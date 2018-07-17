@@ -1,0 +1,7 @@
+
+
+package interrupthandler
+
+func SwallowSigQuit() {
+	
+}

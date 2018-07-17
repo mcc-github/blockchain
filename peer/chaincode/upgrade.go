@@ -1,0 +1,134 @@
+/*
+Copyright IBM Corp. All Rights Reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+package chaincode
+
+import (
+	"errors"
+	"fmt"
+
+	protcommon "github.com/mcc-github/blockchain/protos/common"
+	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
+)
+
+var chaincodeUpgradeCmd *cobra.Command
+
+const upgradeCmdName = "upgrade"
+
+
+func upgradeCmd(cf *ChaincodeCmdFactory) *cobra.Command {
+	chaincodeUpgradeCmd = &cobra.Command{
+		Use:       upgradeCmdName,
+		Short:     "Upgrade chaincode.",
+		Long:      "Upgrade an existing chaincode with the specified one. The new chaincode will immediately replace the existing chaincode upon the transaction committed.",
+		ValidArgs: []string{"1"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return chaincodeUpgrade(cmd, args, cf)
+		},
+	}
+	flagList := []string{
+		"lang",
+		"ctor",
+		"path",
+		"name",
+		"channelID",
+		"version",
+		"policy",
+		"escc",
+		"vscc",
+		"peerAddresses",
+		"tlsRootCertFiles",
+		"connectionProfile",
+		"collections-config",
+	}
+	attachFlags(chaincodeUpgradeCmd, flagList)
+
+	return chaincodeUpgradeCmd
+}
+
+
+func upgrade(cmd *cobra.Command, cf *ChaincodeCmdFactory) (*protcommon.Envelope, error) {
+	spec, err := getChaincodeSpec(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	cds, err := getChaincodeDeploymentSpec(spec, false)
+	if err != nil {
+		return nil, fmt.Errorf("error getting chaincode code %s: %s", chaincodeName, err)
+	}
+
+	creator, err := cf.Signer.Serialize()
+	if err != nil {
+		return nil, fmt.Errorf("error serializing identity for %s: %s", cf.Signer.GetIdentifier(), err)
+	}
+
+	prop, _, err := utils.CreateUpgradeProposalFromCDS(channelID, cds, creator, policyMarshalled, []byte(escc), []byte(vscc), collectionConfigBytes)
+	if err != nil {
+		return nil, fmt.Errorf("error creating proposal %s: %s", chainFuncName, err)
+	}
+	logger.Debugf("Get upgrade proposal for chaincode <%v>", spec.ChaincodeId)
+
+	var signedProp *pb.SignedProposal
+	signedProp, err = utils.GetSignedProposal(prop, cf.Signer)
+	if err != nil {
+		return nil, fmt.Errorf("error creating signed proposal  %s: %s", chainFuncName, err)
+	}
+
+	
+	proposalResponse, err := cf.EndorserClients[0].ProcessProposal(context.Background(), signedProp)
+	if err != nil {
+		return nil, fmt.Errorf("error endorsing %s: %s", chainFuncName, err)
+	}
+	logger.Debugf("endorse upgrade proposal, get response <%v>", proposalResponse.Response)
+
+	if proposalResponse != nil {
+		
+		env, err := utils.CreateSignedTx(prop, cf.Signer, proposalResponse)
+		if err != nil {
+			return nil, fmt.Errorf("could not assemble transaction, err %s", err)
+		}
+		logger.Debug("Get Signed envelope")
+		return env, nil
+	}
+
+	return nil, nil
+}
+
+
+
+func chaincodeUpgrade(cmd *cobra.Command, args []string, cf *ChaincodeCmdFactory) error {
+	if channelID == "" {
+		return errors.New("The required parameter 'channelID' is empty. Rerun the command with -C flag")
+	}
+	
+	cmd.SilenceUsage = true
+
+	var err error
+	if cf == nil {
+		cf, err = InitCmdFactory(cmd.Name(), true, true)
+		if err != nil {
+			return err
+		}
+	}
+	defer cf.BroadcastClient.Close()
+
+	env, err := upgrade(cmd, cf)
+	if err != nil {
+		return err
+	}
+
+	if env != nil {
+		logger.Debug("Send signed envelope to orderer")
+		err = cf.BroadcastClient.Send(env)
+		return err
+	}
+
+	return nil
+}
