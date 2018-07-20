@@ -8,7 +8,6 @@ package kvledger
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"github.com/mcc-github/blockchain/core/ledger/confighistory"
@@ -24,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/ledgerstorage"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
@@ -33,7 +33,7 @@ var (
 	
 	ErrNonExistingLedgerID = errors.New("LedgerID does not exist")
 	
-	ErrLedgerNotOpened = errors.New("Ledger is not opened yet")
+	ErrLedgerNotOpened = errors.New("ledger is not opened yet")
 
 	underConstructionLedgerKey = []byte("underConstructionLedgerKey")
 	ledgerKeyPrefix            = []byte("l")
@@ -105,8 +105,8 @@ func (provider *Provider) Create(genesisBlock *common.Block) (ledger.PeerLedger,
 	}
 	lgr, err := provider.openInternal(ledgerID)
 	if err != nil {
-		logger.Errorf("Error in opening a new empty ledger. Unsetting under construction flag. Err: %s", err)
-		panicOnErr(provider.runCleanup(ledgerID), "Error while running cleanup for ledger id [%s]", ledgerID)
+		logger.Errorf("Error opening a new empty ledger. Unsetting under construction flag. Error: %+v", err)
+		panicOnErr(provider.runCleanup(ledgerID), "Error running cleanup for ledger id [%s]", ledgerID)
 		panicOnErr(provider.idStore.unsetUnderConstructionFlag(), "Error while unsetting under construction flag")
 		return nil, err
 	}
@@ -212,8 +212,8 @@ func (provider *Provider) recoverUnderConstructionLedger() {
 		panicOnErr(err, "Error while retrieving genesis block from blockchain for ledger [%s]", ledgerID)
 		panicOnErr(provider.idStore.createLedgerID(ledgerID, genesisBlock), "Error while adding ledgerID [%s] to created list", ledgerID)
 	default:
-		panic(fmt.Errorf(
-			"Data inconsistency: under construction flag is set for ledger [%s] while the height of the blockchain is [%d]",
+		panic(errors.Errorf(
+			"data inconsistency: under construction flag is set for ledger [%s] while the height of the blockchain is [%d]",
 			ledgerID, bcInfo.Height))
 	}
 	return
@@ -235,7 +235,7 @@ func panicOnErr(err error, mgsFormat string, args ...interface{}) {
 		return
 	}
 	args = append(args, err)
-	panic(fmt.Sprintf(mgsFormat+" Err:%s ", args...))
+	panic(fmt.Sprintf(mgsFormat+" Error: %s", args...))
 }
 
 
@@ -271,14 +271,14 @@ func (s *idStore) createLedgerID(ledgerID string, gb *common.Block) error {
 	key := s.encodeLedgerKey(ledgerID)
 	var val []byte
 	var err error
-	if val, err = proto.Marshal(gb); err != nil {
-		return err
-	}
 	if val, err = s.db.Get(key); err != nil {
 		return err
 	}
 	if val != nil {
 		return ErrLedgerIDExists
+	}
+	if val, err = proto.Marshal(gb); err != nil {
+		return err
 	}
 	batch := &leveldb.Batch{}
 	batch.Put(key, val)

@@ -28,6 +28,21 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
+
+
+
+
+
+
+func MostlyDeterministicMarshal(msg proto.Message) ([]byte, error) {
+	buffer := proto.NewBuffer(make([]byte, 0))
+	buffer.SetDeterministic(true)
+	if err := buffer.Marshal(msg); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
 type protoFieldFactory interface {
 	
 	
@@ -79,6 +94,10 @@ type plainField struct {
 }
 
 func (pf *plainField) PopulateFrom(source interface{}) error {
+	if source == nil {
+		return nil
+	}
+
 	if !reflect.TypeOf(source).AssignableTo(pf.fType) {
 		return fmt.Errorf("expected field %s for message %T to be assignable from %v but was not.  Is %T", pf.name, pf.msg, pf.fType, source)
 	}
@@ -94,6 +113,11 @@ func (pf *plainField) PopulateTo() (interface{}, error) {
 	if !pf.value.Type().AssignableTo(pf.vType) {
 		return nil, fmt.Errorf("expected field %s for message %T to be assignable to %v but was not. Got %T.", pf.name, pf.msg, pf.fType, pf.value)
 	}
+
+	if pf.value.Type().Kind() == reflect.Ptr && pf.value.IsNil() {
+		return nil, nil
+	}
+
 	value, err := pf.populateTo(pf.value)
 	if err != nil {
 		return nil, fmt.Errorf("error in PopulateTo for field %s for message %T: %s", pf.name, pf.msg, err)
@@ -213,6 +237,9 @@ func stringInSlice(target string, slice []string) bool {
 
 
 func protoToJSON(msg proto.Message) ([]byte, error) {
+	if reflect.ValueOf(msg).IsNil() {
+		panic("We're nil here")
+	}
 	var b bytes.Buffer
 	m := jsonpb.Marshaler{
 		EnumsAsInts:  false,

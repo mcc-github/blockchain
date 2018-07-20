@@ -14,6 +14,8 @@ import (
 	"github.com/mcc-github/blockchain/common/configtx"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/common/validation"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -563,7 +565,7 @@ func (v *TxValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upg
 }
 
 func (v *TxValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sysccprovider.ChaincodeInstance, error) {
-	cds, err := utils.GetChaincodeDeploymentSpec(cdsBytes)
+	cds, err := utils.GetChaincodeDeploymentSpec(cdsBytes, platforms.NewRegistry(&golang.Platform{}))
 	if err != nil {
 		return nil, err
 	}

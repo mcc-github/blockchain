@@ -24,6 +24,8 @@ import (
 
 	"github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/spf13/viper"
 )
@@ -85,7 +87,7 @@ func TestLedgerMgmt(t *testing.T) {
 	Close()
 
 	
-	Initialize(nil)
+	Initialize(nil, platforms.NewRegistry(&golang.Platform{}))
 	l, err = OpenLedger(ledgerID)
 	testutil.AssertNoError(t, err, "")
 	Close()

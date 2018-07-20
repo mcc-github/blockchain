@@ -66,7 +66,7 @@ type Codec interface {
 	Name() string
 }
 
-var registeredCodecs = make(map[string]Codec, 0)
+var registeredCodecs = make(map[string]Codec)
 
 
 

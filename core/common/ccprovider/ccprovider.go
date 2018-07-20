@@ -8,7 +8,6 @@ package ccprovider
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -19,6 +18,7 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/pkg/errors"
 )
 
 var ccproviderLogger = flogging.MustGetLogger("ccprovider")
@@ -119,6 +119,14 @@ func (cifs *CCInfoFSImpl) GetChaincode(ccname string, ccversion string) (CCPacka
 	return cifs.GetChaincodeFromPath(ccname, ccversion, chaincodeInstallPath)
 }
 
+func (cifs *CCInfoFSImpl) GetChaincodeCodePackage(ccname, ccversion string) ([]byte, error) {
+	ccpack, err := cifs.GetChaincode(ccname, ccversion)
+	if err != nil {
+		return nil, err
+	}
+	return ccpack.GetDepSpec().Bytes(), nil
+}
+
 
 func (*CCInfoFSImpl) GetChaincodeFromPath(ccname string, ccversion string, path string) (CCPackage, error) {
 	
@@ -157,34 +165,10 @@ func (*CCInfoFSImpl) PutChaincode(depSpec *pb.ChaincodeDeploymentSpec) (CCPackag
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 var ccInfoFSProvider = &CCInfoFSImpl{}
 
 
 var ccInfoCache = NewCCInfoCache(ccInfoFSProvider)
-
-
-
-var ccInfoCacheEnabled bool
-
-
-func EnableCCInfoCache() {
-	ccInfoCacheEnabled = true
-}
 
 
 func GetChaincodeFromFS(ccname string, ccversion string) (CCPackage, error) {
@@ -201,16 +185,8 @@ func PutChaincodeIntoFS(depSpec *pb.ChaincodeDeploymentSpec) error {
 
 
 func GetChaincodeData(ccname string, ccversion string) (*ChaincodeData, error) {
-	if ccInfoCacheEnabled {
-		ccproviderLogger.Debugf("Getting chaincode data for <%s, %s> from cache", ccname, ccversion)
-		return ccInfoCache.GetChaincodeData(ccname, ccversion)
-	}
-	if ccpack, err := ccInfoFSProvider.GetChaincode(ccname, ccversion); err != nil {
-		return nil, err
-	} else {
-		ccproviderLogger.Infof("Putting chaincode data for <%s, %s> into cache", ccname, ccversion)
-		return ccpack.GetChaincodeData(), nil
-	}
+	ccproviderLogger.Debugf("Getting chaincode data for <%s, %s> from cache", ccname, ccversion)
+	return ccInfoCache.GetChaincodeData(ccname, ccversion)
 }
 
 func CheckInstantiationPolicy(name, version string, cdLedger *ChaincodeData) error {
@@ -244,16 +220,43 @@ func CheckInstantiationPolicy(name, version string, cdLedger *ChaincodeData) err
 
 func GetCCPackage(buf []byte) (CCPackage, error) {
 	
-	cccdspack := &CDSPackage{}
-	if _, err := cccdspack.InitFromBuffer(buf); err != nil {
-		
-		ccscdspack := &SignedCDSPackage{}
-		if _, err := ccscdspack.InitFromBuffer(buf); err != nil {
-			return nil, err
+	cds := &CDSPackage{}
+	if ccdata, err := cds.InitFromBuffer(buf); err != nil {
+		cds = nil
+	} else {
+		err = cds.ValidateCC(ccdata)
+		if err != nil {
+			cds = nil
 		}
-		return ccscdspack, nil
 	}
-	return cccdspack, nil
+
+	
+	scds := &SignedCDSPackage{}
+	if ccdata, err := scds.InitFromBuffer(buf); err != nil {
+		scds = nil
+	} else {
+		err = scds.ValidateCC(ccdata)
+		if err != nil {
+			scds = nil
+		}
+	}
+
+	if cds != nil && scds != nil {
+		
+		
+		ccproviderLogger.Errorf("Could not determine chaincode package type, guessing SignedCDS")
+		return scds, nil
+	}
+
+	if cds != nil {
+		return cds, nil
+	}
+
+	if scds != nil {
+		return scds, nil
+	}
+
+	return nil, errors.New("could not unmarshaled chaincode package to CDS or SignedCDS")
 }
 
 
@@ -317,71 +320,15 @@ func GetInstalledChaincodes() (*pb.ChaincodeQueryResponse, error) {
 
 type CCContext struct {
 	
-	ChainID string
-
-	
 	Name string
 
 	
 	Version string
-
-	
-	TxID string
-
-	
-	Syscc bool
-
-	
-	
-	SignedProposal *pb.SignedProposal
-
-	
-	
-	Proposal *pb.Proposal
-
-	
-	canonicalName string
-
-	
-	ProposalDecorations map[string][]byte
-}
-
-
-func NewCCContext(cname, name, version, txid string, syscc bool, signedProp *pb.SignedProposal, prop *pb.Proposal) *CCContext {
-	cccid := &CCContext{
-		ChainID:             cname,
-		Name:                name,
-		Version:             version,
-		TxID:                txid,
-		Syscc:               syscc,
-		SignedProposal:      signedProp,
-		Proposal:            prop,
-		canonicalName:       name + ":" + version,
-		ProposalDecorations: nil,
-	}
-
-	
-	
-	if version == "" {
-		panic(fmt.Sprintf("---empty version---(%s)", cccid))
-	}
-
-	ccproviderLogger.Debugf("NewCCCC(%s)", cccid)
-	return cccid
-}
-
-func (cccid *CCContext) String() string {
-	return fmt.Sprintf("chain=%s,chaincode=%s,version=%s,txid=%s,syscc=%t,proposal=%p,canname=%s",
-		cccid.ChainID, cccid.Name, cccid.Version, cccid.TxID, cccid.Syscc, cccid.Proposal, cccid.canonicalName)
 }
 
 
 func (cccid *CCContext) GetCanonicalName() string {
-	if cccid.canonicalName == "" {
-		panic(fmt.Sprintf("missing canonical name: %s", cccid))
-	}
-
-	return cccid.canonicalName
+	return cccid.Name + ":" + cccid.Version
 }
 
 
@@ -481,9 +428,29 @@ func (cd *ChaincodeData) String() string { return proto.CompactTextString(cd) }
 func (*ChaincodeData) ProtoMessage() {}
 
 
+type ChaincodeContainerInfo struct {
+	Name        string
+	Version     string
+	Path        string
+	Type        string
+	CodePackage []byte
 
-type ChaincodeSpecGetter interface {
-	GetChaincodeSpec() *pb.ChaincodeSpec
+	
+	ContainerType string
+}
+
+
+
+type TransactionParams struct {
+	TxID                 string
+	ChannelID            string
+	SignedProp           *pb.SignedProposal
+	Proposal             *pb.Proposal
+	TXSimulator          ledger.TxSimulator
+	HistoryQueryExecutor ledger.HistoryQueryExecutor
+
+	
+	ProposalDecorations map[string][]byte
 }
 
 
@@ -492,13 +459,20 @@ type ChaincodeSpecGetter interface {
 
 type ChaincodeProvider interface {
 	
+	Execute(txParams *TransactionParams, cccid *CCContext, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error)
 	
 	
-	GetContext(ledger ledger.PeerLedger, txid string) (context.Context, ledger.TxSimulator, error)
+	ExecuteLegacyInit(txParams *TransactionParams, cccid *CCContext, spec *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error)
 	
-	ExecuteChaincode(ctxt context.Context, cccid *CCContext, args [][]byte) (*pb.Response, *pb.ChaincodeEvent, error)
-	
-	Execute(ctxt context.Context, cccid *CCContext, spec ChaincodeSpecGetter) (*pb.Response, *pb.ChaincodeEvent, error)
-	
-	Stop(ctxt context.Context, cccid *CCContext, spec *pb.ChaincodeDeploymentSpec) error
+	Stop(ccci *ChaincodeContainerInfo) error
+}
+
+func DeploymentSpecToChaincodeContainerInfo(cds *pb.ChaincodeDeploymentSpec) *ChaincodeContainerInfo {
+	return &ChaincodeContainerInfo{
+		Name:          cds.Name(),
+		Version:       cds.Version(),
+		Path:          cds.Path(),
+		Type:          cds.CCType(),
+		ContainerType: cds.ExecEnv.String(),
+	}
 }

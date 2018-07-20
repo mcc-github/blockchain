@@ -1,7 +1,7 @@
 
 
 
-package peer
+package peer 
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
@@ -13,6 +13,12 @@ import common "github.com/mcc-github/blockchain/protos/common"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+
+
+
+
+const _ = proto.ProtoPackageIsVersion2 
 
 type TxValidationCode int32
 
@@ -108,7 +114,9 @@ var TxValidationCode_value = map[string]int32{
 func (x TxValidationCode) String() string {
 	return proto.EnumName(TxValidationCode_name, int32(x))
 }
-func (TxValidationCode) EnumDescriptor() ([]byte, []int) { return fileDescriptor12, []int{0} }
+func (TxValidationCode) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_transaction_0011a51fc2808780, []int{0}
+}
 
 
 
@@ -120,13 +128,35 @@ type SignedTransaction struct {
 	
 	
 	
-	Signature []byte `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	Signature            []byte   `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SignedTransaction) Reset()                    { *m = SignedTransaction{} }
-func (m *SignedTransaction) String() string            { return proto.CompactTextString(m) }
-func (*SignedTransaction) ProtoMessage()               {}
-func (*SignedTransaction) Descriptor() ([]byte, []int) { return fileDescriptor12, []int{0} }
+func (m *SignedTransaction) Reset()         { *m = SignedTransaction{} }
+func (m *SignedTransaction) String() string { return proto.CompactTextString(m) }
+func (*SignedTransaction) ProtoMessage()    {}
+func (*SignedTransaction) Descriptor() ([]byte, []int) {
+	return fileDescriptor_transaction_0011a51fc2808780, []int{0}
+}
+func (m *SignedTransaction) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_SignedTransaction.Unmarshal(m, b)
+}
+func (m *SignedTransaction) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_SignedTransaction.Marshal(b, m, deterministic)
+}
+func (dst *SignedTransaction) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SignedTransaction.Merge(dst, src)
+}
+func (m *SignedTransaction) XXX_Size() int {
+	return xxx_messageInfo_SignedTransaction.Size(m)
+}
+func (m *SignedTransaction) XXX_DiscardUnknown() {
+	xxx_messageInfo_SignedTransaction.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SignedTransaction proto.InternalMessageInfo
 
 func (m *SignedTransaction) GetTransactionBytes() []byte {
 	if m != nil {
@@ -152,13 +182,35 @@ type ProcessedTransaction struct {
 	
 	TransactionEnvelope *common.Envelope `protobuf:"bytes,1,opt,name=transactionEnvelope" json:"transactionEnvelope,omitempty"`
 	
-	ValidationCode int32 `protobuf:"varint,2,opt,name=validationCode" json:"validationCode,omitempty"`
+	ValidationCode       int32    `protobuf:"varint,2,opt,name=validationCode" json:"validationCode,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ProcessedTransaction) Reset()                    { *m = ProcessedTransaction{} }
-func (m *ProcessedTransaction) String() string            { return proto.CompactTextString(m) }
-func (*ProcessedTransaction) ProtoMessage()               {}
-func (*ProcessedTransaction) Descriptor() ([]byte, []int) { return fileDescriptor12, []int{1} }
+func (m *ProcessedTransaction) Reset()         { *m = ProcessedTransaction{} }
+func (m *ProcessedTransaction) String() string { return proto.CompactTextString(m) }
+func (*ProcessedTransaction) ProtoMessage()    {}
+func (*ProcessedTransaction) Descriptor() ([]byte, []int) {
+	return fileDescriptor_transaction_0011a51fc2808780, []int{1}
+}
+func (m *ProcessedTransaction) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ProcessedTransaction.Unmarshal(m, b)
+}
+func (m *ProcessedTransaction) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ProcessedTransaction.Marshal(b, m, deterministic)
+}
+func (dst *ProcessedTransaction) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProcessedTransaction.Merge(dst, src)
+}
+func (m *ProcessedTransaction) XXX_Size() int {
+	return xxx_messageInfo_ProcessedTransaction.Size(m)
+}
+func (m *ProcessedTransaction) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProcessedTransaction.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProcessedTransaction proto.InternalMessageInfo
 
 func (m *ProcessedTransaction) GetTransactionEnvelope() *common.Envelope {
 	if m != nil {
@@ -189,13 +241,35 @@ func (m *ProcessedTransaction) GetValidationCode() int32 {
 type Transaction struct {
 	
 	
-	Actions []*TransactionAction `protobuf:"bytes,1,rep,name=actions" json:"actions,omitempty"`
+	Actions              []*TransactionAction `protobuf:"bytes,1,rep,name=actions" json:"actions,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_unrecognized     []byte               `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
-func (m *Transaction) Reset()                    { *m = Transaction{} }
-func (m *Transaction) String() string            { return proto.CompactTextString(m) }
-func (*Transaction) ProtoMessage()               {}
-func (*Transaction) Descriptor() ([]byte, []int) { return fileDescriptor12, []int{2} }
+func (m *Transaction) Reset()         { *m = Transaction{} }
+func (m *Transaction) String() string { return proto.CompactTextString(m) }
+func (*Transaction) ProtoMessage()    {}
+func (*Transaction) Descriptor() ([]byte, []int) {
+	return fileDescriptor_transaction_0011a51fc2808780, []int{2}
+}
+func (m *Transaction) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Transaction.Unmarshal(m, b)
+}
+func (m *Transaction) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Transaction.Marshal(b, m, deterministic)
+}
+func (dst *Transaction) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Transaction.Merge(dst, src)
+}
+func (m *Transaction) XXX_Size() int {
+	return xxx_messageInfo_Transaction.Size(m)
+}
+func (m *Transaction) XXX_DiscardUnknown() {
+	xxx_messageInfo_Transaction.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Transaction proto.InternalMessageInfo
 
 func (m *Transaction) GetActions() []*TransactionAction {
 	if m != nil {
@@ -211,13 +285,35 @@ type TransactionAction struct {
 	Header []byte `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
 	
 	
-	Payload []byte `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload              []byte   `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *TransactionAction) Reset()                    { *m = TransactionAction{} }
-func (m *TransactionAction) String() string            { return proto.CompactTextString(m) }
-func (*TransactionAction) ProtoMessage()               {}
-func (*TransactionAction) Descriptor() ([]byte, []int) { return fileDescriptor12, []int{3} }
+func (m *TransactionAction) Reset()         { *m = TransactionAction{} }
+func (m *TransactionAction) String() string { return proto.CompactTextString(m) }
+func (*TransactionAction) ProtoMessage()    {}
+func (*TransactionAction) Descriptor() ([]byte, []int) {
+	return fileDescriptor_transaction_0011a51fc2808780, []int{3}
+}
+func (m *TransactionAction) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_TransactionAction.Unmarshal(m, b)
+}
+func (m *TransactionAction) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_TransactionAction.Marshal(b, m, deterministic)
+}
+func (dst *TransactionAction) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TransactionAction.Merge(dst, src)
+}
+func (m *TransactionAction) XXX_Size() int {
+	return xxx_messageInfo_TransactionAction.Size(m)
+}
+func (m *TransactionAction) XXX_DiscardUnknown() {
+	xxx_messageInfo_TransactionAction.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TransactionAction proto.InternalMessageInfo
 
 func (m *TransactionAction) GetHeader() []byte {
 	if m != nil {
@@ -248,13 +344,35 @@ type ChaincodeActionPayload struct {
 	
 	ChaincodeProposalPayload []byte `protobuf:"bytes,1,opt,name=chaincode_proposal_payload,json=chaincodeProposalPayload,proto3" json:"chaincode_proposal_payload,omitempty"`
 	
-	Action *ChaincodeEndorsedAction `protobuf:"bytes,2,opt,name=action" json:"action,omitempty"`
+	Action               *ChaincodeEndorsedAction `protobuf:"bytes,2,opt,name=action" json:"action,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_unrecognized     []byte                   `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *ChaincodeActionPayload) Reset()                    { *m = ChaincodeActionPayload{} }
-func (m *ChaincodeActionPayload) String() string            { return proto.CompactTextString(m) }
-func (*ChaincodeActionPayload) ProtoMessage()               {}
-func (*ChaincodeActionPayload) Descriptor() ([]byte, []int) { return fileDescriptor12, []int{4} }
+func (m *ChaincodeActionPayload) Reset()         { *m = ChaincodeActionPayload{} }
+func (m *ChaincodeActionPayload) String() string { return proto.CompactTextString(m) }
+func (*ChaincodeActionPayload) ProtoMessage()    {}
+func (*ChaincodeActionPayload) Descriptor() ([]byte, []int) {
+	return fileDescriptor_transaction_0011a51fc2808780, []int{4}
+}
+func (m *ChaincodeActionPayload) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ChaincodeActionPayload.Unmarshal(m, b)
+}
+func (m *ChaincodeActionPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ChaincodeActionPayload.Marshal(b, m, deterministic)
+}
+func (dst *ChaincodeActionPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChaincodeActionPayload.Merge(dst, src)
+}
+func (m *ChaincodeActionPayload) XXX_Size() int {
+	return xxx_messageInfo_ChaincodeActionPayload.Size(m)
+}
+func (m *ChaincodeActionPayload) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChaincodeActionPayload.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChaincodeActionPayload proto.InternalMessageInfo
 
 func (m *ChaincodeActionPayload) GetChaincodeProposalPayload() []byte {
 	if m != nil {
@@ -279,13 +397,35 @@ type ChaincodeEndorsedAction struct {
 	ProposalResponsePayload []byte `protobuf:"bytes,1,opt,name=proposal_response_payload,json=proposalResponsePayload,proto3" json:"proposal_response_payload,omitempty"`
 	
 	
-	Endorsements []*Endorsement `protobuf:"bytes,2,rep,name=endorsements" json:"endorsements,omitempty"`
+	Endorsements         []*Endorsement `protobuf:"bytes,2,rep,name=endorsements" json:"endorsements,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *ChaincodeEndorsedAction) Reset()                    { *m = ChaincodeEndorsedAction{} }
-func (m *ChaincodeEndorsedAction) String() string            { return proto.CompactTextString(m) }
-func (*ChaincodeEndorsedAction) ProtoMessage()               {}
-func (*ChaincodeEndorsedAction) Descriptor() ([]byte, []int) { return fileDescriptor12, []int{5} }
+func (m *ChaincodeEndorsedAction) Reset()         { *m = ChaincodeEndorsedAction{} }
+func (m *ChaincodeEndorsedAction) String() string { return proto.CompactTextString(m) }
+func (*ChaincodeEndorsedAction) ProtoMessage()    {}
+func (*ChaincodeEndorsedAction) Descriptor() ([]byte, []int) {
+	return fileDescriptor_transaction_0011a51fc2808780, []int{5}
+}
+func (m *ChaincodeEndorsedAction) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ChaincodeEndorsedAction.Unmarshal(m, b)
+}
+func (m *ChaincodeEndorsedAction) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ChaincodeEndorsedAction.Marshal(b, m, deterministic)
+}
+func (dst *ChaincodeEndorsedAction) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChaincodeEndorsedAction.Merge(dst, src)
+}
+func (m *ChaincodeEndorsedAction) XXX_Size() int {
+	return xxx_messageInfo_ChaincodeEndorsedAction.Size(m)
+}
+func (m *ChaincodeEndorsedAction) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChaincodeEndorsedAction.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChaincodeEndorsedAction proto.InternalMessageInfo
 
 func (m *ChaincodeEndorsedAction) GetProposalResponsePayload() []byte {
 	if m != nil {
@@ -311,9 +451,9 @@ func init() {
 	proto.RegisterEnum("protos.TxValidationCode", TxValidationCode_name, TxValidationCode_value)
 }
 
-func init() { proto.RegisterFile("peer/transaction.proto", fileDescriptor12) }
+func init() { proto.RegisterFile("peer/transaction.proto", fileDescriptor_transaction_0011a51fc2808780) }
 
-var fileDescriptor12 = []byte{
+var fileDescriptor_transaction_0011a51fc2808780 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x54, 0x5d, 0x6f, 0x22, 0x37,
 	0x14, 0x2d, 0xd9, 0x26, 0x69, 0x2e, 0xf9, 0x30, 0x86, 0x10, 0x82, 0xa2, 0xee, 0x8a, 0x87, 0x6a,

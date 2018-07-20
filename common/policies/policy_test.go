@@ -212,7 +212,10 @@ func TestPrincipalUniqueSet(t *testing.T) {
 	v := reflect.Indirect(reflect.ValueOf(msp.MSPPrincipal{}))
 	
 	
-	assert.Equal(t, 2, v.NumField())
+	
+	
+	
+	assert.Equal(t, 5, v.NumField())
 }
 
 func TestPrincipalSetContainingOnly(t *testing.T) {

@@ -15,6 +15,10 @@ var (
 
 
 
+
+
+
+
 func Register(b Builder) {
 	m[b.Scheme()] = b
 }
@@ -70,6 +74,8 @@ type Address struct {
 
 
 type BuildOption struct {
+	
+	DisableServiceConfig bool
 }
 
 

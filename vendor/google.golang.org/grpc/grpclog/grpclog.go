@@ -90,15 +90,18 @@ func Fatalln(args ...interface{}) {
 
 
 
+
 func Print(args ...interface{}) {
 	logger.Info(args...)
 }
 
 
 
+
 func Printf(format string, args ...interface{}) {
 	logger.Infof(format, args...)
 }
+
 
 
 

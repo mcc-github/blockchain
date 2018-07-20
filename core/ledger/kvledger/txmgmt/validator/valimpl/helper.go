@@ -148,9 +148,8 @@ func preprocessProtoBlock(txmgr txmgr.TxMgr, validateKVFunc func(key string, val
 		if txRWSet != nil {
 			if err := validateWriteset(txRWSet, validateKVFunc); err != nil {
 				logger.Warningf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
-					" marked as invalid. Reason code [%s]. Message: [%s]",
-					chdr.GetChannelId(), block.Header.Number, txIndex, chdr.GetTxId(),
-					peer.TxValidationCode_INVALID_WRITESET, err.Error())
+					" marked as invalid. Reason code [%s]",
+					chdr.GetChannelId(), block.Header.Number, txIndex, chdr.GetTxId(), peer.TxValidationCode_INVALID_WRITESET)
 				txsFilter.SetFlag(txIndex, peer.TxValidationCode_INVALID_WRITESET)
 				continue
 			}
@@ -186,9 +185,6 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 
 func validateWriteset(txRWSet *rwsetutil.TxRwSet, validateKVFunc func(key string, value []byte) error) error {
 	for _, nsRwSet := range txRWSet.NsRwSets {
-		if nsRwSet == nil {
-			continue
-		}
 		pubWriteset := nsRwSet.KvRwSet
 		if pubWriteset == nil {
 			continue

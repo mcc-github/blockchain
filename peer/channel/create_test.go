@@ -325,7 +325,7 @@ func TestCreateChainWithTimeoutErr(t *testing.T) {
 	}
 
 	
-	args = []string{"create", "-c", mockchain, "-o", "localhost:9999", "--connTimeout", "10ms"}
+	args = []string{"create", "-c", mockchain, "-o", "localhost:0", "--connTimeout", "10ms"}
 	channelCmd.SetArgs(args)
 
 	if err := channelCmd.Execute(); err == nil {

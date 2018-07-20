@@ -22,6 +22,8 @@ import (
 	"github.com/mcc-github/blockchain/common/mocks/scc"
 	"github.com/mcc-github/blockchain/common/util"
 	aclmocks "github.com/mcc-github/blockchain/core/aclmgmt/mocks"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
 	mocks2 "github.com/mcc-github/blockchain/core/committer/txvalidator/mocks"
@@ -424,7 +426,7 @@ func TestRWSetTooBig(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -483,7 +485,7 @@ func TestValidateDeployFail(t *testing.T) {
 
 	v := newValidationInstance(state)
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -741,7 +743,7 @@ func TestAlreadyDeployed(t *testing.T) {
 
 	v := newValidationInstance(state)
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -838,7 +840,7 @@ func TestValidateDeployOK(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -887,7 +889,7 @@ func TestValidateDeployWithCollection(t *testing.T) {
 	})
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -913,7 +915,7 @@ func TestValidateDeployWithCollection(t *testing.T) {
 	coll2 := createCollectionConfig(collName2, policyEnvelope, requiredPeerCount, maximumPeerCount, blockToLive)
 
 	
-	ccp := &common.CollectionConfigPackage{[]*common.CollectionConfig{coll1, coll2}}
+	ccp := &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1, coll2}}
 	ccpBytes, err := proto.Marshal(ccp)
 	assert.NoError(t, err)
 	assert.NotNil(t, ccpBytes)
@@ -944,7 +946,7 @@ func TestValidateDeployWithCollection(t *testing.T) {
 
 	
 	
-	ccp = &common.CollectionConfigPackage{[]*common.CollectionConfig{coll1, coll2, coll1}}
+	ccp = &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1, coll2, coll1}}
 	ccpBytes, err = proto.Marshal(ccp)
 	assert.NoError(t, err)
 	assert.NotNil(t, ccpBytes)
@@ -978,7 +980,7 @@ func TestValidateDeployWithCollection(t *testing.T) {
 
 	v = newValidationInstance(state)
 
-	lccc = lscc.New(mp, mockAclProvider)
+	lccc = lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc = shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1002,7 +1004,7 @@ func TestValidateDeployWithPolicies(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1073,7 +1075,7 @@ func TestInvalidUpgrade(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1114,7 +1116,7 @@ func TestValidateUpgradeOK(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1180,7 +1182,7 @@ func TestInvalidateUpgradeBadVersion(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1252,7 +1254,7 @@ func validateUpgradeWithCollection(t *testing.T, V1_2Validation bool) {
 	})
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1306,7 +1308,7 @@ func validateUpgradeWithCollection(t *testing.T, V1_2Validation bool) {
 	
 	
 	
-	ccp := &common.CollectionConfigPackage{[]*common.CollectionConfig{coll1, coll2}}
+	ccp := &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1, coll2}}
 	ccpBytes, err := proto.Marshal(ccp)
 	assert.NoError(t, err)
 	assert.NotNil(t, ccpBytes)
@@ -1349,7 +1351,7 @@ func validateUpgradeWithCollection(t *testing.T, V1_2Validation bool) {
 
 		
 		
-		ccp = &common.CollectionConfigPackage{[]*common.CollectionConfig{coll3}}
+		ccp = &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll3}}
 		ccpBytes, err = proto.Marshal(ccp)
 		assert.NoError(t, err)
 		assert.NotNil(t, ccpBytes)
@@ -1374,7 +1376,7 @@ func validateUpgradeWithCollection(t *testing.T, V1_2Validation bool) {
 
 		
 		
-		ccp = &common.CollectionConfigPackage{[]*common.CollectionConfig{coll1, coll3}}
+		ccp = &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1, coll3}}
 		ccpBytes, err = proto.Marshal(ccp)
 		assert.NoError(t, err)
 		assert.NotNil(t, ccpBytes)
@@ -1399,7 +1401,7 @@ func validateUpgradeWithCollection(t *testing.T, V1_2Validation bool) {
 		ccver = "3"
 
 		
-		ccp = &common.CollectionConfigPackage{[]*common.CollectionConfig{coll1, coll2, coll3}}
+		ccp = &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1, coll2, coll3}}
 		ccpBytes, err = proto.Marshal(ccp)
 		assert.NoError(t, err)
 		assert.NotNil(t, ccpBytes)
@@ -1440,7 +1442,7 @@ func TestValidateUpgradeWithPoliciesOK(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1529,7 +1531,7 @@ func validateUpgradeWithNewFailAllIP(t *testing.T, v11capability, expecterr bool
 	v := newCustomValidationInstance(qec, capabilities)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1609,7 +1611,7 @@ func TestValidateUpgradeWithPoliciesFail(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider)
+	lccc := lscc.New(mp, mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	stublccc := shim.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1705,7 +1707,7 @@ func createCollectionConfig(collectionName string, signaturePolicyEnvelope *comm
 
 	return &common.CollectionConfig{
 		Payload: &common.CollectionConfig_StaticCollectionConfig{
-			&common.StaticCollectionConfig{
+			StaticCollectionConfig: &common.StaticCollectionConfig{
 				Name:              collectionName,
 				MemberOrgsPolicy:  accessPolicy,
 				RequiredPeerCount: requiredPeerCount,
@@ -1719,7 +1721,7 @@ func createCollectionConfig(collectionName string, signaturePolicyEnvelope *comm
 func testValidateCollection(t *testing.T, v *ValidatorOneValidSignature, collectionConfigs []*common.CollectionConfig, cdRWSet *ccprovider.ChaincodeData,
 	lsccFunc string, ac channelconfig.ApplicationCapabilities, chid string,
 ) error {
-	ccp := &common.CollectionConfigPackage{collectionConfigs}
+	ccp := &common.CollectionConfigPackage{Config: collectionConfigs}
 	ccpBytes, err := proto.Marshal(ccp)
 	assert.NoError(t, err)
 	assert.NotNil(t, ccpBytes)
@@ -1847,7 +1849,7 @@ func TestValidateRWSetAndCollectionForDeploy(t *testing.T) {
 	assert.EqualError(t, err, "collection-name: mycollection3 -- error in member org policy: signature policy is not an OR concatenation, NOutOf 2")
 
 	
-	ccp := &common.CollectionConfigPackage{[]*common.CollectionConfig{coll1}}
+	ccp := &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1}}
 	ccpBytes, err := proto.Marshal(ccp)
 	assert.NoError(t, err)
 	state["lscc"][privdata.BuildCollectionKVSKey(ccid)] = ccpBytes
@@ -1886,7 +1888,7 @@ func TestValidateRWSetAndCollectionForUpgrade(t *testing.T) {
 	coll2 := createCollectionConfig(collName2, policyEnvelope, requiredPeerCount, maximumPeerCount, blockToLive)
 	coll3 := createCollectionConfig(collName3, policyEnvelope, requiredPeerCount, maximumPeerCount, blockToLive)
 
-	ccp := &common.CollectionConfigPackage{[]*common.CollectionConfig{coll1, coll2}}
+	ccp := &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1, coll2}}
 	ccpBytes, err := proto.Marshal(ccp)
 	assert.NoError(t, err)
 

@@ -9,6 +9,7 @@ package kafka
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -94,6 +95,8 @@ type chainImpl struct {
 	channelConsumer sarama.PartitionConsumer
 
 	
+	doneReprocessingMutex sync.Mutex
+	
 	doneReprocessingMsgInFlight chan struct{}
 
 	
@@ -161,13 +164,30 @@ func (chain *chainImpl) WaitReady() error {
 		select {
 		case <-chain.haltChan: 
 			return fmt.Errorf("consenter for this channel has been halted")
-			
-		case <-chain.doneReprocessingMsgInFlight:
+		case <-chain.doneReprocessing(): 
 			return nil
 		}
 	default: 
 		return fmt.Errorf("will not enqueue, consenter for this channel hasn't started yet")
 	}
+}
+
+func (chain *chainImpl) doneReprocessing() <-chan struct{} {
+	chain.doneReprocessingMutex.Lock()
+	defer chain.doneReprocessingMutex.Unlock()
+	return chain.doneReprocessingMsgInFlight
+}
+
+func (chain *chainImpl) reprocessConfigComplete() {
+	chain.doneReprocessingMutex.Lock()
+	defer chain.doneReprocessingMutex.Unlock()
+	close(chain.doneReprocessingMsgInFlight)
+}
+
+func (chain *chainImpl) reprocessConfigPending() {
+	chain.doneReprocessingMutex.Lock()
+	defer chain.doneReprocessingMutex.Unlock()
+	chain.doneReprocessingMsgInFlight = make(chan struct{})
 }
 
 
@@ -771,7 +791,7 @@ func (chain *chainImpl) processRegular(regularMessage *ab.KafkaMessageRegular, r
 				regularMessage.ConfigSeq == seq { 
 				logger.Debugf("[channel: %s] Config message with original offset %d is the last in-flight resubmitted message"+
 					"and it does not require revalidation, unblock ingress messages now", chain.ChainID(), regularMessage.OriginalOffset)
-				close(chain.doneReprocessingMsgInFlight) 
+				chain.reprocessConfigComplete() 
 			}
 
 			
@@ -798,8 +818,8 @@ func (chain *chainImpl) processRegular(regularMessage *ab.KafkaMessageRegular, r
 			}
 
 			logger.Debugf("[channel: %s] Resubmitted config message with offset %d, block ingress messages", chain.ChainID(), receivedOffset)
-			chain.lastResubmittedConfigOffset = receivedOffset      
-			chain.doneReprocessingMsgInFlight = make(chan struct{}) 
+			chain.lastResubmittedConfigOffset = receivedOffset 
+			chain.reprocessConfigPending()                     
 
 			return nil
 		}

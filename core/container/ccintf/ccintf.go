@@ -14,7 +14,6 @@ import (
 	"fmt"
 
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"golang.org/x/net/context"
 )
 
 
@@ -26,7 +25,7 @@ type ChaincodeStream interface {
 
 
 type CCSupport interface {
-	HandleChaincodeStream(context.Context, ChaincodeStream) error
+	HandleChaincodeStream(ChaincodeStream) error
 }
 
 

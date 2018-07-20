@@ -9,6 +9,7 @@ package cceventmgmt
 import (
 	"fmt"
 
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 )
@@ -50,6 +51,7 @@ type ChaincodeInfoProvider interface {
 }
 
 type chaincodeInfoProviderImpl struct {
+	PlatformRegistry *platforms.Registry
 }
 
 
@@ -59,5 +61,5 @@ func (p *chaincodeInfoProviderImpl) IsChaincodeDeployed(chainid string, chaincod
 
 
 func (p *chaincodeInfoProviderImpl) RetrieveChaincodeArtifacts(chaincodeDefinition *ChaincodeDefinition) (installed bool, dbArtifactsTar []byte, err error) {
-	return ccprovider.ExtractStatedbArtifactsForChaincode(chaincodeDefinition.Name, chaincodeDefinition.Version)
+	return ccprovider.ExtractStatedbArtifactsForChaincode(chaincodeDefinition.Name, chaincodeDefinition.Version, p.PlatformRegistry)
 }

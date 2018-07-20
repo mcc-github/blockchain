@@ -7,94 +7,122 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"os"
 
 	"strings"
 
-	"io/ioutil"
-
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metadata"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/car"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
-	"github.com/mcc-github/blockchain/core/config"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
-	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/spf13/viper"
 )
 
 
 
+
+
+
+type MetadataProvider interface {
+	GetMetadataAsTarEntries() ([]byte, error)
+}
+
+
+
 type Platform interface {
-	ValidateSpec(spec *pb.ChaincodeSpec) error
-	ValidateDeploymentSpec(spec *pb.ChaincodeDeploymentSpec) error
-	GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte, error)
-	GenerateDockerfile(spec *pb.ChaincodeDeploymentSpec) (string, error)
-	GenerateDockerBuild(spec *pb.ChaincodeDeploymentSpec, tw *tar.Writer) error
-	GetMetadataProvider(spec *pb.ChaincodeDeploymentSpec) ccmetadata.MetadataProvider
+	Name() string
+	ValidatePath(path string) error
+	ValidateCodePackage(code []byte) error
+	GetDeploymentPayload(path string) ([]byte, error)
+	GenerateDockerfile() (string, error)
+	GenerateDockerBuild(path string, code []byte, tw *tar.Writer) error
+	GetMetadataProvider(code []byte) MetadataProvider
+}
+
+type PackageWriter interface {
+	Write(name string, payload []byte, tw *tar.Writer) error
+}
+
+type PackageWriterWrapper func(name string, payload []byte, tw *tar.Writer) error
+
+func (pw PackageWriterWrapper) Write(name string, payload []byte, tw *tar.Writer) error {
+	return pw(name, payload, tw)
+}
+
+type Registry struct {
+	Platforms     map[string]Platform
+	PackageWriter PackageWriter
 }
 
 var logger = flogging.MustGetLogger("chaincode-platform")
 
-
-var _Find = Find
-var _GetPath = config.GetPath
-var _VGetBool = viper.GetBool
-var _OSStat = os.Stat
-var _IOUtilReadFile = ioutil.ReadFile
-var _CUtilWriteBytesToPackage = cutil.WriteBytesToPackage
-var _generateDockerfile = generateDockerfile
-var _generateDockerBuild = generateDockerBuild
-
-
-func Find(chaincodeType pb.ChaincodeSpec_Type) (Platform, error) {
-
-	switch chaincodeType {
-	case pb.ChaincodeSpec_GOLANG:
-		return &golang.Platform{}, nil
-	case pb.ChaincodeSpec_CAR:
-		return &car.Platform{}, nil
-	case pb.ChaincodeSpec_JAVA:
-		return &java.Platform{}, nil
-	case pb.ChaincodeSpec_NODE:
-		return &node.Platform{}, nil
-	default:
-		return nil, fmt.Errorf("Unknown chaincodeType: %s", chaincodeType)
+func NewRegistry(platformTypes ...Platform) *Registry {
+	platforms := make(map[string]Platform)
+	for _, platform := range platformTypes {
+		if _, ok := platforms[platform.Name()]; ok {
+			logger.Panicf("Multiple platforms of the same name specified: %s", platform.Name())
+		}
+		platforms[platform.Name()] = platform
 	}
-
+	return &Registry{
+		Platforms:     platforms,
+		PackageWriter: PackageWriterWrapper(cutil.WriteBytesToPackage),
+	}
 }
 
-func GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte, error) {
-	platform, err := _Find(spec.Type)
-	if err != nil {
-		return nil, err
+func (r *Registry) ValidateSpec(ccType, path string) error {
+	platform, ok := r.Platforms[ccType]
+	if !ok {
+		return fmt.Errorf("Unknown chaincodeType: %s", ccType)
 	}
-
-	return platform.GetDeploymentPayload(spec)
+	return platform.ValidatePath(path)
 }
 
-func generateDockerfile(platform Platform, cds *pb.ChaincodeDeploymentSpec) ([]byte, error) {
+func (r *Registry) ValidateDeploymentSpec(ccType string, codePackage []byte) error {
+	platform, ok := r.Platforms[ccType]
+	if !ok {
+		return fmt.Errorf("Unknown chaincodeType: %s", ccType)
+	}
+	return platform.ValidateCodePackage(codePackage)
+}
+
+func (r *Registry) GetMetadataProvider(ccType string, codePackage []byte) (MetadataProvider, error) {
+	platform, ok := r.Platforms[ccType]
+	if !ok {
+		return nil, fmt.Errorf("Unknown chaincodeType: %s", ccType)
+	}
+	return platform.GetMetadataProvider(codePackage), nil
+}
+
+func (r *Registry) GetDeploymentPayload(ccType, path string) ([]byte, error) {
+	platform, ok := r.Platforms[ccType]
+	if !ok {
+		return nil, fmt.Errorf("Unknown chaincodeType: %s", ccType)
+	}
+
+	return platform.GetDeploymentPayload(path)
+}
+
+func (r *Registry) GenerateDockerfile(ccType, name, version string) (string, error) {
+	platform, ok := r.Platforms[ccType]
+	if !ok {
+		return "", fmt.Errorf("Unknown chaincodeType: %s", ccType)
+	}
 
 	var buf []string
 
 	
 	
 	
-	base, err := platform.GenerateDockerfile(cds)
+	base, err := platform.GenerateDockerfile()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to generate platform-specific Dockerfile: %s", err)
+		return "", fmt.Errorf("Failed to generate platform-specific Dockerfile: %s", err)
 	}
 	buf = append(buf, base)
 
 	
 	
 	
-	buf = append(buf, fmt.Sprintf("LABEL %s.chaincode.id.name=\"%s\" \\", metadata.BaseDockerLabel, cds.ChaincodeSpec.ChaincodeId.Name))
-	buf = append(buf, fmt.Sprintf("      %s.chaincode.id.version=\"%s\" \\", metadata.BaseDockerLabel, cds.ChaincodeSpec.ChaincodeId.Version))
-	buf = append(buf, fmt.Sprintf("      %s.chaincode.type=\"%s\" \\", metadata.BaseDockerLabel, cds.ChaincodeSpec.Type.String()))
+	buf = append(buf, fmt.Sprintf("LABEL %s.chaincode.id.name=\"%s\" \\", metadata.BaseDockerLabel, name))
+	buf = append(buf, fmt.Sprintf("      %s.chaincode.id.version=\"%s\" \\", metadata.BaseDockerLabel, version))
+	buf = append(buf, fmt.Sprintf("      %s.chaincode.type=\"%s\" \\", metadata.BaseDockerLabel, ccType))
 	buf = append(buf, fmt.Sprintf("      %s.version=\"%s\" \\", metadata.BaseDockerLabel, metadata.Version))
 	buf = append(buf, fmt.Sprintf("      %s.base.version=\"%s\"", metadata.BaseDockerLabel, metadata.BaseVersion))
 	
@@ -109,20 +137,25 @@ func generateDockerfile(platform Platform, cds *pb.ChaincodeDeploymentSpec) ([]b
 	contents := strings.Join(buf, "\n")
 	logger.Debugf("\n%s", contents)
 
-	return []byte(contents), nil
+	return contents, nil
 }
 
-type InputFiles map[string][]byte
-
-func generateDockerBuild(platform Platform, cds *pb.ChaincodeDeploymentSpec, inputFiles InputFiles, tw *tar.Writer) error {
-
+func (r *Registry) StreamDockerBuild(ccType, path string, codePackage []byte, inputFiles map[string][]byte, tw *tar.Writer) error {
 	var err error
 
 	
 	
 	
+	platform, ok := r.Platforms[ccType]
+	if !ok {
+		return fmt.Errorf("could not find platform of type: %s", ccType)
+	}
+
+	
+	
+	
 	for name, data := range inputFiles {
-		err = _CUtilWriteBytesToPackage(name, data, tw)
+		err = r.PackageWriter.Write(name, data, tw)
 		if err != nil {
 			return fmt.Errorf("Failed to inject \"%s\": %s", name, err)
 		}
@@ -131,7 +164,7 @@ func generateDockerBuild(platform Platform, cds *pb.ChaincodeDeploymentSpec, inp
 	
 	
 	
-	err = platform.GenerateDockerBuild(cds, tw)
+	err = platform.GenerateDockerBuild(path, codePackage, tw)
 	if err != nil {
 		return fmt.Errorf("Failed to generate platform-specific docker build: %s", err)
 	}
@@ -139,27 +172,19 @@ func generateDockerBuild(platform Platform, cds *pb.ChaincodeDeploymentSpec, inp
 	return nil
 }
 
-func GenerateDockerBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
+func (r *Registry) GenerateDockerBuild(ccType, path, name, version string, codePackage []byte) (io.Reader, error) {
 
-	inputFiles := make(InputFiles)
-
-	
-	
-	
-	platform, err := _Find(cds.ChaincodeSpec.Type)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to determine platform type: %s", err)
-	}
+	inputFiles := make(map[string][]byte)
 
 	
 	
 	
-	dockerFile, err := _generateDockerfile(platform, cds)
+	dockerFile, err := r.GenerateDockerfile(ccType, name, version)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to generate a Dockerfile: %s", err)
 	}
 
-	inputFiles["Dockerfile"] = dockerFile
+	inputFiles["Dockerfile"] = []byte(dockerFile)
 
 	
 	
@@ -169,7 +194,7 @@ func GenerateDockerBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
 	go func() {
 		gw := gzip.NewWriter(output)
 		tw := tar.NewWriter(gw)
-		err := _generateDockerBuild(platform, cds, inputFiles, tw)
+		err := r.StreamDockerBuild(ccType, path, codePackage, inputFiles, tw)
 		if err != nil {
 			logger.Error(err)
 		}

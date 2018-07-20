@@ -1,17 +1,23 @@
 
 
 
-package peer
+package peer 
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import google_protobuf1 "github.com/golang/protobuf/ptypes/timestamp"
+import timestamp "github.com/golang/protobuf/ptypes/timestamp"
 
 
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+
+
+
+
+const _ = proto.ProtoPackageIsVersion2 
 
 
 
@@ -26,7 +32,7 @@ type ProposalResponse struct {
 	Version int32 `protobuf:"varint,1,opt,name=version" json:"version,omitempty"`
 	
 	
-	Timestamp *google_protobuf1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp,omitempty"`
+	Timestamp *timestamp.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp,omitempty"`
 	
 	
 	Response *Response `protobuf:"bytes,4,opt,name=response" json:"response,omitempty"`
@@ -34,13 +40,35 @@ type ProposalResponse struct {
 	Payload []byte `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
 	
 	
-	Endorsement *Endorsement `protobuf:"bytes,6,opt,name=endorsement" json:"endorsement,omitempty"`
+	Endorsement          *Endorsement `protobuf:"bytes,6,opt,name=endorsement" json:"endorsement,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
-func (m *ProposalResponse) Reset()                    { *m = ProposalResponse{} }
-func (m *ProposalResponse) String() string            { return proto.CompactTextString(m) }
-func (*ProposalResponse) ProtoMessage()               {}
-func (*ProposalResponse) Descriptor() ([]byte, []int) { return fileDescriptor8, []int{0} }
+func (m *ProposalResponse) Reset()         { *m = ProposalResponse{} }
+func (m *ProposalResponse) String() string { return proto.CompactTextString(m) }
+func (*ProposalResponse) ProtoMessage()    {}
+func (*ProposalResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposal_response_22a755721b685f40, []int{0}
+}
+func (m *ProposalResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ProposalResponse.Unmarshal(m, b)
+}
+func (m *ProposalResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ProposalResponse.Marshal(b, m, deterministic)
+}
+func (dst *ProposalResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProposalResponse.Merge(dst, src)
+}
+func (m *ProposalResponse) XXX_Size() int {
+	return xxx_messageInfo_ProposalResponse.Size(m)
+}
+func (m *ProposalResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProposalResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProposalResponse proto.InternalMessageInfo
 
 func (m *ProposalResponse) GetVersion() int32 {
 	if m != nil {
@@ -49,7 +77,7 @@ func (m *ProposalResponse) GetVersion() int32 {
 	return 0
 }
 
-func (m *ProposalResponse) GetTimestamp() *google_protobuf1.Timestamp {
+func (m *ProposalResponse) GetTimestamp() *timestamp.Timestamp {
 	if m != nil {
 		return m.Timestamp
 	}
@@ -85,13 +113,35 @@ type Response struct {
 	
 	Message string `protobuf:"bytes,2,opt,name=message" json:"message,omitempty"`
 	
-	Payload []byte `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload              []byte   `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Response) Reset()                    { *m = Response{} }
-func (m *Response) String() string            { return proto.CompactTextString(m) }
-func (*Response) ProtoMessage()               {}
-func (*Response) Descriptor() ([]byte, []int) { return fileDescriptor8, []int{1} }
+func (m *Response) Reset()         { *m = Response{} }
+func (m *Response) String() string { return proto.CompactTextString(m) }
+func (*Response) ProtoMessage()    {}
+func (*Response) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposal_response_22a755721b685f40, []int{1}
+}
+func (m *Response) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Response.Unmarshal(m, b)
+}
+func (m *Response) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Response.Marshal(b, m, deterministic)
+}
+func (dst *Response) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Response.Merge(dst, src)
+}
+func (m *Response) XXX_Size() int {
+	return xxx_messageInfo_Response.Size(m)
+}
+func (m *Response) XXX_DiscardUnknown() {
+	xxx_messageInfo_Response.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Response proto.InternalMessageInfo
 
 func (m *Response) GetStatus() int32 {
 	if m != nil {
@@ -141,13 +191,35 @@ type ProposalResponsePayload struct {
 	
 	
 	
-	Extension []byte `protobuf:"bytes,2,opt,name=extension,proto3" json:"extension,omitempty"`
+	Extension            []byte   `protobuf:"bytes,2,opt,name=extension,proto3" json:"extension,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ProposalResponsePayload) Reset()                    { *m = ProposalResponsePayload{} }
-func (m *ProposalResponsePayload) String() string            { return proto.CompactTextString(m) }
-func (*ProposalResponsePayload) ProtoMessage()               {}
-func (*ProposalResponsePayload) Descriptor() ([]byte, []int) { return fileDescriptor8, []int{2} }
+func (m *ProposalResponsePayload) Reset()         { *m = ProposalResponsePayload{} }
+func (m *ProposalResponsePayload) String() string { return proto.CompactTextString(m) }
+func (*ProposalResponsePayload) ProtoMessage()    {}
+func (*ProposalResponsePayload) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposal_response_22a755721b685f40, []int{2}
+}
+func (m *ProposalResponsePayload) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ProposalResponsePayload.Unmarshal(m, b)
+}
+func (m *ProposalResponsePayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ProposalResponsePayload.Marshal(b, m, deterministic)
+}
+func (dst *ProposalResponsePayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProposalResponsePayload.Merge(dst, src)
+}
+func (m *ProposalResponsePayload) XXX_Size() int {
+	return xxx_messageInfo_ProposalResponsePayload.Size(m)
+}
+func (m *ProposalResponsePayload) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProposalResponsePayload.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProposalResponsePayload proto.InternalMessageInfo
 
 func (m *ProposalResponsePayload) GetProposalHash() []byte {
 	if m != nil {
@@ -177,13 +249,35 @@ type Endorsement struct {
 	Endorser []byte `protobuf:"bytes,1,opt,name=endorser,proto3" json:"endorser,omitempty"`
 	
 	
-	Signature []byte `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	Signature            []byte   `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Endorsement) Reset()                    { *m = Endorsement{} }
-func (m *Endorsement) String() string            { return proto.CompactTextString(m) }
-func (*Endorsement) ProtoMessage()               {}
-func (*Endorsement) Descriptor() ([]byte, []int) { return fileDescriptor8, []int{3} }
+func (m *Endorsement) Reset()         { *m = Endorsement{} }
+func (m *Endorsement) String() string { return proto.CompactTextString(m) }
+func (*Endorsement) ProtoMessage()    {}
+func (*Endorsement) Descriptor() ([]byte, []int) {
+	return fileDescriptor_proposal_response_22a755721b685f40, []int{3}
+}
+func (m *Endorsement) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Endorsement.Unmarshal(m, b)
+}
+func (m *Endorsement) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Endorsement.Marshal(b, m, deterministic)
+}
+func (dst *Endorsement) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Endorsement.Merge(dst, src)
+}
+func (m *Endorsement) XXX_Size() int {
+	return xxx_messageInfo_Endorsement.Size(m)
+}
+func (m *Endorsement) XXX_DiscardUnknown() {
+	xxx_messageInfo_Endorsement.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Endorsement proto.InternalMessageInfo
 
 func (m *Endorsement) GetEndorser() []byte {
 	if m != nil {
@@ -206,9 +300,11 @@ func init() {
 	proto.RegisterType((*Endorsement)(nil), "protos.Endorsement")
 }
 
-func init() { proto.RegisterFile("peer/proposal_response.proto", fileDescriptor8) }
+func init() {
+	proto.RegisterFile("peer/proposal_response.proto", fileDescriptor_proposal_response_22a755721b685f40)
+}
 
-var fileDescriptor8 = []byte{
+var fileDescriptor_proposal_response_22a755721b685f40 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x92, 0x51, 0x4b, 0xfb, 0x30,
 	0x14, 0xc5, 0xe9, 0xfe, 0xff, 0xcd, 0x2d, 0x9b, 0x30, 0x2a, 0x68, 0x19, 0x03, 0x47, 0x7d, 0x99,

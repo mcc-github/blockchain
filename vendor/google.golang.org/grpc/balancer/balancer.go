@@ -23,6 +23,9 @@ var (
 
 
 
+
+
+
 func Register(b Builder) {
 	m[strings.ToLower(b.Name())] = b
 }
@@ -110,6 +113,8 @@ type BuildOptions struct {
 	
 	
 	Dialer func(context.Context, string) (net.Conn, error)
+	
+	ChannelzParentID int64
 }
 
 
@@ -204,4 +209,46 @@ type Balancer interface {
 	
 	
 	Close()
+}
+
+
+
+
+
+type ConnectivityStateEvaluator struct {
+	numReady            uint64 
+	numConnecting       uint64 
+	numTransientFailure uint64 
+}
+
+
+
+
+
+
+
+
+
+func (cse *ConnectivityStateEvaluator) RecordTransition(oldState, newState connectivity.State) connectivity.State {
+	
+	for idx, state := range []connectivity.State{oldState, newState} {
+		updateVal := 2*uint64(idx) - 1 
+		switch state {
+		case connectivity.Ready:
+			cse.numReady += updateVal
+		case connectivity.Connecting:
+			cse.numConnecting += updateVal
+		case connectivity.TransientFailure:
+			cse.numTransientFailure += updateVal
+		}
+	}
+
+	
+	if cse.numReady > 0 {
+		return connectivity.Ready
+	}
+	if cse.numConnecting > 0 {
+		return connectivity.Connecting
+	}
+	return connectivity.TransientFailure
 }

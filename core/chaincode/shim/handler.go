@@ -728,7 +728,8 @@ func (handler *Handler) handleCreated(msg *pb.ChaincodeMessage, errc chan error)
 
 func (handler *Handler) handleMessage(msg *pb.ChaincodeMessage, errc chan error) error {
 	if msg.Type == pb.ChaincodeMessage_KEEPALIVE {
-		
+		chaincodeLogger.Debug("Sending KEEPALIVE response")
+		handler.serialSendAsync(msg, nil) 
 		return nil
 	}
 	chaincodeLogger.Debugf("[%s] Handling ChaincodeMessage of type: %s(state:%s)", shorttxid(msg.Txid), msg.Type, handler.state)

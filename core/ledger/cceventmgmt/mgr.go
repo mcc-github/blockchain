@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 )
 
@@ -18,8 +19,8 @@ var logger = flogging.MustGetLogger("cceventmgmt")
 var mgr *Mgr
 
 
-func Initialize() {
-	initialize(&chaincodeInfoProviderImpl{})
+func Initialize(pr *platforms.Registry) {
+	initialize(&chaincodeInfoProviderImpl{PlatformRegistry: pr})
 }
 
 func initialize(ccInfoProvider ChaincodeInfoProvider) {

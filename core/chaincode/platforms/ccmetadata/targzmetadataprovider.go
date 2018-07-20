@@ -5,11 +5,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"strings"
 
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 )
 
@@ -23,24 +21,15 @@ const (
 
 
 type TargzMetadataProvider struct {
-	DepSpec *pb.ChaincodeDeploymentSpec
+	Code []byte
 }
 
 func (tgzProv *TargzMetadataProvider) getCode() ([]byte, error) {
-	if tgzProv.DepSpec == nil {
-		logger.Errorf("nil chaincode deployment spec")
-		return nil, errors.New("nil chaincode deployment spec")
+	if tgzProv.Code == nil {
+		return nil, errors.New("nil code package")
 	}
 
-	if tgzProv.DepSpec.ChaincodeSpec == nil || tgzProv.DepSpec.ChaincodeSpec.ChaincodeId == nil {
-		return nil, errors.New("invalid chaincode deployment spec")
-	}
-
-	if tgzProv.DepSpec.CodePackage == nil {
-		return nil, errors.New(fmt.Sprintf("nil code package for %v", tgzProv.DepSpec.ChaincodeSpec.ChaincodeId))
-	}
-
-	return tgzProv.DepSpec.CodePackage, nil
+	return tgzProv.Code, nil
 }
 
 

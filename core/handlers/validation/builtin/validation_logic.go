@@ -17,6 +17,11 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/car"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
@@ -494,7 +499,17 @@ func (vscc *ValidatorOneValidSignature) ValidateLSCCInvocation(
 			return policyErr(fmt.Errorf("Wrong number of arguments for invocation lscc(%s): received %d", lsccFunc, len(lsccArgs)))
 		}
 
-		cdsArgs, err := utils.GetChaincodeDeploymentSpec(lsccArgs[1])
+		cdsArgs, err := utils.GetChaincodeDeploymentSpec(lsccArgs[1], platforms.NewRegistry(
+			
+			
+			
+			
+			&golang.Platform{},
+			&node.Platform{},
+			&java.Platform{},
+			&car.Platform{},
+		))
+
 		if err != nil {
 			return policyErr(fmt.Errorf("GetChaincodeDeploymentSpec error %s", err))
 		}

@@ -19,6 +19,8 @@ package ledgermgmt
 import (
 	"os"
 
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/ledger/customtx"
 
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
@@ -29,14 +31,14 @@ import (
 
 func InitializeTestEnv() {
 	remove()
-	initialize(nil, nil)
+	initialize(nil, nil, platforms.NewRegistry(&golang.Platform{}))
 }
 
 
 func InitializeTestEnvWithCustomProcessors(customTxProcessors customtx.Processors) {
 	remove()
 	customtx.InitializeTestEnv(customTxProcessors)
-	initialize(customTxProcessors, nil)
+	initialize(customTxProcessors, nil, platforms.NewRegistry(&golang.Platform{}))
 }
 
 

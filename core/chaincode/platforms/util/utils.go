@@ -200,7 +200,7 @@ func DockerBuild(opts DockerBuildOptions) error {
 	
 	
 	stdout := bytes.NewBuffer(nil)
-	_, err = client.AttachToContainerNonBlocking(docker.AttachToContainerOptions{
+	cw, err := client.AttachToContainerNonBlocking(docker.AttachToContainerOptions{
 		Container:    container.ID,
 		OutputStream: stdout,
 		ErrorStream:  stdout,
@@ -218,6 +218,7 @@ func DockerBuild(opts DockerBuildOptions) error {
 	
 	err = client.StartContainer(container.ID, nil)
 	if err != nil {
+		cw.Close()
 		return fmt.Errorf("Error executing build: %s \"%s\"", err, stdout.String())
 	}
 
@@ -226,9 +227,16 @@ func DockerBuild(opts DockerBuildOptions) error {
 	
 	retval, err := client.WaitContainer(container.ID)
 	if err != nil {
+		cw.Close()
 		return fmt.Errorf("Error waiting for container to complete: %s", err)
 	}
+	cw.Close()
+
 	if retval > 0 {
+		
+		if err := cw.Wait(); err != nil {
+			logger.Errorf("attach wait failed: %s", err)
+		}
 		return fmt.Errorf("Error returned from build: %d \"%s\"", retval, stdout.String())
 	}
 

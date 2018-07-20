@@ -18,6 +18,7 @@ package peer
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -58,8 +59,10 @@ type MockCCComm struct {
 	recvStream  chan *pb.ChaincodeMessage
 	sendStream  chan *pb.ChaincodeMessage
 	respIndex   int
+	respLock    sync.Mutex
 	respSet     *MockResponseSet
 	pong        bool
+	skipClose   bool
 }
 
 func (s *MockCCComm) SetName(newname string) {
@@ -68,9 +71,6 @@ func (s *MockCCComm) SetName(newname string) {
 
 
 func (s *MockCCComm) Send(msg *pb.ChaincodeMessage) error {
-	defer func() {
-		recover()
-	}()
 	s.sendStream <- msg
 	return nil
 }
@@ -98,14 +98,9 @@ func (s *MockCCComm) GetSendStream() chan *pb.ChaincodeMessage {
 
 
 func (s *MockCCComm) Quit() {
-	if s.recvStream != nil {
+	if !s.skipClose {
 		close(s.recvStream)
-		s.recvStream = nil
-	}
-
-	if s.sendStream != nil {
 		close(s.sendStream)
-		s.sendStream = nil
 	}
 }
 
@@ -126,31 +121,32 @@ func (s *MockCCComm) SetKeepAlive(ka *pb.ChaincodeMessage) {
 
 
 func (s *MockCCComm) SetResponses(respSet *MockResponseSet) {
+	s.respLock.Lock()
 	s.respSet = respSet
 	s.respIndex = 0
+	s.respLock.Unlock()
 }
 
 
-func (s *MockCCComm) ka() {
-	defer recover()
+func (s *MockCCComm) ka(done <-chan struct{}) {
 	for {
 		if s.keepAlive == nil {
 			return
 		}
 		s.Send(s.keepAlive)
-		time.Sleep(10 * time.Millisecond)
+		select {
+		case <-time.After(10 * time.Millisecond):
+		case <-done:
+			return
+		}
 	}
 }
 
 
-func (s *MockCCComm) Run() error {
+func (s *MockCCComm) Run(done <-chan struct{}) error {
 	
-	go s.ka()
-
-	
-	defer func() {
-		s.keepAlive = nil
-	}()
+	go s.ka(done)
+	defer s.Quit()
 
 	for {
 		msg, err := s.Recv()
@@ -180,6 +176,9 @@ func (s *MockCCComm) respond(msg *pb.ChaincodeMessage) error {
 		}
 		return nil
 	}
+
+	s.respLock.Lock()
+	defer s.respLock.Unlock()
 
 	var err error
 	if s.respIndex < len(s.respSet.Responses) {

@@ -800,8 +800,8 @@ func TestDynamicCapabilitiesAndMSP(t *testing.T) {
 	assert.NoError(t, err)
 	assertValid(b, t)
 	
-	capabilityInvokeCount := support.CapabilitiesInvokeCount
-	mspManagerInvokeCount := support.MSPManagerInvokeCount
+	capabilityInvokeCount := support.CapabilitiesInvokeCount()
+	mspManagerInvokeCount := support.MSPManagerInvokeCount()
 
 	
 	err = v.Validate(b)
@@ -810,10 +810,10 @@ func TestDynamicCapabilitiesAndMSP(t *testing.T) {
 
 	
 	
-	assert.Equal(t, 2*capabilityInvokeCount, support.CapabilitiesInvokeCount)
+	assert.Equal(t, 2*capabilityInvokeCount, support.CapabilitiesInvokeCount())
 	
 	
-	assert.Equal(t, 2*mspManagerInvokeCount, support.MSPManagerInvokeCount)
+	assert.Equal(t, 2*mspManagerInvokeCount, support.MSPManagerInvokeCount())
 }
 
 

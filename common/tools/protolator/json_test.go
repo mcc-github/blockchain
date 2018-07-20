@@ -245,3 +245,43 @@ func TestJSONUnmarshalMaxUint32(t *testing.T) {
 	assert.NoError(t, err)
 	assert.IsType(t, json.Number(""), m[fieldName])
 }
+
+func TestMostlyDeterministicMarshal(t *testing.T) {
+	multiKeyMap := &testprotos.SimpleMsg{
+		MapField: map[string]string{
+			"a": "b",
+			"c": "d",
+			"e": "f",
+			"g": "h",
+			"i": "j",
+			"k": "l",
+			"m": "n",
+			"o": "p",
+			"q": "r",
+			"s": "t",
+			"u": "v",
+			"w": "x",
+			"y": "z",
+		},
+	}
+
+	result, err := MostlyDeterministicMarshal(multiKeyMap)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+
+	
+	
+	
+	
+	
+	for i := 0; i < 10; i++ {
+		newResult, err := MostlyDeterministicMarshal(multiKeyMap)
+		assert.NoError(t, err)
+		assert.Equal(t, result, newResult)
+	}
+
+	unmarshaled := &testprotos.SimpleMsg{}
+	err = proto.Unmarshal(result, unmarshaled)
+	assert.NoError(t, err)
+	assert.True(t, proto.Equal(unmarshaled, multiKeyMap))
+}

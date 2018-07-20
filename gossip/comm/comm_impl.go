@@ -39,6 +39,13 @@ const (
 )
 
 
+
+type SecurityAdvisor interface {
+	
+	OrgByPeerIdentity(api.PeerIdentityType) api.OrgIdentityType
+}
+
+
 func SetDialTimeout(timeout time.Duration) {
 	viper.Set("peer.gossip.dialTimeout", timeout)
 }
@@ -53,7 +60,7 @@ func (c *commImpl) SetDialOpts(opts ...grpc.DialOption) {
 
 
 func NewCommInstanceWithServer(port int, idMapper identity.Mapper, peerIdentity api.PeerIdentityType,
-	secureDialOpts api.PeerSecureDialOpts, dialOpts ...grpc.DialOption) (Comm, error) {
+	secureDialOpts api.PeerSecureDialOpts, sa api.SecurityAdvisor, dialOpts ...grpc.DialOption) (Comm, error) {
 
 	var ll net.Listener
 	var s *grpc.Server
@@ -64,6 +71,7 @@ func NewCommInstanceWithServer(port int, idMapper identity.Mapper, peerIdentity 
 	}
 
 	commInst := &commImpl{
+		sa:             sa,
 		pubSub:         util.NewPubSub(),
 		PKIID:          idMapper.GetPKIidOfCert(peerIdentity),
 		idMapper:       idMapper,
@@ -99,10 +107,10 @@ func NewCommInstanceWithServer(port int, idMapper identity.Mapper, peerIdentity 
 
 
 func NewCommInstance(s *grpc.Server, certs *common.TLSCertificates, idStore identity.Mapper,
-	peerIdentity api.PeerIdentityType, secureDialOpts api.PeerSecureDialOpts,
+	peerIdentity api.PeerIdentityType, secureDialOpts api.PeerSecureDialOpts, sa api.SecurityAdvisor,
 	dialOpts ...grpc.DialOption) (Comm, error) {
 
-	commInst, err := NewCommInstanceWithServer(-1, idStore, peerIdentity, secureDialOpts, dialOpts...)
+	commInst, err := NewCommInstanceWithServer(-1, idStore, peerIdentity, secureDialOpts, sa, dialOpts...)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -115,6 +123,7 @@ func NewCommInstance(s *grpc.Server, certs *common.TLSCertificates, idStore iden
 }
 
 type commImpl struct {
+	sa             api.SecurityAdvisor
 	tlsCerts       *common.TLSCertificates
 	pubSub         *util.PubSub
 	peerIdentity   api.PeerIdentityType
@@ -175,11 +184,18 @@ func (c *commImpl) createConnection(endpoint string, expectedPKIID common.PKIidT
 		connInfo, err = c.authenticateRemotePeer(stream, true)
 		if err == nil {
 			pkiID = connInfo.ID
+			
 			if expectedPKIID != nil && !bytes.Equal(pkiID, expectedPKIID) {
+				actualOrg := c.sa.OrgByPeerIdentity(connInfo.Identity)
 				
-				c.logger.Warning("Remote endpoint claims to be a different peer, expected", expectedPKIID, "but got", pkiID)
-				cc.Close()
-				return nil, errors.New("Authentication failure")
+				
+				identity, _ := c.idMapper.Get(expectedPKIID)
+				oldOrg := c.sa.OrgByPeerIdentity(identity)
+				if !bytes.Equal(actualOrg, oldOrg) {
+					c.logger.Warning("Remote endpoint claims to be a different peer, expected", expectedPKIID, "but got", pkiID)
+					cc.Close()
+					return nil, errors.New("authentication failure")
+				}
 			}
 			conn := newConnection(cl, cc, stream, nil)
 			conn.pkiID = pkiID
@@ -441,7 +457,7 @@ func (c *commImpl) authenticateRemotePeer(stream stream, initiator bool) (*proto
 	}
 
 	if receivedMsg.PkiId == nil {
-		c.logger.Warning("%s didn't send a pkiID", remoteAddress)
+		c.logger.Warningf("%s didn't send a pkiID", remoteAddress)
 		return nil, fmt.Errorf("No PKI-ID")
 	}
 

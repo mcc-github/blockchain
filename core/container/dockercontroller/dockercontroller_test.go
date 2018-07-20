@@ -10,16 +10,14 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +25,7 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	coreutil "github.com/mcc-github/blockchain/core/testutil"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -35,22 +34,21 @@ import (
 
 func TestIntegrationPath(t *testing.T) {
 	coreutil.SetupTestConfig()
-	ctxt := context.Background()
-	dc := NewDockerVM("", "")
+	dc := NewDockerVM("", util.GenerateUUID())
 	ccid := ccintf.CCID{Name: "simple"}
 
-	err := dc.Start(ctxt, ccid, nil, nil, nil, InMemBuilder{})
+	err := dc.Start(ccid, nil, nil, nil, InMemBuilder{})
 	require.NoError(t, err)
 
 	
-	err = dc.Stop(ctxt, ccid, 0, true, true)
+	err = dc.Stop(ccid, 0, true, true)
 	require.NoError(t, err)
 
-	err = dc.Start(ctxt, ccid, nil, nil, nil, nil)
+	err = dc.Start(ccid, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	
-	_ = dc.Stop(ctxt, ccid, 0, false, true)
+	_ = dc.Stop(ccid, 0, false, true)
 }
 
 func TestHostConfig(t *testing.T) {
@@ -67,18 +65,16 @@ func TestHostConfig(t *testing.T) {
 }
 
 func TestGetDockerHostConfig(t *testing.T) {
-	os.Setenv("CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE", "overlay")
-	os.Setenv("CORE_VM_DOCKER_HOSTCONFIG_CPUSHARES", fmt.Sprint(1024*1024*1024*2))
 	coreutil.SetupTestConfig()
 	hostConfig = nil 
 	hostConfig := getDockerHostConfig()
 	testutil.AssertNotNil(t, hostConfig)
-	testutil.AssertEquals(t, hostConfig.NetworkMode, "overlay")
+	testutil.AssertEquals(t, hostConfig.NetworkMode, "host")
 	testutil.AssertEquals(t, hostConfig.LogConfig.Type, "json-file")
 	testutil.AssertEquals(t, hostConfig.LogConfig.Config["max-size"], "50m")
 	testutil.AssertEquals(t, hostConfig.LogConfig.Config["max-file"], "5")
 	testutil.AssertEquals(t, hostConfig.Memory, int64(1024*1024*1024*2))
-	testutil.AssertEquals(t, hostConfig.CPUShares, int64(1024*1024*1024*2))
+	testutil.AssertEquals(t, hostConfig.CPUShares, int64(0))
 }
 
 func Test_Start(t *testing.T) {
@@ -89,95 +85,103 @@ func Test_Start(t *testing.T) {
 	files := map[string][]byte{
 		"hello": []byte("world"),
 	}
-	ctx := context.Background()
 
 	
 	
 	dvm.getClientFnc = getMockClient
 	getClientErr = true
-	err := dvm.Start(ctx, ccid, args, env, files, nil)
+	err := dvm.Start(ccid, args, env, files, nil)
 	testerr(t, err, false)
 	getClientErr = false
 
 	
 	createErr = true
-	err = dvm.Start(ctx, ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files, nil)
 	testerr(t, err, false)
 	createErr = false
 
 	
 	uploadErr = true
-	err = dvm.Start(ctx, ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files, nil)
 	testerr(t, err, false)
 	uploadErr = false
 
 	
 	noSuchImgErr = true
-	err = dvm.Start(ctx, ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files, nil)
 	testerr(t, err, false)
 
 	chaincodePath := "github.com/mcc-github/blockchain/examples/chaincode/go/example01/cmd"
-	spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_GOLANG,
+	spec := &pb.ChaincodeSpec{
+		Type:        pb.ChaincodeSpec_GOLANG,
 		ChaincodeId: &pb.ChaincodeID{Name: "ex01", Path: chaincodePath},
-		Input:       &pb.ChaincodeInput{Args: util.ToChaincodeArgs("f")}}
-	codePackage, err := platforms.GetDeploymentPayload(spec)
+		Input:       &pb.ChaincodeInput{Args: util.ToChaincodeArgs("f")},
+	}
+	codePackage, err := platforms.NewRegistry(&golang.Platform{}).GetDeploymentPayload(spec.CCType(), spec.Path())
 	if err != nil {
 		t.Fatal()
 	}
 	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec, CodePackage: codePackage}
 	bldr := &mockBuilder{
-		buildFunc: func() (io.Reader, error) { return platforms.GenerateDockerBuild(cds) },
+		buildFunc: func() (io.Reader, error) {
+			return platforms.NewRegistry(&golang.Platform{}).GenerateDockerBuild(
+				cds.CCType(),
+				cds.Path(),
+				cds.Name(),
+				cds.Version(),
+				cds.Bytes(),
+			)
+		},
 	}
 
 	
 	
 	viper.Set("vm.docker.attachStdout", true)
 	startErr = true
-	err = dvm.Start(ctx, ccid, args, env, files, bldr)
+	err = dvm.Start(ccid, args, env, files, bldr)
 	testerr(t, err, false)
 	startErr = false
 
 	
-	err = dvm.Start(ctx, ccid, args, env, files, bldr)
+	err = dvm.Start(ccid, args, env, files, bldr)
 	testerr(t, err, true)
 	noSuchImgErr = false
 
 	
 	stopErr = true
-	err = dvm.Start(ctx, ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files, nil)
 	testerr(t, err, true)
 	stopErr = false
 
 	
 	killErr = true
-	err = dvm.Start(ctx, ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files, nil)
 	testerr(t, err, true)
 	killErr = false
 
 	
 	removeErr = true
-	err = dvm.Start(ctx, ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files, nil)
 	testerr(t, err, true)
 	removeErr = false
 
-	err = dvm.Start(ctx, ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files, nil)
 	testerr(t, err, true)
 }
 
 func Test_Stop(t *testing.T) {
 	dvm := DockerVM{}
 	ccid := ccintf.CCID{Name: "simple"}
-	ctx := context.Background()
 
 	
 	getClientErr = true
 	dvm.getClientFnc = getMockClient
-	err := dvm.Stop(ctx, ccid, 10, true, true)
+	err := dvm.Stop(ccid, 10, true, true)
 	testerr(t, err, false)
 	getClientErr = false
 
 	
-	err = dvm.Stop(ctx, ccid, 10, true, true)
+	err = dvm.Stop(ccid, 10, true, true)
 	testerr(t, err, true)
 }
 
@@ -258,16 +262,22 @@ func TestGetVMName(t *testing.T) {
 type InMemBuilder struct{}
 
 func (imb InMemBuilder) Build() (io.Reader, error) {
+	buf := &bytes.Buffer{}
+	fmt.Fprintln(buf, "FROM busybox:latest")
+	fmt.Fprintln(buf, `CMD ["tail", "-f", "/dev/null"]`)
+
 	startTime := time.Now()
 	inputbuf := bytes.NewBuffer(nil)
 	gw := gzip.NewWriter(inputbuf)
 	tr := tar.NewWriter(gw)
-	dockerFileContents := []byte("FROM busybox:latest\n\nCMD echo hello")
-	dockerFileSize := int64(len([]byte(dockerFileContents)))
-
-	tr.WriteHeader(&tar.Header{Name: "Dockerfile", Size: dockerFileSize,
-		ModTime: startTime, AccessTime: startTime, ChangeTime: startTime})
-	tr.Write([]byte(dockerFileContents))
+	tr.WriteHeader(&tar.Header{
+		Name:       "Dockerfile",
+		Size:       int64(buf.Len()),
+		ModTime:    startTime,
+		AccessTime: startTime,
+		ChangeTime: startTime,
+	})
+	tr.Write(buf.Bytes())
 	tr.Close()
 	gw.Close()
 	return inputbuf, nil
@@ -306,7 +316,8 @@ var getClientErr, createErr, uploadErr, noSuchImgErr, buildErr, removeImgErr,
 func (c *mockClient) CreateContainer(options docker.CreateContainerOptions) (*docker.Container, error) {
 	if createErr {
 		return nil, errors.New("Error creating the container")
-	} else if noSuchImgErr && !c.noSuchImgErrReturned {
+	}
+	if noSuchImgErr && !c.noSuchImgErrReturned {
 		c.noSuchImgErrReturned = true
 		return nil, docker.ErrNoSuchImage
 	}

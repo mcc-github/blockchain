@@ -19,6 +19,7 @@ const maxInt = int(^uint(0) >> 1)
 
 
 
+
 type MethodConfig struct {
 	
 	
@@ -46,6 +47,7 @@ type MethodConfig struct {
 
 
 
+
 type ServiceConfig struct {
 	
 	
@@ -55,6 +57,8 @@ type ServiceConfig struct {
 	
 	
 	Methods map[string]MethodConfig
+
+	stickinessMetadataKey *string
 }
 
 func parseDuration(s *string) (*time.Duration, error) {
@@ -128,8 +132,9 @@ type jsonMC struct {
 
 
 type jsonSC struct {
-	LoadBalancingPolicy *string
-	MethodConfig        *[]jsonMC
+	LoadBalancingPolicy   *string
+	StickinessMetadataKey *string
+	MethodConfig          *[]jsonMC
 }
 
 func parseServiceConfig(js string) (ServiceConfig, error) {
@@ -142,6 +147,8 @@ func parseServiceConfig(js string) (ServiceConfig, error) {
 	sc := ServiceConfig{
 		LB:      rsc.LoadBalancingPolicy,
 		Methods: make(map[string]MethodConfig),
+
+		stickinessMetadataKey: rsc.StickinessMetadataKey,
 	}
 	if rsc.MethodConfig == nil {
 		return sc, nil

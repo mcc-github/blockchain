@@ -29,22 +29,22 @@ type Provider struct {
 	Peer        peer.Operations
 	PeerSupport peer.Support
 	Registrar   Registrar
-	SysCCs      []*SystemChaincode
+	SysCCs      []SelfDescribingSysCC
 }
 
 
-func (p *Provider) RegisterSysCC(scc *SystemChaincode) {
+func (p *Provider) RegisterSysCC(scc SelfDescribingSysCC) {
 	p.SysCCs = append(p.SysCCs, scc)
 	_, err := p.registerSysCC(scc)
 	if err != nil {
-		sysccLogger.Panic("Could not register system chaincode: %s", err)
+		sysccLogger.Panicf("Could not register system chaincode: %s", err)
 	}
 }
 
 
 func (p *Provider) IsSysCC(name string) bool {
 	for _, sysCC := range p.SysCCs {
-		if sysCC.Name == name {
+		if sysCC.Name() == name {
 			return true
 		}
 	}
@@ -59,8 +59,8 @@ func (p *Provider) IsSysCC(name string) bool {
 
 func (p *Provider) IsSysCCAndNotInvokableCC2CC(name string) bool {
 	for _, sysCC := range p.SysCCs {
-		if sysCC.Name == name {
-			return !sysCC.InvokableCC2CC
+		if sysCC.Name() == name {
+			return !sysCC.InvokableCC2CC()
 		}
 	}
 
@@ -86,8 +86,8 @@ func (p *Provider) GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, 
 
 func (p *Provider) IsSysCCAndNotInvokableExternal(name string) bool {
 	for _, sysCC := range p.SysCCs {
-		if sysCC.Name == name {
-			return !sysCC.InvokableExternal
+		if sysCC.Name() == name {
+			return !sysCC.InvokableExternal()
 		}
 	}
 

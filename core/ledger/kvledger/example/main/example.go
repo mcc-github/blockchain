@@ -21,6 +21,8 @@ import (
 	"os"
 
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/example"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
@@ -53,7 +55,7 @@ func init() {
 	
 	
 	cleanup()
-	ledgermgmt.Initialize(nil)
+	ledgermgmt.Initialize(nil, platforms.NewRegistry(&golang.Platform{}))
 	var err error
 
 	gb, _ := configtxtest.MakeGenesisBlock(ledgerID)

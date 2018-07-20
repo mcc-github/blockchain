@@ -21,6 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	fileledger "github.com/mcc-github/blockchain/common/ledger/blockledger/file"
 	"github.com/mcc-github/blockchain/common/policies"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
@@ -130,11 +131,11 @@ func capabilitiesSupportedOrPanic(res channelconfig.Resources) {
 	}
 
 	if err := ac.Capabilities().Supported(); err != nil {
-		peerLogger.Panicf("[channel %s] incompatible %s", res.ConfigtxValidator(), err)
+		peerLogger.Panicf("[channel %s] incompatible: %s", res.ConfigtxValidator().ChainID(), err)
 	}
 
 	if err := res.ChannelConfig().Capabilities().Supported(); err != nil {
-		peerLogger.Panicf("[channel %s] incompatible %s", res.ConfigtxValidator(), err)
+		peerLogger.Panicf("[channel %s] incompatible: %s", res.ConfigtxValidator().ChainID(), err)
 	}
 }
 
@@ -188,7 +189,7 @@ var validationWorkersSemaphore *semaphore.Weighted
 
 
 
-func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, pm txvalidator.PluginMapper) {
+func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, pm txvalidator.PluginMapper, pr *platforms.Registry) {
 	nWorkers := viper.GetInt("peer.validatorPoolSize")
 	if nWorkers <= 0 {
 		nWorkers = runtime.NumCPU()
@@ -200,7 +201,7 @@ func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccp
 
 	var cb *common.Block
 	var ledger ledger.PeerLedger
-	ledgermgmt.Initialize(ConfigTxProcessors)
+	ledgermgmt.Initialize(ConfigTxProcessors, pr)
 	ledgerIds, err := ledgermgmt.GetLedgerIDs()
 	if err != nil {
 		panic(fmt.Errorf("Error in initializing ledgermgmt: %s", err))
@@ -232,7 +233,7 @@ func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccp
 func InitChain(cid string) {
 	if chainInitializer != nil {
 		
-		peerLogger.Debugf("Init chain %s", cid)
+		peerLogger.Debugf("Initializing channel %s", cid)
 		chainInitializer(cid)
 	}
 }
@@ -372,13 +373,13 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 
 	ordererAddresses := bundle.ChannelConfig().OrdererAddresses()
 	if len(ordererAddresses) == 0 {
-		return errors.New("No ordering service endpoint provided in configuration block")
+		return errors.New("no ordering service endpoint provided in configuration block")
 	}
 
 	
 	store, err := TransientStoreFactory.OpenStore(bundle.ConfigtxValidator().ChainID())
 	if err != nil {
-		return errors.Wrapf(err, "Failed opening transient store for %s", bundle.ConfigtxValidator().ChainID())
+		return errors.Wrapf(err, "[channel %s] failed opening transient store", bundle.ConfigtxValidator().ChainID())
 	}
 	csStoreSupport := &collectionSupport{
 		PeerLedger: ledger,
@@ -413,7 +414,7 @@ func CreateChainFromBlock(cb *common.Block, ccp ccprovider.ChaincodeProvider, sc
 
 	var l ledger.PeerLedger
 	if l, err = ledgermgmt.CreateLedger(cb); err != nil {
-		return fmt.Errorf("Cannot create ledger from genesis block, due to %s", err)
+		return errors.WithMessage(err, "cannot create ledger from genesis block")
 	}
 
 	return createChain(cid, l, cb, ccp, sccp, pluginMapper)
@@ -620,7 +621,7 @@ func SetCurrConfigBlock(block *common.Block, cid string) error {
 		c.cb = block
 		return nil
 	}
-	return fmt.Errorf("Chain %s doesn't exist on the peer", cid)
+	return errors.Errorf("[channel %s] channel not associated with this peer", cid)
 }
 
 
@@ -741,7 +742,7 @@ func (*configSupport) GetChannelConfig(channel string) cc.Config {
 	defer chains.RUnlock()
 	chain := chains.list[channel]
 	if chain == nil {
-		peerLogger.Error("GetChannelConfig: channel", channel, "not found in the list of channels associated with this peer")
+		peerLogger.Errorf("[channel %s] channel not associated with this peer", channel)
 		return nil
 	}
 	return chain.cs.bundleSource.ConfigtxValidator()

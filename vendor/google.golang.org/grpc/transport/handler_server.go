@@ -76,7 +76,7 @@ func NewServerHandlerTransport(w http.ResponseWriter, r *http.Request, stats sta
 	}
 	for k, vv := range r.Header {
 		k = strings.ToLower(k)
-		if isReservedHeader(k) && !isWhitelistedPseudoHeader(k) {
+		if isReservedHeader(k) && !isWhitelistedHeader(k) {
 			continue
 		}
 		for _, v := range vv {
@@ -349,7 +349,7 @@ func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), trace
 		ht.stats.HandleRPC(s.ctx, inHeader)
 	}
 	s.trReader = &transportReader{
-		reader:        &recvBufferReader{ctx: s.ctx, recv: s.buf},
+		reader:        &recvBufferReader{ctx: s.ctx, ctxDone: s.ctx.Done(), recv: s.buf},
 		windowHandler: func(int) {},
 	}
 
@@ -403,6 +403,10 @@ func (ht *serverHandlerTransport) runStream() {
 		}
 	}
 }
+
+func (ht *serverHandlerTransport) IncrMsgSent() {}
+
+func (ht *serverHandlerTransport) IncrMsgRecv() {}
 
 func (ht *serverHandlerTransport) Drain() {
 	panic("Drain() is not implemented")

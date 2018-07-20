@@ -62,6 +62,8 @@ type MockStub struct {
 
 	
 	ChaincodeEventsChannel chan *pb.ChaincodeEvent
+
+	Decorations map[string][]byte
 }
 
 func (stub *MockStub) GetTxID() string {
@@ -137,7 +139,7 @@ func (stub *MockStub) MockInvoke(uuid string, args [][]byte) pb.Response {
 }
 
 func (stub *MockStub) GetDecorations() map[string][]byte {
-	return nil
+	return stub.Decorations
 }
 
 
@@ -381,6 +383,7 @@ func NewMockStub(name string, cc Chaincode) *MockStub {
 	s.Invokables = make(map[string]*MockStub)
 	s.Keys = list.New()
 	s.ChaincodeEventsChannel = make(chan *pb.ChaincodeEvent, 100) 
+	s.Decorations = make(map[string][]byte)
 
 	return s
 }

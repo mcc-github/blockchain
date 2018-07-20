@@ -81,15 +81,6 @@ func equalStruct(v1, v2 reflect.Value) bool {
 				
 				return false
 			}
-			b1, ok := f1.Interface().(raw)
-			if ok {
-				b2 := f2.Interface().(raw)
-				
-				if !bytes.Equal(b1.Bytes(), b2.Bytes()) {
-					return false
-				}
-				continue
-			}
 			f1, f2 = f1.Elem(), f2.Elem()
 		}
 		if !equalAny(f1, f2, sprop.Prop[i]) {
@@ -118,11 +109,7 @@ func equalStruct(v1, v2 reflect.Value) bool {
 
 	u1 := uf.Bytes()
 	u2 := v2.FieldByName("XXX_unrecognized").Bytes()
-	if !bytes.Equal(u1, u2) {
-		return false
-	}
-
-	return true
+	return bytes.Equal(u1, u2)
 }
 
 
@@ -233,6 +220,15 @@ func equalExtMap(base reflect.Type, em1, em2 map[int32]Extension) bool {
 
 		m1, m2 := e1.value, e2.value
 
+		if m1 == nil && m2 == nil {
+			
+			if bytes.Equal(e1.enc, e2.enc) {
+				continue
+			}
+			
+			
+		}
+
 		if m1 != nil && m2 != nil {
 			
 			if !equalAny(reflect.ValueOf(m1), reflect.ValueOf(m2), nil) {
@@ -248,8 +244,12 @@ func equalExtMap(base reflect.Type, em1, em2 map[int32]Extension) bool {
 			desc = m[extNum]
 		}
 		if desc == nil {
+			
+			
+			
+			
 			log.Printf("proto: don't know how to compare extension %d of %v", extNum, base)
-			continue
+			return false
 		}
 		var err error
 		if m1 == nil {

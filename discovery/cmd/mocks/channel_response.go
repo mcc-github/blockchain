@@ -57,12 +57,18 @@ func (_m *ChannelResponse) Endorsers(invocationChain client.InvocationChain, ps 
 }
 
 
-func (_m *ChannelResponse) Peers() ([]*client.Peer, error) {
-	ret := _m.Called()
+func (_m *ChannelResponse) Peers(invocationChain ...*discovery.ChaincodeCall) ([]*client.Peer, error) {
+	_va := make([]interface{}, len(invocationChain))
+	for _i := range invocationChain {
+		_va[_i] = invocationChain[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	var r0 []*client.Peer
-	if rf, ok := ret.Get(0).(func() []*client.Peer); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(...*discovery.ChaincodeCall) []*client.Peer); ok {
+		r0 = rf(invocationChain...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*client.Peer)
@@ -70,8 +76,8 @@ func (_m *ChannelResponse) Peers() ([]*client.Peer, error) {
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
+	if rf, ok := ret.Get(1).(func(...*discovery.ChaincodeCall) error); ok {
+		r1 = rf(invocationChain...)
 	} else {
 		r1 = ret.Error(1)
 	}

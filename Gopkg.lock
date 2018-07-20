@@ -176,6 +176,7 @@
     "protoc-gen-go",
     "protoc-gen-go/descriptor",
     "protoc-gen-go/generator",
+    "protoc-gen-go/generator/internal/remap",
     "protoc-gen-go/grpc",
     "protoc-gen-go/plugin",
     "ptypes",
@@ -185,7 +186,8 @@
     "ptypes/struct",
     "ptypes/timestamp"
   ]
-  revision = "fec3b39b059c0f88fa6b20f5ed012b1aa203a8b4"
+  revision = "b4deda0973fb4c70b50d226b1af49f3da59f5265"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
@@ -594,9 +596,11 @@
     "credentials",
     "encoding",
     "encoding/proto",
-    "grpclb/grpc_lb_v1/messages",
     "grpclog",
     "internal",
+    "internal/backoff",
+    "internal/channelz",
+    "internal/grpcrand",
     "keepalive",
     "metadata",
     "naming",
@@ -609,8 +613,8 @@
     "tap",
     "transport"
   ]
-  revision = "d11072e7ca9811b1100b80ca0269ac831f06d024"
-  version = "v1.11.3"
+  revision = "168a6198bcb0ef175f7dacec0b8691fc141dc9b8"
+  version = "v1.13.0"
 
 [[projects]]
   name = "gopkg.in/alecthomas/kingpin.v2"
@@ -633,6 +637,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "0b9967a9ce9370ccee1fb5c3880f03ffbad05c5dd1b39290568b62cd77a3dc20"
+  inputs-digest = "c20fcba8a0db19d3c1436b5b2796d7acd03a73a7336da0bff52847b93fdbc962"
   solver-name = "gps-cdcl"
   solver-version = 1

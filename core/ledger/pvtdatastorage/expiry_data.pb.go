@@ -1,8 +1,7 @@
 
 
 
-
-package pvtdatastorage
+package pvtdatastorage 
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
@@ -20,13 +19,35 @@ var _ = math.Inf
 const _ = proto.ProtoPackageIsVersion2 
 
 type ExpiryData struct {
-	Map map[string]*Collections `protobuf:"bytes,1,rep,name=map" json:"map,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Map                  map[string]*Collections `protobuf:"bytes,1,rep,name=map" json:"map,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
 }
 
-func (m *ExpiryData) Reset()                    { *m = ExpiryData{} }
-func (m *ExpiryData) String() string            { return proto.CompactTextString(m) }
-func (*ExpiryData) ProtoMessage()               {}
-func (*ExpiryData) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (m *ExpiryData) Reset()         { *m = ExpiryData{} }
+func (m *ExpiryData) String() string { return proto.CompactTextString(m) }
+func (*ExpiryData) ProtoMessage()    {}
+func (*ExpiryData) Descriptor() ([]byte, []int) {
+	return fileDescriptor_expiry_data_8c4813946863f3d0, []int{0}
+}
+func (m *ExpiryData) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ExpiryData.Unmarshal(m, b)
+}
+func (m *ExpiryData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ExpiryData.Marshal(b, m, deterministic)
+}
+func (dst *ExpiryData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExpiryData.Merge(dst, src)
+}
+func (m *ExpiryData) XXX_Size() int {
+	return xxx_messageInfo_ExpiryData.Size(m)
+}
+func (m *ExpiryData) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExpiryData.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExpiryData proto.InternalMessageInfo
 
 func (m *ExpiryData) GetMap() map[string]*Collections {
 	if m != nil {
@@ -36,13 +57,35 @@ func (m *ExpiryData) GetMap() map[string]*Collections {
 }
 
 type Collections struct {
-	Map map[string]*TxNums `protobuf:"bytes,1,rep,name=map" json:"map,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Map                  map[string]*TxNums `protobuf:"bytes,1,rep,name=map" json:"map,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
+	XXX_unrecognized     []byte             `json:"-"`
+	XXX_sizecache        int32              `json:"-"`
 }
 
-func (m *Collections) Reset()                    { *m = Collections{} }
-func (m *Collections) String() string            { return proto.CompactTextString(m) }
-func (*Collections) ProtoMessage()               {}
-func (*Collections) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
+func (m *Collections) Reset()         { *m = Collections{} }
+func (m *Collections) String() string { return proto.CompactTextString(m) }
+func (*Collections) ProtoMessage()    {}
+func (*Collections) Descriptor() ([]byte, []int) {
+	return fileDescriptor_expiry_data_8c4813946863f3d0, []int{1}
+}
+func (m *Collections) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Collections.Unmarshal(m, b)
+}
+func (m *Collections) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Collections.Marshal(b, m, deterministic)
+}
+func (dst *Collections) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Collections.Merge(dst, src)
+}
+func (m *Collections) XXX_Size() int {
+	return xxx_messageInfo_Collections.Size(m)
+}
+func (m *Collections) XXX_DiscardUnknown() {
+	xxx_messageInfo_Collections.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Collections proto.InternalMessageInfo
 
 func (m *Collections) GetMap() map[string]*TxNums {
 	if m != nil {
@@ -52,13 +95,35 @@ func (m *Collections) GetMap() map[string]*TxNums {
 }
 
 type TxNums struct {
-	List []uint64 `protobuf:"varint,1,rep,packed,name=list" json:"list,omitempty"`
+	List                 []uint64 `protobuf:"varint,1,rep,packed,name=list" json:"list,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *TxNums) Reset()                    { *m = TxNums{} }
-func (m *TxNums) String() string            { return proto.CompactTextString(m) }
-func (*TxNums) ProtoMessage()               {}
-func (*TxNums) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
+func (m *TxNums) Reset()         { *m = TxNums{} }
+func (m *TxNums) String() string { return proto.CompactTextString(m) }
+func (*TxNums) ProtoMessage()    {}
+func (*TxNums) Descriptor() ([]byte, []int) {
+	return fileDescriptor_expiry_data_8c4813946863f3d0, []int{2}
+}
+func (m *TxNums) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_TxNums.Unmarshal(m, b)
+}
+func (m *TxNums) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_TxNums.Marshal(b, m, deterministic)
+}
+func (dst *TxNums) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxNums.Merge(dst, src)
+}
+func (m *TxNums) XXX_Size() int {
+	return xxx_messageInfo_TxNums.Size(m)
+}
+func (m *TxNums) XXX_DiscardUnknown() {
+	xxx_messageInfo_TxNums.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TxNums proto.InternalMessageInfo
 
 func (m *TxNums) GetList() []uint64 {
 	if m != nil {
@@ -69,13 +134,15 @@ func (m *TxNums) GetList() []uint64 {
 
 func init() {
 	proto.RegisterType((*ExpiryData)(nil), "pvtdatastorage.ExpiryData")
+	proto.RegisterMapType((map[string]*Collections)(nil), "pvtdatastorage.ExpiryData.MapEntry")
 	proto.RegisterType((*Collections)(nil), "pvtdatastorage.Collections")
+	proto.RegisterMapType((map[string]*TxNums)(nil), "pvtdatastorage.Collections.MapEntry")
 	proto.RegisterType((*TxNums)(nil), "pvtdatastorage.TxNums")
 }
 
-func init() { proto.RegisterFile("expiry_data.proto", fileDescriptor0) }
+func init() { proto.RegisterFile("expiry_data.proto", fileDescriptor_expiry_data_8c4813946863f3d0) }
 
-var fileDescriptor0 = []byte{
+var fileDescriptor_expiry_data_8c4813946863f3d0 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x12, 0x4c, 0xad, 0x28, 0xc8,
 	0x2c, 0xaa, 0x8c, 0x4f, 0x49, 0x2c, 0x49, 0xd4, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x2b,

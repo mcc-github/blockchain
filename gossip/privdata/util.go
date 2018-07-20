@@ -13,7 +13,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/protos/common"
-	gossip2 "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/protos/msp"
@@ -262,10 +261,10 @@ func (df *pvtDataFactory) create() []*ledger.TxPvtData {
 
 type digestsAndSourceFactory struct {
 	d2s     dig2sources
-	lastDig *gossip2.PvtDataDigest
+	lastDig *DigKey
 }
 
-func (f *digestsAndSourceFactory) mapDigest(dig *gossip2.PvtDataDigest) *digestsAndSourceFactory {
+func (f *digestsAndSourceFactory) mapDigest(dig *DigKey) *digestsAndSourceFactory {
 	f.lastDig = dig
 	return f
 }
@@ -280,7 +279,7 @@ func (f *digestsAndSourceFactory) toSources(peers ...string) *digestsAndSourceFa
 			Endorser: []byte(p),
 		})
 	}
-	f.d2s[f.lastDig] = endorsements
+	f.d2s[*f.lastDig] = endorsements
 	return f
 }
 

@@ -27,7 +27,7 @@ import (
 	"github.com/mcc-github/blockchain/discovery/endorsement"
 	"github.com/mcc-github/blockchain/gossip/api"
 	gossipcommon "github.com/mcc-github/blockchain/gossip/common"
-	discovery3 "github.com/mcc-github/blockchain/gossip/discovery"
+	gdisc "github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/mcc-github/blockchain/protos/gossip"
@@ -39,6 +39,10 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+)
+
+const (
+	signerCacheSize = 1
 )
 
 var (
@@ -101,7 +105,7 @@ var (
 		},
 	}
 
-	channelPeersWithChaincodes = discovery3.Members{
+	channelPeersWithChaincodes = gdisc.Members{
 		newPeer(0, stateInfoMessage(cc, cc2), propertiesWithChaincodes).NetworkMember,
 		newPeer(1, stateInfoMessage(cc, cc2), propertiesWithChaincodes).NetworkMember,
 		newPeer(2, stateInfoMessage(cc, cc2), propertiesWithChaincodes).NetworkMember,
@@ -112,7 +116,7 @@ var (
 		newPeer(7, stateInfoMessage(cc, cc2), propertiesWithChaincodes).NetworkMember,
 	}
 
-	channelPeersWithoutChaincodes = discovery3.Members{
+	channelPeersWithoutChaincodes = gdisc.Members{
 		newPeer(0, stateInfoMessage(), nil).NetworkMember,
 		newPeer(1, stateInfoMessage(), nil).NetworkMember,
 		newPeer(2, stateInfoMessage(), nil).NetworkMember,
@@ -123,7 +127,7 @@ var (
 		newPeer(7, stateInfoMessage(), nil).NetworkMember,
 	}
 
-	membershipPeers = discovery3.Members{
+	membershipPeers = gdisc.Members{
 		newPeer(0, aliveMessage(0), nil).NetworkMember,
 		newPeer(1, aliveMessage(1), nil).NetworkMember,
 		newPeer(2, aliveMessage(2), nil).NetworkMember,
@@ -328,7 +332,7 @@ func TestClient(t *testing.T) {
 		ClientIdentity:    []byte{1, 2, 3},
 		ClientTlsCertHash: util.ComputeSHA256(clientTLSCert.Certificate[0]),
 	}
-	cl := NewClient(connect, signer)
+	cl := NewClient(connect, signer, signerCacheSize)
 
 	sup.On("PeersOfChannel").Return(channelPeersWithoutChaincodes).Times(2)
 	req := NewRequest()
@@ -422,6 +426,22 @@ func TestClient(t *testing.T) {
 		assert.Contains(t, expectedOrgCombinations2, getMSPs(endorsers))
 	})
 
+	t.Run("Peer membership query with collections and chaincodes", func(t *testing.T) {
+		sup.On("PeersOfChannel").Return(channelPeersWithChaincodes).Once()
+		interest := ccCall("mycc2")
+		interest[0].CollectionNames = append(interest[0].CollectionNames, "col")
+		req = NewRequest().OfChannel("mychannel").AddPeersQuery(interest...)
+		r, err = cl.Send(ctx, req, authInfo)
+		assert.NoError(t, err)
+		mychannel := r.ForChannel("mychannel")
+		peers, err := mychannel.Peers(interest...)
+		assert.NoError(t, err)
+		
+		for _, p := range peers {
+			assert.NotEqual(t, "A", p.MSPID)
+		}
+		assert.Len(t, peers, 6)
+	})
 }
 
 func TestUnableToSign(t *testing.T) {
@@ -434,7 +454,7 @@ func TestUnableToSign(t *testing.T) {
 	authInfo := &discovery.AuthInfo{
 		ClientIdentity: []byte{1, 2, 3},
 	}
-	cl := NewClient(failToConnect, signer)
+	cl := NewClient(failToConnect, signer, signerCacheSize)
 	req := NewRequest()
 	req = req.OfChannel("mychannel")
 	resp, err := cl.Send(ctx, req, authInfo)
@@ -452,7 +472,7 @@ func TestUnableToConnect(t *testing.T) {
 	auth := &discovery.AuthInfo{
 		ClientIdentity: []byte{1, 2, 3},
 	}
-	cl := NewClient(failToConnect, signer)
+	cl := NewClient(failToConnect, signer, signerCacheSize)
 	req := NewRequest()
 	req = req.OfChannel("mychannel")
 	resp, err := cl.Send(ctx, req, auth)
@@ -475,7 +495,7 @@ func TestBadResponses(t *testing.T) {
 	auth := &discovery.AuthInfo{
 		ClientIdentity: []byte{1, 2, 3},
 	}
-	cl := NewClient(connect, signer)
+	cl := NewClient(connect, signer, signerCacheSize)
 
 	
 	svc.On("Discover").Return(nil, errors.New("foo")).Once()
@@ -671,12 +691,6 @@ func (mdf *ccMetadataFetcher) Metadata(channel string, cc string, _ bool) *chain
 type principalEvaluator struct {
 }
 
-func (pe *principalEvaluator) MSPOfPrincipal(principal *msp.MSPPrincipal) string {
-	sID := &msp.SerializedIdentity{}
-	proto.Unmarshal(principal.Principal, sID)
-	return sID.Mspid
-}
-
 func (pe *principalEvaluator) SatisfiesPrincipal(channel string, identity []byte, principal *msp.MSPPrincipal) error {
 	sID := &msp.SerializedIdentity{}
 	proto.Unmarshal(identity, sID)
@@ -698,6 +712,8 @@ func (pf *policyFetcher) PolicyByChaincode(channel string, cc string) policies.I
 
 type endorsementAnalyzer interface {
 	PeersForEndorsement(chainID gossipcommon.ChainID, interest *discovery.ChaincodeInterest) (*discovery.EndorsementDescriptor, error)
+
+	PeersAuthorizedByCriteria(chainID gossipcommon.ChainID, interest *discovery.ChaincodeInterest) (gdisc.Members, error)
 }
 
 type inquireablePolicy struct {
@@ -740,7 +756,7 @@ func peerIdentity(mspID string, i int) api.PeerIdentityInfo {
 type peerInfo struct {
 	identity api.PeerIdentityType
 	pkiID    gossipcommon.PKIidType
-	discovery3.NetworkMember
+	gdisc.NetworkMember
 }
 
 func aliveMessage(id int) *gossip.Envelope {
@@ -784,7 +800,7 @@ func newPeer(i int, env *gossip.Envelope, properties *gossip.Properties) *peerIn
 	return &peerInfo{
 		pkiID:    gossipcommon.PKIidType(p),
 		identity: api.PeerIdentityType(p),
-		NetworkMember: discovery3.NetworkMember{
+		NetworkMember: gdisc.NetworkMember{
 			PKIid:            gossipcommon.PKIidType(p),
 			Endpoint:         p,
 			InternalEndpoint: p,
@@ -814,16 +830,20 @@ func (*mockSupport) ChannelExists(channel string) bool {
 	return true
 }
 
-func (ms *mockSupport) PeersOfChannel(gossipcommon.ChainID) discovery3.Members {
-	return ms.Called().Get(0).(discovery3.Members)
+func (ms *mockSupport) PeersOfChannel(gossipcommon.ChainID) gdisc.Members {
+	return ms.Called().Get(0).(gdisc.Members)
 }
 
-func (ms *mockSupport) Peers() discovery3.Members {
-	return ms.Called().Get(0).(discovery3.Members)
+func (ms *mockSupport) Peers() gdisc.Members {
+	return ms.Called().Get(0).(gdisc.Members)
 }
 
 func (ms *mockSupport) PeersForEndorsement(channel gossipcommon.ChainID, interest *discovery.ChaincodeInterest) (*discovery.EndorsementDescriptor, error) {
 	return ms.endorsementAnalyzer.PeersForEndorsement(channel, interest)
+}
+
+func (ms *mockSupport) PeersAuthorizedByCriteria(channel gossipcommon.ChainID, interest *discovery.ChaincodeInterest) (gdisc.Members, error) {
+	return ms.endorsementAnalyzer.PeersAuthorizedByCriteria(channel, interest)
 }
 
 func (*mockSupport) EligibleForService(channel string, data common.SignedData) error {

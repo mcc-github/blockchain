@@ -6,12 +6,12 @@ SPDX-License-Identifier: Apache-2.0
 package statecouchdb
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
+	"github.com/pkg/errors"
 )
 
 
@@ -134,11 +134,11 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 
 			
 			if err != nil {
-				errorString := fmt.Sprintf("Error occurred while saving document ID = %v  Error: %s  Reason: %s\n",
+				errorString := fmt.Sprintf("error saving document ID: %v. Error: %s,  Reason: %s",
 					respDoc.ID, respDoc.Error, respDoc.Reason)
 
 				logger.Errorf(errorString)
-				return fmt.Errorf(errorString)
+				return errors.WithMessage(err, errorString)
 			}
 		}
 	}
@@ -161,8 +161,8 @@ func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
 func (f *nsFlusher) execute() error {
 	dbResponse, err := f.db.EnsureFullCommit()
 	if err != nil || dbResponse.Ok != true {
-		logger.Errorf("Failed to perform full commit\n")
-		return errors.New("Failed to perform full commit")
+		logger.Errorf("Failed to perform full commit")
+		return errors.New("failed to perform full commit")
 	}
 	return nil
 }

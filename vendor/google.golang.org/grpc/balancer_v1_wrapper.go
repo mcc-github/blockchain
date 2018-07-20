@@ -39,7 +39,7 @@ func (bwb *balancerWrapperBuilder) Build(cc balancer.ClientConn, opts balancer.B
 		startCh:    make(chan struct{}),
 		conns:      make(map[resolver.Address]balancer.SubConn),
 		connSt:     make(map[balancer.SubConn]*scState),
-		csEvltr:    &connectivityStateEvaluator{},
+		csEvltr:    &balancer.ConnectivityStateEvaluator{},
 		state:      connectivity.Idle,
 	}
 	cc.UpdateBalancerState(connectivity.Idle, bw)
@@ -64,10 +64,6 @@ type balancerWrapper struct {
 	cc         balancer.ClientConn
 	targetAddr string 
 
-	
-	csEvltr *connectivityStateEvaluator
-	state   connectivity.State
-
 	mu     sync.Mutex
 	conns  map[resolver.Address]balancer.SubConn
 	connSt map[balancer.SubConn]*scState
@@ -76,6 +72,10 @@ type balancerWrapper struct {
 	
 	
 	startCh chan struct{}
+
+	
+	csEvltr *balancer.ConnectivityStateEvaluator
+	state   connectivity.State
 }
 
 
@@ -232,7 +232,7 @@ func (bw *balancerWrapper) HandleSubConnStateChange(sc balancer.SubConn, s conne
 			scSt.down(errConnClosing)
 		}
 	}
-	sa := bw.csEvltr.recordTransition(oldS, s)
+	sa := bw.csEvltr.RecordTransition(oldS, s)
 	if bw.state != sa {
 		bw.state = sa
 	}
@@ -241,7 +241,6 @@ func (bw *balancerWrapper) HandleSubConnStateChange(sc balancer.SubConn, s conne
 		
 		delete(bw.connSt, sc)
 	}
-	return
 }
 
 func (bw *balancerWrapper) HandleResolvedAddrs([]resolver.Address, error) {
@@ -254,7 +253,6 @@ func (bw *balancerWrapper) HandleResolvedAddrs([]resolver.Address, error) {
 	}
 	
 	
-	return
 }
 
 func (bw *balancerWrapper) Close() {
@@ -266,7 +264,6 @@ func (bw *balancerWrapper) Close() {
 		close(bw.startCh)
 	}
 	bw.balancer.Close()
-	return
 }
 
 
@@ -312,48 +309,4 @@ func (bw *balancerWrapper) Pick(ctx context.Context, opts balancer.PickOptions) 
 	}
 
 	return sc, done, nil
-}
-
-
-
-
-type connectivityStateEvaluator struct {
-	mu                  sync.Mutex
-	numReady            uint64 
-	numConnecting       uint64 
-	numTransientFailure uint64 
-}
-
-
-
-
-
-
-
-
-func (cse *connectivityStateEvaluator) recordTransition(oldState, newState connectivity.State) connectivity.State {
-	cse.mu.Lock()
-	defer cse.mu.Unlock()
-
-	
-	for idx, state := range []connectivity.State{oldState, newState} {
-		updateVal := 2*uint64(idx) - 1 
-		switch state {
-		case connectivity.Ready:
-			cse.numReady += updateVal
-		case connectivity.Connecting:
-			cse.numConnecting += updateVal
-		case connectivity.TransientFailure:
-			cse.numTransientFailure += updateVal
-		}
-	}
-
-	
-	if cse.numReady > 0 {
-		return connectivity.Ready
-	}
-	if cse.numConnecting > 0 {
-		return connectivity.Connecting
-	}
-	return connectivity.TransientFailure
 }

@@ -214,6 +214,8 @@ func (d *deliverServiceImpl) Stop() {
 }
 
 func (d *deliverServiceImpl) newClient(chainID string, ledgerInfoProvider blocksprovider.LedgerInfo) *broadcastClient {
+	reconnectBackoffThreshold := getReConnectBackoffThreshold()
+	reconnectTotalTimeThreshold := getReConnectTotalTimeThreshold()
 	requester := &blocksRequester{
 		tls:     viper.GetBool("peer.tls.enabled"),
 		chainID: chainID,
@@ -222,12 +224,12 @@ func (d *deliverServiceImpl) newClient(chainID string, ledgerInfoProvider blocks
 		return requester.RequestBlocks(ledgerInfoProvider)
 	}
 	backoffPolicy := func(attemptNum int, elapsedTime time.Duration) (time.Duration, bool) {
-		if elapsedTime.Nanoseconds() > getReConnectTotalTimeThreshold().Nanoseconds() {
+		if elapsedTime > reconnectTotalTimeThreshold {
 			return 0, false
 		}
 		sleepIncrement := float64(time.Millisecond * 500)
 		attempt := float64(attemptNum)
-		return time.Duration(math.Min(math.Pow(2, attempt)*sleepIncrement, getReConnectBackoffThreshold())), true
+		return time.Duration(math.Min(math.Pow(2, attempt)*sleepIncrement, reconnectBackoffThreshold)), true
 	}
 	connProd := comm.NewConnectionProducer(d.conf.ConnFactory(chainID), d.conf.Endpoints)
 	bClient := NewBroadcastClient(connProd, d.conf.ABCFactory, broadcastSetup, backoffPolicy)
@@ -262,7 +264,6 @@ func DefaultConnectionFactory(channelID string) func(endpoint string) (*grpc.Cli
 		} else {
 			dialOpts = append(dialOpts, grpc.WithInsecure())
 		}
-		grpc.EnableTracing = true
 		ctx := context.Background()
 		ctx, _ = context.WithTimeout(ctx, getConnectionTimeout())
 		return grpc.DialContext(ctx, endpoint, dialOpts...)

@@ -2,7 +2,11 @@
 
 
 
+
+
 package naming
+
+
 
 
 type Operation uint8
@@ -13,6 +17,8 @@ const (
 	
 	Delete
 )
+
+
 
 
 
@@ -27,10 +33,14 @@ type Update struct {
 }
 
 
+
+
 type Resolver interface {
 	
 	Resolve(target string) (Watcher, error)
 }
+
+
 
 
 type Watcher interface {

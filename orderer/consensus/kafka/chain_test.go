@@ -25,6 +25,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -2462,9 +2463,12 @@ func TestResubmission(t *testing.T) {
 			}
 			defer close(mockSupport.BlockCutterVal.Block)
 
-			expectedKafkaMsg := &ab.KafkaMessage{}
+			expectedKafkaMsgCh := make(chan *ab.KafkaMessage, 1)
 			producer := mocks.NewSyncProducer(t, mockBrokerConfig)
 			producer.ExpectSendMessageWithCheckerFunctionAndSucceed(func(val []byte) error {
+				defer close(expectedKafkaMsgCh)
+
+				expectedKafkaMsg := &ab.KafkaMessage{}
 				if err := proto.Unmarshal(val, expectedKafkaMsg); err != nil {
 					return err
 				}
@@ -2482,6 +2486,7 @@ func TestResubmission(t *testing.T) {
 					return fmt.Errorf("Expect Original Offset to be non-zero if resubmission")
 				}
 
+				expectedKafkaMsgCh <- expectedKafkaMsg
 				return nil
 			})
 
@@ -2535,8 +2540,14 @@ func TestResubmission(t *testing.T) {
 			}
 
 			
-			mpc.YieldMessage(newMockConsumerMessage(expectedKafkaMsg))
-			mockSupport.BlockCutterVal.Block <- struct{}{}
+			select {
+			case expectedKafkaMsg := <-expectedKafkaMsgCh:
+				require.NotNil(t, expectedKafkaMsg)
+				mpc.YieldMessage(newMockConsumerMessage(expectedKafkaMsg))
+				mockSupport.BlockCutterVal.Block <- struct{}{}
+			case <-time.After(shortTimeout):
+				t.Fatalf("Expected to receive kafka message")
+			}
 
 			select {
 			case <-mockSupport.Blocks:
@@ -2920,9 +2931,12 @@ func TestResubmission(t *testing.T) {
 			}
 			defer close(mockSupport.BlockCutterVal.Block)
 
-			expectedKafkaMsg := &ab.KafkaMessage{}
+			expectedKafkaMsgCh := make(chan *ab.KafkaMessage, 1)
 			producer := mocks.NewSyncProducer(t, mockBrokerConfig)
 			producer.ExpectSendMessageWithCheckerFunctionAndSucceed(func(val []byte) error {
+				defer close(expectedKafkaMsgCh)
+
+				expectedKafkaMsg := &ab.KafkaMessage{}
 				if err := proto.Unmarshal(val, expectedKafkaMsg); err != nil {
 					return err
 				}
@@ -2940,6 +2954,7 @@ func TestResubmission(t *testing.T) {
 					return fmt.Errorf("Expect Original Offset to be non-zero if resubmission")
 				}
 
+				expectedKafkaMsgCh <- expectedKafkaMsg
 				return nil
 			})
 
@@ -2984,8 +2999,14 @@ func TestResubmission(t *testing.T) {
 			
 			blockIngressMsg(t, true, bareMinimumChain.WaitReady)
 
-			
-			mpc.YieldMessage(newMockConsumerMessage(expectedKafkaMsg))
+			select {
+			case expectedKafkaMsg := <-expectedKafkaMsgCh:
+				require.NotNil(t, expectedKafkaMsg)
+				
+				mpc.YieldMessage(newMockConsumerMessage(expectedKafkaMsg))
+			case <-time.After(shortTimeout):
+				t.Fatalf("Expected to receive kafka message")
+			}
 
 			select {
 			case <-mockSupport.Blocks:

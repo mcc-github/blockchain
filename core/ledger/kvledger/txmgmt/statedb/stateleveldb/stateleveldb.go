@@ -7,13 +7,13 @@ package stateleveldb
 
 import (
 	"bytes"
-	"errors"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
+	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 

@@ -1,8 +1,7 @@
 
 
 
-
-package common
+package common 
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
@@ -23,13 +22,35 @@ const _ = proto.ProtoPackageIsVersion2
 
 
 type CollectionConfigPackage struct {
-	Config []*CollectionConfig `protobuf:"bytes,1,rep,name=config" json:"config,omitempty"`
+	Config               []*CollectionConfig `protobuf:"bytes,1,rep,name=config" json:"config,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_unrecognized     []byte              `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *CollectionConfigPackage) Reset()                    { *m = CollectionConfigPackage{} }
-func (m *CollectionConfigPackage) String() string            { return proto.CompactTextString(m) }
-func (*CollectionConfigPackage) ProtoMessage()               {}
-func (*CollectionConfigPackage) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (m *CollectionConfigPackage) Reset()         { *m = CollectionConfigPackage{} }
+func (m *CollectionConfigPackage) String() string { return proto.CompactTextString(m) }
+func (*CollectionConfigPackage) ProtoMessage()    {}
+func (*CollectionConfigPackage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_collection_b741380d1d025da1, []int{0}
+}
+func (m *CollectionConfigPackage) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CollectionConfigPackage.Unmarshal(m, b)
+}
+func (m *CollectionConfigPackage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CollectionConfigPackage.Marshal(b, m, deterministic)
+}
+func (dst *CollectionConfigPackage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CollectionConfigPackage.Merge(dst, src)
+}
+func (m *CollectionConfigPackage) XXX_Size() int {
+	return xxx_messageInfo_CollectionConfigPackage.Size(m)
+}
+func (m *CollectionConfigPackage) XXX_DiscardUnknown() {
+	xxx_messageInfo_CollectionConfigPackage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CollectionConfigPackage proto.InternalMessageInfo
 
 func (m *CollectionConfigPackage) GetConfig() []*CollectionConfig {
 	if m != nil {
@@ -44,15 +65,39 @@ func (m *CollectionConfigPackage) GetConfig() []*CollectionConfig {
 type CollectionConfig struct {
 	
 	
-	Payload isCollectionConfig_Payload `protobuf_oneof:"payload"`
+	Payload              isCollectionConfig_Payload `protobuf_oneof:"payload"`
+	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
+	XXX_unrecognized     []byte                     `json:"-"`
+	XXX_sizecache        int32                      `json:"-"`
 }
 
-func (m *CollectionConfig) Reset()                    { *m = CollectionConfig{} }
-func (m *CollectionConfig) String() string            { return proto.CompactTextString(m) }
-func (*CollectionConfig) ProtoMessage()               {}
-func (*CollectionConfig) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
+func (m *CollectionConfig) Reset()         { *m = CollectionConfig{} }
+func (m *CollectionConfig) String() string { return proto.CompactTextString(m) }
+func (*CollectionConfig) ProtoMessage()    {}
+func (*CollectionConfig) Descriptor() ([]byte, []int) {
+	return fileDescriptor_collection_b741380d1d025da1, []int{1}
+}
+func (m *CollectionConfig) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CollectionConfig.Unmarshal(m, b)
+}
+func (m *CollectionConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CollectionConfig.Marshal(b, m, deterministic)
+}
+func (dst *CollectionConfig) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CollectionConfig.Merge(dst, src)
+}
+func (m *CollectionConfig) XXX_Size() int {
+	return xxx_messageInfo_CollectionConfig.Size(m)
+}
+func (m *CollectionConfig) XXX_DiscardUnknown() {
+	xxx_messageInfo_CollectionConfig.DiscardUnknown(m)
+}
 
-type isCollectionConfig_Payload interface{ isCollectionConfig_Payload() }
+var xxx_messageInfo_CollectionConfig proto.InternalMessageInfo
+
+type isCollectionConfig_Payload interface {
+	isCollectionConfig_Payload()
+}
 
 type CollectionConfig_StaticCollectionConfig struct {
 	StaticCollectionConfig *StaticCollectionConfig `protobuf:"bytes,1,opt,name=static_collection_config,json=staticCollectionConfig,oneof"`
@@ -119,7 +164,7 @@ func _CollectionConfig_OneofSizer(msg proto.Message) (n int) {
 	switch x := m.Payload.(type) {
 	case *CollectionConfig_StaticCollectionConfig:
 		s := proto.Size(x.StaticCollectionConfig)
-		n += proto.SizeVarint(1<<3 | proto.WireBytes)
+		n += 1 
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -149,13 +194,35 @@ type StaticCollectionConfig struct {
 	
 	
 	
-	BlockToLive uint64 `protobuf:"varint,5,opt,name=block_to_live,json=blockToLive" json:"block_to_live,omitempty"`
+	BlockToLive          uint64   `protobuf:"varint,5,opt,name=block_to_live,json=blockToLive" json:"block_to_live,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StaticCollectionConfig) Reset()                    { *m = StaticCollectionConfig{} }
-func (m *StaticCollectionConfig) String() string            { return proto.CompactTextString(m) }
-func (*StaticCollectionConfig) ProtoMessage()               {}
-func (*StaticCollectionConfig) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
+func (m *StaticCollectionConfig) Reset()         { *m = StaticCollectionConfig{} }
+func (m *StaticCollectionConfig) String() string { return proto.CompactTextString(m) }
+func (*StaticCollectionConfig) ProtoMessage()    {}
+func (*StaticCollectionConfig) Descriptor() ([]byte, []int) {
+	return fileDescriptor_collection_b741380d1d025da1, []int{2}
+}
+func (m *StaticCollectionConfig) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_StaticCollectionConfig.Unmarshal(m, b)
+}
+func (m *StaticCollectionConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_StaticCollectionConfig.Marshal(b, m, deterministic)
+}
+func (dst *StaticCollectionConfig) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StaticCollectionConfig.Merge(dst, src)
+}
+func (m *StaticCollectionConfig) XXX_Size() int {
+	return xxx_messageInfo_StaticCollectionConfig.Size(m)
+}
+func (m *StaticCollectionConfig) XXX_DiscardUnknown() {
+	xxx_messageInfo_StaticCollectionConfig.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StaticCollectionConfig proto.InternalMessageInfo
 
 func (m *StaticCollectionConfig) GetName() string {
 	if m != nil {
@@ -199,15 +266,39 @@ func (m *StaticCollectionConfig) GetBlockToLive() uint64 {
 type CollectionPolicyConfig struct {
 	
 	
-	Payload isCollectionPolicyConfig_Payload `protobuf_oneof:"payload"`
+	Payload              isCollectionPolicyConfig_Payload `protobuf_oneof:"payload"`
+	XXX_NoUnkeyedLiteral struct{}                         `json:"-"`
+	XXX_unrecognized     []byte                           `json:"-"`
+	XXX_sizecache        int32                            `json:"-"`
 }
 
-func (m *CollectionPolicyConfig) Reset()                    { *m = CollectionPolicyConfig{} }
-func (m *CollectionPolicyConfig) String() string            { return proto.CompactTextString(m) }
-func (*CollectionPolicyConfig) ProtoMessage()               {}
-func (*CollectionPolicyConfig) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
+func (m *CollectionPolicyConfig) Reset()         { *m = CollectionPolicyConfig{} }
+func (m *CollectionPolicyConfig) String() string { return proto.CompactTextString(m) }
+func (*CollectionPolicyConfig) ProtoMessage()    {}
+func (*CollectionPolicyConfig) Descriptor() ([]byte, []int) {
+	return fileDescriptor_collection_b741380d1d025da1, []int{3}
+}
+func (m *CollectionPolicyConfig) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CollectionPolicyConfig.Unmarshal(m, b)
+}
+func (m *CollectionPolicyConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CollectionPolicyConfig.Marshal(b, m, deterministic)
+}
+func (dst *CollectionPolicyConfig) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CollectionPolicyConfig.Merge(dst, src)
+}
+func (m *CollectionPolicyConfig) XXX_Size() int {
+	return xxx_messageInfo_CollectionPolicyConfig.Size(m)
+}
+func (m *CollectionPolicyConfig) XXX_DiscardUnknown() {
+	xxx_messageInfo_CollectionPolicyConfig.DiscardUnknown(m)
+}
 
-type isCollectionPolicyConfig_Payload interface{ isCollectionPolicyConfig_Payload() }
+var xxx_messageInfo_CollectionPolicyConfig proto.InternalMessageInfo
+
+type isCollectionPolicyConfig_Payload interface {
+	isCollectionPolicyConfig_Payload()
+}
 
 type CollectionPolicyConfig_SignaturePolicy struct {
 	SignaturePolicy *SignaturePolicyEnvelope `protobuf:"bytes,1,opt,name=signature_policy,json=signaturePolicy,oneof"`
@@ -274,7 +365,7 @@ func _CollectionPolicyConfig_OneofSizer(msg proto.Message) (n int) {
 	switch x := m.Payload.(type) {
 	case *CollectionPolicyConfig_SignaturePolicy:
 		s := proto.Size(x.SignaturePolicy)
-		n += proto.SizeVarint(1<<3 | proto.WireBytes)
+		n += 1 
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -287,16 +378,38 @@ func _CollectionPolicyConfig_OneofSizer(msg proto.Message) (n int) {
 
 
 type CollectionCriteria struct {
-	Channel    string `protobuf:"bytes,1,opt,name=channel" json:"channel,omitempty"`
-	TxId       string `protobuf:"bytes,2,opt,name=tx_id,json=txId" json:"tx_id,omitempty"`
-	Collection string `protobuf:"bytes,3,opt,name=collection" json:"collection,omitempty"`
-	Namespace  string `protobuf:"bytes,4,opt,name=namespace" json:"namespace,omitempty"`
+	Channel              string   `protobuf:"bytes,1,opt,name=channel" json:"channel,omitempty"`
+	TxId                 string   `protobuf:"bytes,2,opt,name=tx_id,json=txId" json:"tx_id,omitempty"`
+	Collection           string   `protobuf:"bytes,3,opt,name=collection" json:"collection,omitempty"`
+	Namespace            string   `protobuf:"bytes,4,opt,name=namespace" json:"namespace,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *CollectionCriteria) Reset()                    { *m = CollectionCriteria{} }
-func (m *CollectionCriteria) String() string            { return proto.CompactTextString(m) }
-func (*CollectionCriteria) ProtoMessage()               {}
-func (*CollectionCriteria) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
+func (m *CollectionCriteria) Reset()         { *m = CollectionCriteria{} }
+func (m *CollectionCriteria) String() string { return proto.CompactTextString(m) }
+func (*CollectionCriteria) ProtoMessage()    {}
+func (*CollectionCriteria) Descriptor() ([]byte, []int) {
+	return fileDescriptor_collection_b741380d1d025da1, []int{4}
+}
+func (m *CollectionCriteria) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CollectionCriteria.Unmarshal(m, b)
+}
+func (m *CollectionCriteria) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CollectionCriteria.Marshal(b, m, deterministic)
+}
+func (dst *CollectionCriteria) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CollectionCriteria.Merge(dst, src)
+}
+func (m *CollectionCriteria) XXX_Size() int {
+	return xxx_messageInfo_CollectionCriteria.Size(m)
+}
+func (m *CollectionCriteria) XXX_DiscardUnknown() {
+	xxx_messageInfo_CollectionCriteria.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CollectionCriteria proto.InternalMessageInfo
 
 func (m *CollectionCriteria) GetChannel() string {
 	if m != nil {
@@ -334,9 +447,9 @@ func init() {
 	proto.RegisterType((*CollectionCriteria)(nil), "common.CollectionCriteria")
 }
 
-func init() { proto.RegisterFile("common/collection.proto", fileDescriptor0) }
+func init() { proto.RegisterFile("common/collection.proto", fileDescriptor_collection_b741380d1d025da1) }
 
-var fileDescriptor0 = []byte{
+var fileDescriptor_collection_b741380d1d025da1 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x92, 0x41, 0x6b, 0xdb, 0x40,
 	0x10, 0x85, 0xa3, 0xc6, 0x76, 0xd0, 0x98, 0x52, 0x77, 0x43, 0x1d, 0x51, 0x4a, 0x6a, 0x44, 0x0f,

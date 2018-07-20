@@ -1,7 +1,7 @@
 
 
 
-package orderer
+package orderer 
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
@@ -12,14 +12,42 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+
+
+
+
+const _ = proto.ProtoPackageIsVersion2 
+
 type ConsensusType struct {
-	Type string `protobuf:"bytes,1,opt,name=type" json:"type,omitempty"`
+	Type                 string   `protobuf:"bytes,1,opt,name=type" json:"type,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ConsensusType) Reset()                    { *m = ConsensusType{} }
-func (m *ConsensusType) String() string            { return proto.CompactTextString(m) }
-func (*ConsensusType) ProtoMessage()               {}
-func (*ConsensusType) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{0} }
+func (m *ConsensusType) Reset()         { *m = ConsensusType{} }
+func (m *ConsensusType) String() string { return proto.CompactTextString(m) }
+func (*ConsensusType) ProtoMessage()    {}
+func (*ConsensusType) Descriptor() ([]byte, []int) {
+	return fileDescriptor_configuration_fcdec24820b11e98, []int{0}
+}
+func (m *ConsensusType) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ConsensusType.Unmarshal(m, b)
+}
+func (m *ConsensusType) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ConsensusType.Marshal(b, m, deterministic)
+}
+func (dst *ConsensusType) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ConsensusType.Merge(dst, src)
+}
+func (m *ConsensusType) XXX_Size() int {
+	return xxx_messageInfo_ConsensusType.Size(m)
+}
+func (m *ConsensusType) XXX_DiscardUnknown() {
+	xxx_messageInfo_ConsensusType.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ConsensusType proto.InternalMessageInfo
 
 func (m *ConsensusType) GetType() string {
 	if m != nil {
@@ -37,13 +65,35 @@ type BatchSize struct {
 	AbsoluteMaxBytes uint32 `protobuf:"varint,2,opt,name=absolute_max_bytes,json=absoluteMaxBytes" json:"absolute_max_bytes,omitempty"`
 	
 	
-	PreferredMaxBytes uint32 `protobuf:"varint,3,opt,name=preferred_max_bytes,json=preferredMaxBytes" json:"preferred_max_bytes,omitempty"`
+	PreferredMaxBytes    uint32   `protobuf:"varint,3,opt,name=preferred_max_bytes,json=preferredMaxBytes" json:"preferred_max_bytes,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *BatchSize) Reset()                    { *m = BatchSize{} }
-func (m *BatchSize) String() string            { return proto.CompactTextString(m) }
-func (*BatchSize) ProtoMessage()               {}
-func (*BatchSize) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{1} }
+func (m *BatchSize) Reset()         { *m = BatchSize{} }
+func (m *BatchSize) String() string { return proto.CompactTextString(m) }
+func (*BatchSize) ProtoMessage()    {}
+func (*BatchSize) Descriptor() ([]byte, []int) {
+	return fileDescriptor_configuration_fcdec24820b11e98, []int{1}
+}
+func (m *BatchSize) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_BatchSize.Unmarshal(m, b)
+}
+func (m *BatchSize) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_BatchSize.Marshal(b, m, deterministic)
+}
+func (dst *BatchSize) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchSize.Merge(dst, src)
+}
+func (m *BatchSize) XXX_Size() int {
+	return xxx_messageInfo_BatchSize.Size(m)
+}
+func (m *BatchSize) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchSize.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchSize proto.InternalMessageInfo
 
 func (m *BatchSize) GetMaxMessageCount() uint32 {
 	if m != nil {
@@ -69,13 +119,35 @@ func (m *BatchSize) GetPreferredMaxBytes() uint32 {
 type BatchTimeout struct {
 	
 	
-	Timeout string `protobuf:"bytes,1,opt,name=timeout" json:"timeout,omitempty"`
+	Timeout              string   `protobuf:"bytes,1,opt,name=timeout" json:"timeout,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *BatchTimeout) Reset()                    { *m = BatchTimeout{} }
-func (m *BatchTimeout) String() string            { return proto.CompactTextString(m) }
-func (*BatchTimeout) ProtoMessage()               {}
-func (*BatchTimeout) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{2} }
+func (m *BatchTimeout) Reset()         { *m = BatchTimeout{} }
+func (m *BatchTimeout) String() string { return proto.CompactTextString(m) }
+func (*BatchTimeout) ProtoMessage()    {}
+func (*BatchTimeout) Descriptor() ([]byte, []int) {
+	return fileDescriptor_configuration_fcdec24820b11e98, []int{2}
+}
+func (m *BatchTimeout) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_BatchTimeout.Unmarshal(m, b)
+}
+func (m *BatchTimeout) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_BatchTimeout.Marshal(b, m, deterministic)
+}
+func (dst *BatchTimeout) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchTimeout.Merge(dst, src)
+}
+func (m *BatchTimeout) XXX_Size() int {
+	return xxx_messageInfo_BatchTimeout.Size(m)
+}
+func (m *BatchTimeout) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchTimeout.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchTimeout proto.InternalMessageInfo
 
 func (m *BatchTimeout) GetTimeout() string {
 	if m != nil {
@@ -89,13 +161,35 @@ func (m *BatchTimeout) GetTimeout() string {
 type KafkaBrokers struct {
 	
 	
-	Brokers []string `protobuf:"bytes,1,rep,name=brokers" json:"brokers,omitempty"`
+	Brokers              []string `protobuf:"bytes,1,rep,name=brokers" json:"brokers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *KafkaBrokers) Reset()                    { *m = KafkaBrokers{} }
-func (m *KafkaBrokers) String() string            { return proto.CompactTextString(m) }
-func (*KafkaBrokers) ProtoMessage()               {}
-func (*KafkaBrokers) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{3} }
+func (m *KafkaBrokers) Reset()         { *m = KafkaBrokers{} }
+func (m *KafkaBrokers) String() string { return proto.CompactTextString(m) }
+func (*KafkaBrokers) ProtoMessage()    {}
+func (*KafkaBrokers) Descriptor() ([]byte, []int) {
+	return fileDescriptor_configuration_fcdec24820b11e98, []int{3}
+}
+func (m *KafkaBrokers) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_KafkaBrokers.Unmarshal(m, b)
+}
+func (m *KafkaBrokers) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_KafkaBrokers.Marshal(b, m, deterministic)
+}
+func (dst *KafkaBrokers) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_KafkaBrokers.Merge(dst, src)
+}
+func (m *KafkaBrokers) XXX_Size() int {
+	return xxx_messageInfo_KafkaBrokers.Size(m)
+}
+func (m *KafkaBrokers) XXX_DiscardUnknown() {
+	xxx_messageInfo_KafkaBrokers.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_KafkaBrokers proto.InternalMessageInfo
 
 func (m *KafkaBrokers) GetBrokers() []string {
 	if m != nil {
@@ -106,13 +200,35 @@ func (m *KafkaBrokers) GetBrokers() []string {
 
 
 type ChannelRestrictions struct {
-	MaxCount uint64 `protobuf:"varint,1,opt,name=max_count,json=maxCount" json:"max_count,omitempty"`
+	MaxCount             uint64   `protobuf:"varint,1,opt,name=max_count,json=maxCount" json:"max_count,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ChannelRestrictions) Reset()                    { *m = ChannelRestrictions{} }
-func (m *ChannelRestrictions) String() string            { return proto.CompactTextString(m) }
-func (*ChannelRestrictions) ProtoMessage()               {}
-func (*ChannelRestrictions) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{4} }
+func (m *ChannelRestrictions) Reset()         { *m = ChannelRestrictions{} }
+func (m *ChannelRestrictions) String() string { return proto.CompactTextString(m) }
+func (*ChannelRestrictions) ProtoMessage()    {}
+func (*ChannelRestrictions) Descriptor() ([]byte, []int) {
+	return fileDescriptor_configuration_fcdec24820b11e98, []int{4}
+}
+func (m *ChannelRestrictions) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ChannelRestrictions.Unmarshal(m, b)
+}
+func (m *ChannelRestrictions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ChannelRestrictions.Marshal(b, m, deterministic)
+}
+func (dst *ChannelRestrictions) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChannelRestrictions.Merge(dst, src)
+}
+func (m *ChannelRestrictions) XXX_Size() int {
+	return xxx_messageInfo_ChannelRestrictions.Size(m)
+}
+func (m *ChannelRestrictions) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChannelRestrictions.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChannelRestrictions proto.InternalMessageInfo
 
 func (m *ChannelRestrictions) GetMaxCount() uint64 {
 	if m != nil {
@@ -129,9 +245,11 @@ func init() {
 	proto.RegisterType((*ChannelRestrictions)(nil), "orderer.ChannelRestrictions")
 }
 
-func init() { proto.RegisterFile("orderer/configuration.proto", fileDescriptor1) }
+func init() {
+	proto.RegisterFile("orderer/configuration.proto", fileDescriptor_configuration_fcdec24820b11e98)
+}
 
-var fileDescriptor1 = []byte{
+var fileDescriptor_configuration_fcdec24820b11e98 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x4c, 0xd0, 0xcd, 0x4a, 0xc3, 0x40,
 	0x10, 0x07, 0x70, 0x62, 0x8b, 0xb5, 0x8b, 0x45, 0xbb, 0xbd, 0x04, 0x7a, 0x29, 0x11, 0xa1, 0x48,

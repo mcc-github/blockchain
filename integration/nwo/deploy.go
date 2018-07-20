@@ -8,7 +8,6 @@ package nwo
 
 import (
 	"fmt"
-	"time"
 
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -18,45 +17,98 @@ import (
 )
 
 type Chaincode struct {
-	Name    string
-	Version string
-	Path    string
-	Ctor    string
-	Policy  string
+	Name              string
+	Version           string
+	Path              string
+	Ctor              string
+	Policy            string
+	CollectionsConfig string 
 }
 
 
 
 
-func DeployChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode) {
-	peers := n.PeersWithChannel(channel)
+func DeployChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
+	if len(peers) == 0 {
+		peers = n.PeersWithChannel(channel)
+	}
 	if len(peers) == 0 {
 		return
 	}
 
 	
-	n.InstallChaincode(peers, commands.ChaincodeInstall{
-		Name:    chaincode.Name,
-		Version: chaincode.Version,
-		Path:    chaincode.Path,
-	})
+	InstallChaincode(n, chaincode, peers...)
 
 	
-	n.InstantiateChaincode(peers[0], commands.ChaincodeInstantiate{
-		ChannelID: channel,
-		Orderer:   n.OrdererAddress(orderer, ListenPort),
-		Name:      chaincode.Name,
-		Version:   chaincode.Version,
-		Ctor:      chaincode.Ctor,
-		Policy:    chaincode.Policy,
-	})
+	InstantiateChaincode(n, channel, orderer, chaincode, peers[0], peers...)
+}
 
-	
-	for _, p := range peers[1:] {
-		Eventually(listInstantiated(n, p, channel), time.Minute).Should(
-			gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", chaincode.Name, chaincode.Version)),
+func InstallChaincode(n *Network, chaincode Chaincode, peers ...*Peer) {
+	for _, p := range peers {
+		sess, err := n.PeerAdminSession(p, commands.ChaincodeInstall{
+			Name:    chaincode.Name,
+			Version: chaincode.Version,
+			Path:    chaincode.Path,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+
+		sess, err = n.PeerAdminSession(p, commands.ChaincodeListInstalled{})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+		Expect(sess).To(gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", chaincode.Name, chaincode.Version)))
+	}
+}
+
+func InstantiateChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peer *Peer, checkPeers ...*Peer) {
+	sess, err := n.PeerAdminSession(peer, commands.ChaincodeInstantiate{
+		ChannelID:         channel,
+		Orderer:           n.OrdererAddress(orderer, ListenPort),
+		Name:              chaincode.Name,
+		Version:           chaincode.Version,
+		Ctor:              chaincode.Ctor,
+		Policy:            chaincode.Policy,
+		CollectionsConfig: chaincode.CollectionsConfig,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+
+	EnsureInstantiated(n, channel, chaincode.Name, chaincode.Version, checkPeers...)
+}
+
+func EnsureInstantiated(n *Network, channel, name, version string, peers ...*Peer) {
+	for _, p := range peers {
+		Eventually(listInstantiated(n, p, channel), n.EventuallyTimeout).Should(
+			gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", name, version)),
 		)
 	}
+}
+
+func UpgradeChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
+	if len(peers) == 0 {
+		peers = n.PeersWithChannel(channel)
+	}
+	if len(peers) == 0 {
+		return
+	}
+
+	
+	InstallChaincode(n, chaincode, peers...)
+
+	
+	sess, err := n.PeerAdminSession(peers[0], commands.ChaincodeUpgrade{
+		ChannelID:         channel,
+		Orderer:           n.OrdererAddress(orderer, ListenPort),
+		Name:              chaincode.Name,
+		Version:           chaincode.Version,
+		Ctor:              chaincode.Ctor,
+		Policy:            chaincode.Policy,
+		CollectionsConfig: chaincode.CollectionsConfig,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+
+	EnsureInstantiated(n, channel, chaincode.Name, chaincode.Version, peers...)
 }
 
 func listInstantiated(n *Network, peer *Peer, channel string) func() *gbytes.Buffer {
@@ -65,7 +117,7 @@ func listInstantiated(n *Network, peer *Peer, channel string) func() *gbytes.Buf
 			ChannelID: channel,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, 10*time.Second).Should(gexec.Exit(0))
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 		return sess.Buffer()
 	}
 }

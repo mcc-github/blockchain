@@ -31,31 +31,30 @@ type TarFileEntry struct {
 
 
 
-func ExtractStatedbArtifactsForChaincode(ccname, ccversion string) (installed bool, statedbArtifactsTar []byte, err error) {
+func ExtractStatedbArtifactsForChaincode(ccname, ccversion string, pr *platforms.Registry) (installed bool, statedbArtifactsTar []byte, err error) {
 	ccpackage, err := GetChaincodeFromFS(ccname, ccversion)
 	if err != nil {
 		
 		
 		
-		ccproviderLogger.Info("Error while loading installation package for ccname=%s, ccversion=%s. Err=%s", ccname, ccversion, err)
+		ccproviderLogger.Infof("Error while loading installation package for ccname=%s, ccversion=%s. Err=%s", ccname, ccversion, err)
 		return false, nil, nil
 	}
 
-	statedbArtifactsTar, err = ExtractStatedbArtifactsFromCCPackage(ccpackage)
+	statedbArtifactsTar, err = ExtractStatedbArtifactsFromCCPackage(ccpackage, pr)
 	return true, statedbArtifactsTar, err
 }
 
 
 
 
-func ExtractStatedbArtifactsFromCCPackage(ccpackage CCPackage) (statedbArtifactsTar []byte, err error) {
+func ExtractStatedbArtifactsFromCCPackage(ccpackage CCPackage, pr *platforms.Registry) (statedbArtifactsTar []byte, err error) {
 	cds := ccpackage.GetDepSpec()
-	pform, err := platforms.Find(cds.ChaincodeSpec.Type)
+	metaprov, err := pr.GetMetadataProvider(cds.CCType(), cds.Bytes())
 	if err != nil {
-		ccproviderLogger.Infof("invalid deployment spec (bad platform type:%s)", cds.ChaincodeSpec.Type)
+		ccproviderLogger.Infof("invalid deployment spec: %s", err)
 		return nil, fmt.Errorf("invalid deployment spec")
 	}
-	metaprov := pform.GetMetadataProvider(cds)
 	return metaprov.GetMetadataAsTarEntries()
 }
 

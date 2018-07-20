@@ -100,6 +100,15 @@ func Timestamp(ts *tspb.Timestamp) (time.Time, error) {
 }
 
 
+func TimestampNow() *tspb.Timestamp {
+	ts, err := TimestampProto(time.Now())
+	if err != nil {
+		panic("ptypes: time.Now() out of Timestamp range")
+	}
+	return ts
+}
+
+
 
 func TimestampProto(t time.Time) (*tspb.Timestamp, error) {
 	seconds := t.Unix()

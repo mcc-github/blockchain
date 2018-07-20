@@ -15,13 +15,11 @@ import (
 	"path/filepath"
 
 	cutil "github.com/mcc-github/blockchain/core/container/util"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 
 
-func writeChaincodePackage(spec *pb.ChaincodeSpec, tw *tar.Writer) error {
-	urlLocation := spec.ChaincodeId.Path
+func writeChaincodePackage(urlLocation string, tw *tar.Writer) error {
 	if urlLocation == "" {
 		return errors.New("ChaincodeSpec's path/URL cannot be empty")
 	}

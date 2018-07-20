@@ -42,6 +42,9 @@ type Receiver struct {
 	CutNext bool
 
 	
+	SkipAppendCurBatch bool
+
+	
 	CurBatch []*cb.Envelope
 
 	
@@ -79,7 +82,9 @@ func (mbc *Receiver) Ordered(env *cb.Envelope) ([][]*cb.Envelope, bool) {
 		return res, true
 	}
 
-	mbc.CurBatch = append(mbc.CurBatch, env)
+	if !mbc.SkipAppendCurBatch {
+		mbc.CurBatch = append(mbc.CurBatch, env)
+	}
 
 	if mbc.CutNext {
 		logger.Debugf("Receiver: Returning regular batch")

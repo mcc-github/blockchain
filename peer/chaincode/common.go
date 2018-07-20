@@ -20,7 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/common/localmsp"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/msp"
@@ -44,12 +43,7 @@ func checkSpec(spec *pb.ChaincodeSpec) error {
 		return errors.New("expected chaincode specification, nil received")
 	}
 
-	platform, err := platforms.Find(spec.Type)
-	if err != nil {
-		return errors.WithMessage(err, "failed to determine platform type")
-	}
-
-	return platform.ValidateSpec(spec)
+	return platformRegistry.ValidateSpec(spec.CCType(), spec.Path())
 }
 
 
@@ -61,7 +55,7 @@ func getChaincodeDeploymentSpec(spec *pb.ChaincodeSpec, crtPkg bool) (*pb.Chainc
 			return nil, err
 		}
 
-		codePackageBytes, err = container.GetChaincodePackageBytes(spec)
+		codePackageBytes, err = container.GetChaincodePackageBytes(platformRegistry, spec)
 		if err != nil {
 			err = errors.WithMessage(err, "error getting chaincode package bytes")
 			return nil, err

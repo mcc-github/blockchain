@@ -22,14 +22,15 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/integration/helpers"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
+	"github.com/mcc-github/blockchain/integration/nwo/blockchainconfig"
 	"github.com/mcc-github/blockchain/integration/runner"
 	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/tedsuo/ifrit"
 	"github.com/tedsuo/ifrit/ginkgomon"
 	"github.com/tedsuo/ifrit/grouper"
+	yaml "gopkg.in/yaml.v2"
 )
 
 
@@ -126,11 +127,12 @@ type Profile struct {
 
 
 type Network struct {
-	RootDir      string
-	StartPort    uint16
-	NetworkID    string
-	Components   *Components
-	DockerClient *docker.Client
+	RootDir           string
+	StartPort         uint16
+	Components        *Components
+	DockerClient      *docker.Client
+	NetworkID         string
+	EventuallyTimeout time.Duration
 
 	PortsByBrokerID  map[string]Ports
 	PortsByOrdererID map[string]Ports
@@ -143,6 +145,7 @@ type Network struct {
 	Peers            []*Peer
 	Profiles         []*Profile
 	Consortiums      []*Consortium
+	Templates        *Templates
 
 	colorIndex uint
 }
@@ -157,10 +160,11 @@ func New(c *Config, rootDir string, client *docker.Client, startPort int, compon
 		Components:   components,
 		DockerClient: client,
 
-		NetworkID:        helpers.UniqueName(),
-		PortsByBrokerID:  map[string]Ports{},
-		PortsByOrdererID: map[string]Ports{},
-		PortsByPeerID:    map[string]Ports{},
+		NetworkID:         helpers.UniqueName(),
+		EventuallyTimeout: time.Minute,
+		PortsByBrokerID:   map[string]Ports{},
+		PortsByOrdererID:  map[string]Ports{},
+		PortsByPeerID:     map[string]Ports{},
 
 		Organizations: c.Organizations,
 		Consensus:     c.Consensus,
@@ -170,6 +174,11 @@ func New(c *Config, rootDir string, client *docker.Client, startPort int, compon
 		Channels:      c.Channels,
 		Profiles:      c.Profiles,
 		Consortiums:   c.Consortiums,
+		Templates:     c.Templates,
+	}
+
+	if network.Templates == nil {
+		network.Templates = &Templates{}
 	}
 
 	for i := 0; i < network.Consensus.Brokers; i++ {
@@ -218,14 +227,14 @@ func (n *Network) CryptoConfigPath() string {
 
 
 
-func (n *Network) OutputBlockPath(name string) string {
-	return filepath.Join(n.RootDir, fmt.Sprintf("%s_block.pb", name))
+func (n *Network) OutputBlockPath(channelName string) string {
+	return filepath.Join(n.RootDir, fmt.Sprintf("%s_block.pb", channelName))
 }
 
 
 
-func (n *Network) CreateChannelTxPath(name string) string {
-	return filepath.Join(n.RootDir, fmt.Sprintf("%s_tx.pb", name))
+func (n *Network) CreateChannelTxPath(channelName string) string {
+	return filepath.Join(n.RootDir, fmt.Sprintf("%s_tx.pb", channelName))
 }
 
 
@@ -242,6 +251,29 @@ func (n *Network) OrdererConfigPath(o *Orderer) string {
 
 
 
+func (n *Network) ReadOrdererConfig(o *Orderer) *blockchainconfig.Orderer {
+	var orderer blockchainconfig.Orderer
+	ordererBytes, err := ioutil.ReadFile(n.OrdererConfigPath(o))
+	Expect(err).NotTo(HaveOccurred())
+
+	err = yaml.Unmarshal(ordererBytes, &orderer)
+	Expect(err).NotTo(HaveOccurred())
+
+	return &orderer
+}
+
+
+
+func (n *Network) WriteOrdererConfig(o *Orderer, config *blockchainconfig.Orderer) {
+	ordererBytes, err := yaml.Marshal(config)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = ioutil.WriteFile(n.OrdererConfigPath(o), ordererBytes, 0644)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+
+
 func (n *Network) PeerDir(p *Peer) string {
 	return filepath.Join(n.RootDir, "peers", p.ID())
 }
@@ -250,6 +282,29 @@ func (n *Network) PeerDir(p *Peer) string {
 
 func (n *Network) PeerConfigPath(p *Peer) string {
 	return filepath.Join(n.PeerDir(p), "core.yaml")
+}
+
+
+
+func (n *Network) ReadPeerConfig(p *Peer) *blockchainconfig.Core {
+	var core blockchainconfig.Core
+	coreBytes, err := ioutil.ReadFile(n.PeerConfigPath(p))
+	Expect(err).NotTo(HaveOccurred())
+
+	err = yaml.Unmarshal(coreBytes, &core)
+	Expect(err).NotTo(HaveOccurred())
+
+	return &core
+}
+
+
+
+func (n *Network) WritePeerConfig(p *Peer, config *blockchainconfig.Core) {
+	coreBytes, err := yaml.Marshal(config)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = ioutil.WriteFile(n.PeerConfigPath(p), coreBytes, 0644)
+	Expect(err).NotTo(HaveOccurred())
 }
 
 
@@ -270,6 +325,38 @@ func (n *Network) PeerUserMSPDir(p *Peer, user string) string {
 }
 
 
+
+func (n *Network) PeerUserCert(p *Peer, user string) string {
+	org := n.Organization(p.Organization)
+	Expect(org).NotTo(BeNil())
+
+	return filepath.Join(
+		n.PeerUserMSPDir(p, user),
+		"signcerts",
+		fmt.Sprintf("%s@%s-cert.pem", user, org.Domain),
+	)
+}
+
+
+
+func (n *Network) PeerUserKey(p *Peer, user string) string {
+	org := n.Organization(p.Organization)
+	Expect(org).NotTo(BeNil())
+
+	keystore := filepath.Join(
+		n.PeerUserMSPDir(p, user),
+		"keystore",
+	)
+
+	
+	keys, err := ioutil.ReadDir(keystore)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(keys).To(HaveLen(1))
+
+	return filepath.Join(keystore, keys[0].Name())
+}
+
+
 func (n *Network) PeerLocalMSPDir(p *Peer) string {
 	org := n.Organization(p.Organization)
 	Expect(org).NotTo(BeNil())
@@ -282,6 +369,18 @@ func (n *Network) PeerLocalMSPDir(p *Peer) string {
 		"peers",
 		fmt.Sprintf("%s.%s", p.Name, org.Domain),
 		"msp",
+	)
+}
+
+
+func (n *Network) PeerCert(p *Peer) string {
+	org := n.Organization(p.Organization)
+	Expect(org).NotTo(BeNil())
+
+	return filepath.Join(
+		n.PeerLocalMSPDir(p),
+		"signcerts",
+		fmt.Sprintf("%s.%s-cert.pem", p.Name, org.Domain),
 	)
 }
 
@@ -323,6 +422,17 @@ func (n *Network) OrdererLocalMSPDir(o *Orderer) string {
 		fmt.Sprintf("%s.%s", o.Name, org.Domain),
 		"msp",
 	)
+}
+
+
+
+func (n *Network) ProfileForChannel(channelName string) string {
+	for _, ch := range n.Channels {
+		if ch.Name == channelName {
+			return ch.Profile
+		}
+	}
+	return ""
 }
 
 
@@ -381,7 +491,7 @@ func (n *Network) Bootstrap() {
 		Output: n.CryptoPath(),
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	sess, err = n.ConfigTxGen(commands.OutputBlock{
 		ChannelID:   n.SystemChannel.Name,
@@ -390,7 +500,7 @@ func (n *Network) Bootstrap() {
 		OutputBlock: n.OutputBlockPath(n.SystemChannel.Name),
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	for _, c := range n.Channels {
 		sess, err := n.ConfigTxGen(commands.CreateChannelTx{
@@ -400,7 +510,7 @@ func (n *Network) Bootstrap() {
 			OutputCreateChannelTx: n.CreateChannelTxPath(c.Name),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess).Should(gexec.Exit(0))
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 	}
 }
 
@@ -472,14 +582,50 @@ func (n *Network) CreateAndJoinChannel(o *Orderer, channelName string) {
 		OutputBlock: tempFile.Name(),
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, time.Minute).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	for _, p := range peers {
 		sess, err := n.PeerAdminSession(p, commands.ChannelJoin{
 			BlockPath: tempFile.Name(),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess).Should(gexec.Exit(0))
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+	}
+}
+
+
+
+
+func (n *Network) UpdateChannelAnchors(o *Orderer, channelName string) {
+	tempFile, err := ioutil.TempFile("", "update-anchors")
+	Expect(err).NotTo(HaveOccurred())
+	tempFile.Close()
+	defer os.Remove(tempFile.Name())
+
+	peersByOrg := map[string]*Peer{}
+	for _, p := range n.AnchorsForChannel(channelName) {
+		peersByOrg[p.Organization] = p
+	}
+
+	for orgName, p := range peersByOrg {
+		anchorUpdate := commands.OutputAnchorPeersUpdate{
+			ChannelID:  channelName,
+			Profile:    n.ProfileForChannel(channelName),
+			ConfigPath: n.RootDir,
+			AsOrg:      orgName,
+			OutputAnchorPeersUpdate: tempFile.Name(),
+		}
+		sess, err := n.ConfigTxGen(anchorUpdate)
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+
+		sess, err = n.PeerAdminSession(p, commands.ChannelUpdate{
+			ChannelID: channelName,
+			Orderer:   n.OrdererAddress(o, ListenPort),
+			File:      tempFile.Name(),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 	}
 }
 
@@ -496,7 +642,7 @@ func (n *Network) CreateChannel(name string, o *Orderer, p *Peer) {
 		OutputBlock: "/dev/null",
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 }
 
 
@@ -520,42 +666,15 @@ func (n *Network) JoinChannel(name string, o *Orderer, peers ...*Peer) {
 		OutputFile: tempFile.Name(),
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	for _, p := range peers {
 		sess, err := n.PeerAdminSession(p, commands.ChannelJoin{
 			BlockPath: tempFile.Name(),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess).Should(gexec.Exit(0))
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 	}
-}
-
-
-
-func (n *Network) InstallChaincode(peers []*Peer, install commands.ChaincodeInstall) {
-	for _, p := range peers {
-		sess, err := n.PeerAdminSession(p, install)
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, time.Minute).Should(gexec.Exit(0))
-
-		sess, err = n.PeerAdminSession(p, commands.ChaincodeListInstalled{})
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, time.Minute).Should(gexec.Exit(0))
-		Expect(sess).To(gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", install.Name, install.Version)))
-	}
-}
-
-
-
-func (n *Network) InstantiateChaincode(peer *Peer, instantiate commands.ChaincodeInstantiate) {
-	sess, err := n.PeerAdminSession(peer, instantiate)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, time.Minute).Should(gexec.Exit(0))
-
-	Eventually(listInstantiated(n, peer, instantiate.ChannelID), time.Minute).Should(
-		gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", instantiate.Name, instantiate.Version)),
-	)
 }
 
 
@@ -567,6 +686,12 @@ func (n *Network) Cryptogen(command Command) (*gexec.Session, error) {
 
 func (n *Network) ConfigTxGen(command Command) (*gexec.Session, error) {
 	cmd := NewCommand(n.Components.ConfigTxGen(), command)
+	return n.StartSession(cmd, command.SessionName())
+}
+
+
+func (n *Network) Discover(command Command) (*gexec.Session, error) {
+	cmd := NewCommand(n.Components.Discover(), command)
 	return n.StartSession(cmd, command.SessionName())
 }
 
@@ -820,7 +945,7 @@ func (n *Network) AnchorsForChannel(chanName string) []*Peer {
 	anchors := []*Peer{}
 	for _, p := range n.Peers {
 		for _, pc := range p.Channels {
-			if pc.Name == chanName {
+			if pc.Name == chanName && pc.Anchor {
 				anchors = append(anchors, p)
 			}
 		}
@@ -1009,7 +1134,7 @@ func (n *Network) GenerateCryptoConfig() {
 	Expect(err).NotTo(HaveOccurred())
 	defer crypto.Close()
 
-	t, err := template.New("crypto").Parse(CryptoTemplate)
+	t, err := template.New("crypto").Parse(n.Templates.CryptoTemplate())
 	Expect(err).NotTo(HaveOccurred())
 
 	pw := gexec.NewPrefixedWriter("[crypto-config.yaml] ", ginkgo.GinkgoWriter)
@@ -1022,7 +1147,7 @@ func (n *Network) GenerateConfigTxConfig() {
 	Expect(err).NotTo(HaveOccurred())
 	defer config.Close()
 
-	t, err := template.New("configtx").Parse(ConfigTxTemplate)
+	t, err := template.New("configtx").Parse(n.Templates.ConfigTxTemplate())
 	Expect(err).NotTo(HaveOccurred())
 
 	pw := gexec.NewPrefixedWriter("[configtx.yaml] ", ginkgo.GinkgoWriter)
@@ -1040,7 +1165,7 @@ func (n *Network) GenerateOrdererConfig(o *Orderer) {
 
 	t, err := template.New("orderer").Funcs(template.FuncMap{
 		"Orderer": func() *Orderer { return o },
-	}).Parse(OrdererTemplate)
+	}).Parse(n.Templates.OrdererTemplate())
 	Expect(err).NotTo(HaveOccurred())
 
 	pw := gexec.NewPrefixedWriter(fmt.Sprintf("[%s#orderer.yaml] ", o.ID()), ginkgo.GinkgoWriter)
@@ -1058,7 +1183,7 @@ func (n *Network) GenerateCoreConfig(p *Peer) {
 
 	t, err := template.New("orderer").Funcs(template.FuncMap{
 		"Peer": func() *Peer { return p },
-	}).Parse(CoreTemplate)
+	}).Parse(n.Templates.CoreTemplate())
 	Expect(err).NotTo(HaveOccurred())
 
 	pw := gexec.NewPrefixedWriter(fmt.Sprintf("[%s#core.yaml] ", p.ID()), ginkgo.GinkgoWriter)

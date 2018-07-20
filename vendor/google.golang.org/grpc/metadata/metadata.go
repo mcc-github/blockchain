@@ -13,6 +13,8 @@ import (
 )
 
 
+
+
 func DecodeKeyValue(k, v string) (string, string, error) {
 	return k, v, nil
 }
@@ -77,6 +79,30 @@ func (md MD) Len() int {
 
 func (md MD) Copy() MD {
 	return Join(md)
+}
+
+
+func (md MD) Get(k string) []string {
+	k = strings.ToLower(k)
+	return md[k]
+}
+
+
+func (md MD) Set(k string, vals ...string) {
+	if len(vals) == 0 {
+		return
+	}
+	k = strings.ToLower(k)
+	md[k] = vals
+}
+
+
+func (md MD) Append(k string, vals ...string) {
+	if len(vals) == 0 {
+		return
+	}
+	k = strings.ToLower(k)
+	md[k] = append(md[k], vals...)
 }
 
 

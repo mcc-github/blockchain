@@ -10,9 +10,8 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/core/container/inproccontroller"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 
@@ -23,7 +22,7 @@ type LaunchRegistry interface {
 
 
 type PackageProvider interface {
-	GetChaincode(ccname string, ccversion string) (ccprovider.CCPackage, error)
+	GetChaincodeCodePackage(ccname string, ccversion string) ([]byte, error)
 }
 
 
@@ -31,57 +30,20 @@ type RuntimeLauncher struct {
 	Runtime         Runtime
 	Registry        LaunchRegistry
 	PackageProvider PackageProvider
-	Lifecycle       *Lifecycle
 	StartupTimeout  time.Duration
 }
 
-
-func (r *RuntimeLauncher) Launch(ctx context.Context, cccid *ccprovider.CCContext, spec ccprovider.ChaincodeSpecGetter) error {
-	chaincodeID := spec.GetChaincodeSpec().ChaincodeId
-	cds, _ := spec.(*pb.ChaincodeDeploymentSpec)
-	if cds == nil {
+func (r *RuntimeLauncher) Launch(ccci *ccprovider.ChaincodeContainerInfo) error {
+	var codePackage []byte
+	if ccci.ContainerType != inproccontroller.ContainerType {
 		var err error
-		cds, err = r.getDeploymentSpec(ctx, cccid, chaincodeID)
-		if err != nil {
-			return err
-		}
-	}
-
-	if cds.CodePackage == nil && cds.ExecEnv != pb.ChaincodeDeploymentSpec_SYSTEM {
-		ccpack, err := r.PackageProvider.GetChaincode(chaincodeID.Name, chaincodeID.Version)
+		codePackage, err = r.PackageProvider.GetChaincodeCodePackage(ccci.Name, ccci.Version)
 		if err != nil {
 			return errors.Wrap(err, "failed to get chaincode package")
 		}
-		cds = ccpack.GetDepSpec()
 	}
 
-	err := r.start(ctx, cccid, cds)
-	if err != nil {
-		chaincodeLogger.Errorf("start failed: %+v", err)
-		return err
-	}
-
-	chaincodeLogger.Debug("launch complete")
-
-	return nil
-}
-
-func (r *RuntimeLauncher) getDeploymentSpec(ctx context.Context, cccid *ccprovider.CCContext, chaincodeID *pb.ChaincodeID) (*pb.ChaincodeDeploymentSpec, error) {
-	cname := cccid.GetCanonicalName()
-	if cccid.Syscc {
-		return nil, errors.Errorf("a syscc should be running (it cannot be launched) %s", cname)
-	}
-
-	cds, err := r.Lifecycle.GetChaincodeDeploymentSpec(ctx, cccid.TxID, cccid.SignedProposal, cccid.Proposal, cccid.ChainID, chaincodeID.Name)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get deployment spec for %s", cname)
-	}
-
-	return cds, nil
-}
-
-func (r *RuntimeLauncher) start(ctx context.Context, cccid *ccprovider.CCContext, cds *pb.ChaincodeDeploymentSpec) error {
-	cname := cccid.GetCanonicalName()
+	cname := ccci.Name + ":" + ccci.Version
 	launchState, err := r.Registry.Launching(cname)
 	if err != nil {
 		return errors.Wrapf(err, "failed to register %s as launching", cname)
@@ -90,7 +52,7 @@ func (r *RuntimeLauncher) start(ctx context.Context, cccid *ccprovider.CCContext
 	startFail := make(chan error, 1)
 	go func() {
 		chaincodeLogger.Debugf("chaincode %s is being launched", cname)
-		err := r.Runtime.Start(ctx, cccid, cds)
+		err := r.Runtime.Start(ccci, codePackage)
 		if err != nil {
 			startFail <- errors.WithMessage(err, "error starting container")
 		}
@@ -103,17 +65,18 @@ func (r *RuntimeLauncher) start(ctx context.Context, cccid *ccprovider.CCContext
 		}
 	case err = <-startFail:
 	case <-time.After(r.StartupTimeout):
-		err = errors.Errorf("timeout expired while starting chaincode %s for transaction %s", cname, cccid.TxID)
+		err = errors.Errorf("timeout expired while starting chaincode %s for transaction", cname)
 	}
 
 	if err != nil {
 		chaincodeLogger.Debugf("stopping due to error while launching: %+v", err)
 		defer r.Registry.Deregister(cname)
-		if err := r.Runtime.Stop(ctx, cccid, cds); err != nil {
+		if err := r.Runtime.Stop(ccci); err != nil {
 			chaincodeLogger.Debugf("stop failed: %+v", err)
 		}
 		return err
 	}
 
+	chaincodeLogger.Debug("launch complete")
 	return nil
 }

@@ -35,22 +35,39 @@
 package proto
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 	"strings"
 )
 
 
-func Clone(pb Message) Message {
-	in := reflect.ValueOf(pb)
+func Clone(src Message) Message {
+	in := reflect.ValueOf(src)
 	if in.IsNil() {
-		return pb
+		return src
 	}
-
 	out := reflect.New(in.Type().Elem())
+	dst := out.Interface().(Message)
+	Merge(dst, src)
+	return dst
+}
+
+
+type Merger interface {
 	
-	mergeStruct(out.Elem(), in.Elem())
-	return out.Interface().(Message)
+	
+	
+	
+	
+	Merge(src Message)
+}
+
+
+
+
+type generatedMerger interface {
+	XXX_Merge(src Message)
 }
 
 
@@ -58,17 +75,24 @@ func Clone(pb Message) Message {
 
 
 func Merge(dst, src Message) {
+	if m, ok := dst.(Merger); ok {
+		m.Merge(src)
+		return
+	}
+
 	in := reflect.ValueOf(src)
 	out := reflect.ValueOf(dst)
 	if out.IsNil() {
 		panic("proto: nil destination")
 	}
 	if in.Type() != out.Type() {
-		
-		panic("proto: type mismatch")
+		panic(fmt.Sprintf("proto.Merge(%T, %T) type mismatch", dst, src))
 	}
 	if in.IsNil() {
-		
+		return 
+	}
+	if m, ok := dst.(generatedMerger); ok {
+		m.XXX_Merge(src)
 		return
 	}
 	mergeStruct(out.Elem(), in.Elem())
@@ -84,7 +108,7 @@ func mergeStruct(out, in reflect.Value) {
 		mergeAny(out.Field(i), in.Field(i), false, sprop.Prop[i])
 	}
 
-	if emIn, ok := extendable(in.Addr().Interface()); ok {
+	if emIn, err := extendable(in.Addr().Interface()); err == nil {
 		emOut, _ := extendable(out.Addr().Interface())
 		mIn, muIn := emIn.extensionsRead()
 		if mIn != nil {

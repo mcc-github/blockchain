@@ -17,6 +17,7 @@ import (
 
 
 
+
 type Address struct {
 	
 	Addr string
@@ -24,6 +25,8 @@ type Address struct {
 	
 	Metadata interface{}
 }
+
+
 
 
 type BalancerConfig struct {
@@ -39,11 +42,13 @@ type BalancerConfig struct {
 
 
 
+
 type BalancerGetOptions struct {
 	
 	
 	BlockingWait bool
 }
+
 
 
 
@@ -116,6 +121,8 @@ func downErrorf(timeout, temporary bool, format string, a ...interface{}) downEr
 		desc:      fmt.Sprintf(format, a...),
 	}
 }
+
+
 
 
 

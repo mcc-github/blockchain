@@ -29,6 +29,8 @@ import (
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container"
@@ -222,6 +224,7 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 		ca.CertBytes(),
 		certGenerator,
 		&ccprovider.CCInfoFSImpl{},
+		nil,
 		mockAclProvider,
 		container.NewVMController(
 			map[string]container.VMProvider{
@@ -229,6 +232,7 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 			},
 		),
 		mp,
+		platforms.NewRegistry(&golang.Platform{}),
 	)
 
 	

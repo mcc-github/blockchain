@@ -40,7 +40,7 @@ type ChannelResponse interface {
 	Config() (*discovery.ConfigResult, error)
 
 	
-	Peers() ([]*Peer, error)
+	Peers(invocationChain ...*discovery.ChaincodeCall) ([]*Peer, error)
 
 	
 	

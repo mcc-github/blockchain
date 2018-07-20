@@ -6,13 +6,14 @@
 package transport 
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/net/context"
-	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -41,6 +42,7 @@ type recvBuffer struct {
 	c       chan recvMsg
 	mu      sync.Mutex
 	backlog []recvMsg
+	err     error
 }
 
 func newRecvBuffer() *recvBuffer {
@@ -52,6 +54,13 @@ func newRecvBuffer() *recvBuffer {
 
 func (b *recvBuffer) put(r recvMsg) {
 	b.mu.Lock()
+	if b.err != nil {
+		b.mu.Unlock()
+		
+		
+		return
+	}
+	b.err = r.err
 	if len(b.backlog) == 0 {
 		select {
 		case b.c <- r:
@@ -87,12 +96,13 @@ func (b *recvBuffer) get() <-chan recvMsg {
 
 
 
+
 type recvBufferReader struct {
-	ctx    context.Context
-	goAway chan struct{}
-	recv   *recvBuffer
-	last   []byte 
-	err    error
+	ctx     context.Context
+	ctxDone <-chan struct{} 
+	recv    *recvBuffer
+	last    []byte 
+	err     error
 }
 
 
@@ -114,10 +124,8 @@ func (r *recvBufferReader) read(p []byte) (n int, err error) {
 		return copied, nil
 	}
 	select {
-	case <-r.ctx.Done():
+	case <-r.ctxDone:
 		return 0, ContextErr(r.ctx.Err())
-	case <-r.goAway:
-		return 0, errStreamDrain
 	case m := <-r.recv.get():
 		r.recv.load()
 		if m.err != nil {
@@ -129,61 +137,7 @@ func (r *recvBufferReader) read(p []byte) (n int, err error) {
 	}
 }
 
-
-type item interface {
-	item()
-}
-
-
-type controlBuffer struct {
-	c       chan item
-	mu      sync.Mutex
-	backlog []item
-}
-
-func newControlBuffer() *controlBuffer {
-	b := &controlBuffer{
-		c: make(chan item, 1),
-	}
-	return b
-}
-
-func (b *controlBuffer) put(r item) {
-	b.mu.Lock()
-	if len(b.backlog) == 0 {
-		select {
-		case b.c <- r:
-			b.mu.Unlock()
-			return
-		default:
-		}
-	}
-	b.backlog = append(b.backlog, r)
-	b.mu.Unlock()
-}
-
-func (b *controlBuffer) load() {
-	b.mu.Lock()
-	if len(b.backlog) > 0 {
-		select {
-		case b.c <- b.backlog[0]:
-			b.backlog[0] = nil
-			b.backlog = b.backlog[1:]
-		default:
-		}
-	}
-	b.mu.Unlock()
-}
-
-
-
-
-
-func (b *controlBuffer) get() <-chan item {
-	return b.c
-}
-
-type streamState uint8
+type streamState uint32
 
 const (
 	streamActive    streamState = iota
@@ -199,7 +153,7 @@ type Stream struct {
 	ctx          context.Context    
 	cancel       context.CancelFunc 
 	done         chan struct{}      
-	goAway       chan struct{}      
+	ctxDone      <-chan struct{}    
 	method       string             
 	recvCompress string
 	sendCompress string
@@ -207,33 +161,58 @@ type Stream struct {
 	trReader     io.Reader
 	fc           *inFlow
 	recvQuota    uint32
-	waiters      waiters
+	wq           *writeQuota
 
 	
 	
 	requestRead func(int)
 
-	sendQuotaPool *quotaPool
-	headerChan    chan struct{} 
-	headerDone    bool          
-	header        metadata.MD   
-	trailer       metadata.MD   
+	headerChan chan struct{} 
+	headerDone uint32        
 
-	mu       sync.RWMutex 
-	headerOk bool         
-	state    streamState
+	
+	hdrMu   sync.Mutex
+	header  metadata.MD 
+	trailer metadata.MD 
 
-	status *status.Status 
+	
+	headerSent uint32
 
-	rstStream bool          
-	rstError  http2.ErrCode 
+	state streamState
 
-	bytesReceived bool 
-	unprocessed   bool 
+	
+	
+	status *status.Status
+
+	bytesReceived uint32 
+	unprocessed   uint32 
 
 	
 	
 	contentSubtype string
+}
+
+
+func (s *Stream) isHeaderSent() bool {
+	return atomic.LoadUint32(&s.headerSent) == 1
+}
+
+
+
+func (s *Stream) updateHeaderSent() bool {
+	return atomic.SwapUint32(&s.headerSent, 1) == 1
+}
+
+func (s *Stream) swapState(st streamState) streamState {
+	return streamState(atomic.SwapUint32((*uint32)(&s.state), uint32(st)))
+}
+
+func (s *Stream) compareAndSwapState(oldState, newState streamState) bool {
+	return atomic.CompareAndSwapUint32((*uint32)(&s.state), uint32(oldState), uint32(newState))
+}
+
+func (s *Stream) getState() streamState {
+	return streamState(atomic.LoadUint32((*uint32)(&s.state)))
 }
 
 func (s *Stream) waitOnHeader() error {
@@ -242,12 +221,9 @@ func (s *Stream) waitOnHeader() error {
 		
 		return nil
 	}
-	wc := s.waiters
 	select {
-	case <-wc.ctx.Done():
-		return ContextErr(wc.ctx.Err())
-	case <-wc.goAway:
-		return errStreamDrain
+	case <-s.ctx.Done():
+		return ContextErr(s.ctx.Err())
 	case <-s.headerChan:
 		return nil
 	}
@@ -275,18 +251,15 @@ func (s *Stream) Done() <-chan struct{} {
 
 
 
-func (s *Stream) GoAway() <-chan struct{} {
-	return s.goAway
-}
-
-
-
 
 func (s *Stream) Header() (metadata.MD, error) {
 	err := s.waitOnHeader()
 	
 	select {
 	case <-s.headerChan:
+		if s.header == nil {
+			return nil, nil
+		}
 		return s.header.Copy(), nil
 	default:
 	}
@@ -296,10 +269,10 @@ func (s *Stream) Header() (metadata.MD, error) {
 
 
 
+
+
 func (s *Stream) Trailer() metadata.MD {
-	s.mu.RLock()
 	c := s.trailer.Copy()
-	s.mu.RUnlock()
 	return c
 }
 
@@ -329,24 +302,25 @@ func (s *Stream) Method() string {
 }
 
 
+
+
 func (s *Stream) Status() *status.Status {
 	return s.status
 }
 
 
 
+
 func (s *Stream) SetHeader(md metadata.MD) error {
-	s.mu.Lock()
-	if s.headerOk || s.state == streamDone {
-		s.mu.Unlock()
-		return ErrIllegalHeaderWrite
-	}
 	if md.Len() == 0 {
-		s.mu.Unlock()
 		return nil
 	}
+	if s.isHeaderSent() || s.getState() == streamDone {
+		return ErrIllegalHeaderWrite
+	}
+	s.hdrMu.Lock()
 	s.header = metadata.Join(s.header, md)
-	s.mu.Unlock()
+	s.hdrMu.Unlock()
 	return nil
 }
 
@@ -360,13 +334,17 @@ func (s *Stream) SendHeader(md metadata.MD) error {
 
 
 
+
 func (s *Stream) SetTrailer(md metadata.MD) error {
 	if md.Len() == 0 {
 		return nil
 	}
-	s.mu.Lock()
+	if s.getState() == streamDone {
+		return ErrIllegalHeaderWrite
+	}
+	s.hdrMu.Lock()
 	s.trailer = metadata.Join(s.trailer, md)
-	s.mu.Unlock()
+	s.hdrMu.Unlock()
 	return nil
 }
 
@@ -407,28 +385,14 @@ func (t *transportReader) Read(p []byte) (n int, err error) {
 }
 
 
-
-func (s *Stream) finish(st *status.Status) {
-	s.status = st
-	s.state = streamDone
-	close(s.done)
-}
-
-
 func (s *Stream) BytesReceived() bool {
-	s.mu.Lock()
-	br := s.bytesReceived
-	s.mu.Unlock()
-	return br
+	return atomic.LoadUint32(&s.bytesReceived) == 1
 }
 
 
 
 func (s *Stream) Unprocessed() bool {
-	s.mu.Lock()
-	br := s.unprocessed
-	s.mu.Unlock()
-	return br
+	return atomic.LoadUint32(&s.unprocessed) == 1
 }
 
 
@@ -458,6 +422,7 @@ type ServerConfig struct {
 	InitialConnWindowSize int32
 	WriteBufferSize       int
 	ReadBufferSize        int
+	ChannelzParentID      int64
 }
 
 
@@ -493,6 +458,8 @@ type ConnectOptions struct {
 	WriteBufferSize int
 	
 	ReadBufferSize int
+	
+	ChannelzParentID int64
 }
 
 
@@ -592,6 +559,12 @@ type ClientTransport interface {
 
 	
 	GetGoAwayReason() GoAwayReason
+
+	
+	IncrMsgSent()
+
+	
+	IncrMsgRecv()
 }
 
 
@@ -625,6 +598,12 @@ type ServerTransport interface {
 
 	
 	Drain()
+
+	
+	IncrMsgSent()
+
+	
+	IncrMsgRecv()
 }
 
 
@@ -680,6 +659,9 @@ var (
 	errStreamDrain = streamErrorf(codes.Unavailable, "the connection is draining")
 	
 	
+	errStreamDone = errors.New("the stream is done")
+	
+	
 	statusGoAway = status.New(codes.Unavailable, "the stream is rejected because server is draining the connection")
 )
 
@@ -696,15 +678,6 @@ func (e StreamError) Error() string {
 }
 
 
-
-type waiters struct {
-	ctx    context.Context
-	tctx   context.Context
-	done   chan struct{}
-	goAway chan struct{}
-}
-
-
 type GoAwayReason uint8
 
 const (
@@ -717,39 +690,3 @@ const (
 	
 	GoAwayTooManyPings GoAwayReason = 2
 )
-
-
-
-func loopyWriter(ctx context.Context, cbuf *controlBuffer, handler func(item) error) {
-	for {
-		select {
-		case i := <-cbuf.get():
-			cbuf.load()
-			if err := handler(i); err != nil {
-				errorf("transport: Error while handling item. Err: %v", err)
-				return
-			}
-		case <-ctx.Done():
-			return
-		}
-	hasData:
-		for {
-			select {
-			case i := <-cbuf.get():
-				cbuf.load()
-				if err := handler(i); err != nil {
-					errorf("transport: Error while handling item. Err: %v", err)
-					return
-				}
-			case <-ctx.Done():
-				return
-			default:
-				if err := handler(&flushIO{}); err != nil {
-					errorf("transport: Error while flushing. Err: %v", err)
-					return
-				}
-				break hasData
-			}
-		}
-	}
-}

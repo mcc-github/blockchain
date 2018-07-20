@@ -30,6 +30,11 @@ import (
 	"github.com/mcc-github/blockchain/core/cclifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/car"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
@@ -46,6 +51,9 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/scc"
+	"github.com/mcc-github/blockchain/core/scc/cscc"
+	"github.com/mcc-github/blockchain/core/scc/lscc"
+	"github.com/mcc-github/blockchain/core/scc/qscc"
 	"github.com/mcc-github/blockchain/discovery"
 	"github.com/mcc-github/blockchain/discovery/endorsement"
 	discsupport "github.com/mcc-github/blockchain/discovery/support"
@@ -134,6 +142,11 @@ func serve(args []string) error {
 		}
 	}
 
+	
+	
+	
+	grpc.EnableTracing = true
+
 	flogging.SetPeerStartupModulesMap()
 
 	logger.Infof("Starting %s", version.GetInfo())
@@ -144,8 +157,15 @@ func serve(args []string) error {
 		aclmgmt.ResourceGetter(peer.GetStableChannelConfig),
 	)
 
+	pr := platforms.NewRegistry(
+		&golang.Platform{},
+		&node.Platform{},
+		&java.Platform{},
+		&car.Platform{},
+	)
+
 	
-	ledgermgmt.Initialize(peer.ConfigTxProcessors)
+	ledgermgmt.Initialize(peer.ConfigTxProcessors, pr)
 
 	
 	
@@ -217,9 +237,6 @@ func serve(args []string) error {
 	ccprovider.SetChaincodesPath(ccprovider.GetCCsPath())
 
 	
-	ccprovider.EnableCCInfoCache()
-
-	
 	ca, err := tlsgen.NewCA()
 	if err != nil {
 		logger.Panic("Failed creating authentication layer:", err)
@@ -228,7 +245,7 @@ func serve(args []string) error {
 	if err != nil {
 		logger.Panicf("Failed to create chaincode server: %s", err)
 	}
-	chaincodeSupport, ccp, sccp := registerChaincodeSupport(ccSrv, ccEndpoint, ca, aclProvider)
+	chaincodeSupport, ccp, sccp := registerChaincodeSupport(ccSrv, ccEndpoint, ca, aclProvider, pr)
 	go ccSrv.Start()
 
 	logger.Debugf("Running peer")
@@ -273,7 +290,7 @@ func serve(args []string) error {
 		SigningIdentityFetcher:  signingIdentityFetcher,
 	})
 	endorserSupport.PluginEndorser = pluginEndorser
-	serverEndorser := endorser.NewEndorserServer(privDataDist, endorserSupport)
+	serverEndorser := endorser.NewEndorserServer(privDataDist, endorserSupport, pr)
 	auth := authHandler.ChainFilters(serverEndorser, authFilters...)
 	
 	pb.RegisterEndorserServer(peerServer.Server(), auth)
@@ -363,7 +380,7 @@ func serve(args []string) error {
 			logger.Panicf("Failed subscribing to chaincode lifecycle updates")
 		}
 		cceventmgmt.GetMgr().Register(cid, sub)
-	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName))
+	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName), pr)
 
 	if viper.GetBool("peer.discovery.enabled") {
 		registerDiscoveryService(peerServer, policyMgr, lifecycle)
@@ -597,14 +614,17 @@ func computeChaincodeEndpoint(peerHostname string) (ccEndpoint string, err error
 
 
 
-func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca tlsgen.CA, aclProvider aclmgmt.ACLProvider) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider) {
+func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca tlsgen.CA, aclProvider aclmgmt.ACLProvider, pr *platforms.Registry) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider) {
 	
 	userRunsCC := chaincode.IsDevMode()
 	tlsEnabled := viper.GetBool("peer.tls.enabled")
 
 	authenticator := accesscontrol.NewAuthenticator(ca)
 	ipRegistry := inproccontroller.NewRegistry()
+
 	sccp := scc.NewProvider(peer.Default, peer.DefaultSupport, ipRegistry)
+	lsccInst := lscc.New(sccp, aclProvider, pr)
+
 	chaincodeSupport := chaincode.NewChaincodeSupport(
 		chaincode.GlobalConfig(),
 		ccEndpoint,
@@ -612,6 +632,7 @@ func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca
 		ca.CertBytes(),
 		authenticator,
 		&ccprovider.CCInfoFSImpl{},
+		lsccInst,
 		aclProvider,
 		container.NewVMController(map[string]container.VMProvider{
 			dockercontroller.ContainerType: dockercontroller.NewProvider(
@@ -621,7 +642,9 @@ func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca
 			inproccontroller.ContainerType: ipRegistry,
 		}),
 		sccp,
+		pr,
 	)
+	ipRegistry.ChaincodeSupport = chaincodeSupport
 	ccp := chaincode.NewProvider(chaincodeSupport)
 
 	ccSrv := pb.ChaincodeSupportServer(chaincodeSupport)
@@ -629,9 +652,12 @@ func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca
 		ccSrv = authenticator.Wrap(ccSrv)
 	}
 
+	csccInst := cscc.New(ccp, sccp, aclProvider)
+	qsccInst := qscc.New(aclProvider)
+
 	
-	sccs := scc.CreateSysCCs(ccp, sccp, aclProvider)
-	for _, cc := range sccs {
+	sccs := scc.CreatePluginSysCCs(sccp)
+	for _, cc := range append([]scc.SelfDescribingSysCC{lsccInst, csccInst, qsccInst}, sccs...) {
 		sccp.RegisterSysCC(cc)
 	}
 	pb.RegisterChaincodeSupportServer(grpcServer.Server(), ccSrv)

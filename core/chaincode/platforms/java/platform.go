@@ -13,10 +13,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	
 )
 
 
@@ -24,8 +24,13 @@ type Platform struct {
 }
 
 
-func (javaPlatform *Platform) ValidateSpec(spec *pb.ChaincodeSpec) error {
-	path, err := url.Parse(spec.ChaincodeId.Path)
+func (javaPlatform *Platform) Name() string {
+	return pb.ChaincodeSpec_JAVA.String()
+}
+
+
+func (javaPlatform *Platform) ValidatePath(rawPath string) error {
+	path, err := url.Parse(rawPath)
 	if err != nil || path == nil {
 		return fmt.Errorf("invalid path: %s", err)
 	}
@@ -33,13 +38,13 @@ func (javaPlatform *Platform) ValidateSpec(spec *pb.ChaincodeSpec) error {
 	return nil
 }
 
-func (javaPlatform *Platform) ValidateDeploymentSpec(cds *pb.ChaincodeDeploymentSpec) error {
+func (javaPlatform *Platform) ValidateCodePackage(code []byte) error {
 	
 	return nil
 }
 
 
-func (javaPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte, error) {
+func (javaPlatform *Platform) GetDeploymentPayload(path string) ([]byte, error) {
 
 	var err error
 
@@ -47,15 +52,7 @@ func (javaPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]by
 	gw := gzip.NewWriter(inputbuf)
 	tw := tar.NewWriter(gw)
 
-	
-	
-	
-	_, err = collectChaincodeFiles(spec, tw)
-	if err != nil {
-		return nil, err
-	}
-
-	err = writeChaincodePackage(spec, tw)
+	err = writeChaincodePackage(path, tw)
 
 	tw.Close()
 	gw.Close()
@@ -69,7 +66,7 @@ func (javaPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]by
 	return payload, nil
 }
 
-func (javaPlatform *Platform) GenerateDockerfile(cds *pb.ChaincodeDeploymentSpec) (string, error) {
+func (javaPlatform *Platform) GenerateDockerfile() (string, error) {
 	var buf []string
 
 	buf = append(buf, cutil.GetDockerfileFromConfig("chaincode.java.Dockerfile"))
@@ -80,11 +77,11 @@ func (javaPlatform *Platform) GenerateDockerfile(cds *pb.ChaincodeDeploymentSpec
 	return dockerFileContents, nil
 }
 
-func (javaPlatform *Platform) GenerateDockerBuild(cds *pb.ChaincodeDeploymentSpec, tw *tar.Writer) error {
-	return cutil.WriteBytesToPackage("codepackage.tgz", cds.CodePackage, tw)
+func (javaPlatform *Platform) GenerateDockerBuild(path string, code []byte, tw *tar.Writer) error {
+	return cutil.WriteBytesToPackage("codepackage.tgz", code, tw)
 }
 
 
-func (javaPlatform *Platform) GetMetadataProvider(cds *pb.ChaincodeDeploymentSpec) ccmetadata.MetadataProvider {
-	return &ccmetadata.TargzMetadataProvider{cds}
+func (javaPlatform *Platform) GetMetadataProvider(code []byte) platforms.MetadataProvider {
+	return &ccmetadata.TargzMetadataProvider{Code: code}
 }

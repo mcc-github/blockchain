@@ -38,6 +38,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -48,6 +49,8 @@ import (
 
 	stpb "github.com/golang/protobuf/ptypes/struct"
 )
+
+const secondInNanos = int64(time.Second / time.Nanosecond)
 
 
 
@@ -66,10 +69,59 @@ type Marshaler struct {
 
 	
 	OrigName bool
+
+	
+	
+	
+	
+	AnyResolver AnyResolver
+}
+
+
+
+type AnyResolver interface {
+	Resolve(typeUrl string) (proto.Message, error)
+}
+
+func defaultResolveAny(typeUrl string) (proto.Message, error) {
+	
+	mname := typeUrl
+	if slash := strings.LastIndex(mname, "/"); slash >= 0 {
+		mname = mname[slash+1:]
+	}
+	mt := proto.MessageType(mname)
+	if mt == nil {
+		return nil, fmt.Errorf("unknown message type %q", mname)
+	}
+	return reflect.New(mt.Elem()).Interface().(proto.Message), nil
+}
+
+
+
+
+
+type JSONPBMarshaler interface {
+	MarshalJSONPB(*Marshaler) ([]byte, error)
+}
+
+
+
+
+
+type JSONPBUnmarshaler interface {
+	UnmarshalJSONPB(*Unmarshaler, []byte) error
 }
 
 
 func (m *Marshaler) Marshal(out io.Writer, pb proto.Message) error {
+	v := reflect.ValueOf(pb)
+	if pb == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return errors.New("Marshal called with nil")
+	}
+	
+	if err := checkRequiredFields(pb); err != nil {
+		return err
+	}
 	writer := &errWriter{writer: out}
 	return m.marshalObject(writer, pb, "", "")
 }
@@ -85,6 +137,12 @@ func (m *Marshaler) MarshalToString(pb proto.Message) (string, error) {
 
 type int32Slice []int32
 
+var nonFinite = map[string]float64{
+	`"NaN"`:       math.NaN(),
+	`"Infinity"`:  math.Inf(1),
+	`"-Infinity"`: math.Inf(-1),
+}
+
 
 func (s int32Slice) Len() int           { return len(s) }
 func (s int32Slice) Less(i, j int) bool { return s[i] < s[j] }
@@ -96,6 +154,31 @@ type wkt interface {
 
 
 func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeURL string) error {
+	if jsm, ok := v.(JSONPBMarshaler); ok {
+		b, err := jsm.MarshalJSONPB(m)
+		if err != nil {
+			return err
+		}
+		if typeURL != "" {
+			
+			var js map[string]*json.RawMessage
+			if err = json.Unmarshal(b, &js); err != nil {
+				return fmt.Errorf("type %T produced invalid JSON: %v", v, err)
+			}
+			turl, err := json.Marshal(typeURL)
+			if err != nil {
+				return fmt.Errorf("failed to marshal type URL %q to JSON: %v", typeURL, err)
+			}
+			js["@type"] = (*json.RawMessage)(&turl)
+			if b, err = json.Marshal(js); err != nil {
+				return err
+			}
+		}
+
+		out.write(string(b))
+		return out.err
+	}
+
 	s := reflect.ValueOf(v).Elem()
 
 	
@@ -114,10 +197,19 @@ func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeU
 			
 			
 			s, ns := s.Field(0).Int(), s.Field(1).Int()
-			d := time.Duration(s)*time.Second + time.Duration(ns)*time.Nanosecond
-			x := fmt.Sprintf("%.9f", d.Seconds())
+			if ns <= -secondInNanos || ns >= secondInNanos {
+				return fmt.Errorf("ns out of range (%v, %v)", -secondInNanos, secondInNanos)
+			}
+			if (s > 0 && ns < 0) || (s < 0 && ns > 0) {
+				return errors.New("signs of seconds and nanos do not match")
+			}
+			if s < 0 {
+				ns = -ns
+			}
+			x := fmt.Sprintf("%d.%09d", s, ns)
 			x = strings.TrimSuffix(x, "000")
 			x = strings.TrimSuffix(x, "000")
+			x = strings.TrimSuffix(x, ".000")
 			out.write(`"`)
 			out.write(x)
 			out.write(`s"`)
@@ -130,11 +222,15 @@ func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeU
 			
 			
 			s, ns := s.Field(0).Int(), s.Field(1).Int()
+			if ns < 0 || ns >= secondInNanos {
+				return fmt.Errorf("ns out of range [0, %v)", secondInNanos)
+			}
 			t := time.Unix(s, ns).UTC()
 			
 			x := t.Format("2006-01-02T15:04:05.000000000")
 			x = strings.TrimSuffix(x, "000")
 			x = strings.TrimSuffix(x, "000")
+			x = strings.TrimSuffix(x, ".000")
 			out.write(`"`)
 			out.write(x)
 			out.write(`Z"`)
@@ -176,7 +272,7 @@ func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeU
 
 		
 		switch value.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		case reflect.Chan, reflect.Func, reflect.Interface:
 			if value.IsNil() {
 				continue
 			}
@@ -202,6 +298,10 @@ func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeU
 				}
 			case reflect.String:
 				if value.Len() == 0 {
+					continue
+				}
+			case reflect.Map, reflect.Ptr, reflect.Slice:
+				if value.IsNil() {
 					continue
 				}
 			}
@@ -286,16 +386,17 @@ func (m *Marshaler) marshalAny(out *errWriter, any proto.Message, indent string)
 	turl := v.Field(0).String()
 	val := v.Field(1).Bytes()
 
-	
-	mname := turl
-	if slash := strings.LastIndex(mname, "/"); slash >= 0 {
-		mname = mname[slash+1:]
+	var msg proto.Message
+	var err error
+	if m.AnyResolver != nil {
+		msg, err = m.AnyResolver.Resolve(turl)
+	} else {
+		msg, err = defaultResolveAny(turl)
 	}
-	mt := proto.MessageType(mname)
-	if mt == nil {
-		return fmt.Errorf("unknown message type %q", mname)
+	if err != nil {
+		return err
 	}
-	msg := reflect.New(mt.Elem()).Interface().(proto.Message)
+
 	if err := proto.Unmarshal(val, msg); err != nil {
 		return err
 	}
@@ -367,9 +468,14 @@ func (m *Marshaler) marshalField(out *errWriter, prop *proto.Properties, v refle
 
 
 func (m *Marshaler) marshalValue(out *errWriter, prop *proto.Properties, v reflect.Value, indent string) error {
-
 	var err error
 	v = reflect.Indirect(v)
+
+	
+	if v.Kind() == reflect.Invalid {
+		out.write("null")
+		return out.err
+	}
 
 	
 	if v.Kind() == reflect.Slice && v.Type().Elem().Kind() != reflect.Uint8 {
@@ -400,9 +506,6 @@ func (m *Marshaler) marshalValue(out *errWriter, prop *proto.Properties, v refle
 
 	
 	
-	type wkt interface {
-		XXX_WellKnownType() string
-	}
 	if wkt, ok := v.Interface().(wkt); ok {
 		switch wkt.XXX_WellKnownType() {
 		case "NullValue":
@@ -491,6 +594,24 @@ func (m *Marshaler) marshalValue(out *errWriter, prop *proto.Properties, v refle
 	}
 
 	
+	if v.Kind() == reflect.Float32 || v.Kind() == reflect.Float64 {
+		f := v.Float()
+		var sval string
+		switch {
+		case math.IsInf(f, 1):
+			sval = `"Infinity"`
+		case math.IsInf(f, -1):
+			sval = `"-Infinity"`
+		case math.IsNaN(f):
+			sval = `"NaN"`
+		}
+		if sval != "" {
+			out.write(sval)
+			return out.err
+		}
+	}
+
+	
 	b, err := json.Marshal(v.Interface())
 	if err != nil {
 		return err
@@ -512,6 +633,12 @@ type Unmarshaler struct {
 	
 	
 	AllowUnknownFields bool
+
+	
+	
+	
+	
+	AnyResolver AnyResolver
 }
 
 
@@ -522,7 +649,10 @@ func (u *Unmarshaler) UnmarshalNext(dec *json.Decoder, pb proto.Message) error {
 	if err := dec.Decode(&inputValue); err != nil {
 		return err
 	}
-	return u.unmarshalValue(reflect.ValueOf(pb).Elem(), inputValue, nil)
+	if err := u.unmarshalValue(reflect.ValueOf(pb).Elem(), inputValue, nil); err != nil {
+		return err
+	}
+	return checkRequiredFields(pb)
 }
 
 
@@ -561,58 +691,66 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 
 	
 	if targetType.Kind() == reflect.Ptr {
+		
+		
+		_, isJSONPBUnmarshaler := target.Interface().(JSONPBUnmarshaler)
+		if string(inputValue) == "null" && targetType != reflect.TypeOf(&stpb.Value{}) && !isJSONPBUnmarshaler {
+			return nil
+		}
 		target.Set(reflect.New(targetType.Elem()))
+
 		return u.unmarshalValue(target.Elem(), inputValue, prop)
 	}
 
-	
-	type wkt interface {
-		XXX_WellKnownType() string
+	if jsu, ok := target.Addr().Interface().(JSONPBUnmarshaler); ok {
+		return jsu.UnmarshalJSONPB(u, []byte(inputValue))
 	}
+
+	
 	if w, ok := target.Addr().Interface().(wkt); ok {
 		switch w.XXX_WellKnownType() {
 		case "DoubleValue", "FloatValue", "Int64Value", "UInt64Value",
 			"Int32Value", "UInt32Value", "BoolValue", "StringValue", "BytesValue":
-			
-			
-			
-			
 			return u.unmarshalValue(target.Field(0), inputValue, prop)
 		case "Any":
-			var jsonFields map[string]json.RawMessage
+			
+			
+			
+			var jsonFields map[string]*json.RawMessage
 			if err := json.Unmarshal(inputValue, &jsonFields); err != nil {
 				return err
 			}
 
 			val, ok := jsonFields["@type"]
-			if !ok {
+			if !ok || val == nil {
 				return errors.New("Any JSON doesn't have '@type'")
 			}
 
 			var turl string
-			if err := json.Unmarshal([]byte(val), &turl); err != nil {
-				return fmt.Errorf("can't unmarshal Any's '@type': %q", val)
+			if err := json.Unmarshal([]byte(*val), &turl); err != nil {
+				return fmt.Errorf("can't unmarshal Any's '@type': %q", *val)
 			}
 			target.Field(0).SetString(turl)
 
-			mname := turl
-			if slash := strings.LastIndex(mname, "/"); slash >= 0 {
-				mname = mname[slash+1:]
+			var m proto.Message
+			var err error
+			if u.AnyResolver != nil {
+				m, err = u.AnyResolver.Resolve(turl)
+			} else {
+				m, err = defaultResolveAny(turl)
 			}
-			mt := proto.MessageType(mname)
-			if mt == nil {
-				return fmt.Errorf("unknown message type %q", mname)
+			if err != nil {
+				return err
 			}
 
-			m := reflect.New(mt.Elem()).Interface().(proto.Message)
 			if _, ok := m.(wkt); ok {
 				val, ok := jsonFields["value"]
 				if !ok {
 					return errors.New("Any JSON doesn't have 'value'")
 				}
 
-				if err := u.unmarshalValue(reflect.ValueOf(m).Elem(), val, nil); err != nil {
-					return fmt.Errorf("can't unmarshal Any's WKT: %v", err)
+				if err := u.unmarshalValue(reflect.ValueOf(m).Elem(), *val, nil); err != nil {
+					return fmt.Errorf("can't unmarshal Any nested proto %T: %v", m, err)
 				}
 			} else {
 				delete(jsonFields, "@type")
@@ -622,33 +760,28 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 				}
 
 				if err = u.unmarshalValue(reflect.ValueOf(m).Elem(), nestedProto, nil); err != nil {
-					return fmt.Errorf("can't unmarshal nested Any proto: %v", err)
+					return fmt.Errorf("can't unmarshal Any nested proto %T: %v", m, err)
 				}
 			}
 
 			b, err := proto.Marshal(m)
 			if err != nil {
-				return fmt.Errorf("can't marshal proto into Any.Value: %v", err)
+				return fmt.Errorf("can't marshal proto %T into Any.Value: %v", m, err)
 			}
 			target.Field(1).SetBytes(b)
 
 			return nil
 		case "Duration":
-			ivStr := string(inputValue)
-			if ivStr == "null" {
-				target.Field(0).SetInt(0)
-				target.Field(1).SetInt(0)
-				return nil
-			}
-
-			unq, err := strconv.Unquote(ivStr)
+			unq, err := strconv.Unquote(string(inputValue))
 			if err != nil {
 				return err
 			}
+
 			d, err := time.ParseDuration(unq)
 			if err != nil {
 				return fmt.Errorf("bad Duration: %v", err)
 			}
+
 			ns := d.Nanoseconds()
 			s := ns / 1e9
 			ns %= 1e9
@@ -656,33 +789,25 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 			target.Field(1).SetInt(ns)
 			return nil
 		case "Timestamp":
-			ivStr := string(inputValue)
-			if ivStr == "null" {
-				target.Field(0).SetInt(0)
-				target.Field(1).SetInt(0)
-				return nil
-			}
-
-			unq, err := strconv.Unquote(ivStr)
+			unq, err := strconv.Unquote(string(inputValue))
 			if err != nil {
 				return err
 			}
+
 			t, err := time.Parse(time.RFC3339Nano, unq)
 			if err != nil {
 				return fmt.Errorf("bad Timestamp: %v", err)
 			}
-			target.Field(0).SetInt(int64(t.Unix()))
+
+			target.Field(0).SetInt(t.Unix())
 			target.Field(1).SetInt(int64(t.Nanosecond()))
 			return nil
 		case "Struct":
-			if string(inputValue) == "null" {
-				
-				return nil
-			}
 			var m map[string]json.RawMessage
 			if err := json.Unmarshal(inputValue, &m); err != nil {
 				return fmt.Errorf("bad StructValue: %v", err)
 			}
+
 			target.Field(0).Set(reflect.ValueOf(map[string]*stpb.Value{}))
 			for k, jv := range m {
 				pv := &stpb.Value{}
@@ -693,15 +818,12 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 			}
 			return nil
 		case "ListValue":
-			if string(inputValue) == "null" {
-				
-				return nil
-			}
 			var s []json.RawMessage
 			if err := json.Unmarshal(inputValue, &s); err != nil {
 				return fmt.Errorf("bad ListValue: %v", err)
 			}
-			target.Field(0).Set(reflect.ValueOf(make([]*stpb.Value, len(s), len(s))))
+
+			target.Field(0).Set(reflect.ValueOf(make([]*stpb.Value, len(s))))
 			for i, sv := range s {
 				if err := u.unmarshalValue(target.Field(0).Index(i), sv, prop); err != nil {
 					return err
@@ -851,11 +973,13 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 		if err := json.Unmarshal(inputValue, &slc); err != nil {
 			return err
 		}
-		len := len(slc)
-		target.Set(reflect.MakeSlice(targetType, len, len))
-		for i := 0; i < len; i++ {
-			if err := u.unmarshalValue(target.Index(i), slc[i], prop); err != nil {
-				return err
+		if slc != nil {
+			l := len(slc)
+			target.Set(reflect.MakeSlice(targetType, l, l))
+			for i := 0; i < l; i++ {
+				if err := u.unmarshalValue(target.Index(i), slc[i], prop); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -867,33 +991,30 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 		if err := json.Unmarshal(inputValue, &mp); err != nil {
 			return err
 		}
-		target.Set(reflect.MakeMap(targetType))
-		var keyprop, valprop *proto.Properties
-		if prop != nil {
-			
-			
-			
-			
-		}
-		for ks, raw := range mp {
-			
-			
-			var k reflect.Value
-			if targetType.Key().Kind() == reflect.String {
-				k = reflect.ValueOf(ks)
-			} else {
-				k = reflect.New(targetType.Key()).Elem()
-				if err := u.unmarshalValue(k, json.RawMessage(ks), keyprop); err != nil {
+		if mp != nil {
+			target.Set(reflect.MakeMap(targetType))
+			for ks, raw := range mp {
+				
+				
+				var k reflect.Value
+				if targetType.Key().Kind() == reflect.String {
+					k = reflect.ValueOf(ks)
+				} else {
+					k = reflect.New(targetType.Key()).Elem()
+					
+					if err := u.unmarshalValue(k, json.RawMessage(ks), nil); err != nil {
+						return err
+					}
+				}
+
+				
+				v := reflect.New(targetType.Elem()).Elem()
+				
+				if err := u.unmarshalValue(v, raw, nil); err != nil {
 					return err
 				}
+				target.SetMapIndex(k, v)
 			}
-
-			
-			v := reflect.New(targetType.Elem()).Elem()
-			if err := u.unmarshalValue(v, raw, valprop); err != nil {
-				return err
-			}
-			target.SetMapIndex(k, v)
 		}
 		return nil
 	}
@@ -903,6 +1024,15 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 	isNum := targetType.Kind() == reflect.Int64 || targetType.Kind() == reflect.Uint64
 	if isNum && strings.HasPrefix(string(inputValue), `"`) {
 		inputValue = inputValue[1 : len(inputValue)-1]
+	}
+
+	
+	isFloat := targetType.Kind() == reflect.Float32 || targetType.Kind() == reflect.Float64
+	if isFloat {
+		if num, ok := nonFinite[string(inputValue)]; ok {
+			target.SetFloat(num)
+			return nil
+		}
 	}
 
 	
@@ -965,4 +1095,141 @@ func (s mapKeys) Less(i, j int) bool {
 		}
 	}
 	return fmt.Sprint(s[i].Interface()) < fmt.Sprint(s[j].Interface())
+}
+
+
+
+
+func checkRequiredFields(pb proto.Message) error {
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	if _, ok := pb.(wkt); ok {
+		return nil
+	}
+
+	v := reflect.ValueOf(pb)
+	
+	if v.Kind() != reflect.Ptr {
+		return nil
+	}
+	v = v.Elem()
+	if v.Kind() != reflect.Struct {
+		return nil
+	}
+
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		sfield := v.Type().Field(i)
+
+		if sfield.PkgPath != "" {
+			
+			continue
+		}
+
+		if strings.HasPrefix(sfield.Name, "XXX_") {
+			continue
+		}
+
+		
+		
+		if sfield.Tag.Get("protobuf_oneof") != "" {
+			if field.Kind() != reflect.Interface {
+				continue
+			}
+			v := field.Elem()
+			if v.Kind() != reflect.Ptr || v.IsNil() {
+				continue
+			}
+			v = v.Elem()
+			if v.Kind() != reflect.Struct || v.NumField() < 1 {
+				continue
+			}
+			field = v.Field(0)
+			sfield = v.Type().Field(0)
+		}
+
+		protoTag := sfield.Tag.Get("protobuf")
+		if protoTag == "" {
+			continue
+		}
+		var prop proto.Properties
+		prop.Init(sfield.Type, sfield.Name, protoTag, &sfield)
+
+		switch field.Kind() {
+		case reflect.Map:
+			if field.IsNil() {
+				continue
+			}
+			
+			keys := field.MapKeys()
+			for _, k := range keys {
+				v := field.MapIndex(k)
+				if err := checkRequiredFieldsInValue(v); err != nil {
+					return err
+				}
+			}
+		case reflect.Slice:
+			
+			if !prop.Repeated {
+				if prop.Required && field.IsNil() {
+					return fmt.Errorf("required field %q is not set", prop.Name)
+				}
+				continue
+			}
+
+			
+			if field.IsNil() {
+				continue
+			}
+			
+			for i := 0; i < field.Len(); i++ {
+				v := field.Index(i)
+				if err := checkRequiredFieldsInValue(v); err != nil {
+					return err
+				}
+			}
+		case reflect.Ptr:
+			if field.IsNil() {
+				if prop.Required {
+					return fmt.Errorf("required field %q is not set", prop.Name)
+				}
+				continue
+			}
+			if err := checkRequiredFieldsInValue(field); err != nil {
+				return err
+			}
+		}
+	}
+
+	
+	for _, ext := range proto.RegisteredExtensions(pb) {
+		if !proto.HasExtension(pb, ext) {
+			continue
+		}
+		ep, err := proto.GetExtension(pb, ext)
+		if err != nil {
+			return err
+		}
+		err = checkRequiredFieldsInValue(reflect.ValueOf(ep))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func checkRequiredFieldsInValue(v reflect.Value) error {
+	if pm, ok := v.Interface().(proto.Message); ok {
+		return checkRequiredFields(pm)
+	}
+	return nil
 }

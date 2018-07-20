@@ -74,7 +74,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 	pubSimulationResults = append(pubSimulationResults, res)
 
 	
-	tx1PvtData := &ledger.TxPvtData{0, tx1SimulationResults.PvtSimulationResults}
+	tx1PvtData := &ledger.TxPvtData{SeqInBlock: 0, WriteSet: tx1SimulationResults.PvtSimulationResults}
 	pvtDataMap[uint64(0)] = tx1PvtData
 
 	
@@ -99,7 +99,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 	pubSimulationResults = append(pubSimulationResults, res)
 
 	
-	tx3PvtData := &ledger.TxPvtData{2, tx3SimulationResults.PvtSimulationResults}
+	tx3PvtData := &ledger.TxPvtData{SeqInBlock: 2, WriteSet: tx3SimulationResults.PvtSimulationResults}
 	pvtDataMap[uint64(2)] = tx3PvtData
 
 	

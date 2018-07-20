@@ -163,7 +163,7 @@ func TestSignedEvent(t *testing.T) {
 	recvChan := make(chan *streamEvent)
 	sendChan := make(chan *pb.Event)
 	stream := &mockEventStream{recvChan: recvChan, sendChan: sendChan}
-	mockHandler := &handler{ChatStream: stream, eventProcessor: gEventProcessor}
+	mockHandler := newHandler(stream, gEventProcessor)
 	backupSerializedIdentity := signerSerialized
 	signerSerialized = createExpiredIdentity(t)
 	
@@ -446,7 +446,7 @@ func TestRegister_ExpiredIdentity(t *testing.T) {
 		handlerList.Lock()
 		for k := range handlerList.handlers {
 			
-			k.sessionEndTime = time.Now().Add(-1 * time.Minute)
+			k.setSessionEndTime(time.Now().Add(-1 * time.Minute))
 		}
 		handlerList.Unlock()
 		gEventProcessor.RUnlock()
@@ -514,10 +514,11 @@ func resetEventProcessor(useMutualTLS bool) {
 		}
 		return evt.TlsCertHash
 	}
-	gEventProcessor.BindingInspector = comm.NewBindingInspector(useMutualTLS, extract)
 
-	
+	gEventProcessor.Lock()
+	gEventProcessor.BindingInspector = comm.NewBindingInspector(useMutualTLS, extract)
 	gEventProcessor.eventConsumers = make(map[pb.EventType]*handlerList)
+	gEventProcessor.Unlock()
 
 	
 	gEventProcessor.addSupportedEventTypes()

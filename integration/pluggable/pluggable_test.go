@@ -21,7 +21,6 @@ import (
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/tedsuo/ifrit"
-	yaml "gopkg.in/yaml.v2"
 
 	"github.com/mcc-github/blockchain/integration/nwo"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
@@ -139,24 +138,14 @@ func compilePlugin(pluginType string) string {
 
 func configurePlugins(network *nwo.Network, endorsement, validation string) {
 	for _, p := range network.Peers {
-		var core blockchainconfig.Core
-		coreBytes, err := ioutil.ReadFile(network.PeerConfigPath(p))
-		Expect(err).NotTo(HaveOccurred())
-
-		err = yaml.Unmarshal(coreBytes, &core)
-		Expect(err).NotTo(HaveOccurred())
+		core := network.ReadPeerConfig(p)
 		core.Peer.Handlers.Endorsers = blockchainconfig.HandlerMap{
 			"escc": blockchainconfig.Handler{Name: "plugin-escc", Library: endorsement},
 		}
 		core.Peer.Handlers.Validators = blockchainconfig.HandlerMap{
 			"vscc": blockchainconfig.Handler{Name: "plugin-vscc", Library: validation},
 		}
-
-		coreBytes, err = yaml.Marshal(core)
-		Expect(err).NotTo(HaveOccurred())
-
-		err = ioutil.WriteFile(network.PeerConfigPath(p), coreBytes, 0644)
-		Expect(err).NotTo(HaveOccurred())
+		network.WritePeerConfig(p, core)
 	}
 }
 

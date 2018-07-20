@@ -24,7 +24,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 
@@ -123,37 +122,34 @@ func (s *SupportImpl) GetChaincodeDeploymentSpecFS(cds *pb.ChaincodeDeploymentSp
 }
 
 
-func (s *SupportImpl) Execute(ctxt context.Context, cid, name, version, txid string, syscc bool, signedProp *pb.SignedProposal, prop *pb.Proposal, spec ccprovider.ChaincodeSpecGetter) (*pb.Response, *pb.ChaincodeEvent, error) {
-	cccid := ccprovider.NewCCContext(cid, name, version, txid, syscc, signedProp, prop)
-
-	switch spec.(type) {
-	case *pb.ChaincodeDeploymentSpec:
-		return s.ChaincodeSupport.Execute(ctxt, cccid, spec)
-	case *pb.ChaincodeInvocationSpec:
-		cis := spec.(*pb.ChaincodeInvocationSpec)
-
-		
-		decorators := library.InitRegistry(library.Config{}).Lookup(library.Decoration).([]decoration.Decorator)
-		cis.ChaincodeSpec.Input.Decorations = make(map[string][]byte)
-		cis.ChaincodeSpec.Input = decoration.Apply(prop, cis.ChaincodeSpec.Input, decorators...)
-		cccid.ProposalDecorations = cis.ChaincodeSpec.Input.Decorations
-
-		return s.ChaincodeSupport.Execute(ctxt, cccid, cis)
-	default:
-		panic("programming error, unkwnown spec type")
+func (s *SupportImpl) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, cid, name, version, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, cds *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error) {
+	cccid := &ccprovider.CCContext{
+		Name:    name,
+		Version: version,
 	}
+
+	return s.ChaincodeSupport.ExecuteLegacyInit(txParams, cccid, cds)
 }
 
 
-func (s *SupportImpl) GetChaincodeDefinition(ctx context.Context, chainID string, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, chaincodeID string, txsim ledger.TxSimulator) (ccprovider.ChaincodeDefinition, error) {
-	ctxt := ctx
-	if txsim != nil {
-		ctxt = context.WithValue(ctx, chaincode.TXSimulatorKey, txsim)
+func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, cid, name, version, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
+	cccid := &ccprovider.CCContext{
+		Name:    name,
+		Version: version,
 	}
-	lifecycle := &chaincode.Lifecycle{
-		Executor: s.ChaincodeSupport,
-	}
-	return lifecycle.GetChaincodeDefinition(ctxt, txid, signedProp, prop, chainID, chaincodeID)
+
+	
+	decorators := library.InitRegistry(library.Config{}).Lookup(library.Decoration).([]decoration.Decorator)
+	input.Decorations = make(map[string][]byte)
+	input = decoration.Apply(prop, input, decorators...)
+	txParams.ProposalDecorations = input.Decorations
+
+	return s.ChaincodeSupport.Execute(txParams, cccid, input)
+}
+
+
+func (s *SupportImpl) GetChaincodeDefinition(chaincodeName string, txsim ledger.QueryExecutor) (ccprovider.ChaincodeDefinition, error) {
+	return s.ChaincodeSupport.Lifecycle.ChaincodeDefinition(chaincodeName, txsim)
 }
 
 

@@ -1,7 +1,7 @@
 
 
 
-package peer
+package peer 
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
@@ -14,17 +14,45 @@ var _ = math.Inf
 
 
 
+
+
+const _ = proto.ProtoPackageIsVersion2 
+
+
+
 type ChaincodeEvent struct {
-	ChaincodeId string `protobuf:"bytes,1,opt,name=chaincode_id,json=chaincodeId" json:"chaincode_id,omitempty"`
-	TxId        string `protobuf:"bytes,2,opt,name=tx_id,json=txId" json:"tx_id,omitempty"`
-	EventName   string `protobuf:"bytes,3,opt,name=event_name,json=eventName" json:"event_name,omitempty"`
-	Payload     []byte `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
+	ChaincodeId          string   `protobuf:"bytes,1,opt,name=chaincode_id,json=chaincodeId" json:"chaincode_id,omitempty"`
+	TxId                 string   `protobuf:"bytes,2,opt,name=tx_id,json=txId" json:"tx_id,omitempty"`
+	EventName            string   `protobuf:"bytes,3,opt,name=event_name,json=eventName" json:"event_name,omitempty"`
+	Payload              []byte   `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ChaincodeEvent) Reset()                    { *m = ChaincodeEvent{} }
-func (m *ChaincodeEvent) String() string            { return proto.CompactTextString(m) }
-func (*ChaincodeEvent) ProtoMessage()               {}
-func (*ChaincodeEvent) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{0} }
+func (m *ChaincodeEvent) Reset()         { *m = ChaincodeEvent{} }
+func (m *ChaincodeEvent) String() string { return proto.CompactTextString(m) }
+func (*ChaincodeEvent) ProtoMessage()    {}
+func (*ChaincodeEvent) Descriptor() ([]byte, []int) {
+	return fileDescriptor_chaincode_event_b240c71081bd7c2d, []int{0}
+}
+func (m *ChaincodeEvent) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ChaincodeEvent.Unmarshal(m, b)
+}
+func (m *ChaincodeEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ChaincodeEvent.Marshal(b, m, deterministic)
+}
+func (dst *ChaincodeEvent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChaincodeEvent.Merge(dst, src)
+}
+func (m *ChaincodeEvent) XXX_Size() int {
+	return xxx_messageInfo_ChaincodeEvent.Size(m)
+}
+func (m *ChaincodeEvent) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChaincodeEvent.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChaincodeEvent proto.InternalMessageInfo
 
 func (m *ChaincodeEvent) GetChaincodeId() string {
 	if m != nil {
@@ -58,9 +86,11 @@ func init() {
 	proto.RegisterType((*ChaincodeEvent)(nil), "protos.ChaincodeEvent")
 }
 
-func init() { proto.RegisterFile("peer/chaincode_event.proto", fileDescriptor2) }
+func init() {
+	proto.RegisterFile("peer/chaincode_event.proto", fileDescriptor_chaincode_event_b240c71081bd7c2d)
+}
 
-var fileDescriptor2 = []byte{
+var fileDescriptor_chaincode_event_b240c71081bd7c2d = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x48, 0x4d, 0x2d,
 	0xd2, 0x4f, 0xce, 0x48, 0xcc, 0xcc, 0x4b, 0xce, 0x4f, 0x49, 0x8d, 0x4f, 0x2d, 0x4b, 0xcd, 0x2b,

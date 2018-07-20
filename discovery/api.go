@@ -11,7 +11,7 @@ import (
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	common2 "github.com/mcc-github/blockchain/protos/common"
-	discovery2 "github.com/mcc-github/blockchain/protos/discovery"
+	discprotos "github.com/mcc-github/blockchain/protos/discovery"
 )
 
 
@@ -50,13 +50,19 @@ type GossipSupport interface {
 
 type EndorsementSupport interface {
 	
-	PeersForEndorsement(channel common.ChainID, interest *discovery2.ChaincodeInterest) (*discovery2.EndorsementDescriptor, error)
+	PeersForEndorsement(channel common.ChainID, interest *discprotos.ChaincodeInterest) (*discprotos.EndorsementDescriptor, error)
+
+	
+	
+	
+	
+	PeersAuthorizedByCriteria(chainID common.ChainID, interest *discprotos.ChaincodeInterest) (discovery.Members, error)
 }
 
 
 type ConfigSupport interface {
 	
-	Config(channel string) (*discovery2.ConfigResult, error)
+	Config(channel string) (*discprotos.ConfigResult, error)
 }
 
 

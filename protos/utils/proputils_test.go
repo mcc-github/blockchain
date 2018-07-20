@@ -12,11 +12,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/util"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
@@ -157,7 +158,9 @@ func TestGetNonce(t *testing.T) {
 }
 
 func TestGetChaincodeDeploymentSpec(t *testing.T) {
-	_, err := utils.GetChaincodeDeploymentSpec([]byte("bad spec"))
+	pr := platforms.NewRegistry(&golang.Platform{})
+
+	_, err := utils.GetChaincodeDeploymentSpec([]byte("bad spec"), pr)
 	assert.Error(t, err, "Expected error with malformed spec")
 
 	cds, _ := proto.Marshal(&pb.ChaincodeDeploymentSpec{
@@ -165,7 +168,7 @@ func TestGetChaincodeDeploymentSpec(t *testing.T) {
 			Type: pb.ChaincodeSpec_GOLANG,
 		},
 	})
-	_, err = utils.GetChaincodeDeploymentSpec(cds)
+	_, err = utils.GetChaincodeDeploymentSpec(cds, pr)
 	assert.NoError(t, err, "Unexpected error getting deployment spec")
 
 	cds, _ = proto.Marshal(&pb.ChaincodeDeploymentSpec{
@@ -173,7 +176,7 @@ func TestGetChaincodeDeploymentSpec(t *testing.T) {
 			Type: pb.ChaincodeSpec_UNDEFINED,
 		},
 	})
-	_, err = utils.GetChaincodeDeploymentSpec(cds)
+	_, err = utils.GetChaincodeDeploymentSpec(cds, pr)
 	assert.Error(t, err, "Expected error with invalid spec type")
 
 }
@@ -259,7 +262,7 @@ func TestProposal(t *testing.T) {
 		t.Fatalf("Could not deserialize the chaincode proposal, err %s\n", err)
 		return
 	}
-	if !reflect.DeepEqual(prop, propBack) {
+	if !proto.Equal(prop, propBack) {
 		t.Fatalf("Proposal and deserialized proposals don't match\n")
 		return
 	}

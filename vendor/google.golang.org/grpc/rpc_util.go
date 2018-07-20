@@ -28,6 +28,8 @@ import (
 )
 
 
+
+
 type Compressor interface {
 	
 	Do(w io.Writer, p []byte) error
@@ -40,10 +42,14 @@ type gzipCompressor struct {
 }
 
 
+
+
 func NewGZIPCompressor() Compressor {
 	c, _ := NewGZIPCompressorWithLevel(gzip.DefaultCompression)
 	return c
 }
+
+
 
 
 
@@ -81,6 +87,8 @@ func (c *gzipCompressor) Type() string {
 }
 
 
+
+
 type Decompressor interface {
 	
 	Do(r io.Reader) ([]byte, error)
@@ -91,6 +99,8 @@ type Decompressor interface {
 type gzipDecompressor struct {
 	pool sync.Pool
 }
+
+
 
 
 func NewGZIPDecompressor() Decompressor {
@@ -249,7 +259,7 @@ func (o FailFastCallOption) before(c *callInfo) error {
 	c.failFast = o.FailFast
 	return nil
 }
-func (o FailFastCallOption) after(c *callInfo) { return }
+func (o FailFastCallOption) after(c *callInfo) {}
 
 
 func MaxCallRecvMsgSize(s int) CallOption {
@@ -267,7 +277,7 @@ func (o MaxRecvMsgSizeCallOption) before(c *callInfo) error {
 	c.maxReceiveMessageSize = &o.MaxRecvMsgSize
 	return nil
 }
-func (o MaxRecvMsgSizeCallOption) after(c *callInfo) { return }
+func (o MaxRecvMsgSizeCallOption) after(c *callInfo) {}
 
 
 func MaxCallSendMsgSize(s int) CallOption {
@@ -285,7 +295,7 @@ func (o MaxSendMsgSizeCallOption) before(c *callInfo) error {
 	c.maxSendMessageSize = &o.MaxSendMsgSize
 	return nil
 }
-func (o MaxSendMsgSizeCallOption) after(c *callInfo) { return }
+func (o MaxSendMsgSizeCallOption) after(c *callInfo) {}
 
 
 
@@ -304,7 +314,7 @@ func (o PerRPCCredsCallOption) before(c *callInfo) error {
 	c.creds = o.Creds
 	return nil
 }
-func (o PerRPCCredsCallOption) after(c *callInfo) { return }
+func (o PerRPCCredsCallOption) after(c *callInfo) {}
 
 
 
@@ -325,7 +335,7 @@ func (o CompressorCallOption) before(c *callInfo) error {
 	c.compressorType = o.CompressorType
 	return nil
 }
-func (o CompressorCallOption) after(c *callInfo) { return }
+func (o CompressorCallOption) after(c *callInfo) {}
 
 
 
@@ -358,7 +368,7 @@ func (o ContentSubtypeCallOption) before(c *callInfo) error {
 	c.contentSubtype = o.ContentSubtype
 	return nil
 }
-func (o ContentSubtypeCallOption) after(c *callInfo) { return }
+func (o ContentSubtypeCallOption) after(c *callInfo) {}
 
 
 
@@ -387,14 +397,14 @@ func (o CustomCodecCallOption) before(c *callInfo) error {
 	c.codec = o.Codec
 	return nil
 }
-func (o CustomCodecCallOption) after(c *callInfo) { return }
+func (o CustomCodecCallOption) after(c *callInfo) {}
 
 
 type payloadFormat uint8
 
 const (
-	compressionNone payloadFormat = iota 
-	compressionMade
+	compressionNone payloadFormat = 0 
+	compressionMade payloadFormat = 1 
 )
 
 
@@ -454,62 +464,79 @@ func (p *parser) recvMsg(maxReceiveMessageSize int) (pf payloadFormat, msg []byt
 
 
 
-func encode(c baseCodec, msg interface{}, cp Compressor, outPayload *stats.OutPayload, compressor encoding.Compressor) ([]byte, []byte, error) {
-	var (
-		b    []byte
-		cbuf *bytes.Buffer
-	)
-	const (
-		payloadLen = 1
-		sizeLen    = 4
-	)
-	if msg != nil {
-		var err error
-		b, err = c.Marshal(msg)
-		if err != nil {
-			return nil, nil, status.Errorf(codes.Internal, "grpc: error while marshaling: %v", err.Error())
-		}
-		if outPayload != nil {
-			outPayload.Payload = msg
-			
-			outPayload.Data = b
-			outPayload.Length = len(b)
-		}
-		if compressor != nil || cp != nil {
-			cbuf = new(bytes.Buffer)
-			
-			if compressor != nil {
-				z, _ := compressor.Compress(cbuf)
-				if _, err := z.Write(b); err != nil {
-					return nil, nil, status.Errorf(codes.Internal, "grpc: error while compressing: %v", err.Error())
-				}
-				z.Close()
-			} else {
-				
-				if err := cp.Do(cbuf, b); err != nil {
-					return nil, nil, status.Errorf(codes.Internal, "grpc: error while compressing: %v", err.Error())
-				}
-			}
-			b = cbuf.Bytes()
-		}
+func encode(c baseCodec, msg interface{}) ([]byte, error) {
+	if msg == nil { 
+		return nil, nil
+	}
+	b, err := c.Marshal(msg)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "grpc: error while marshaling: %v", err.Error())
 	}
 	if uint(len(b)) > math.MaxUint32 {
-		return nil, nil, status.Errorf(codes.ResourceExhausted, "grpc: message too large (%d bytes)", len(b))
+		return nil, status.Errorf(codes.ResourceExhausted, "grpc: message too large (%d bytes)", len(b))
 	}
+	return b, nil
+}
 
-	bufHeader := make([]byte, payloadLen+sizeLen)
-	if compressor != nil || cp != nil {
-		bufHeader[0] = byte(compressionMade)
+
+
+
+
+func compress(in []byte, cp Compressor, compressor encoding.Compressor) ([]byte, error) {
+	if compressor == nil && cp == nil {
+		return nil, nil
+	}
+	wrapErr := func(err error) error {
+		return status.Errorf(codes.Internal, "grpc: error while compressing: %v", err.Error())
+	}
+	cbuf := &bytes.Buffer{}
+	if compressor != nil {
+		z, _ := compressor.Compress(cbuf)
+		if _, err := z.Write(in); err != nil {
+			return nil, wrapErr(err)
+		}
+		if err := z.Close(); err != nil {
+			return nil, wrapErr(err)
+		}
 	} else {
-		bufHeader[0] = byte(compressionNone)
+		if err := cp.Do(cbuf, in); err != nil {
+			return nil, wrapErr(err)
+		}
+	}
+	return cbuf.Bytes(), nil
+}
+
+const (
+	payloadLen = 1
+	sizeLen    = 4
+	headerLen  = payloadLen + sizeLen
+)
+
+
+
+func msgHeader(data, compData []byte) (hdr []byte, payload []byte) {
+	hdr = make([]byte, headerLen)
+	if compData != nil {
+		hdr[0] = byte(compressionMade)
+		data = compData
+	} else {
+		hdr[0] = byte(compressionNone)
 	}
 
 	
-	binary.BigEndian.PutUint32(bufHeader[payloadLen:], uint32(len(b)))
-	if outPayload != nil {
-		outPayload.WireLength = payloadLen + sizeLen + len(b)
+	binary.BigEndian.PutUint32(hdr[payloadLen:], uint32(len(data)))
+	return hdr, data
+}
+
+func outPayload(client bool, msg interface{}, data, payload []byte, t time.Time) *stats.OutPayload {
+	return &stats.OutPayload{
+		Client:     client,
+		Payload:    msg,
+		Data:       data,
+		Length:     len(data),
+		WireLength: len(payload) + headerLen,
+		SentTime:   t,
 	}
-	return bufHeader, b, nil
 }
 
 func checkRecvPayload(pf payloadFormat, recvCompress string, haveCompressor bool) *status.Status {
@@ -694,8 +721,5 @@ const (
 	SupportPackageIsVersion4 = true
 	SupportPackageIsVersion5 = true
 )
-
-
-const Version = "1.11.3"
 
 const grpcUA = "grpc-go/" + Version

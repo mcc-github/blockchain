@@ -16,6 +16,7 @@ import (
 	"time"
 
 	pb "github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	util2 "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -35,6 +36,25 @@ import (
 
 func init() {
 	viper.Set("peer.gossip.pvtData.pullRetryThreshold", time.Second*3)
+	factory.InitFactories(nil)
+}
+
+
+
+type CollectionCriteria struct {
+	Channel    string
+	TxId       string
+	Collection string
+	Namespace  string
+}
+
+func fromCollectionCriteria(criteria common.CollectionCriteria) CollectionCriteria {
+	return CollectionCriteria{
+		TxId:       criteria.TxId,
+		Collection: criteria.Collection,
+		Namespace:  criteria.Namespace,
+		Channel:    criteria.Channel,
+	}
 }
 
 type persistCall struct {
@@ -238,13 +258,13 @@ func (v *validatorMock) Validate(block *common.Block) error {
 	return nil
 }
 
-type digests []*proto.PvtDataDigest
+type digests []DigKey
 
 func (d digests) Equal(other digests) bool {
-	flatten := func(d digests) map[proto.PvtDataDigest]struct{} {
-		m := map[proto.PvtDataDigest]struct{}{}
+	flatten := func(d digests) map[DigKey]struct{} {
+		m := map[DigKey]struct{}{}
 		for _, dig := range d {
-			m[*dig] = struct{}{}
+			m[dig] = struct{}{}
 		}
 		return m
 	}
@@ -269,8 +289,8 @@ func (fc *fetchCall) expectingEndorsers(orgs ...string) *fetchCall {
 	return fc
 }
 
-func (fc *fetchCall) expectingDigests(dig []*proto.PvtDataDigest) *fetchCall {
-	fc.fetcher.expectedDigests = dig
+func (fc *fetchCall) expectingDigests(digests []DigKey) *fetchCall {
+	fc.fetcher.expectedDigests = digests
 	return fc
 }
 
@@ -282,7 +302,7 @@ func (fc *fetchCall) Return(returnArguments ...interface{}) *mock.Call {
 type fetcherMock struct {
 	t *testing.T
 	mock.Mock
-	expectedDigests   []*proto.PvtDataDigest
+	expectedDigests   []DigKey
 	expectedEndorsers map[string]struct{}
 }
 
@@ -316,8 +336,8 @@ func (f *fetcherMock) fetch(dig2src dig2sources, _ uint64) (*FetchedPvtDataConta
 func createcollectionStore(expectedSignedData common.SignedData) *collectionStore {
 	return &collectionStore{
 		expectedSignedData: expectedSignedData,
-		policies:           make(map[collectionAccessPolicy]common.CollectionCriteria),
-		store:              make(map[common.CollectionCriteria]collectionAccessPolicy),
+		policies:           make(map[collectionAccessPolicy]CollectionCriteria),
+		store:              make(map[CollectionCriteria]collectionAccessPolicy),
 	}
 }
 
@@ -325,8 +345,8 @@ type collectionStore struct {
 	expectedSignedData common.SignedData
 	acceptsAll         bool
 	lenient            bool
-	store              map[common.CollectionCriteria]collectionAccessPolicy
-	policies           map[collectionAccessPolicy]common.CollectionCriteria
+	store              map[CollectionCriteria]collectionAccessPolicy
+	policies           map[collectionAccessPolicy]CollectionCriteria
 }
 
 func (cs *collectionStore) thatAcceptsAll() *collectionStore {
@@ -339,7 +359,7 @@ func (cs *collectionStore) andIsLenient() *collectionStore {
 	return cs
 }
 
-func (cs *collectionStore) thatAccepts(cc common.CollectionCriteria) *collectionStore {
+func (cs *collectionStore) thatAccepts(cc CollectionCriteria) *collectionStore {
 	sp := collectionAccessPolicy{
 		cs: cs,
 		n:  util.RandomUInt64(),
@@ -350,7 +370,7 @@ func (cs *collectionStore) thatAccepts(cc common.CollectionCriteria) *collection
 }
 
 func (cs *collectionStore) RetrieveCollectionAccessPolicy(cc common.CollectionCriteria) (privdata.CollectionAccessPolicy, error) {
-	if sp, exists := cs.store[cc]; exists {
+	if sp, exists := cs.store[fromCollectionCriteria(cc)]; exists {
 		return &sp, nil
 	}
 	if cs.acceptsAll || cs.lenient {
@@ -546,7 +566,9 @@ func TestPvtDataCollections_Unmarshal(t *testing.T) {
 
 	err = newCol.Unmarshal(bytes)
 	assertion.NoError(err)
-	assertion.Equal(newCol, collection)
+	assertion.Equal(1, len(newCol))
+	assertion.Equal(newCol[0].SeqInBlock, collection[0].SeqInBlock)
+	assertion.True(pb.Equal(newCol[0].WriteSet, collection[0].WriteSet))
 }
 
 type rwsTriplet struct {
@@ -812,7 +834,7 @@ func TestCoordinatorToFilterOutPvtRWSetsWithWrongHash(t *testing.T) {
 		Validator:       &validatorMock{},
 	}, peerSelfSignedData)
 
-	fetcher.On("fetch", mock.Anything).expectingDigests([]*proto.PvtDataDigest{
+	fetcher.On("fetch", mock.Anything).expectingDigests([]DigKey{
 		{
 			TxId: "tx1", Namespace: "ns1", Collection: "c1", BlockSeq: 1,
 		},
@@ -935,7 +957,7 @@ func TestCoordinatorStoreBlock(t *testing.T) {
 	
 	
 	
-	fetcher.On("fetch", mock.Anything).expectingDigests([]*proto.PvtDataDigest{
+	fetcher.On("fetch", mock.Anything).expectingDigests([]DigKey{
 		{
 			TxId: "tx1", Namespace: "ns1", Collection: "c2", BlockSeq: 1,
 		},
@@ -989,7 +1011,7 @@ func TestCoordinatorStoreBlock(t *testing.T) {
 	
 	block = bf.AddTxn("tx3", "ns3", hash, "c3").create()
 	fetcher = &fetcherMock{t: t}
-	fetcher.On("fetch", mock.Anything).expectingDigests([]*proto.PvtDataDigest{
+	fetcher.On("fetch", mock.Anything).expectingDigests([]DigKey{
 		{
 			TxId: "tx3", Namespace: "ns3", Collection: "c3", BlockSeq: 1,
 		},
@@ -1038,7 +1060,7 @@ func TestCoordinatorStoreBlock(t *testing.T) {
 	
 	
 	block = bf.AddTxn("tx3", "ns3", hash, "c3", "c2", "c1").AddTxn("tx1", "ns1", hash, "c1").create()
-	cs = createcollectionStore(peerSelfSignedData).thatAccepts(common.CollectionCriteria{
+	cs = createcollectionStore(peerSelfSignedData).thatAccepts(CollectionCriteria{
 		TxId:       "tx3",
 		Collection: "c3",
 		Namespace:  "ns3",
@@ -1120,7 +1142,7 @@ func TestProceedWithoutPrivateData(t *testing.T) {
 
 	fetcher := &fetcherMock{t: t}
 	
-	fetcher.On("fetch", mock.Anything).expectingDigests([]*proto.PvtDataDigest{
+	fetcher.On("fetch", mock.Anything).expectingDigests([]DigKey{
 		{
 			TxId: "tx1", Namespace: "ns3", Collection: "c2", BlockSeq: 1,
 		},
@@ -1185,7 +1207,7 @@ func TestCoordinatorGetBlocks(t *testing.T) {
 
 	
 	
-	cs = createcollectionStore(sd).thatAccepts(common.CollectionCriteria{
+	cs = createcollectionStore(sd).thatAccepts(CollectionCriteria{
 		Namespace:  "ns1",
 		Collection: "c2",
 		TxId:       "tx1",

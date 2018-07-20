@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/internal/grpcrand"
 	"google.golang.org/grpc/resolver"
 )
 
@@ -34,7 +34,9 @@ const (
 	txtAttribute = "grpc_config="
 )
 
-var errMissingAddr = errors.New("missing address")
+var (
+	errMissingAddr = errors.New("missing address")
+)
 
 
 func NewBuilder() resolver.Builder {
@@ -48,6 +50,9 @@ type dnsBuilder struct {
 
 
 func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOption) (resolver.Resolver, error) {
+	if target.Authority != "" {
+		return nil, fmt.Errorf("Default DNS resolver does not support custom DNS server")
+	}
 	host, port, err := parseTarget(target.Endpoint)
 	if err != nil {
 		return nil, err
@@ -71,14 +76,15 @@ func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts 
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &dnsResolver{
-		freq:   b.freq,
-		host:   host,
-		port:   port,
-		ctx:    ctx,
-		cancel: cancel,
-		cc:     cc,
-		t:      time.NewTimer(0),
-		rn:     make(chan struct{}, 1),
+		freq:                 b.freq,
+		host:                 host,
+		port:                 port,
+		ctx:                  ctx,
+		cancel:               cancel,
+		cc:                   cc,
+		t:                    time.NewTimer(0),
+		rn:                   make(chan struct{}, 1),
+		disableServiceConfig: opts.DisableServiceConfig,
 	}
 
 	d.wg.Add(1)
@@ -141,7 +147,8 @@ type dnsResolver struct {
 	
 	
 	
-	wg sync.WaitGroup
+	wg                   sync.WaitGroup
+	disableServiceConfig bool
 }
 
 
@@ -171,7 +178,7 @@ func (d *dnsResolver) watcher() {
 		result, sc := d.lookup()
 		
 		d.t.Reset(d.freq)
-		d.cc.NewServiceConfig(string(sc))
+		d.cc.NewServiceConfig(sc)
 		d.cc.NewAddress(result)
 	}
 }
@@ -186,7 +193,7 @@ func (d *dnsResolver) lookupSRV() []resolver.Address {
 	for _, s := range srvs {
 		lbAddrs, err := lookupHost(d.ctx, s.Target)
 		if err != nil {
-			grpclog.Warningf("grpc: failed load banlacer address dns lookup due to %v.\n", err)
+			grpclog.Infof("grpc: failed load balancer address dns lookup due to %v.\n", err)
 			continue
 		}
 		for _, a := range lbAddrs {
@@ -205,7 +212,7 @@ func (d *dnsResolver) lookupSRV() []resolver.Address {
 func (d *dnsResolver) lookupTXT() string {
 	ss, err := lookupTXT(d.ctx, d.host)
 	if err != nil {
-		grpclog.Warningf("grpc: failed dns TXT record lookup due to %v.\n", err)
+		grpclog.Infof("grpc: failed dns TXT record lookup due to %v.\n", err)
 		return ""
 	}
 	var res string
@@ -241,10 +248,12 @@ func (d *dnsResolver) lookupHost() []resolver.Address {
 }
 
 func (d *dnsResolver) lookup() ([]resolver.Address, string) {
-	var newAddrs []resolver.Address
-	newAddrs = d.lookupSRV()
+	newAddrs := d.lookupSRV()
 	
 	newAddrs = append(newAddrs, d.lookupHost()...)
+	if d.disableServiceConfig {
+		return newAddrs, ""
+	}
 	sc := d.lookupTXT()
 	return newAddrs, canaryingSC(sc)
 }
@@ -323,12 +332,7 @@ func chosenByPercentage(a *int) bool {
 	if a == nil {
 		return true
 	}
-	s := rand.NewSource(time.Now().UnixNano())
-	r := rand.New(s)
-	if r.Intn(100)+1 > *a {
-		return false
-	}
-	return true
+	return grpcrand.Intn(100)+1 <= *a
 }
 
 func canaryingSC(js string) string {

@@ -50,6 +50,14 @@ func New(ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodePro
 	}
 }
 
+func (e *PeerConfiger) Name() string              { return "cscc" }
+func (e *PeerConfiger) Path() string              { return "github.com/mcc-github/blockchain/core/scc/cscc" }
+func (e *PeerConfiger) InitArgs() [][]byte        { return nil }
+func (e *PeerConfiger) Chaincode() shim.Chaincode { return e }
+func (e *PeerConfiger) InvokableExternal() bool   { return true }
+func (e *PeerConfiger) InvokableCC2CC() bool      { return false }
+func (e *PeerConfiger) Enabled() bool             { return true }
+
 
 
 

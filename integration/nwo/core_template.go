@@ -6,9 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 package nwo
 
-
-
-const CoreTemplate = `---
+const DefaultCoreTemplate = `---
 logging:
   level:      info
   cauthdsl:   warning

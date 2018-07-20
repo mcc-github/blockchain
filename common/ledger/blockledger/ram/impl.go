@@ -1,30 +1,21 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package ramledger
 
 import (
 	"bytes"
-	"fmt"
+	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/op/go-logging"
+	"github.com/pkg/errors"
 )
 
 const pkgLogID = "orderer/ledger/ramledger"
@@ -46,6 +37,7 @@ type simpleList struct {
 }
 
 type ramLedger struct {
+	lock    sync.RWMutex
 	maxSize int
 	size    int
 	oldest  *simpleList
@@ -76,6 +68,9 @@ func (cu *cursor) Close() {}
 
 
 func (rl *ramLedger) Iterator(startPosition *ab.SeekPosition) (blockledger.Iterator, uint64) {
+	rl.lock.RLock()
+	defer rl.lock.RUnlock()
+
 	var list *simpleList
 	switch start := startPosition.Type.(type) {
 	case *ab.SeekPosition_Oldest:
@@ -138,19 +133,24 @@ func (rl *ramLedger) Iterator(startPosition *ab.SeekPosition) (blockledger.Itera
 
 
 func (rl *ramLedger) Height() uint64 {
+	rl.lock.RLock()
+	defer rl.lock.RUnlock()
 	return rl.newest.block.Header.Number + 1
 }
 
 
 func (rl *ramLedger) Append(block *cb.Block) error {
+	rl.lock.Lock()
+	defer rl.lock.Unlock()
+
 	if block.Header.Number != rl.newest.block.Header.Number+1 {
-		return fmt.Errorf("Block number should have been %d but was %d",
+		return errors.Errorf("block number should have been %d but was %d",
 			rl.newest.block.Header.Number+1, block.Header.Number)
 	}
 
 	if rl.newest.block.Header.Number+1 != 0 { 
 		if !bytes.Equal(block.Header.PreviousHash, rl.newest.block.Header.Hash()) {
-			return fmt.Errorf("Block should have had previous hash of %x but was %x",
+			return errors.Errorf("block should have had previous hash of %x but was %x",
 				rl.newest.block.Header.Hash(), block.Header.PreviousHash)
 		}
 	}

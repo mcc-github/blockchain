@@ -15,6 +15,7 @@ import (
 
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -76,7 +77,10 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 	
 	retrievedData, err = store.GetPvtDataByBlockNum(1, nilFilter)
 	assert.NoError(err)
-	assert.Equal(testData, retrievedData)
+	for i, data := range retrievedData {
+		assert.Equal(data.SeqInBlock, testData[i].SeqInBlock)
+		assert.True(proto.Equal(data.WriteSet, testData[i].WriteSet))
+	}
 
 	
 	filter := ledger.NewPvtNsCollFilter()
@@ -87,7 +91,10 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-2:coll-2"}),
 		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-2:coll-2"}),
 	}
-	testutil.AssertEquals(t, retrievedData, expectedRetrievedData)
+	for i, data := range retrievedData {
+		assert.Equal(data.SeqInBlock, expectedRetrievedData[i].SeqInBlock)
+		assert.True(proto.Equal(data.WriteSet, expectedRetrievedData[i].WriteSet))
+	}
 
 	
 	retrievedData, err = store.GetPvtDataByBlockNum(2, nilFilter)
@@ -132,7 +139,10 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 
 	retrievedData, _ := store.GetPvtDataByBlockNum(1, nil)
 	
-	testutil.AssertEquals(t, retrievedData, testDataForBlk1)
+	for i, data := range retrievedData {
+		assert.Equal(data.SeqInBlock, testDataForBlk1[i].SeqInBlock)
+		assert.True(proto.Equal(data.WriteSet, testDataForBlk1[i].WriteSet))
+	}
 
 	
 	assert.NoError(store.Prepare(3, nil))

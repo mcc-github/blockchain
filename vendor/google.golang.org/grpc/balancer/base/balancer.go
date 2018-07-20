@@ -130,7 +130,6 @@ func (b *baseBalancer) HandleSubConnStateChange(sc balancer.SubConn, s connectiv
 	}
 
 	b.cc.UpdateBalancerState(b.state, b.picker)
-	return
 }
 
 

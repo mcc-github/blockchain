@@ -9,7 +9,6 @@ package chaincode_test
 import (
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/chaincode"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
 	. "github.com/onsi/ginkgo"
@@ -54,11 +53,6 @@ type processor interface {
 }
 
 
-type executor interface {
-	chaincode.Executor
-}
-
-
 type invoker interface {
 	chaincode.Invoker
 }
@@ -69,8 +63,10 @@ type packageProvider interface {
 }
 
 
-type ccpackage interface {
-	ccprovider.CCPackage
+
+
+type lifecycleIface interface {
+	chaincode.Lifecycle
 }
 
 

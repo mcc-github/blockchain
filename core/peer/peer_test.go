@@ -8,12 +8,14 @@ package peer
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"testing"
 
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/localmsp"
 	mscc "github.com/mcc-github/blockchain/common/mocks/scc"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
 	"github.com/mcc-github/blockchain/core/deliverservice"
@@ -83,14 +85,15 @@ func TestInitialize(t *testing.T) {
 	cleanup := setupPeerFS(t)
 	defer cleanup()
 
-	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}))
+	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), nil)
 }
 
 func TestCreateChainFromBlock(t *testing.T) {
 	cleanup := setupPeerFS(t)
 	defer cleanup()
 
-	testChainID := "mytestchainid"
+	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), &platforms.Registry{})
+	testChainID := fmt.Sprintf("mytestchainid-%d", rand.Int())
 	block, err := configtxtest.MakeGenesisBlock(testChainID)
 	if err != nil {
 		fmt.Printf("Failed to create a config block, err %s\n", err)
@@ -187,6 +190,11 @@ func TestCreateChainFromBlock(t *testing.T) {
 	if len(channels) != 1 {
 		t.Fatalf("incorrect number of channels")
 	}
+
+	
+	chains.Lock()
+	chains.list = map[string]*chain{}
+	chains.Unlock()
 }
 
 func TestGetLocalIP(t *testing.T) {

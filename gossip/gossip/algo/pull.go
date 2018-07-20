@@ -83,6 +83,10 @@ type PullEngine struct {
 	outgoingNONCES     *util.Set
 	incomingNONCES     *util.Set
 	digFilter          DigestFilter
+
+	digestWaitTime   time.Duration
+	requestWaitTime  time.Duration
+	responseWaitTime time.Duration
 }
 
 
@@ -100,6 +104,9 @@ func NewPullEngineWithFilter(participant PullAdapter, sleepTime time.Duration, d
 		incomingNONCES:     util.NewSet(),
 		outgoingNONCES:     util.NewSet(),
 		digFilter:          df,
+		digestWaitTime:     util.GetDurationOrDefault("peer.gossip.digestWaitTime", defDigestWaitTime),
+		requestWaitTime:    util.GetDurationOrDefault("peer.gossip.requestWaitTime", defRequestWaitTime),
+		responseWaitTime:   util.GetDurationOrDefault("peer.gossip.responseWaitTime", defResponseWaitTime),
 	}
 
 	go func() {
@@ -168,8 +175,7 @@ func (engine *PullEngine) initiatePull() {
 		engine.Hello(peer, nonce)
 	}
 
-	digestWaitTime := util.GetDurationOrDefault("peer.gossip.digestWaitTime", defDigestWaitTime)
-	time.AfterFunc(digestWaitTime, func() {
+	time.AfterFunc(engine.digestWaitTime, func() {
 		engine.processIncomingDigests()
 	})
 }
@@ -197,9 +203,7 @@ func (engine *PullEngine) processIncomingDigests() {
 		engine.SendReq(dest, seqsToReq, engine.peers2nonces[dest])
 	}
 
-	responseWaitTime := util.GetDurationOrDefault("peer.gossip.responseWaitTime", defResponseWaitTime)
-	time.AfterFunc(responseWaitTime, engine.endPull)
-
+	time.AfterFunc(engine.responseWaitTime, engine.endPull)
 }
 
 func (engine *PullEngine) endPull() {
@@ -254,8 +258,7 @@ func (engine *PullEngine) Remove(seqs ...string) {
 func (engine *PullEngine) OnHello(nonce uint64, context interface{}) {
 	engine.incomingNONCES.Add(nonce)
 
-	requestWaitTime := util.GetDurationOrDefault("peer.gossip.requestWaitTime", defRequestWaitTime)
-	time.AfterFunc(requestWaitTime, func() {
+	time.AfterFunc(engine.requestWaitTime, func() {
 		engine.incomingNONCES.Remove(nonce)
 	})
 

@@ -4,6 +4,7 @@ package grpclog
 
 
 
+
 type Logger interface {
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
@@ -12,6 +13,7 @@ type Logger interface {
 	Printf(format string, args ...interface{})
 	Println(args ...interface{})
 }
+
 
 
 
