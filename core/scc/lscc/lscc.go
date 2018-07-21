@@ -86,8 +86,8 @@ const (
 	
 	GETINSTALLEDCHAINCODESALIAS = "GetInstalledChaincodes"
 
-	allowedCharsChaincodeName = "[A-Za-z0-9_-]+"
-	allowedCharsVersion       = "[A-Za-z0-9_.+-]+"
+	allowedChaincodeName = "^[a-zA-Z0-9]+([-_][a-zA-Z0-9]+)*$"
+	allowedCharsVersion  = "[A-Za-z0-9_.+-]+"
 )
 
 
@@ -480,7 +480,7 @@ func (lscc *LifeCycleSysCC) isValidChaincodeName(chaincodeName string) error {
 		return EmptyChaincodeNameErr("")
 	}
 
-	if !isValidCCNameOrVersion(chaincodeName, allowedCharsChaincodeName) {
+	if !isValidCCNameOrVersion(chaincodeName, allowedChaincodeName) {
 		return InvalidChaincodeNameErr(chaincodeName)
 	}
 
