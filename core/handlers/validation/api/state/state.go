@@ -23,6 +23,12 @@ type State interface {
 	GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
 
 	
+	GetStateMetadata(namespace, key string) (map[string][]byte, error)
+
+	
+	GetPrivateDataMetadata(namespace, collection, key string) (map[string][]byte, error)
+
+	
 	Done()
 }
 
