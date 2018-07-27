@@ -65,6 +65,13 @@ func TestBadProposalHeaders(t *testing.T) {
 
 	
 	prop = &pb.Proposal{
+		Header: []byte("header"),
+	}
+	_, _, err = utils.GetChaincodeProposalContext(prop)
+	assert.Error(t, err, "Expected error with empty proposal payload")
+
+	
+	prop = &pb.Proposal{
 		Header:  []byte("bad header"),
 		Payload: []byte("payload"),
 	}
@@ -109,6 +116,7 @@ func TestBadProposalHeaders(t *testing.T) {
 	prop.Header = hdrBytes
 	_, _, err = utils.GetChaincodeProposalContext(prop)
 	assert.Error(t, err, "Expected error with wrong header type")
+	assert.Contains(t, err.Error(), "invalid proposal: invalid channel header type")
 	_, err = utils.GetNonce(prop)
 	assert.Error(t, err, "Expected error with wrong header type")
 

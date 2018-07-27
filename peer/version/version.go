@@ -26,8 +26,14 @@ var cobraCommand = &cobra.Command{
 	Use:   "version",
 	Short: "Print blockchain peer version.",
 	Long:  `Print current version of the blockchain peer server.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 0 {
+			return fmt.Errorf("trailing args detected")
+		}
+		
+		cmd.SilenceUsage = true
 		fmt.Print(GetInfo())
+		return nil
 	},
 }
 

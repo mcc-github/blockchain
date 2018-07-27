@@ -16,7 +16,11 @@ limitations under the License.
 
 package crypto
 
-import "crypto/rand"
+import (
+	"crypto/rand"
+
+	"github.com/pkg/errors"
+)
 
 const (
 	
@@ -30,7 +34,7 @@ func GetRandomBytes(len int) ([]byte, error) {
 	
 	_, err := rand.Read(key)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error getting random bytes")
 	}
 
 	return key, nil

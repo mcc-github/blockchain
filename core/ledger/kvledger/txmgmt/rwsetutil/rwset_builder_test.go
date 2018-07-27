@@ -226,6 +226,124 @@ func TestTxSimulationResultWithPvtData(t *testing.T) {
 	assert.Equal(t, expectedPubRWSet, actualSimRes.PubSimulationResults)
 }
 
+func TestTxSimulationResultWithMetadata(t *testing.T) {
+	rwSetBuilder := NewRWSetBuilder()
+	
+	rwSetBuilder.AddToReadSet("ns1", "key1", version.NewHeight(1, 1))
+	rwSetBuilder.AddToMetadataWriteSet("ns1", "key1",
+		map[string][]byte{"metadata2": []byte("ns1-key1-metadata2"), "metadata1": []byte("ns1-key1-metadata1")},
+	)
+	
+	rwSetBuilder.AddToWriteSet("ns2", "key1", []byte("ns2-key1-value"))
+	rwSetBuilder.AddToMetadataWriteSet("ns2", "key1", map[string][]byte{}) 
+
+	
+	rwSetBuilder.AddToPvtAndHashedWriteSet("ns1", "coll1", "key1", []byte("pvt-ns1-coll1-key1-value"))
+	rwSetBuilder.AddToHashedMetadataWriteSet("ns1", "coll1", "key1",
+		map[string][]byte{"metadata1": []byte("ns1-coll1-key1-metadata1")})
+
+	
+	rwSetBuilder.AddToHashedMetadataWriteSet("ns1", "coll2", "key1", nil) 
+
+	actualSimRes, err := rwSetBuilder.GetTxSimulationResults()
+	testutil.AssertNoError(t, err, "")
+
+	
+	pvtNs1Coll1 := &kvrwset.KVRWSet{
+		Writes: []*kvrwset.KVWrite{newKVWrite("key1", []byte("pvt-ns1-coll1-key1-value"))},
+	}
+	expectedPvtRWSet := &rwset.TxPvtReadWriteSet{
+		DataModel: rwset.TxReadWriteSet_KV,
+		NsPvtRwset: []*rwset.NsPvtReadWriteSet{
+			{
+				Namespace: "ns1",
+				CollectionPvtRwset: []*rwset.CollectionPvtReadWriteSet{
+					{
+						CollectionName: "coll1",
+						Rwset:          serializeTestProtoMsg(t, pvtNs1Coll1),
+					},
+				},
+			},
+		},
+	}
+	assert.Equal(t, expectedPvtRWSet, actualSimRes.PvtSimulationResults)
+
+	
+	pubNs1 := &kvrwset.KVRWSet{
+		Reads: []*kvrwset.KVRead{NewKVRead("key1", version.NewHeight(1, 1))},
+		MetadataWrites: []*kvrwset.KVMetadataWrite{
+			{
+				Key: "key1",
+				Entries: []*kvrwset.KVMetadataEntry{
+					{Name: "metadata1", Value: []byte("ns1-key1-metadata1")},
+					{Name: "metadata2", Value: []byte("ns1-key1-metadata2")},
+				},
+			},
+		},
+	}
+
+	pubNs2 := &kvrwset.KVRWSet{
+		Writes: []*kvrwset.KVWrite{newKVWrite("key1", []byte("ns2-key1-value"))},
+		MetadataWrites: []*kvrwset.KVMetadataWrite{
+			{
+				Key:     "key1",
+				Entries: nil,
+			},
+		},
+	}
+
+	hashedNs1Coll1 := &kvrwset.HashedRWSet{
+		HashedWrites: []*kvrwset.KVWriteHash{
+			constructTestPvtKVWriteHash(t, "key1", []byte("pvt-ns1-coll1-key1-value")),
+		},
+		MetadataWrites: []*kvrwset.KVMetadataWriteHash{
+			{
+				KeyHash: util.ComputeStringHash("key1"),
+				Entries: []*kvrwset.KVMetadataEntry{
+					{Name: "metadata1", Value: []byte("ns1-coll1-key1-metadata1")},
+				},
+			},
+		},
+	}
+
+	hashedNs1Coll2 := &kvrwset.HashedRWSet{
+		MetadataWrites: []*kvrwset.KVMetadataWriteHash{
+			{
+				KeyHash: util.ComputeStringHash("key1"),
+				Entries: nil,
+			},
+		},
+	}
+
+	pubAndHashCombinedNs1 := &rwset.NsReadWriteSet{
+		Namespace: "ns1",
+		Rwset:     serializeTestProtoMsg(t, pubNs1),
+		CollectionHashedRwset: []*rwset.CollectionHashedReadWriteSet{
+			{
+				CollectionName: "coll1",
+				HashedRwset:    serializeTestProtoMsg(t, hashedNs1Coll1),
+				PvtRwsetHash:   util.ComputeHash(serializeTestProtoMsg(t, pvtNs1Coll1)),
+			},
+			{
+				CollectionName: "coll2",
+				HashedRwset:    serializeTestProtoMsg(t, hashedNs1Coll2),
+				PvtRwsetHash:   nil,
+			},
+		},
+	}
+	assert.Equal(t, pubAndHashCombinedNs1, actualSimRes.PubSimulationResults.NsRwset[0])
+	pubAndHashCombinedNs2 := &rwset.NsReadWriteSet{
+		Namespace: "ns2",
+		Rwset:     serializeTestProtoMsg(t, pubNs2),
+		CollectionHashedRwset: nil,
+	}
+	expectedPubRWSet := &rwset.TxReadWriteSet{
+		DataModel: rwset.TxReadWriteSet_KV,
+		NsRwset:   []*rwset.NsReadWriteSet{pubAndHashCombinedNs1, pubAndHashCombinedNs2},
+	}
+	assert.Equal(t, expectedPubRWSet, actualSimRes.PubSimulationResults)
+}
+
 func constructTestPvtKVReadHash(t *testing.T, key string, version *version.Height) *kvrwset.KVReadHash {
 	kvReadHash := newPvtKVReadHash(key, version)
 	return kvReadHash
