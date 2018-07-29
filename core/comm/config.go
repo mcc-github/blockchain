@@ -8,6 +8,7 @@ package comm
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"time"
 
 	"google.golang.org/grpc"
@@ -65,6 +66,10 @@ type ClientConfig struct {
 
 
 type SecureOptions struct {
+	
+	
+	
+	VerifyCertificate func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error
 	
 	Certificate []byte
 	
