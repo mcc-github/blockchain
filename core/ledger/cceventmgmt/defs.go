@@ -16,9 +16,10 @@ import (
 
 
 type ChaincodeDefinition struct {
-	Name    string
-	Hash    []byte
-	Version string
+	Name              string
+	Hash              []byte
+	Version           string
+	CollectionConfigs []byte
 }
 
 func (cdef *ChaincodeDefinition) String() string {

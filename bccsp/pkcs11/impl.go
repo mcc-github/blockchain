@@ -128,7 +128,7 @@ func (csp *impl) KeyGen(opts bccsp.KeyGenOpts) (k bccsp.Key, err error) {
 
 
 
-func (csp *impl) KeyDeriv(k bccsp.Key, opts bccsp.KeyDerivOpts) (dk bccsp.Key, err error) {
+func (csp *impl) KeyDeriv(k bccsp.Key, opts bccsp.KeyDerivOpts) (bccsp.Key, error) {
 	
 	if k == nil {
 		return nil, errors.New("Invalid Key. It must not be nil")
@@ -431,7 +431,7 @@ func (csp *impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
 
 
 
-func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
+func (csp *impl) GetKey(ski []byte) (bccsp.Key, error) {
 	pubKey, isPriv, err := csp.getECKey(ski)
 	if err == nil {
 		if isPriv {
@@ -449,7 +449,7 @@ func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
 
 
 
-func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
+func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) ([]byte, error) {
 	
 	if k == nil {
 		return nil, errors.New("Invalid Key. It must not be nil")
@@ -468,7 +468,7 @@ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
 }
 
 
-func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
+func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (bool, error) {
 	
 	if k == nil {
 		return false, errors.New("Invalid Key. It must not be nil")
@@ -493,14 +493,14 @@ func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.Signer
 
 
 
-func (csp *impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts) (ciphertext []byte, err error) {
+func (csp *impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts) ([]byte, error) {
 	
 	return csp.BCCSP.Encrypt(k, plaintext, opts)
 }
 
 
 
-func (csp *impl) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpts) (plaintext []byte, err error) {
+func (csp *impl) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpts) ([]byte, error) {
 	return csp.BCCSP.Decrypt(k, ciphertext, opts)
 }
 

@@ -30,11 +30,15 @@ func (listener *KVLedgerLSCCStateListener) HandleStateUpdates(channelName string
 	kvWrites := stateUpdates[lsccNamespace].([]*kvrwset.KVWrite)
 	logger.Debugf("Channel [%s]: Handling state updates in LSCC namespace - stateUpdates=%#v", channelName, kvWrites)
 	chaincodeDefs := []*ChaincodeDefinition{}
+	chaincodesCollConfigs := make(map[string][]byte)
+
 	for _, kvWrite := range kvWrites {
 		
 		
 		
 		if privdata.IsCollectionConfigKey(kvWrite.Key) {
+			ccname := privdata.GetCCNameFromCollectionConfigKey(kvWrite.Key)
+			chaincodesCollConfigs[ccname] = kvWrite.Value
 			continue
 		}
 		
@@ -49,6 +53,14 @@ func (listener *KVLedgerLSCCStateListener) HandleStateUpdates(channelName string
 		}
 		chaincodeDefs = append(chaincodeDefs, &ChaincodeDefinition{Name: chaincodeData.CCName(), Version: chaincodeData.CCVersion(), Hash: chaincodeData.Hash()})
 	}
+
+	for _, chaincodeDef := range chaincodeDefs {
+		chaincodeCollConfigs, ok := chaincodesCollConfigs[chaincodeDef.Name]
+		if ok {
+			chaincodeDef.CollectionConfigs = chaincodeCollConfigs
+		}
+	}
+
 	return GetMgr().HandleChaincodeDeploy(channelName, chaincodeDefs)
 }
 

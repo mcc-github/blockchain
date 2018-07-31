@@ -110,3 +110,9 @@ func BuildCollectionKVSKey(ccname string) string {
 func IsCollectionConfigKey(key string) bool {
 	return strings.Contains(key, collectionSeparator)
 }
+
+
+func GetCCNameFromCollectionConfigKey(key string) string {
+	splittedKey := strings.Split(key, collectionSeparator)
+	return splittedKey[0]
+}

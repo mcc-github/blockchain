@@ -12,12 +12,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/util"
+	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -421,12 +423,32 @@ func TestHandleChainCodeDeployOnCouchDB(t *testing.T) {
 	}
 }
 
+func createCollectionConfig(collectionName string) *common.CollectionConfig {
+	return &common.CollectionConfig{
+		Payload: &common.CollectionConfig_StaticCollectionConfig{
+			StaticCollectionConfig: &common.StaticCollectionConfig{
+				Name:              collectionName,
+				MemberOrgsPolicy:  nil,
+				RequiredPeerCount: 0,
+				MaximumPeerCount:  0,
+				BlockToLive:       0,
+			},
+		},
+	}
+}
+
 func testHandleChainCodeDeploy(t *testing.T, env TestEnv) {
 	env.Init(t)
 	defer env.Cleanup()
 	db := env.GetDBHandle("test-handle-chaincode-deploy")
 
-	chaincodeDef := &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: ""}
+	coll1 := createCollectionConfig("collectionMarbles")
+	ccp := &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1}}
+	ccpBytes, err := proto.Marshal(ccp)
+	assert.NoError(t, err)
+	assert.NotNil(t, ccpBytes)
+
+	chaincodeDef := &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: "", CollectionConfigs: ccpBytes}
 
 	commonStorageDB := db.(*CommonStorageDB)
 
@@ -458,6 +480,32 @@ func testHandleChainCodeDeploy(t *testing.T, env TestEnv) {
 	actualJSON := fileEntries["META-INF/statedb/couchdb/collections/collectionMarbles/indexes"][0].FileContent
 	assert.Equal(t, expectedJSON, actualJSON)
 
+	
+	
+	err = commonStorageDB.HandleChaincodeDeploy(chaincodeDef, dbArtifactsTarBytes)
+	assert.NoError(t, err)
+
+	coll2 := createCollectionConfig("collectionMarblesPrivateDetails")
+	ccp = &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1, coll2}}
+	ccpBytes, err = proto.Marshal(ccp)
+	assert.NoError(t, err)
+	assert.NotNil(t, ccpBytes)
+
+	chaincodeDef = &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: "", CollectionConfigs: ccpBytes}
+
+	
+	
+	
+	
+	err = commonStorageDB.HandleChaincodeDeploy(chaincodeDef, dbArtifactsTarBytes)
+	assert.NoError(t, err)
+
+	chaincodeDef = &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: "", CollectionConfigs: nil}
+
+	
+	
+	
+	
 	err = commonStorageDB.HandleChaincodeDeploy(chaincodeDef, dbArtifactsTarBytes)
 	assert.NoError(t, err)
 

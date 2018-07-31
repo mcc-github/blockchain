@@ -10,9 +10,12 @@ import (
 	"encoding/base64"
 	"strings"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
+	"github.com/mcc-github/blockchain/protos/common"
 
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
@@ -195,6 +198,53 @@ func (s *CommonStorageDB) ApplyPrivacyAwareUpdates(updates *UpdateBatch, height 
 	return s.VersionedDB.ApplyUpdates(updates.PubUpdates.UpdateBatch, height)
 }
 
+func (s *CommonStorageDB) getCollectionConfigMap(chaincodeDefinition *cceventmgmt.ChaincodeDefinition) (map[string]bool, error) {
+	var collectionConfigsBytes []byte
+	collectionConfigsMap := make(map[string]bool)
+
+	
+	
+	
+	if chaincodeDefinition.CollectionConfigs != nil {
+		
+		
+		collectionConfigsBytes = chaincodeDefinition.CollectionConfigs
+	} else {
+		
+		
+		
+		lsccNamespace := "lscc"
+		collectionConfigKey := privdata.BuildCollectionKVSKey(chaincodeDefinition.Name)
+
+		versionedValue, err := s.VersionedDB.GetState(lsccNamespace, collectionConfigKey)
+		if err != nil {
+			return nil, err
+		}
+		
+		
+		if versionedValue != nil {
+			collectionConfigsBytes = versionedValue.Value
+		}
+	}
+
+	if collectionConfigsBytes != nil {
+		collectionConfigs := &common.CollectionConfigPackage{}
+		if err := proto.Unmarshal(collectionConfigsBytes, collectionConfigs); err != nil {
+			return nil, err
+		}
+
+		for _, config := range collectionConfigs.Config {
+			sConfig := config.GetStaticCollectionConfig()
+			if sConfig == nil {
+				continue
+			}
+			collectionConfigsMap[sConfig.Name] = true
+		}
+	}
+
+	return collectionConfigsMap, nil
+}
+
 
 
 
@@ -215,9 +265,17 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 
 	dbArtifacts, err := ccprovider.ExtractFileEntries(dbArtifactsTar, indexCapable.GetDBType())
 	if err != nil {
-		logger.Errorf("Error extracting db artifacts from tar for chaincode [%s]: %s", chaincodeDefinition.Name, err)
+		logger.Errorf("Index creation: error extracting db artifacts from tar for chaincode [%s]: %s", chaincodeDefinition.Name, err)
 		return nil
 	}
+
+	collectionConfigMap, err := s.getCollectionConfigMap(chaincodeDefinition)
+	if err != nil {
+		logger.Errorf("Error while retrieving collection config for chaincode=[%s]: %s",
+			chaincodeDefinition.Name, err)
+		return nil
+	}
+
 	for directoryPath, archiveDirectoryEntries := range dbArtifacts {
 		
 		directoryPathArray := strings.Split(directoryPath, "/")
@@ -232,10 +290,16 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 		
 		if directoryPathArray[3] == "collections" && directoryPathArray[5] == "indexes" {
 			collectionName := directoryPathArray[4]
-			err := indexCapable.ProcessIndexesForChaincodeDeploy(derivePvtDataNs(chaincodeDefinition.Name, collectionName),
-				archiveDirectoryEntries)
-			if err != nil {
-				logger.Errorf("Error processing collection index for chaincode [%s]: %s", chaincodeDefinition.Name, err)
+			_, ok := collectionConfigMap[collectionName]
+			if !ok {
+				logger.Errorf("Error processing index for chaincode [%s]: cannot create an index for an undefined collection=[%s]", chaincodeDefinition.Name, collectionName)
+			} else {
+
+				err := indexCapable.ProcessIndexesForChaincodeDeploy(derivePvtDataNs(chaincodeDefinition.Name, collectionName),
+					archiveDirectoryEntries)
+				if err != nil {
+					logger.Errorf("Error processing collection index for chaincode [%s]: %s", chaincodeDefinition.Name, err)
+				}
 			}
 		}
 	}
