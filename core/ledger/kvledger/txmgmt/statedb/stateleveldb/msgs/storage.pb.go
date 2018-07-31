@@ -1,8 +1,7 @@
 
 
 
-
-package msgs
+package msgs 
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
@@ -20,15 +19,37 @@ var _ = math.Inf
 const _ = proto.ProtoPackageIsVersion2 
 
 type VersionedValueProto struct {
-	VersionBytes []byte `protobuf:"bytes,1,opt,name=version_bytes,json=versionBytes,proto3" json:"version_bytes,omitempty"`
-	Value        []byte `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Metadata     []byte `protobuf:"bytes,3,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	VersionBytes         []byte   `protobuf:"bytes,1,opt,name=version_bytes,json=versionBytes,proto3" json:"version_bytes,omitempty"`
+	Value                []byte   `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Metadata             []byte   `protobuf:"bytes,3,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *VersionedValueProto) Reset()                    { *m = VersionedValueProto{} }
-func (m *VersionedValueProto) String() string            { return proto.CompactTextString(m) }
-func (*VersionedValueProto) ProtoMessage()               {}
-func (*VersionedValueProto) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (m *VersionedValueProto) Reset()         { *m = VersionedValueProto{} }
+func (m *VersionedValueProto) String() string { return proto.CompactTextString(m) }
+func (*VersionedValueProto) ProtoMessage()    {}
+func (*VersionedValueProto) Descriptor() ([]byte, []int) {
+	return fileDescriptor_storage_8fef7a68096053f5, []int{0}
+}
+func (m *VersionedValueProto) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_VersionedValueProto.Unmarshal(m, b)
+}
+func (m *VersionedValueProto) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_VersionedValueProto.Marshal(b, m, deterministic)
+}
+func (dst *VersionedValueProto) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_VersionedValueProto.Merge(dst, src)
+}
+func (m *VersionedValueProto) XXX_Size() int {
+	return xxx_messageInfo_VersionedValueProto.Size(m)
+}
+func (m *VersionedValueProto) XXX_DiscardUnknown() {
+	xxx_messageInfo_VersionedValueProto.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_VersionedValueProto proto.InternalMessageInfo
 
 func (m *VersionedValueProto) GetVersionBytes() []byte {
 	if m != nil {
@@ -55,9 +76,9 @@ func init() {
 	proto.RegisterType((*VersionedValueProto)(nil), "msgs.VersionedValueProto")
 }
 
-func init() { proto.RegisterFile("storage.proto", fileDescriptor0) }
+func init() { proto.RegisterFile("storage.proto", fileDescriptor_storage_8fef7a68096053f5) }
 
-var fileDescriptor0 = []byte{
+var fileDescriptor_storage_8fef7a68096053f5 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x3c, 0x8f, 0xbd, 0x0e, 0x82, 0x30,
 	0x14, 0x85, 0x83, 0x7f, 0x31, 0x0d, 0x2c, 0xe8, 0x40, 0x9c, 0x8c, 0x2e, 0x4e, 0x74, 0xf0, 0x0d,
