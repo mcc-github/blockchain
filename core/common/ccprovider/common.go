@@ -13,8 +13,8 @@ import (
 )
 
 
-func GetCCsPath() string {
-	return config.GetPath("peer.fileSystemPath") + string(filepath.Separator) + "chaincodes"
+func GetChaincodeInstallPathFromViper() string {
+	return filepath.Join(config.GetPath("peer.fileSystemPath"), "chaincodes")
 }
 
 

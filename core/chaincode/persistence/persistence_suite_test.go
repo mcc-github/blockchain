@@ -25,6 +25,16 @@ type osFileInfo interface {
 	os.FileInfo
 }
 
+
+type storePackageProvider interface {
+	persistence.StorePackageProvider
+}
+
+
+type legacyPackageProvider interface {
+	persistence.LegacyPackageProvider
+}
+
 func TestPersistence(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Persistence Suite")

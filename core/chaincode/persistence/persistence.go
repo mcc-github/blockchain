@@ -9,6 +9,7 @@ package persistence
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -143,6 +144,17 @@ func (s *Store) LoadMetadata(path string) (name, version string, err error) {
 
 
 
+type CodePackageNotFoundErr struct {
+	Name    string
+	Version string
+}
+
+func (e *CodePackageNotFoundErr) Error() string {
+	return fmt.Sprintf("chaincode install package not found with name '%s', version '%s'", e.Name, e.Version)
+}
+
+
+
 func (s *Store) RetrieveHash(name string, version string) ([]byte, error) {
 	files, err := s.ReadWriter.ReadDir(s.Path)
 	if err != nil {
@@ -171,7 +183,12 @@ func (s *Store) RetrieveHash(name string, version string) ([]byte, error) {
 		}
 	}
 
-	return nil, errors.Errorf("chaincode install package not found with name '%s', version '%s'", name, version)
+	err = &CodePackageNotFoundErr{
+		Name:    name,
+		Version: version,
+	}
+
+	return nil, err
 }
 
 
