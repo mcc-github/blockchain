@@ -41,7 +41,7 @@ var _ = Describe("PrivateData-EndToEnd", func() {
 	
 	
 	
-	PDescribe("collection config is modified", func() {
+	Describe("collection config is modified", func() {
 		BeforeEach(func() {
 			var err error
 			testDir, err = ioutil.TempDir("", "e2e-pvtdata")
@@ -227,7 +227,7 @@ var _ = Describe("PrivateData-EndToEnd", func() {
 		})
 	})
 
-	PDescribe("collection config BlockToLive is respected", func() {
+	Describe("collection config BlockToLive is respected", func() {
 		BeforeEach(func() {
 			var err error
 			testDir, err = ioutil.TempDir("", "e2e-pvtdata")
@@ -316,6 +316,9 @@ var _ = Describe("PrivateData-EndToEnd", func() {
 				return adminRunner.Err(), err
 			}).Should(gbytes.Say("Successfully submitted proposal to join channel"))
 
+			By("install the chaincode on peer1.org2 in order to query it")
+			adminPeer.InstallChaincode("marblesp", "1.0", "github.com/mcc-github/blockchain/integration/chaincode/marbles_private/cmd")
+
 			By("fetch latest blocks to peer1.org2")
 			EventuallyWithOffset(1, func() (*gbytes.Buffer, error) {
 				adminRunner := adminPeer.FetchChannel(d.Channel, filepath.Join(w.Rootpath, "peer1.org2.example.com", fmt.Sprintf("%s_block.pb", d.Channel)), "newest", d.Orderer)
@@ -323,8 +326,10 @@ var _ = Describe("PrivateData-EndToEnd", func() {
 				return adminRunner.Err(), err
 			}).Should(gbytes.Say("Received block: 9"))
 
-			By("install the chaincode on peer1.org2 in order to query it")
-			adminPeer.InstallChaincode("marblesp", "1.0", "github.com/mcc-github/blockchain/integration/chaincode/marbles_private/cmd")
+			By("wait until ledger is updated with all blocks")
+			EventuallyWithOffset(1, func() int {
+				return getLedgerHeight(1, 2, d.Channel, testDir)
+			}, time.Minute).Should(Equal(10))
 
 			By("query peer1.org2, verify marble1 exist in collectionMarbles and private data doesn't exist")
 			verifyAccess(d.Chaincode.Name, d.Channel, `{"Args":["readMarble","marble1"]}`, []*runner.Peer{adminPeer}, `{"docType":"marble","name":"marble1","color":"blue","size":35,"owner":"tom"}`)
@@ -332,7 +337,7 @@ var _ = Describe("PrivateData-EndToEnd", func() {
 		})
 	})
 
-	PDescribe("network partition with respect of private data", func() {
+	Describe("network partition with respect of private data", func() {
 		BeforeEach(func() {
 			var err error
 			testDir, err = ioutil.TempDir("", "e2e-pvtdata")
@@ -415,6 +420,12 @@ var _ = Describe("PrivateData-EndToEnd", func() {
 			By("stop p0.org2 process")
 			stopPeer(w, 0, 2)
 
+			By("verify membership using discovery service")
+			expectedDiscoveredPeers = []helpers.DiscoveredPeer{
+				{MSPID: "Org1MSP", LedgerHeight: 0, Endpoint: "0.0.0.0:7051", Identity: "", Chaincodes: []string{}},
+			}
+			verifyMembership(w, d, expectedDiscoveredPeers)
+
 			By("start p0.org3 process")
 			spawnNewPeer(w, 0, 3)
 
@@ -442,8 +453,13 @@ var _ = Describe("PrivateData-EndToEnd", func() {
 				return adminRunner.Err(), err
 			}).Should(gbytes.Say("Received block: 6"))
 
+			By("wait until ledger is updated with all blocks")
+			EventuallyWithOffset(1, func() int {
+				return getLedgerHeight(0, 3, d.Channel, testDir)
+			}, time.Minute).Should(Equal(7))
+
 			By("verify p0.org3 didn't get private data")
-			verifyAccessFailed(d.Chaincode.Name, d.Channel, `{"Args":["readMarblePrivateDetails","marble1"]}`, adminPeer, "Marble private details does not exist: marble1")
+			verifyAccessFailed(d.Chaincode.Name, d.Channel, `{"Args":["readMarblePrivateDetails","marble1"]}`, adminPeer, "Failed to get private details for marble1")
 		})
 	})
 })
