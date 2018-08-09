@@ -249,7 +249,7 @@ func (h *Handler) HandleTransaction(msg *pb.ChaincodeMessage, delegate handleFun
 
 	chaincodeLogger.Debugf("[%s] Completed %s. Sending %s", shorttxid(msg.Txid), msg.Type, resp.Type)
 	h.ActiveTransactions.Remove(msg.ChannelId, msg.Txid)
-	h.serialSendAsync(resp, false)
+	h.serialSendAsync(resp)
 }
 
 func shorttxid(txid string) string {
@@ -289,12 +289,13 @@ func (h *Handler) serialSend(msg *pb.ChaincodeMessage) error {
 	h.serialLock.Lock()
 	defer h.serialLock.Unlock()
 
-	var err error
-	if err = h.chatStream.Send(msg); err != nil {
+	if err := h.chatStream.Send(msg); err != nil {
 		err = errors.WithMessage(err, fmt.Sprintf("[%s] error sending %s", shorttxid(msg.Txid), msg.Type))
 		chaincodeLogger.Errorf("%+v", err)
+		return err
 	}
-	return err
+
+	return nil
 }
 
 
@@ -302,12 +303,20 @@ func (h *Handler) serialSend(msg *pb.ChaincodeMessage) error {
 
 
 
-func (h *Handler) serialSendAsync(msg *pb.ChaincodeMessage, sendErr bool) {
+func (h *Handler) serialSendAsync(msg *pb.ChaincodeMessage) {
 	go func() {
 		if err := h.serialSend(msg); err != nil {
-			if sendErr {
-				h.errChan <- err
+			
+			resp := &pb.ChaincodeMessage{
+				Type:      pb.ChaincodeMessage_ERROR,
+				Payload:   []byte(err.Error()),
+				Txid:      msg.Txid,
+				ChannelId: msg.ChannelId,
 			}
+			h.Notify(resp)
+
+			
+			h.errChan <- err
 		}
 	}()
 }
@@ -405,7 +414,7 @@ func (h *Handler) ProcessStream(stream ccintf.ChaincodeStream) error {
 		case <-keepaliveCh:
 			
 			
-			h.serialSendAsync(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_KEEPALIVE}, false)
+			h.serialSendAsync(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_KEEPALIVE})
 			continue
 		}
 	}
@@ -485,7 +494,7 @@ func (h *Handler) HandleRegister(msg *pb.ChaincodeMessage) {
 func (h *Handler) Notify(msg *pb.ChaincodeMessage) {
 	tctx := h.TXContexts.Get(msg.ChannelId, msg.Txid)
 	if tctx == nil {
-		chaincodeLogger.Debugf("notifier Txid:%s, channelID:%s does not exist for handleing message %s", msg.Txid, msg.ChannelId, msg.Type)
+		chaincodeLogger.Debugf("notifier Txid:%s, channelID:%s does not exist for handling message %s", msg.Txid, msg.ChannelId, msg.Type)
 		return
 	}
 
@@ -912,7 +921,7 @@ func (h *Handler) Execute(txParams *ccprovider.TransactionParams, cccid *ccprovi
 		return nil, err
 	}
 
-	h.serialSendAsync(msg, true)
+	h.serialSendAsync(msg)
 
 	var ccresp *pb.ChaincodeMessage
 	select {
