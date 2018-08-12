@@ -18,6 +18,8 @@ type Orderer struct {
 	
 	ConsensusTypeVal string
 	
+	ConsensusMetadataVal []byte
+	
 	BatchSizeVal *ab.BatchSize
 	
 	BatchTimeoutVal time.Duration
@@ -32,38 +34,43 @@ type Orderer struct {
 }
 
 
-func (scm *Orderer) ConsensusType() string {
-	return scm.ConsensusTypeVal
+func (o *Orderer) ConsensusType() string {
+	return o.ConsensusTypeVal
 }
 
 
-func (scm *Orderer) BatchSize() *ab.BatchSize {
-	return scm.BatchSizeVal
+func (o *Orderer) ConsensusMetadata() []byte {
+	return o.ConsensusMetadataVal
 }
 
 
-func (scm *Orderer) BatchTimeout() time.Duration {
-	return scm.BatchTimeoutVal
+func (o *Orderer) BatchSize() *ab.BatchSize {
+	return o.BatchSizeVal
 }
 
 
-func (scm *Orderer) KafkaBrokers() []string {
-	return scm.KafkaBrokersVal
+func (o *Orderer) BatchTimeout() time.Duration {
+	return o.BatchTimeoutVal
 }
 
 
-func (scm *Orderer) MaxChannelsCount() uint64 {
-	return scm.MaxChannelsCountVal
+func (o *Orderer) KafkaBrokers() []string {
+	return o.KafkaBrokersVal
 }
 
 
-func (scm *Orderer) Organizations() map[string]channelconfig.Org {
-	return scm.OrganizationsVal
+func (o *Orderer) MaxChannelsCount() uint64 {
+	return o.MaxChannelsCountVal
 }
 
 
-func (scm *Orderer) Capabilities() channelconfig.OrdererCapabilities {
-	return scm.CapabilitiesVal
+func (o *Orderer) Organizations() map[string]channelconfig.Org {
+	return o.OrganizationsVal
+}
+
+
+func (o *Orderer) Capabilities() channelconfig.OrdererCapabilities {
+	return o.CapabilitiesVal
 }
 
 

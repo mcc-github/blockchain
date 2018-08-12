@@ -18,6 +18,7 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/msp"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
 
@@ -200,7 +201,6 @@ func NewOrdererGroup(conf *genesisconfig.Orderer) (*cb.ConfigGroup, error) {
 		Policy:    policies.ImplicitMetaAnyPolicy(channelconfig.WritersPolicyKey).Value(),
 		ModPolicy: channelconfig.AdminsPolicyKey,
 	}
-	addValue(ordererGroup, channelconfig.ConsensusTypeValue(conf.OrdererType), channelconfig.AdminsPolicyKey)
 	addValue(ordererGroup, channelconfig.BatchSizeValue(
 		conf.BatchSize.MaxMessageCount,
 		conf.BatchSize.AbsoluteMaxBytes,
@@ -213,13 +213,22 @@ func NewOrdererGroup(conf *genesisconfig.Orderer) (*cb.ConfigGroup, error) {
 		addValue(ordererGroup, channelconfig.CapabilitiesValue(conf.Capabilities), channelconfig.AdminsPolicyKey)
 	}
 
+	var consensusMetadata []byte
+	var err error
+
 	switch conf.OrdererType {
 	case ConsensusTypeSolo:
 	case ConsensusTypeKafka:
 		addValue(ordererGroup, channelconfig.KafkaBrokersValue(conf.Kafka.Brokers), channelconfig.AdminsPolicyKey)
+	case etcdraft.TypeKey:
+		if consensusMetadata, err = etcdraft.Marshal(conf.EtcdRaft); err != nil {
+			return nil, errors.Errorf("cannot marshal metadata for orderer type %s: %s", etcdraft.TypeKey, err)
+		}
 	default:
 		return nil, errors.Errorf("unknown orderer type: %s", conf.OrdererType)
 	}
+
+	addValue(ordererGroup, channelconfig.ConsensusTypeValue(conf.OrdererType, consensusMetadata), channelconfig.AdminsPolicyKey)
 
 	for _, org := range conf.Organizations {
 		var err error

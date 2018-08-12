@@ -90,6 +90,11 @@ func (oc *OrdererConfig) ConsensusType() string {
 }
 
 
+func (oc *OrdererConfig) ConsensusMetadata() []byte {
+	return oc.protos.ConsensusType.Metadata
+}
+
+
 func (oc *OrdererConfig) BatchSize() *ab.BatchSize {
 	return oc.protos.BatchSize
 }

@@ -104,11 +104,12 @@ func OrdererAddressesValue(addresses []string) *StandardConfigValue {
 
 
 
-func ConsensusTypeValue(consensusType string) *StandardConfigValue {
+func ConsensusTypeValue(consensusType string, consensusMetadata []byte) *StandardConfigValue {
 	return &StandardConfigValue{
 		key: ConsensusTypeKey,
 		value: &ab.ConsensusType{
-			Type: consensusType,
+			Type:     consensusType,
+			Metadata: consensusMetadata,
 		},
 	}
 }

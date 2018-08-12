@@ -14,7 +14,13 @@ import (
 	localconfig "github.com/mcc-github/blockchain/orderer/common/localconfig"
 )
 
-func newBrokerConfig(tlsConfig localconfig.TLS, retryOptions localconfig.Retry, kafkaVersion sarama.KafkaVersion, chosenStaticPartition int32) *sarama.Config {
+func newBrokerConfig(
+	tlsConfig localconfig.TLS,
+	saslPlain localconfig.SASLPlain,
+	retryOptions localconfig.Retry,
+	kafkaVersion sarama.KafkaVersion,
+	chosenStaticPartition int32) *sarama.Config {
+
 	
 	paddingDelta := 1 * 1024 * 1024
 
@@ -52,6 +58,11 @@ func newBrokerConfig(tlsConfig localconfig.TLS, retryOptions localconfig.Retry, 
 			MinVersion:   tls.VersionTLS12,
 			MaxVersion:   0, 
 		}
+	}
+	brokerConfig.Net.SASL.Enable = saslPlain.Enabled
+	if brokerConfig.Net.SASL.Enable {
+		brokerConfig.Net.SASL.User = saslPlain.User
+		brokerConfig.Net.SASL.Password = saslPlain.Password
 	}
 
 	

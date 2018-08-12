@@ -85,6 +85,13 @@ type CollectionStore interface {
 
 	
 	RetrieveCollectionPersistenceConfigs(cc common.CollectionCriteria) (CollectionPersistenceConfigs, error)
+
+	CollectionFilter
+}
+
+type CollectionFilter interface {
+	
+	AccessFilter(channelName string, collectionPolicyConfig *common.CollectionPolicyConfig) (Filter, error)
 }
 
 const (

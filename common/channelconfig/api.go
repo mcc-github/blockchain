@@ -84,6 +84,9 @@ type Orderer interface {
 	ConsensusType() string
 
 	
+	ConsensusMetadata() []byte
+
+	
 	BatchSize() *ab.BatchSize
 
 	

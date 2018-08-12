@@ -9,6 +9,8 @@ package encoder
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
+
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -17,10 +19,12 @@ import (
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/utils"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -283,6 +287,23 @@ func TestNewOrdererGroup(t *testing.T) {
 		group, err := NewOrdererGroup(config.Orderer)
 		assert.Error(t, err)
 		assert.Nil(t, group)
+	})
+
+	t.Run("etcd/raft-based Orderer", func(t *testing.T) {
+		config := configtxgentest.Load(genesisconfig.SampleDevModeEtcdRaftProfile)
+		group, _ := NewOrdererGroup(config.Orderer)
+		consensusType := group.GetValues()[channelconfig.ConsensusTypeKey]
+		packedType := consensusType.GetValue()
+		unpackedType := new(ab.ConsensusType)
+		err := proto.Unmarshal(packedType, unpackedType)
+		require.NoError(t, err, "cannot extract %s config value from orderer group", channelconfig.ConsensusTypeKey)
+		unpackedMetadata := new(etcdraft.Metadata)
+		err = proto.Unmarshal(unpackedType.GetMetadata(), unpackedMetadata)
+		require.NoError(t, err, "cannot extract metadata value from %s consenters", etcdraft.TypeKey)
+		for _, v := range unpackedMetadata.GetConsenters() {
+			
+			require.NotNil(t, v.GetClientTlsCert(), "cannot extract PEM-encoded client certificate of consenter")
+		}
 	})
 }
 
