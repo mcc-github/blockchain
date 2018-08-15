@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -161,6 +162,55 @@ func (*CCInfoFSImpl) PutChaincode(depSpec *pb.ChaincodeDeploymentSpec) (CCPackag
 	}
 
 	return cccdspack, nil
+}
+
+
+type DirEnumerator func(string) ([]os.FileInfo, error)
+
+
+type ChaincodeExtractor func(ccname string, ccversion string, path string) (CCPackage, error)
+
+
+func (cifs *CCInfoFSImpl) ListInstalledChaincodes(dir string, ls DirEnumerator, ccFromPath ChaincodeExtractor) ([]chaincode.InstalledChaincode, error) {
+	var chaincodes []chaincode.InstalledChaincode
+	if _, err := os.Stat(dir); err != nil && os.IsNotExist(err) {
+		return nil, nil
+	}
+	files, err := ls(dir)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed reading directory %s", dir)
+	}
+
+	for _, f := range files {
+		
+		if f.IsDir() {
+			continue
+		}
+		
+		
+		
+		i := strings.Index(f.Name(), ".")
+		if i == -1 {
+			ccproviderLogger.Info("Skipping", f.Name(), "because of missing separator '.'")
+			continue
+		}
+		ccName := f.Name()[:i]      
+		ccVersion := f.Name()[i+1:] 
+
+		ccPackage, err := ccFromPath(ccName, ccVersion, dir)
+		if err != nil {
+			ccproviderLogger.Warning("Failed obtaining chaincode information about", ccName, ccVersion, ":", err)
+			return nil, errors.Wrapf(err, "failed obtaining information about %s, version %s", ccName, ccVersion)
+		}
+
+		chaincodes = append(chaincodes, chaincode.InstalledChaincode{
+			Name:    ccName,
+			Version: ccVersion,
+			Id:      ccPackage.GetId(),
+		})
+	}
+	ccproviderLogger.Debug("Returning", chaincodes)
+	return chaincodes, nil
 }
 
 

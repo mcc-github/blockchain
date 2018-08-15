@@ -58,11 +58,6 @@ func (cu *cursor) Next() (*cb.Block, cb.Status) {
 }
 
 
-func (cu *cursor) ReadyChan() <-chan struct{} {
-	return cu.list.signal
-}
-
-
 func (cu *cursor) Close() {}
 
 

@@ -41,7 +41,7 @@ var _ = Describe("PrivateData-EndToEnd", func() {
 	
 	
 	
-	Describe("collection config is modified", func() {
+	PDescribe("collection config is modified", func() {
 		BeforeEach(func() {
 			var err error
 			testDir, err = ioutil.TempDir("", "e2e-pvtdata")

@@ -101,17 +101,6 @@ func (cu *cursor) Next() (*cb.Block, cb.Status) {
 	}
 }
 
-
-func (cu *cursor) ReadyChan() <-chan struct{} {
-	cu.jl.mutex.Lock()
-	signal := cu.jl.signal
-	cu.jl.mutex.Unlock()
-	if _, err := os.Stat(cu.jl.blockFilename(cu.blockNumber)); os.IsNotExist(err) {
-		return signal
-	}
-	return closedChan
-}
-
 func (cu *cursor) Close() {}
 
 

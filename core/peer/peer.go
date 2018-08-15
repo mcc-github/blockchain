@@ -66,8 +66,7 @@ type chainSupport struct {
 	bundleSource *channelconfig.BundleSource
 	channelconfig.Resources
 	channelconfig.Application
-	ledger     ledger.PeerLedger
-	fileLedger *fileledger.FileLedger
+	ledger ledger.PeerLedger
 }
 
 var TransientStoreFactory = &storeProvider{stores: make(map[string]transientstore.Store)}
@@ -152,9 +151,16 @@ func (cs *chainSupport) Sequence() uint64 {
 	sb := cs.bundleSource.StableBundle()
 	return sb.ConfigtxValidator().Sequence()
 }
+
+
 func (cs *chainSupport) Reader() blockledger.Reader {
-	return cs.fileLedger
+	return fileledger.NewFileLedger(fileLedgerBlockStore{cs.ledger})
 }
+
+
+
+
+
 func (cs *chainSupport) Errored() <-chan struct{} {
 	return nil
 }
@@ -338,7 +344,6 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 	cs := &chainSupport{
 		Application: ac, 
 		ledger:      ledger,
-		fileLedger:  fileledger.NewFileLedger(fileLedgerBlockStore{ledger}),
 	}
 
 	peerSingletonCallback := func(bundle *channelconfig.Bundle) {

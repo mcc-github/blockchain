@@ -8,7 +8,6 @@ package node
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -230,6 +229,14 @@ func serve(args []string) error {
 	chaincodeInstallPath := ccprovider.GetChaincodeInstallPathFromViper()
 	ccprovider.SetChaincodesPath(chaincodeInstallPath)
 
+	packageProvider := &persistence.PackageProvider{
+		LegacyPP: &ccprovider.CCInfoFSImpl{},
+		Store: &persistence.Store{
+			Path:       chaincodeInstallPath,
+			ReadWriter: &persistence.FilesystemIO{},
+		},
+	}
+
 	
 	ca, err := tlsgen.NewCA()
 	if err != nil {
@@ -243,7 +250,7 @@ func serve(args []string) error {
 		ccSrv,
 		ccEndpoint,
 		ca,
-		chaincodeInstallPath,
+		packageProvider,
 		aclProvider,
 		pr,
 	)
@@ -359,7 +366,7 @@ func serve(args []string) error {
 	logger.Infof("Deployed system chaincodes")
 
 	installedCCs := func() ([]ccdef.InstalledChaincode, error) {
-		return cc.InstalledCCs(chaincodeInstallPath, ioutil.ReadDir, ccprovider.LoadPackage)
+		return packageProvider.ListInstalledChaincodes()
 	}
 	lifecycle, err := cc.NewLifeCycle(cc.Enumerate(installedCCs))
 	if err != nil {
@@ -372,7 +379,7 @@ func serve(args []string) error {
 
 	
 	peer.Initialize(func(cid string) {
-		logger.Debugf("Deploying system CC, for chain <%s>", cid)
+		logger.Debugf("Deploying system CC, for channel <%s>", cid)
 		sccp.DeploySysCCs(cid, ccp)
 		sub, err := lifecycle.NewChannelSubscription(cid, cc.QueryCreatorFunc(func() (cc.Query, error) {
 			return peer.GetLedger(cid).NewQueryExecutor()
@@ -610,7 +617,7 @@ func computeChaincodeEndpoint(peerHostname string) (ccEndpoint string, err error
 
 
 
-func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca tlsgen.CA, chaincodeInstallPath string, aclProvider aclmgmt.ACLProvider, pr *platforms.Registry) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider) {
+func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca tlsgen.CA, packageProvider *persistence.PackageProvider, aclProvider aclmgmt.ACLProvider, pr *platforms.Registry) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider) {
 	
 	userRunsCC := chaincode.IsDevMode()
 	tlsEnabled := viper.GetBool("peer.tls.enabled")
@@ -620,14 +627,6 @@ func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca
 
 	sccp := scc.NewProvider(peer.Default, peer.DefaultSupport, ipRegistry)
 	lsccInst := lscc.New(sccp, aclProvider, pr)
-
-	packageProvider := &persistence.PackageProvider{
-		LegacyPP: &ccprovider.CCInfoFSImpl{},
-		Store: &persistence.Store{
-			Path:       chaincodeInstallPath,
-			ReadWriter: &persistence.FilesystemIO{},
-		},
-	}
 
 	chaincodeSupport := chaincode.NewChaincodeSupport(
 		chaincode.GlobalConfig(),
