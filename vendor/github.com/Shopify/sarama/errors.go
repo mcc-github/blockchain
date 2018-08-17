@@ -43,6 +43,14 @@ var ErrConsumerOffsetNotAdvanced = errors.New("kafka: consumer offset was not ad
 
 
 
+var ErrControllerNotAvailable = errors.New("kafka: controller is not available")
+
+
+
+var ErrNoTopicsToUpdateMetadata = errors.New("kafka: no specific topics to update metadata")
+
+
+
 type PacketEncodingError struct {
 	Info string
 }

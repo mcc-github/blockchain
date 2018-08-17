@@ -256,6 +256,13 @@ func startThread(chain *chainImpl) {
 	var err error
 
 	
+	err = setupTopicForChannel(chain.consenter.retryOptions(), chain.haltChan, chain.SharedConfig().KafkaBrokers(), chain.consenter.brokerConfig(), chain.consenter.topicDetail(), chain.channel)
+	if err != nil {
+		
+		logger.Infof("[channel: %s]: failed to create Kafka topic = %s", chain.channel.topic(), err)
+	}
+
+	
 	chain.producer, err = setupProducerForChannel(chain.consenter.retryOptions(), chain.haltChan, chain.SharedConfig().KafkaBrokers(), chain.consenter.brokerConfig(), chain.channel)
 	if err != nil {
 		logger.Panicf("[channel: %s] Cannot set up producer = %s", chain.channel.topic(), err)
@@ -949,4 +956,138 @@ func setupProducerForChannel(retryOptions localconfig.Retry, haltChan chan struc
 	})
 
 	return producer, setupProducer.retry()
+}
+
+
+func setupTopicForChannel(retryOptions localconfig.Retry, haltChan chan struct{}, brokers []string, brokerConfig *sarama.Config, topicDetail *sarama.TopicDetail, channel channel) error {
+
+	
+	if !brokerConfig.Version.IsAtLeast(sarama.V0_10_1_0) {
+		return nil
+	}
+
+	logger.Infof("[channel: %s] Setting up the topic for this channel...",
+		channel.topic())
+
+	retryMsg := fmt.Sprintf("Creating Kafka topic [%s] for channel [%s]",
+		channel.topic(), channel.String())
+
+	setupTopic := newRetryProcess(
+		retryOptions,
+		haltChan,
+		channel,
+		retryMsg,
+		func() error {
+
+			var err error
+			clusterMembers := map[int32]*sarama.Broker{}
+			var controllerId int32
+
+			
+			for _, address := range brokers {
+				broker := sarama.NewBroker(address)
+				err = broker.Open(brokerConfig)
+
+				if err != nil {
+					continue
+				}
+
+				var ok bool
+				ok, err = broker.Connected()
+				if !ok {
+					continue
+				}
+				defer broker.Close()
+
+				
+				var apiVersion int16
+				if brokerConfig.Version.IsAtLeast(sarama.V0_11_0_0) {
+					
+					
+					apiVersion = 4
+				} else {
+					apiVersion = 1
+				}
+				metadata, err := broker.GetMetadata(&sarama.MetadataRequest{
+					Version:                apiVersion,
+					Topics:                 []string{channel.topic()},
+					AllowAutoTopicCreation: false})
+
+				if err != nil {
+					continue
+				}
+
+				controllerId = metadata.ControllerID
+				for _, broker := range metadata.Brokers {
+					clusterMembers[broker.ID()] = broker
+				}
+
+				for _, topic := range metadata.Topics {
+					if topic.Name == channel.topic() {
+						if topic.Err != sarama.ErrUnknownTopicOrPartition {
+							
+							return nil
+						}
+					}
+				}
+				break
+			}
+
+			
+			if len(clusterMembers) == 0 {
+				return fmt.Errorf(
+					"error creating topic [%s]; failed to retrieve metadata for the cluster",
+					channel.topic())
+			}
+
+			
+			controller := clusterMembers[controllerId]
+			err = controller.Open(brokerConfig)
+
+			if err != nil {
+				return err
+			}
+
+			var ok bool
+			ok, err = controller.Connected()
+			if !ok {
+				return err
+			}
+			defer controller.Close()
+
+			
+			req := &sarama.CreateTopicsRequest{
+				Version: 0,
+				TopicDetails: map[string]*sarama.TopicDetail{
+					channel.topic(): topicDetail},
+				Timeout: 3 * time.Second}
+			resp := &sarama.CreateTopicsResponse{}
+			resp, err = controller.CreateTopics(req)
+			if err != nil {
+				return err
+			}
+
+			
+			if topicErr, ok := resp.TopicErrors[channel.topic()]; ok {
+				
+				if topicErr.Err == sarama.ErrNoError ||
+					topicErr.Err == sarama.ErrTopicAlreadyExists {
+					return nil
+				}
+				if topicErr.Err == sarama.ErrInvalidTopic {
+					
+					logger.Warningf("[channel: %s] Failed to set up topic = %s",
+						channel.topic(), topicErr.Err.Error())
+					go func() {
+						haltChan <- struct{}{}
+					}()
+				}
+				return fmt.Errorf("error creating topic: [%s]",
+					topicErr.Err.Error())
+			}
+
+			return nil
+		})
+
+	return setupTopic.retry()
 }

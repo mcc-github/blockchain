@@ -110,6 +110,7 @@ type Kafka struct {
 	Version   sarama.KafkaVersion 
 	TLS       TLS
 	SASLPlain SASLPlain
+	Topic     Topic
 }
 
 
@@ -153,6 +154,11 @@ type Producer struct {
 
 type Consumer struct {
 	RetryBackoff time.Duration
+}
+
+
+type Topic struct {
+	ReplicationFactor int16
 }
 
 
@@ -218,6 +224,9 @@ var Defaults = TopLevel{
 		Version: sarama.V0_10_2_0,
 		TLS: TLS{
 			Enabled: false,
+		},
+		Topic: Topic{
+			ReplicationFactor: 3,
 		},
 	},
 	Debug: Debug{

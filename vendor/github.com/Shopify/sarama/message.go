@@ -24,13 +24,28 @@ const (
 	CompressionLZ4    CompressionCodec = 3
 )
 
+func (cc CompressionCodec) String() string {
+	return []string{
+		"none",
+		"gzip",
+		"snappy",
+		"lz4",
+	}[int(cc)]
+}
+
+
+
+
+const CompressionLevelDefault = -1000
+
 type Message struct {
-	Codec     CompressionCodec 
-	Key       []byte           
-	Value     []byte           
-	Set       *MessageSet      
-	Version   int8             
-	Timestamp time.Time        
+	Codec            CompressionCodec 
+	CompressionLevel int              
+	Key              []byte           
+	Value            []byte           
+	Set              *MessageSet      
+	Version          int8             
+	Timestamp        time.Time        
 
 	compressedCache []byte
 	compressedSize  int 
@@ -66,7 +81,15 @@ func (m *Message) encode(pe packetEncoder) error {
 			payload = m.Value
 		case CompressionGZIP:
 			var buf bytes.Buffer
-			writer := gzip.NewWriter(&buf)
+			var writer *gzip.Writer
+			if m.CompressionLevel != CompressionLevelDefault {
+				writer, err = gzip.NewWriterLevel(&buf, m.CompressionLevel)
+				if err != nil {
+					return err
+				}
+			} else {
+				writer = gzip.NewWriter(&buf)
+			}
 			if _, err = writer.Write(m.Value); err != nil {
 				return err
 			}

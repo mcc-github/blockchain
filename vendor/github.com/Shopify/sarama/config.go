@@ -1,7 +1,10 @@
 package sarama
 
 import (
+	"compress/gzip"
 	"crypto/tls"
+	"fmt"
+	"io/ioutil"
 	"regexp"
 	"time"
 
@@ -99,6 +102,10 @@ type Config struct {
 		
 		
 		Compression CompressionCodec
+		
+		
+		
+		CompressionLevel int
 		
 		
 		
@@ -290,6 +297,7 @@ func NewConfig() *Config {
 	c.Producer.Retry.Max = 3
 	c.Producer.Retry.Backoff = 100 * time.Millisecond
 	c.Producer.Return.Errors = true
+	c.Producer.CompressionLevel = CompressionLevelDefault
 
 	c.Consumer.Fetch.Min = 1
 	c.Consumer.Fetch.Default = 1024 * 1024
@@ -302,7 +310,7 @@ func NewConfig() *Config {
 
 	c.ClientID = defaultClientID
 	c.ChannelBufferSize = 256
-	c.Version = minVersion
+	c.Version = MinVersion
 	c.MetricRegistry = metrics.NewRegistry()
 
 	return c
@@ -407,6 +415,14 @@ func (c *Config) Validate() error {
 
 	if c.Producer.Compression == CompressionLZ4 && !c.Version.IsAtLeast(V0_10_0_0) {
 		return ConfigurationError("lz4 compression requires Version >= V0_10_0_0")
+	}
+
+	if c.Producer.Compression == CompressionGZIP {
+		if c.Producer.CompressionLevel != CompressionLevelDefault {
+			if _, err := gzip.NewWriterLevel(ioutil.Discard, c.Producer.CompressionLevel); err != nil {
+				return ConfigurationError(fmt.Sprintf("gzip compression does not work with level %d: %v", c.Producer.CompressionLevel, err))
+			}
+		}
 	}
 
 	
