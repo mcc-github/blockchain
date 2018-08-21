@@ -7,9 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package kvledger
 
 import (
+	"fmt"
 	"sync"
-
-	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
@@ -24,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerstorage"
+	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
@@ -314,6 +314,14 @@ func (l *kvLedger) PrivateDataMinBlockNum() (uint64, error) {
 
 func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, error) {
 	return l.configHistoryRetriever, nil
+}
+
+func (l *kvLedger) CommitPvtData(pvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error) {
+	return nil, fmt.Errorf("not yet implemented")
+}
+
+func (l *kvLedger) GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error) {
+	return nil, fmt.Errorf("not yet implemented")
 }
 
 

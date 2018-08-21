@@ -50,6 +50,12 @@ type ServerConfig struct {
 	SecOpts *SecureOptions
 	
 	KaOpts *KeepaliveOptions
+	
+	
+	StreamInterceptors []grpc.StreamServerInterceptor
+	
+	
+	UnaryInterceptors []grpc.UnaryServerInterceptor
 }
 
 

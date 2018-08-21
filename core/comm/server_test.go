@@ -18,6 +18,7 @@ import (
 	"net"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,7 +28,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/transport"
 )
 
@@ -103,10 +106,26 @@ func init() {
 }
 
 
-type testServiceServer struct{}
+type emptyServiceServer struct{}
 
-func (tss *testServiceServer) EmptyCall(context.Context, *testpb.Empty) (*testpb.Empty, error) {
+func (ess *emptyServiceServer) EmptyCall(context.Context, *testpb.Empty) (*testpb.Empty, error) {
 	return new(testpb.Empty), nil
+}
+
+func (esss *emptyServiceServer) EmptyStream(stream testpb.EmptyService_EmptyStreamServer) error {
+	for {
+		_, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(&testpb.Empty{}); err != nil {
+			return err
+		}
+
+	}
 }
 
 
@@ -121,7 +140,7 @@ func invokeEmptyCall(address string, dialOptions []grpc.DialOption) (*testpb.Emp
 	defer clientConn.Close()
 
 	
-	client := testpb.NewTestServiceClient(clientConn)
+	client := testpb.NewEmptyServiceClient(clientConn)
 
 	callCtx := context.Background()
 	callCtx, cancel := context.WithTimeout(callCtx, timeout)
@@ -134,6 +153,52 @@ func invokeEmptyCall(address string, dialOptions []grpc.DialOption) (*testpb.Emp
 	}
 
 	return empty, nil
+}
+
+
+func invokeEmptyStream(address string, dialOptions []grpc.DialOption) (*testpb.Empty, error) {
+	ctx := context.Background()
+	ctx, _ = context.WithTimeout(ctx, timeout)
+	
+	clientConn, err := grpc.DialContext(ctx, address, dialOptions...)
+	if err != nil {
+		return nil, err
+	}
+	defer clientConn.Close()
+
+	stream, err := testpb.NewEmptyServiceClient(clientConn).EmptyStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var msg *testpb.Empty
+	var streamErr error
+
+	waitc := make(chan struct{})
+	go func() {
+		for {
+			in, err := stream.Recv()
+			if err == io.EOF {
+				close(waitc)
+				return
+			}
+			if err != nil {
+				streamErr = err
+				close(waitc)
+				return
+			}
+			msg = in
+		}
+	}()
+
+	if err := stream.Send(new(testpb.Empty)); err != nil {
+		return nil, err
+	}
+
+	stream.CloseSend()
+	<-waitc
+	return msg, streamErr
+
 }
 
 const (
@@ -491,7 +556,7 @@ func TestNewGRPCServer(t *testing.T) {
 	assert.Equal(t, srv.MutualTLSRequired(), false)
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 
 	
 	go srv.Start()
@@ -546,7 +611,7 @@ func TestNewGRPCServerFromListener(t *testing.T) {
 	assert.Equal(t, srv.MutualTLSRequired(), false)
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 
 	
 	go srv.Start()
@@ -601,7 +666,7 @@ func TestNewSecureGRPCServer(t *testing.T) {
 	assert.Equal(t, srv.MutualTLSRequired(), false)
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 
 	
 	go srv.Start()
@@ -753,7 +818,7 @@ func TestNewSecureGRPCServerFromListener(t *testing.T) {
 	assert.Equal(t, srv.MutualTLSRequired(), false)
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 
 	
 	go srv.Start()
@@ -820,7 +885,7 @@ func TestWithSignedRootCertificates(t *testing.T) {
 	}
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 
 	
 	go srv.Start()
@@ -899,7 +964,7 @@ func TestWithSignedIntermediateCertificates(t *testing.T) {
 	}
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 
 	
 	go srv.Start()
@@ -927,7 +992,6 @@ func TestWithSignedIntermediateCertificates(t *testing.T) {
 	assert.NoError(t, err, "Expected client to connect with server cert only")
 
 	
-
 	
 	certPoolCA, err := createCertPool([][]byte{intermediatePEMBlock})
 	if err != nil {
@@ -970,7 +1034,7 @@ func runMutualAuth(t *testing.T, servers []testServer, trustedClients, unTrusted
 		assert.Equal(t, srv.MutualTLSRequired(), true)
 
 		
-		testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+		testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 		go srv.Start()
 		defer srv.Stop()
 		
@@ -1134,7 +1198,7 @@ func TestAppendClientRootCAs(t *testing.T) {
 	}
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 	go srv.Start()
 	defer srv.Stop()
 	
@@ -1198,7 +1262,7 @@ func TestRemoveClientRootCAs(t *testing.T) {
 	}
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 	go srv.Start()
 	defer srv.Stop()
 	
@@ -1264,7 +1328,7 @@ func TestConcurrentAppendRemoveSet(t *testing.T) {
 	}
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 	go srv.Start()
 	defer srv.Stop()
 
@@ -1295,8 +1359,6 @@ func TestConcurrentAppendRemoveSet(t *testing.T) {
 
 	}()
 
-	
-	
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1339,7 +1401,7 @@ func TestSetClientRootCAs(t *testing.T) {
 	}
 
 	
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 	go srv.Start()
 	defer srv.Stop()
 	
@@ -1525,7 +1587,7 @@ func TestUpdateTLSCert(t *testing.T) {
 	}
 	srv, err := comm.NewGRPCServer("localhost:8333", cfg)
 	assert.NoError(t, err)
-	testpb.RegisterTestServiceServer(srv.Server(), &testServiceServer{})
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
 	go srv.Start()
 	defer srv.Stop()
 
@@ -1664,4 +1726,81 @@ func TestCipherSuites(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServerInterceptors(t *testing.T) {
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to start listener: [%s]", err)
+	}
+	msg := "error from interceptor"
+
+	
+	usiCount := uint32(0)
+	ssiCount := uint32(0)
+	usi1 := func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler) (resp interface{}, err error) {
+
+		atomic.AddUint32(&usiCount, 1)
+		return handler(ctx, req)
+	}
+	usi2 := func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler) (resp interface{}, err error) {
+
+		atomic.AddUint32(&usiCount, 1)
+		return nil, status.Error(codes.Aborted, msg)
+	}
+	ssi1 := func(
+		srv interface{},
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler) error {
+
+		atomic.AddUint32(&ssiCount, 1)
+		return handler(srv, ss)
+	}
+	ssi2 := func(
+		srv interface{},
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler) error {
+
+		atomic.AddUint32(&ssiCount, 1)
+		return status.Error(codes.Aborted, msg)
+	}
+
+	srvConfig := comm.ServerConfig{}
+	srvConfig.UnaryInterceptors = append(srvConfig.UnaryInterceptors, usi1)
+	srvConfig.UnaryInterceptors = append(srvConfig.UnaryInterceptors, usi2)
+	srvConfig.StreamInterceptors = append(srvConfig.StreamInterceptors, ssi1)
+	srvConfig.StreamInterceptors = append(srvConfig.StreamInterceptors, ssi2)
+
+	srv, err := comm.NewGRPCServerFromListener(lis, srvConfig)
+	if err != nil {
+		t.Fatalf("failed to create gRPC server: [%s]", err)
+	}
+	testpb.RegisterEmptyServiceServer(srv.Server(), &emptyServiceServer{})
+	defer srv.Stop()
+	go srv.Start()
+
+	_, err = invokeEmptyCall(lis.Addr().String(),
+		[]grpc.DialOption{
+			grpc.WithBlock(),
+			grpc.WithInsecure()})
+	assert.Equal(t, grpc.ErrorDesc(err), msg, "Expected error from second usi")
+	assert.Equal(t, uint32(2), atomic.LoadUint32(&usiCount), "Expected both usi handlers to be invoked")
+
+	_, err = invokeEmptyStream(lis.Addr().String(),
+		[]grpc.DialOption{
+			grpc.WithBlock(),
+			grpc.WithInsecure()})
+	assert.Equal(t, grpc.ErrorDesc(err), msg, "Expected error from second ssi")
+	assert.Equal(t, uint32(2), atomic.LoadUint32(&ssiCount), "Expected both ssi handlers to be invoked")
 }

@@ -75,6 +75,13 @@ type PeerLedger interface {
 	Prune(policy commonledger.PrunePolicy) error
 	
 	GetConfigHistoryRetriever() (ConfigHistoryRetriever, error)
+	
+	
+	
+	
+	CommitPvtData(blockPvtData []*BlockPvtData) ([]*PvtdataHashMismatch, error)
+	
+	GetMissingPvtDataTracker() (MissingPvtDataTracker, error)
 }
 
 
@@ -198,6 +205,12 @@ type BlockAndPvtData struct {
 }
 
 
+type BlockPvtData struct {
+	BlockNum  uint64
+	WriteSets map[uint64]*TxPvtData
+}
+
+
 type PvtCollFilter map[string]bool
 
 
@@ -297,6 +310,22 @@ type ConfigHistoryRetriever interface {
 }
 
 
+type MissingPvtDataTracker interface {
+	GetMissingPvtDataInfoForMostRecentBlocks(maxBlocks int) (MissingPvtDataInfo, error)
+}
+
+
+type MissingPvtDataInfo map[uint64]MissingBlockPvtdataInfo
+
+
+type MissingBlockPvtdataInfo map[uint64][]*MissingCollectionPvtDataInfo
+
+
+type MissingCollectionPvtDataInfo struct {
+	ChaincodeName, CollectionName string
+}
+
+
 type CollectionConfigInfo struct {
 	CollectionConfig   *common.CollectionConfigPackage
 	CommittingBlockNum uint64
@@ -319,4 +348,13 @@ type NotFoundInIndexErr string
 
 func (NotFoundInIndexErr) Error() string {
 	return "Entry not found in index"
+}
+
+
+
+
+type PvtdataHashMismatch struct {
+	BlockNum, TxNum               uint64
+	ChaincodeName, CollectionName string
+	ExpectedHash                  []byte
 }

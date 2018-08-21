@@ -690,6 +690,15 @@ func (m *mockLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever,
 	return args.Get(0).(ledger.ConfigHistoryRetriever), nil
 }
 
+func (m *mockLedger) CommitPvtData(blockPvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error) {
+	return nil, nil
+}
+
+func (m *mockLedger) GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error) {
+	args := m.Called()
+	return args.Get(0).(ledger.MissingPvtDataTracker), nil
+}
+
 
 
 
