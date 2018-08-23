@@ -91,23 +91,28 @@ type ValidatedLedger interface {
 }
 
 
-
-
-
-
-type QueryExecutor interface {
+type SimpleQueryExecutor interface {
 	
 	GetState(namespace string, key string) ([]byte, error)
-	
-	GetStateMetadata(namespace, key string) (map[string][]byte, error)
-	
-	GetStateMultipleKeys(namespace string, keys []string) ([][]byte, error)
 	
 	
 	
 	
 	
 	GetStateRangeScanIterator(namespace string, startKey string, endKey string) (commonledger.ResultsIterator, error)
+}
+
+
+
+
+
+
+type QueryExecutor interface {
+	SimpleQueryExecutor
+	
+	GetStateMetadata(namespace, key string) (map[string][]byte, error)
+	
+	GetStateMultipleKeys(namespace string, keys []string) ([][]byte, error)
 	
 	
 	
@@ -297,8 +302,17 @@ func (txSim *TxSimulationResults) ContainsPvtWrites() bool {
 
 type StateListener interface {
 	InterestedInNamespaces() []string
-	HandleStateUpdates(ledgerID string, stateUpdates StateUpdates, committingBlockNum uint64) error
+	HandleStateUpdates(trigger *StateUpdateTrigger) error
 	StateCommitDone(channelID string)
+}
+
+
+type StateUpdateTrigger struct {
+	LedgerID                    string
+	StateUpdates                StateUpdates
+	CommittingBlockNum          uint64
+	CommittedStateQueryExecutor SimpleQueryExecutor
+	PostCommitQueryExecutor     SimpleQueryExecutor
 }
 
 

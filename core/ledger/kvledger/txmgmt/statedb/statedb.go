@@ -15,6 +15,8 @@ import (
 )
 
 
+
+
 type VersionedDBProvider interface {
 	
 	GetDBHandle(id string) (VersionedDB, error)
@@ -88,6 +90,11 @@ type VersionedValue struct {
 }
 
 
+func (vv *VersionedValue) IsDelete() bool {
+	return vv.Value == nil
+}
+
+
 type VersionedKV struct {
 	CompositeKey
 	VersionedValue
@@ -135,10 +142,16 @@ func (batch *UpdateBatch) Get(ns string, key string) *VersionedValue {
 
 
 func (batch *UpdateBatch) Put(ns string, key string, value []byte, version *version.Height) {
+	batch.PutValAndMetadata(ns, key, value, nil, version)
+}
+
+
+
+func (batch *UpdateBatch) PutValAndMetadata(ns string, key string, value []byte, metadata []byte, version *version.Height) {
 	if value == nil {
 		panic("Nil value not allowed. Instead call 'Delete' function")
 	}
-	batch.Update(ns, key, &VersionedValue{value, nil, version})
+	batch.Update(ns, key, &VersionedValue{value, metadata, version})
 }
 
 

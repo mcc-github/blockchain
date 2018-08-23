@@ -59,9 +59,9 @@ func (m *mgr) StateCommitDone(ledgerID string) {
 
 
 
-func (m *mgr) HandleStateUpdates(ledgerID string, stateUpdates ledger.StateUpdates, commitHeight uint64) error {
-	batch := prepareDBBatch(stateUpdates, commitHeight)
-	dbHandle := m.dbProvider.getDB(ledgerID)
+func (m *mgr) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
+	batch := prepareDBBatch(trigger.StateUpdates, trigger.CommittingBlockNum)
+	dbHandle := m.dbProvider.getDB(trigger.LedgerID)
 	return dbHandle.writeBatch(batch, true)
 }
 

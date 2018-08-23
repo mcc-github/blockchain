@@ -46,7 +46,7 @@ func (v *collNameValidator) validateCollName(ns, coll string) error {
 
 func (v *collNameValidator) retrieveCollConfigFromStateDB(ns string) (*common.CollectionConfigPackage, error) {
 	logger.Debugf("retrieveCollConfigFromStateDB() begin - ns=[%s]", ns)
-	configPkgBytes, err := v.queryHelper.getState(lsccNamespace, constructCollectionConfigKey(ns))
+	configPkgBytes, _, err := v.queryHelper.getState(lsccNamespace, constructCollectionConfigKey(ns))
 	if err != nil {
 		return nil, err
 	}
@@ -105,5 +105,5 @@ type errCollConfigNotDefined struct {
 }
 
 func (e *errCollConfigNotDefined) Error() string {
-	return fmt.Sprintf("collection config not define for namespace [%s]", e.ns)
+	return fmt.Sprintf("collection config not defined for chaincode [%s], pass the collection configuration upon chaincode definition/instantiation", e.ns)
 }

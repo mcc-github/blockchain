@@ -29,6 +29,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 )
 
@@ -170,4 +171,12 @@ func populateCollConfigForTest(t *testing.T, txMgr *LockBasedTxMgr, nsColls []co
 		updates.PubUpdates.Put(lsccNamespace, constructCollectionConfigKey(ns), pkgBytes, ht)
 	}
 	txMgr.db.ApplyPrivacyAwareUpdates(updates, ht)
+}
+
+func testutilPopulateDB(t *testing.T, txMgr *LockBasedTxMgr, ns string, data []*queryresult.KV, version *version.Height) {
+	updates := privacyenabledstate.NewUpdateBatch()
+	for _, kv := range data {
+		updates.PubUpdates.Put(ns, kv.Key, kv.Value, version)
+	}
+	txMgr.db.ApplyPrivacyAwareUpdates(updates, version)
 }

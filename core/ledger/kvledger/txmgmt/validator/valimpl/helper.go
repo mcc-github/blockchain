@@ -14,6 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/valinternal"
@@ -28,8 +29,10 @@ import (
 
 
 
-func validateAndPreparePvtBatch(block *valinternal.Block, pvtdata map[uint64]*ledger.TxPvtData) (*privacyenabledstate.PvtUpdateBatch, error) {
+func validateAndPreparePvtBatch(block *valinternal.Block, db privacyenabledstate.DB,
+	pubAndHashUpdates *valinternal.PubAndHashUpdates, pvtdata map[uint64]*ledger.TxPvtData) (*privacyenabledstate.PvtUpdateBatch, error) {
 	pvtUpdates := privacyenabledstate.NewPvtUpdateBatch()
+	metadataUpdates := metadataUpdates{}
 	for _, tx := range block.Txs {
 		if tx.ValidationCode != peer.TxValidationCode_VALID {
 			continue
@@ -52,6 +55,10 @@ func validateAndPreparePvtBatch(block *valinternal.Block, pvtdata map[uint64]*le
 			return nil, err
 		}
 		addPvtRWSetToPvtUpdateBatch(pvtRWSet, pvtUpdates, version.NewHeight(block.Num, uint64(tx.IndexInBlock)))
+		addEntriesToMetadataUpdates(metadataUpdates, pvtRWSet)
+	}
+	if err := incrementPvtdataVersionIfNeeded(metadataUpdates, pvtUpdates, pubAndHashUpdates, db); err != nil {
+		return nil, err
 	}
 	return pvtUpdates, nil
 }
@@ -219,4 +226,70 @@ func addPvtRWSetToPvtUpdateBatch(pvtRWSet *rwsetutil.TxPvtRwSet, pvtUpdateBatch 
 			}
 		}
 	}
+}
+
+
+
+
+
+
+func incrementPvtdataVersionIfNeeded(
+	metadataUpdates metadataUpdates,
+	pvtUpdateBatch *privacyenabledstate.PvtUpdateBatch,
+	pubAndHashUpdates *valinternal.PubAndHashUpdates,
+	db privacyenabledstate.DB) error {
+
+	for collKey := range metadataUpdates {
+		ns, coll, key := collKey.ns, collKey.coll, collKey.key
+		keyHash := util.ComputeStringHash(key)
+		hashedVal := pubAndHashUpdates.HashUpdates.Get(ns, coll, string(keyHash))
+		if hashedVal == nil {
+			
+			
+			
+			continue
+		}
+		latestVal, err := retrieveLatestVal(ns, coll, key, pvtUpdateBatch, db)
+		if err != nil {
+			return err
+		}
+		if latestVal == nil || 
+			version.AreSame(latestVal.Version, hashedVal.Version) { 
+			continue
+		}
+		
+		
+		latestValHash := util.ComputeHash(latestVal.Value)
+		if bytes.Equal(latestValHash, hashedVal.Value) { 
+			
+			pvtUpdateBatch.Put(ns, coll, key, latestVal.Value, hashedVal.Version)
+		}
+	}
+	return nil
+}
+
+type collKey struct {
+	ns, coll, key string
+}
+
+type metadataUpdates map[collKey]bool
+
+func addEntriesToMetadataUpdates(metadataUpdates metadataUpdates, pvtRWSet *rwsetutil.TxPvtRwSet) {
+	for _, ns := range pvtRWSet.NsPvtRwSet {
+		for _, coll := range ns.CollPvtRwSets {
+			for _, metadataWrite := range coll.KvRwSet.MetadataWrites {
+				ns, coll, key := ns.NameSpace, coll.CollectionName, metadataWrite.Key
+				metadataUpdates[collKey{ns, coll, key}] = true
+			}
+		}
+	}
+}
+
+func retrieveLatestVal(ns, coll, key string, pvtUpdateBatch *privacyenabledstate.PvtUpdateBatch,
+	db privacyenabledstate.DB) (val *statedb.VersionedValue, err error) {
+	val = pvtUpdateBatch.Get(ns, coll, key)
+	if val == nil {
+		val, err = db.GetPrivateData(ns, coll, key)
+	}
+	return
 }

@@ -149,6 +149,12 @@ type ApplicationCapabilities interface {
 	
 	
 	
+	
+	V1_3Validation() bool
+
+	
+	
+	
 	MetadataLifecycle() bool
 
 	

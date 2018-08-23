@@ -35,6 +35,11 @@ type legacyPackageProvider interface {
 	persistence.LegacyPackageProvider
 }
 
+
+type packageParser interface {
+	persistence.PackageParser
+}
+
 func TestPersistence(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Persistence Suite")

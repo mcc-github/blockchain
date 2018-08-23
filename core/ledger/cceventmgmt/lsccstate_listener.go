@@ -26,7 +26,8 @@ type KVLedgerLSCCStateListener struct {
 
 
 
-func (listener *KVLedgerLSCCStateListener) HandleStateUpdates(channelName string, stateUpdates ledger.StateUpdates, committingBlockNum uint64) error {
+func (listener *KVLedgerLSCCStateListener) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
+	channelName, stateUpdates := trigger.LedgerID, trigger.StateUpdates
 	kvWrites := stateUpdates[lsccNamespace].([]*kvrwset.KVWrite)
 	logger.Debugf("Channel [%s]: Handling state updates in LSCC namespace - stateUpdates=%#v", channelName, kvWrites)
 	chaincodeDefs := []*ChaincodeDefinition{}

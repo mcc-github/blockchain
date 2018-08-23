@@ -8,53 +8,39 @@ package valimpl
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/valinternal"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	lgrutil "github.com/mcc-github/blockchain/core/ledger/util"
 	lutils "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	putils "github.com/mcc-github/blockchain/protos/utils"
 	"github.com/op/go-logging"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
-func getPubAndPvtSimulationResults(t *testing.T, key string) *ledger.TxSimulationResults {
-	rwSetBuilder := rwsetutil.NewRWSetBuilder()
-	
-	rwSetBuilder.AddToReadSet("ns1", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToReadSet("ns2", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToWriteSet("ns2", key, []byte("ns2-key1-value"))
-
-	
-	rwSetBuilder.AddToHashedReadSet("ns1", "coll1", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToHashedReadSet("ns1", "coll2", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToPvtAndHashedWriteSet("ns1", "coll2", key, []byte("pvt-ns1-coll2-key1-value"))
-
-	
-	rwSetBuilder.AddToHashedReadSet("ns2", "coll1", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToHashedReadSet("ns2", "coll2", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll2", key, []byte("pvt-ns2-coll2-key1-value"))
-	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll3", key, nil)
-
-	rwSetBuilder.AddToHashedReadSet("ns3", "coll1", key, version.NewHeight(1, 1))
-
-	pubAndPvtSimulationResults, err := rwSetBuilder.GetTxSimulationResults()
-	if err != nil {
-		t.Fatalf("ConstructSimulationResultsWithPvtData failed while getting simulation results, err %s", err)
-	}
-
-	return pubAndPvtSimulationResults
+func TestMain(m *testing.M) {
+	flogging.SetModuleLevel("valinternal", "debug")
+	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/kvledger/txmgmt/validator/valinternal")
+	os.Exit(m.Run())
 }
 
 func TestValidateAndPreparePvtBatch(t *testing.T) {
+	testDBEnv := &privacyenabledstate.LevelDBCommonStorageTestEnv{}
+	testDBEnv.Init(t)
+	defer testDBEnv.Cleanup()
+	testDB := testDBEnv.GetDBHandle("emptydb")
+
 	pubSimulationResults := [][]byte{}
 	pvtDataMap := make(map[uint64]*ledger.TxPvtData)
 
@@ -66,7 +52,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 
 	
 	
-	tx1SimulationResults := getPubAndPvtSimulationResults(t, "key1")
+	tx1SimulationResults := testutilSampleTxSimulationResults(t, "key1")
 	res, err := tx1SimulationResults.GetPubSimulationBytes()
 	assert.NoError(t, err)
 
@@ -79,7 +65,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 
 	
 	
-	tx2SimulationResults := getPubAndPvtSimulationResults(t, "key2")
+	tx2SimulationResults := testutilSampleTxSimulationResults(t, "key2")
 	res, err = tx2SimulationResults.GetPubSimulationBytes()
 	assert.NoError(t, err)
 
@@ -91,7 +77,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 
 	
 	
-	tx3SimulationResults := getPubAndPvtSimulationResults(t, "key3")
+	tx3SimulationResults := testutilSampleTxSimulationResults(t, "key3")
 	res, err = tx3SimulationResults.GetPubSimulationBytes()
 	assert.NoError(t, err)
 
@@ -141,7 +127,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 	assert.NoError(t, err)
 	addPvtRWSetToPvtUpdateBatch(tx1TxPvtRWSet, expectedPvtUpdates, version.NewHeight(uint64(10), uint64(0)))
 
-	actualPvtUpdates, err := validateAndPreparePvtBatch(mvccValidatedBlock, pvtDataMap)
+	actualPvtUpdates, err := validateAndPreparePvtBatch(mvccValidatedBlock, testDB, nil, pvtDataMap)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPvtUpdates, actualPvtUpdates)
 
@@ -246,7 +232,7 @@ func TestPreprocessProtoBlockInvalidWriteset(t *testing.T) {
 
 	block := testutil.ConstructBlock(t, 1, testutil.ConstructRandomBytes(t, 32),
 		[][]byte{simulation1Bytes, simulation2Bytes}, false) 
-	txfilter := lgrutil.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	txfilter := lutils.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 	assert.True(t, txfilter.IsValid(0))
 	assert.True(t, txfilter.IsValid(1)) 
 
@@ -256,6 +242,56 @@ func TestPreprocessProtoBlockInvalidWriteset(t *testing.T) {
 	assert.True(t, txfilter.IsValid(1))  
 	assert.Len(t, internalBlock.Txs, 1)
 	assert.Equal(t, internalBlock.Txs[0].IndexInBlock, 1)
+}
+
+func TestIncrementPvtdataVersionIfNeeded(t *testing.T) {
+	testDBEnv := &privacyenabledstate.LevelDBCommonStorageTestEnv{}
+	testDBEnv.Init(t)
+	defer testDBEnv.Cleanup()
+	testDB := testDBEnv.GetDBHandle("testdb")
+	updateBatch := privacyenabledstate.NewUpdateBatch()
+	
+	updateBatch.PvtUpdates.Put("ns", "coll1", "key1", []byte("value1"), version.NewHeight(1, 1))
+	updateBatch.PvtUpdates.Put("ns", "coll2", "key2", []byte("value2"), version.NewHeight(1, 2))
+	updateBatch.PvtUpdates.Put("ns", "coll3", "key3", []byte("value3"), version.NewHeight(1, 3))
+	updateBatch.PvtUpdates.Put("ns", "col4", "key4", []byte("value4"), version.NewHeight(1, 4))
+	testDB.ApplyPrivacyAwareUpdates(updateBatch, version.NewHeight(1, 4))
+
+	
+	hashUpdates := privacyenabledstate.NewHashedUpdateBatch()
+	hashUpdates.PutValHashAndMetadata("ns", "coll1", lutils.ComputeStringHash("key1"),
+		lutils.ComputeStringHash("value1_set_by_tx1"), []byte("metadata1_set_by_tx2"), version.NewHeight(2, 2)) 
+	hashUpdates.PutValHashAndMetadata("ns", "coll2", lutils.ComputeStringHash("key2"),
+		lutils.ComputeStringHash("value2"), []byte("metadata2_set_by_tx4"), version.NewHeight(2, 4)) 
+	hashUpdates.PutValHashAndMetadata("ns", "coll3", lutils.ComputeStringHash("key3"),
+		lutils.ComputeStringHash("value3_set_by_tx6"), []byte("metadata3"), version.NewHeight(2, 6)) 
+	pubAndHashedUpdatesBatch := &valinternal.PubAndHashUpdates{HashUpdates: hashUpdates}
+
+	
+	pvtUpdateBatch := privacyenabledstate.NewPvtUpdateBatch()
+	pvtUpdateBatch.Put("ns", "coll1", "key1", []byte("value1_set_by_tx1"), version.NewHeight(2, 1))
+	pvtUpdateBatch.Put("ns", "coll3", "key3", []byte("value3_set_by_tx5"), version.NewHeight(2, 5))
+	
+	metadataUpdates := metadataUpdates{collKey{"ns", "coll1", "key1"}: true, collKey{"ns", "coll2", "key2"}: true}
+
+	
+	err := incrementPvtdataVersionIfNeeded(metadataUpdates, pvtUpdateBatch, pubAndHashedUpdatesBatch, testDB)
+	assert.NoError(t, err)
+
+	assert.Equal(t,
+		&statedb.VersionedValue{Value: []byte("value1_set_by_tx1"), Version: version.NewHeight(2, 2)}, 
+		pvtUpdateBatch.Get("ns", "coll1", "key1"),
+	)
+
+	assert.Equal(t,
+		&statedb.VersionedValue{Value: []byte("value2"), Version: version.NewHeight(2, 4)}, 
+		pvtUpdateBatch.Get("ns", "coll2", "key2"),
+	)
+
+	assert.Equal(t,
+		&statedb.VersionedValue{Value: []byte("value3_set_by_tx5"), Version: version.NewHeight(2, 5)}, 
+		pvtUpdateBatch.Get("ns", "coll3", "key3"),
+	)
 }
 
 
@@ -271,4 +307,32 @@ func memoryRecordN(b *logging.MemoryBackend, n int) *logging.Record {
 		return nil
 	}
 	return node.Record
+}
+
+func testutilSampleTxSimulationResults(t *testing.T, key string) *ledger.TxSimulationResults {
+	rwSetBuilder := rwsetutil.NewRWSetBuilder()
+	
+	rwSetBuilder.AddToReadSet("ns1", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToReadSet("ns2", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToWriteSet("ns2", key, []byte("ns2-key1-value"))
+
+	
+	rwSetBuilder.AddToHashedReadSet("ns1", "coll1", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToHashedReadSet("ns1", "coll2", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToPvtAndHashedWriteSet("ns1", "coll2", key, []byte("pvt-ns1-coll2-key1-value"))
+
+	
+	rwSetBuilder.AddToHashedReadSet("ns2", "coll1", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToHashedReadSet("ns2", "coll2", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll2", key, []byte("pvt-ns2-coll2-key1-value"))
+	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll3", key, nil)
+
+	rwSetBuilder.AddToHashedReadSet("ns3", "coll1", key, version.NewHeight(1, 1))
+
+	pubAndPvtSimulationResults, err := rwSetBuilder.GetTxSimulationResults()
+	if err != nil {
+		t.Fatalf("ConstructSimulationResultsWithPvtData failed while getting simulation results, err %s", err)
+	}
+
+	return pubAndPvtSimulationResults
 }

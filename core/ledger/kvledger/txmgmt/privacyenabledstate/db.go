@@ -111,7 +111,12 @@ func (b UpdateMap) IsEmpty() bool {
 
 
 func (b UpdateMap) Put(ns, coll, key string, value []byte, version *version.Height) {
-	b.getOrCreateNsBatch(ns).Put(coll, key, value, version)
+	b.PutValAndMetadata(ns, coll, key, value, nil, version)
+}
+
+
+func (b UpdateMap) PutValAndMetadata(ns, coll, key string, value []byte, metadata []byte, version *version.Height) {
+	b.getOrCreateNsBatch(ns).PutValAndMetadata(coll, key, value, metadata, version)
 }
 
 
@@ -157,7 +162,13 @@ func (h HashedUpdateBatch) Contains(ns, coll string, keyHash []byte) bool {
 
 
 func (h HashedUpdateBatch) Put(ns, coll string, key []byte, value []byte, version *version.Height) {
-	h.UpdateMap.Put(ns, coll, string(key), value, version)
+	h.PutValHashAndMetadata(ns, coll, key, value, nil, version)
+}
+
+
+
+func (h HashedUpdateBatch) PutValHashAndMetadata(ns, coll string, key []byte, value []byte, metadata []byte, version *version.Height) {
+	h.UpdateMap.PutValAndMetadata(ns, coll, string(key), value, metadata, version)
 }
 
 

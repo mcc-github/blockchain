@@ -8,8 +8,6 @@ package statecouchdb
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -83,7 +81,11 @@ func couchDocToKeyValue(doc *couchdb.CouchDoc) (*keyValue, error) {
 	}
 	key := jsonResult[idField].(string)
 	
-	returnVersion := createVersionHeightFromVersionString(jsonResult[versionField].(string))
+
+	returnVersion, returnMetadata, err := decodeVersionAndMetadata(jsonResult[versionField].(string))
+	if err != nil {
+		return nil, err
+	}
 	
 	delete(jsonResult, idField)
 	delete(jsonResult, revField)
@@ -103,7 +105,11 @@ func couchDocToKeyValue(doc *couchdb.CouchDoc) (*keyValue, error) {
 			return nil, err
 		}
 	}
-	return &keyValue{key, &statedb.VersionedValue{Value: returnValue, Version: returnVersion}}, nil
+	return &keyValue{key, &statedb.VersionedValue{
+		Value:    returnValue,
+		Metadata: returnMetadata,
+		Version:  returnVersion},
+	}, nil
 }
 
 func keyValToCouchDoc(kv *keyValue, revision string) (*couchdb.CouchDoc, error) {
@@ -113,7 +119,7 @@ func keyValToCouchDoc(kv *keyValue, revision string) (*couchdb.CouchDoc, error) 
 		kvTypeJSON
 		kvTypeAttachment
 	)
-	key, value, version := kv.key, kv.VersionedValue.Value, kv.VersionedValue.Version
+	key, value, metadata, version := kv.key, kv.Value, kv.Metadata, kv.Version
 	jsonMap := make(jsonValue)
 
 	var kvtype kvType
@@ -135,8 +141,12 @@ func keyValToCouchDoc(kv *keyValue, revision string) (*couchdb.CouchDoc, error) 
 		kvtype = kvTypeAttachment
 	}
 
+	verAndMetadata, err := encodeVersionAndMetadata(version, metadata)
+	if err != nil {
+		return nil, err
+	}
 	
-	jsonMap[versionField] = fmt.Sprintf("%v:%v", version.BlockNum, version.TxNum)
+	jsonMap[versionField] = verAndMetadata
 	jsonMap[idField] = key
 	if revision != "" {
 		jsonMap[revField] = revision
@@ -189,15 +199,6 @@ func decodeSavepoint(couchDoc *couchdb.CouchDoc) (*version.Height, error) {
 		return nil, err
 	}
 	return &version.Height{BlockNum: savepointDoc.BlockNum, TxNum: savepointDoc.TxNum}, nil
-}
-
-func createVersionHeightFromVersionString(encodedVersion string) *version.Height {
-	versionArray := strings.Split(fmt.Sprintf("%s", encodedVersion), ":")
-	
-	blockNum, _ := strconv.ParseUint(versionArray[0], 10, 64)
-	
-	txNum, _ := strconv.ParseUint(versionArray[1], 10, 64)
-	return version.NewHeight(blockNum, txNum)
 }
 
 func validateValue(value []byte) error {
