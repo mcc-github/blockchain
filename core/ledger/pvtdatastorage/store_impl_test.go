@@ -57,15 +57,15 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 	}
 
 	
-	assert.NoError(store.Prepare(0, nil))
+	assert.NoError(store.Prepare(0, nil, nil))
 	assert.NoError(store.Commit())
 
 	
-	assert.NoError(store.Prepare(1, testData))
+	assert.NoError(store.Prepare(1, testData, nil))
 	assert.NoError(store.Commit())
 
 	
-	assert.NoError(store.Prepare(2, testData))
+	assert.NoError(store.Prepare(2, testData, nil))
 	assert.NoError(store.Rollback())
 
 	
@@ -118,7 +118,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	store := env.TestStore
 
 	
-	assert.NoError(store.Prepare(0, nil))
+	assert.NoError(store.Prepare(0, nil, nil))
 	assert.NoError(store.Commit())
 
 	
@@ -126,7 +126,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 	}
-	assert.NoError(store.Prepare(1, testDataForBlk1))
+	assert.NoError(store.Prepare(1, testDataForBlk1, nil))
 	assert.NoError(store.Commit())
 
 	
@@ -134,7 +134,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 		produceSamplePvtdata(t, 3, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 		produceSamplePvtdata(t, 5, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 	}
-	assert.NoError(store.Prepare(2, testDataForBlk2))
+	assert.NoError(store.Prepare(2, testDataForBlk2, nil))
 	assert.NoError(store.Commit())
 
 	retrievedData, _ := store.GetPvtDataByBlockNum(1, nil)
@@ -145,7 +145,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	}
 
 	
-	assert.NoError(store.Prepare(3, nil))
+	assert.NoError(store.Prepare(3, nil, nil))
 	assert.NoError(store.Commit())
 
 	
@@ -157,7 +157,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	testutil.AssertEquals(t, retrievedData, expectedPvtdataFromBlock1)
 
 	
-	assert.NoError(store.Prepare(4, nil))
+	assert.NoError(store.Prepare(4, nil, nil))
 	assert.NoError(store.Commit())
 
 	
@@ -193,7 +193,7 @@ func TestStorePurge(t *testing.T) {
 	s := env.TestStore
 
 	
-	assert.NoError(s.Prepare(0, nil))
+	assert.NoError(s.Prepare(0, nil, nil))
 	assert.NoError(s.Commit())
 
 	
@@ -201,19 +201,11 @@ func TestStorePurge(t *testing.T) {
 		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 	}
-	assert.NoError(s.Prepare(1, testDataForBlk1))
+	assert.NoError(s.Prepare(1, testDataForBlk1, nil))
 	assert.NoError(s.Commit())
 
 	
-	assert.NoError(s.Prepare(2, nil))
-	assert.NoError(s.Commit())
-	
-	testWaitForPurgerRoutineToFinish(s)
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
-
-	
-	assert.NoError(s.Prepare(3, nil))
+	assert.NoError(s.Prepare(2, nil, nil))
 	assert.NoError(s.Commit())
 	
 	testWaitForPurgerRoutineToFinish(s)
@@ -221,7 +213,15 @@ func TestStorePurge(t *testing.T) {
 	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
 
 	
-	assert.NoError(s.Prepare(4, nil))
+	assert.NoError(s.Prepare(3, nil, nil))
+	assert.NoError(s.Commit())
+	
+	testWaitForPurgerRoutineToFinish(s)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+
+	
+	assert.NoError(s.Prepare(4, nil, nil))
 	assert.NoError(s.Commit())
 	
 	
@@ -230,7 +230,7 @@ func TestStorePurge(t *testing.T) {
 	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
 
 	
-	assert.NoError(s.Prepare(5, nil))
+	assert.NoError(s.Prepare(5, nil, nil))
 	assert.NoError(s.Commit())
 	
 	testWaitForPurgerRoutineToFinish(s)
@@ -238,7 +238,7 @@ func TestStorePurge(t *testing.T) {
 	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
 
 	
-	assert.NoError(s.Prepare(6, nil))
+	assert.NoError(s.Prepare(6, nil, nil))
 	assert.NoError(s.Commit())
 	
 	testWaitForPurgerRoutineToFinish(s)
@@ -262,14 +262,14 @@ func TestStoreState(t *testing.T) {
 	testData := []*ledger.TxPvtData{
 		produceSamplePvtdata(t, 0, []string{"ns-1:coll-1", "ns-1:coll-2"}),
 	}
-	_, ok := store.Prepare(1, testData).(*ErrIllegalArgs)
+	_, ok := store.Prepare(1, testData, nil).(*ErrIllegalArgs)
 	assert.True(ok)
 
-	assert.Nil(store.Prepare(0, testData))
+	assert.Nil(store.Prepare(0, testData, nil))
 	assert.NoError(store.Commit())
 
-	assert.Nil(store.Prepare(1, testData))
-	_, ok = store.Prepare(2, testData).(*ErrIllegalCall)
+	assert.Nil(store.Prepare(1, testData, nil))
+	_, ok = store.Prepare(2, testData, nil).(*ErrIllegalCall)
 	assert.True(ok)
 }
 

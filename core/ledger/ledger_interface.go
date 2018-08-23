@@ -194,6 +194,7 @@ type MissingPrivateData struct {
 	SeqInBlock int
 	Namespace  string
 	Collection string
+	Eligible   bool
 }
 
 
@@ -201,7 +202,7 @@ type MissingPrivateData struct {
 type BlockAndPvtData struct {
 	Block        *common.Block
 	BlockPvtData map[uint64]*TxPvtData
-	Missing      []MissingPrivateData
+	Missing      []*MissingPrivateData
 }
 
 

@@ -48,7 +48,11 @@ type Store interface {
 	
 	
 	
-	Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error
+	
+	
+	
+	
+	Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missing []*ledger.MissingPrivateData) error
 	
 	Commit() error
 	

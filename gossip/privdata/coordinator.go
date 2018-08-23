@@ -224,12 +224,12 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 
 	
 	for missingRWS := range privateInfo.missingKeys {
-		blockAndPvtData.Missing = append(blockAndPvtData.Missing, ledger.MissingPrivateData{
-			TxId:       missingRWS.txID,
-			Namespace:  missingRWS.namespace,
-			Collection: missingRWS.collection,
-			SeqInBlock: int(missingRWS.seqInBlock),
-		})
+		blockAndPvtData.Missing = append(blockAndPvtData.Missing, constructMissingPvtData(&missingRWS, true))
+	}
+
+	
+	for _, missingRWS := range privateInfo.missingRWSButIneligible {
+		blockAndPvtData.Missing = append(blockAndPvtData.Missing, constructMissingPvtData(&missingRWS, false))
 	}
 
 	
@@ -254,6 +254,16 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	}
 
 	return nil
+}
+
+func constructMissingPvtData(missingRWS *rwSetKey, eligible bool) *ledger.MissingPrivateData {
+	return &ledger.MissingPrivateData{
+		TxId:       missingRWS.txID,
+		Namespace:  missingRWS.namespace,
+		Collection: missingRWS.collection,
+		SeqInBlock: int(missingRWS.seqInBlock),
+		Eligible:   eligible,
+	}
 }
 
 func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][]byte, privateInfo *privateDataInfo) {
@@ -624,10 +634,11 @@ func endorsersFromOrgs(ns string, col string, endorsers []*peer.Endorsement, org
 }
 
 type privateDataInfo struct {
-	sources            map[rwSetKey][]*peer.Endorsement
-	missingKeysByTxIDs rwSetKeysByTxIDs
-	missingKeys        rwsetKeys
-	txns               txns
+	sources                 map[rwSetKey][]*peer.Endorsement
+	missingKeysByTxIDs      rwSetKeysByTxIDs
+	missingKeys             rwsetKeys
+	txns                    txns
+	missingRWSButIneligible []rwSetKey
 }
 
 
@@ -657,6 +668,7 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 		sources:            sources,
 		missingKeysByTxIDs: missing,
 		txns:               txList,
+		missingRWSButIneligible: bi.missingRWSButIneligible,
 	}
 
 	logger.Debug("Retrieving private write sets for", len(privateInfo.missingKeysByTxIDs), "transactions from transient store")
@@ -685,10 +697,11 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 
 type transactionInspector struct {
 	*coordinator
-	privateRWsetsInBlock map[rwSetKey]struct{}
-	missingKeys          rwSetKeysByTxIDs
-	sources              map[rwSetKey][]*peer.Endorsement
-	ownedRWsets          map[rwSetKey][]byte
+	privateRWsetsInBlock    map[rwSetKey]struct{}
+	missingKeys             rwSetKeysByTxIDs
+	sources                 map[rwSetKey][]*peer.Endorsement
+	ownedRWsets             map[rwSetKey][]byte
+	missingRWSButIneligible []rwSetKey
 }
 
 func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, endorsers []*peer.Endorsement) {
@@ -697,18 +710,18 @@ func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *comm
 			if !containsWrites(chdr.TxId, ns.NameSpace, hashedCollection) {
 				continue
 			}
+			
+			
+			
+			
+			
 			policy := bi.accessPolicyForCollection(chdr, ns.NameSpace, hashedCollection.CollectionName)
 			if policy == nil {
 				logger.Errorf("Failed to retrieve collection config for channel [%s], chaincode [%s], collection name [%s] for txID [%s]. Skipping.",
 					chdr.ChannelId, ns.NameSpace, hashedCollection.CollectionName, chdr.TxId)
 				continue
 			}
-			if !bi.isEligible(policy, ns.NameSpace, hashedCollection.CollectionName) {
-				logger.Debugf("Peer is not eligible for collection, channel [%s], chaincode [%s], "+
-					"collection name [%s], txID [%s] the policy is [%#v]. Skipping.",
-					chdr.ChannelId, ns.NameSpace, hashedCollection.CollectionName, chdr.TxId, policy)
-				continue
-			}
+
 			key := rwSetKey{
 				txID:       chdr.TxId,
 				seqInBlock: seqInBlock,
@@ -716,6 +729,15 @@ func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *comm
 				namespace:  ns.NameSpace,
 				collection: hashedCollection.CollectionName,
 			}
+
+			if !bi.isEligible(policy, ns.NameSpace, hashedCollection.CollectionName) {
+				logger.Debugf("Peer is not eligible for collection, channel [%s], chaincode [%s], "+
+					"collection name [%s], txID [%s] the policy is [%#v]. Skipping.",
+					chdr.ChannelId, ns.NameSpace, hashedCollection.CollectionName, chdr.TxId, policy)
+				bi.missingRWSButIneligible = append(bi.missingRWSButIneligible, key)
+				continue
+			}
+
 			bi.privateRWsetsInBlock[key] = struct{}{}
 			if _, exists := bi.ownedRWsets[key]; !exists {
 				txAndSeq := txAndSeqInBlock{
@@ -749,10 +771,6 @@ func (c *coordinator) accessPolicyForCollection(chdr *common.ChannelHeader, name
 
 func (c *coordinator) isEligible(ap privdata.CollectionAccessPolicy, namespace string, col string) bool {
 	filt := ap.AccessFilter()
-	if filt == nil {
-		logger.Warning("Failed parsing policy for namespace", namespace, "collection", col, "skipping collection")
-		return false
-	}
 	eligible := filt(c.selfSignedData)
 	if !eligible {
 		logger.Debug("Skipping namespace", namespace, "collection", col, "because we're not eligible for the private data")

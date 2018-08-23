@@ -172,7 +172,7 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 		pvtdataAtCrash = append(pvtdataAtCrash, p)
 	}
 	
-	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash)
+	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
 	store.Shutdown()
 	provider.Close()
 	provider = NewProvider()
@@ -229,7 +229,7 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 
 	
 	
-	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash)
+	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
 	store.BlockStore.AddBlock(dataAtCrash.Block)
 	store.Shutdown()
 	provider.Close()
