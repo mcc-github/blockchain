@@ -164,7 +164,11 @@ func serve(args []string) error {
 	)
 
 	
-	ledgermgmt.Initialize(peer.ConfigTxProcessors, pr)
+	ledgermgmt.Initialize(
+		&ledgermgmt.Initializer{
+			CustomTxProcessors: peer.ConfigTxProcessors,
+			PlatformRegistry:   pr,
+		})
 
 	
 	

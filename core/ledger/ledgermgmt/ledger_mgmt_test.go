@@ -18,9 +18,8 @@ package ledgermgmt
 
 import (
 	"fmt"
-	"testing"
-
 	"os"
+	"testing"
 
 	"github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
@@ -87,7 +86,9 @@ func TestLedgerMgmt(t *testing.T) {
 	Close()
 
 	
-	Initialize(nil, platforms.NewRegistry(&golang.Platform{}))
+	Initialize(&Initializer{
+		PlatformRegistry: platforms.NewRegistry(&golang.Platform{}),
+	})
 	l, err = OpenLedger(ledgerID)
 	testutil.AssertNoError(t, err, "")
 	Close()

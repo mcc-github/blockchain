@@ -10,11 +10,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/mcc-github/blockchain/core/ledger/confighistory"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/ledger/confighistory"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb/historyleveldb"
@@ -48,39 +47,36 @@ type Provider struct {
 	configHistoryMgr    confighistory.Mgr
 	stateListeners      []ledger.StateListener
 	bookkeepingProvider bookkeeping.Provider
+	initializer         *ledger.Initializer
 }
 
 
 
 func NewProvider() (ledger.PeerLedgerProvider, error) {
-
 	logger.Info("Initializing ledger provider")
-
 	
 	idStore := openIDStore(ledgerconfig.GetLedgerProviderPath())
-
 	ledgerStoreProvider := ledgerstorage.NewProvider()
-
 	
 	vdbProvider, err := privacyenabledstate.NewCommonStorageDBProvider()
 	if err != nil {
 		return nil, err
 	}
-
 	
 	historydbProvider := historyleveldb.NewHistoryDBProvider()
 	bookkeepingProvider := bookkeeping.NewProvider()
-	
-	configHistoryMgr := confighistory.NewMgr()
 	logger.Info("ledger provider Initialized")
-	provider := &Provider{idStore, ledgerStoreProvider, vdbProvider, historydbProvider, configHistoryMgr, nil, bookkeepingProvider}
-	provider.recoverUnderConstructionLedger()
+	provider := &Provider{idStore, ledgerStoreProvider,
+		vdbProvider, historydbProvider, nil, nil, bookkeepingProvider, nil}
 	return provider, nil
 }
 
 
-func (provider *Provider) Initialize(stateListeners []ledger.StateListener) {
-	provider.stateListeners = stateListeners
+func (provider *Provider) Initialize(initializer *ledger.Initializer) {
+	provider.initializer = initializer
+	provider.configHistoryMgr = confighistory.NewMgr()
+	provider.stateListeners = initializer.StateListeners
+	provider.recoverUnderConstructionLedger()
 }
 
 
@@ -155,7 +151,8 @@ func (provider *Provider) openInternal(ledgerID string) (ledger.PeerLedger, erro
 
 	
 	
-	l, err := newKVLedger(ledgerID, blockStore, vDB, historyDB, provider.configHistoryMgr, provider.stateListeners, provider.bookkeepingProvider)
+	l, err := newKVLedger(ledgerID, blockStore, vDB, historyDB, provider.configHistoryMgr,
+		provider.stateListeners, provider.bookkeepingProvider, provider.initializer.DeployedChaincodeInfoProvider)
 	if err != nil {
 		return nil, err
 	}

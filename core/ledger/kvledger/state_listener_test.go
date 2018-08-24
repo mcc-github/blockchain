@@ -9,10 +9,10 @@ package kvledger
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
-
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/ledger/mock"
+	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,7 +26,10 @@ func TestStateListener(t *testing.T) {
 	channelid := "testLedger"
 	namespace := "testchaincode"
 	mockListener := &mockStateListener{namespace: namespace}
-	provider.Initialize([]ledger.StateListener{mockListener})
+	provider.Initialize(&ledger.Initializer{
+		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+		StateListeners:                []ledger.StateListener{mockListener},
+	})
 
 	bg, gb := testutil.NewBlockGenerator(t, channelid, false)
 	lgr, err := provider.Create(gb)

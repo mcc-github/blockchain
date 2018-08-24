@@ -11,12 +11,19 @@ import (
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
+	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 
+type Initializer struct {
+	StateListeners                []StateListener
+	DeployedChaincodeInfoProvider DeployedChaincodeInfoProvider
+}
+
+
 type PeerLedgerProvider interface {
-	Initialize(statelisteners []StateListener)
+	Initialize(initializer *Initializer)
 	
 	
 	
@@ -373,3 +380,38 @@ type PvtdataHashMismatch struct {
 	ChaincodeName, CollectionName string
 	ExpectedHash                  []byte
 }
+
+
+
+type DeployedChaincodeInfoProvider interface {
+	Namespaces() []string
+	UpdatedChaincodes(stateUpdates map[string][]*kvrwset.KVWrite) ([]*ChaincodeLifecycleInfo, error)
+	ChaincodeInfo(chaincodeName string, qe SimpleQueryExecutor) (*DeployedChaincodeInfo, error)
+	CollectionInfo(chaincodeName, collectionName string, qe SimpleQueryExecutor) (*common.StaticCollectionConfig, error)
+}
+
+
+type DeployedChaincodeInfo struct {
+	Name                string
+	Hash                []byte
+	Version             string
+	CollectionConfigPkg *common.CollectionConfigPackage
+}
+
+
+type ChaincodeLifecycleInfo struct {
+	Name    string
+	Deleted bool
+	Details *ChaincodeLifecycleDetails 
+}
+
+
+type ChaincodeLifecycleDetails struct {
+	Updated bool 
+	
+	HashChanged        bool     
+	CollectionsUpdated []string 
+	CollectionsRemoved []string 
+}
+
+

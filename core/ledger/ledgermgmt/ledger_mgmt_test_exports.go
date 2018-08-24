@@ -17,28 +17,34 @@ limitations under the License.
 package ledgermgmt
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/ledger/customtx"
-
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
-
-	"fmt"
+	"github.com/mcc-github/blockchain/core/ledger/mock"
 )
 
 
 func InitializeTestEnv() {
 	remove()
-	initialize(nil, nil, platforms.NewRegistry(&golang.Platform{}))
+	initialize(&Initializer{
+		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
+		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+	})
 }
 
 
 func InitializeTestEnvWithCustomProcessors(customTxProcessors customtx.Processors) {
 	remove()
 	customtx.InitializeTestEnv(customTxProcessors)
-	initialize(customTxProcessors, nil, platforms.NewRegistry(&golang.Platform{}))
+	initialize(&Initializer{
+		CustomTxProcessors:            customTxProcessors,
+		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
+		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+	})
 }
 
 

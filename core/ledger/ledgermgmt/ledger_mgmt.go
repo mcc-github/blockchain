@@ -35,26 +35,37 @@ var initialized bool
 var once sync.Once
 
 
-func Initialize(customTxProcessors customtx.Processors, pr *platforms.Registry) {
+type Initializer struct {
+	CustomTxProcessors            customtx.Processors
+	PlatformRegistry              *platforms.Registry
+	DeployedChaincodeInfoProvider ledger.DeployedChaincodeInfoProvider
+}
+
+
+func Initialize(initializer *Initializer) {
 	once.Do(func() {
-		initialize(customTxProcessors, nil, pr)
+		initialize(initializer)
 	})
 }
 
-func initialize(customTxProcessors customtx.Processors, statelisteners []ledger.StateListener, pr *platforms.Registry) {
+func initialize(initializer *Initializer) {
 	logger.Info("Initializing ledger mgmt")
 	lock.Lock()
 	defer lock.Unlock()
 	initialized = true
 	openedLedgers = make(map[string]ledger.PeerLedger)
-	customtx.Initialize(customTxProcessors)
-	cceventmgmt.Initialize(pr)
-	finalStateListeners := addListenerForCCEventsHandler(statelisteners)
+	customtx.Initialize(initializer.CustomTxProcessors)
+	cceventmgmt.Initialize(initializer.PlatformRegistry)
+	finalStateListeners := addListenerForCCEventsHandler([]ledger.StateListener{})
 	provider, err := kvledger.NewProvider()
 	if err != nil {
 		panic(errors.WithMessage(err, "Error in instantiating ledger provider"))
 	}
-	provider.Initialize(finalStateListeners)
+	provider.Initialize(&ledger.Initializer{
+		StateListeners:                finalStateListeners,
+		DeployedChaincodeInfoProvider: initializer.DeployedChaincodeInfoProvider,
+	})
+
 	ledgerProvider = provider
 	logger.Info("ledger mgmt initialized")
 }

@@ -14,11 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mcc-github/blockchain/core/config/configtest"
-	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/mcc-github/blockchain/core/config/configtest"
+	"github.com/mcc-github/blockchain/gossip/util"
 )
 
 const (
