@@ -15,24 +15,20 @@ import (
 	"go.uber.org/zap/zapgrpc"
 )
 
-var moduleLevels = &ModuleLevels{}
 
 
 
 
-
-func NewZapLogger(module string, enc zapcore.Encoder, sink zapcore.WriteSyncer, options ...zap.Option) *zap.Logger {
-	core := zapcore.NewCore(enc, sink, moduleLevels.LevelEnabler(module))
-	zl := zap.New(
+func NewZapLogger(core zapcore.Core, options ...zap.Option) *zap.Logger {
+	return zap.New(
 		core,
 		append([]zap.Option{
 			zap.AddCaller(),
 			zap.AddStacktrace(zapcore.ErrorLevel),
 		}, options...)...,
 	)
-
-	return zl.Named(module)
 }
+
 
 func NewGRPCLogger(l *zap.Logger) *zapgrpc.Logger {
 	l = l.WithOptions(
@@ -41,6 +37,7 @@ func NewGRPCLogger(l *zap.Logger) *zapgrpc.Logger {
 	)
 	return zapgrpc.NewLogger(l, zapgrpc.WithDebug())
 }
+
 
 func NewFabricLogger(l *zap.Logger, options ...zap.Option) *FabricLogger {
 	return &FabricLogger{

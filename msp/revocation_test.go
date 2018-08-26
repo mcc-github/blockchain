@@ -22,13 +22,8 @@ import (
 
 	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/protos/msp"
-	"github.com/op/go-logging"
 	"github.com/stretchr/testify/assert"
 )
-
-func init() {
-	logging.SetLevel(logging.DEBUG, "msp/identity")
-}
 
 func TestRevocation(t *testing.T) {
 	

@@ -25,7 +25,6 @@ import (
 	mspprotos "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -77,12 +76,7 @@ type TxValidator struct {
 	Vscc    vsccValidator
 }
 
-var logger *logging.Logger 
-
-func init() {
-	
-	logger = flogging.MustGetLogger("committer/txvalidator")
-}
+var logger = flogging.MustGetLogger("committer/txvalidator")
 
 type blockValidationRequest struct {
 	block *common.Block

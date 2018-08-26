@@ -11,20 +11,15 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
 
+var logger = flogging.MustGetLogger("committer")
 
 
 
 
 
-var logger *logging.Logger 
-
-func init() {
-	logger = flogging.MustGetLogger("committer")
-}
 
 
 

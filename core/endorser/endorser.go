@@ -193,57 +193,6 @@ func (e *Endorser) SanitizeUserCDS(userCDS *pb.ChaincodeDeploymentSpec) (*pb.Cha
 }
 
 
-
-func (e *Endorser) DisableJavaCCInst(cid *pb.ChaincodeID, cis *pb.ChaincodeInvocationSpec) error {
-	
-	if cid.Name != "lscc" {
-		return nil
-	}
-
-	
-	if cis.ChaincodeSpec == nil || cis.ChaincodeSpec.Input == nil {
-		return nil
-	}
-
-	
-	if len(cis.ChaincodeSpec.Input.Args) < 1 {
-		return nil
-	}
-
-	var argNo int
-	switch string(cis.ChaincodeSpec.Input.Args[0]) {
-	case "install":
-		argNo = 1
-	case "deploy", "upgrade":
-		argNo = 2
-	default:
-		
-		return nil
-	}
-
-	if argNo >= len(cis.ChaincodeSpec.Input.Args) {
-		return errors.Errorf("too few arguments passed. expected %d", argNo)
-	}
-
-	if JavaEnabled() {
-		endorserLogger.Debug("java chaincode enabled")
-	} else {
-		endorserLogger.Debug("java chaincode disabled")
-		
-		isjava, err := e.s.IsJavaCC(cis.ChaincodeSpec.Input.Args[argNo])
-		if err != nil {
-			return err
-		}
-		if isjava {
-			return errors.New("Java chaincode is work-in-progress and disabled")
-		}
-	}
-
-	
-	return nil
-}
-
-
 func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid *pb.ChaincodeID) (ccprovider.ChaincodeDefinition, *pb.Response, []byte, *pb.ChaincodeEvent, error) {
 	endorserLogger.Debugf("[%s][%s] Entry chaincode: %s", txParams.ChannelID, shorttxid(txParams.TxID), cid)
 	defer endorserLogger.Debugf("[%s][%s] Exit", txParams.ChannelID, shorttxid(txParams.TxID))
@@ -252,11 +201,6 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid 
 	
 	cis, err := putils.GetChaincodeInvocationSpec(txParams.Proposal)
 	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	
-	if err = e.DisableJavaCCInst(cid, cis); err != nil {
 		return nil, nil, nil, nil, err
 	}
 

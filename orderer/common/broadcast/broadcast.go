@@ -14,17 +14,12 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
 
 const pkgLogID = "orderer/common/broadcast"
 
-var logger *logging.Logger
-
-func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
+var logger = flogging.MustGetLogger(pkgLogID)
 
 
 type Handler interface {

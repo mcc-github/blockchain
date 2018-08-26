@@ -14,8 +14,8 @@ import (
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -34,7 +34,7 @@ type connFactory interface {
 }
 
 type connectionStore struct {
-	logger           *logging.Logger        
+	logger           util.Logger            
 	isClosing        bool                   
 	connFactory      connFactory            
 	sync.RWMutex                            
@@ -43,7 +43,7 @@ type connectionStore struct {
 	
 }
 
-func newConnStore(connFactory connFactory, logger *logging.Logger) *connectionStore {
+func newConnStore(connFactory connFactory, logger util.Logger) *connectionStore {
 	return &connectionStore{
 		connFactory:      connFactory,
 		isClosing:        false,
@@ -207,7 +207,7 @@ type connection struct {
 	cancel       context.CancelFunc
 	info         *proto.ConnectionInfo
 	outBuff      chan *msgSending
-	logger       *logging.Logger                 
+	logger       util.Logger                     
 	pkiID        common.PKIidType                
 	handler      handler                         
 	conn         *grpc.ClientConn                
@@ -263,7 +263,7 @@ func (conn *connection) send(msg *proto.SignedGossipMessage, onErr func(error), 
 	}
 
 	if len(conn.outBuff) == cap(conn.outBuff) {
-		if conn.logger.IsEnabledFor(logging.DEBUG) {
+		if conn.logger.IsEnabledFor(zapcore.DebugLevel) {
 			conn.logger.Debug("Buffer to", conn.info.Endpoint, "overflowed, dropping message", msg.String())
 		}
 		if !shouldBlock {

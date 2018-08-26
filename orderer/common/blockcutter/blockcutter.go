@@ -11,16 +11,11 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/op/go-logging"
 )
 
 const pkgLogID = "orderer/common/blockcutter"
 
-var logger *logging.Logger
-
-func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
+var logger = flogging.MustGetLogger(pkgLogID)
 
 type OrdererConfigFetcher interface {
 	OrdererConfig() (channelconfig.Orderer, bool)

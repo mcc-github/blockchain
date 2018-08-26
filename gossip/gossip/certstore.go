@@ -15,7 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/identity"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
 
@@ -24,7 +23,7 @@ type certStore struct {
 	selfIdentity api.PeerIdentityType
 	idMapper     identity.Mapper
 	pull         pull.Mediator
-	logger       *logging.Logger
+	logger       util.Logger
 	mcs          api.MessageCryptoService
 }
 

@@ -19,16 +19,11 @@ package blockcutter
 import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/op/go-logging"
 )
 
 const pkgLogID = "orderer/mocks/common/blockcutter"
 
-var logger *logging.Logger
-
-func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
+var logger = flogging.MustGetLogger(pkgLogID)
 
 
 type Receiver struct {

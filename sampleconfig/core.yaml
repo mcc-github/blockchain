@@ -14,7 +14,7 @@ logging:
 
     # Valid logging levels are case-insensitive strings chosen from
 
-    #     CRITICAL | ERROR | WARNING | NOTICE | INFO | DEBUG
+    #     FATAL | PANIC | ERROR | WARNING | INFO | DEBUG
 
     # The overall default logging level can be specified in various ways,
     # listed below from strongest to weakest:
@@ -522,7 +522,7 @@ chaincode:
         # tools added for java shim layer packaging.
         # This image is packed with shim layer libraries that are necessary
         # for Java chaincode runtime.
-        Dockerfile: $(DOCKER_NS)/blockchain-javaenv:latest
+        runtime: $(DOCKER_NS)/blockchain-javaenv:$(ARCH)-$(PROJECT_VERSION)
             # from $(DOCKER_NS)/blockchain-javaenv:$(ARCH)-1.2.0
 
     node:

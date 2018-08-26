@@ -53,7 +53,6 @@ import (
 	"github.com/mcc-github/blockchain/core/policy/mocks"
 	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/core/scc/lscc"
-	"github.com/mcc-github/blockchain/core/testutil"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
@@ -1311,8 +1310,6 @@ func setupTestConfig() {
 	if err != nil {                      
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
-
-	testutil.SetupTestLogging()
 
 	
 	var numProcsDesired = viper.GetInt("peer.gomaxprocs")

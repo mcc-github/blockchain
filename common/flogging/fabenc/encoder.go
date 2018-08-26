@@ -27,36 +27,12 @@ type Formatter interface {
 	Format(w io.Writer, entry zapcore.Entry, fields []zapcore.Field)
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-func NewFormatEncoder(formatSpec string) (*FormatEncoder, error) {
-	formatters, err := ParseFormat(formatSpec)
-	if err != nil {
-		return nil, err
-	}
-
+func NewFormatEncoder(formatters ...Formatter) *FormatEncoder {
 	return &FormatEncoder{
 		Encoder:    zapcore.NewConsoleEncoder(zapcore.EncoderConfig{LineEnding: "\n"}),
 		formatters: formatters,
 		pool:       buffer.NewPool(),
-	}, nil
+	}
 }
 
 

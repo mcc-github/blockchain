@@ -20,7 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	gossip_proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/op/go-logging"
 )
 
 
@@ -103,12 +102,7 @@ type blocksProviderImpl struct {
 const wrongStatusThreshold = 10
 
 var maxRetryDelay = time.Second * 10
-
-var logger *logging.Logger 
-
-func init() {
-	logger = flogging.MustGetLogger("blocksProvider")
-}
+var logger = flogging.MustGetLogger("blocksProvider")
 
 
 func NewBlocksProvider(chainID string, client streamClient, gossip GossipServiceAdapter, mcs api.MessageCryptoService) BlocksProvider {

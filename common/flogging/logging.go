@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2017 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package flogging
@@ -19,215 +9,203 @@ package flogging
 import (
 	"io"
 	"os"
-	"regexp"
-	"strings"
 	"sync"
 
-	"github.com/op/go-logging"
+	"github.com/mcc-github/blockchain/common/flogging/fabenc"
+	logging "github.com/op/go-logging"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-const (
-	pkgLogID      = "flogging"
-	defaultFormat = "%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}"
-	defaultLevel  = logging.INFO
-)
 
-var (
-	logger *logging.Logger
+type Config struct {
+	
+	
+	
+	
+	
+	
+	
+	Format string
 
-	defaultOutput *os.File
+	
+	
+	
+	
+	LogSpec string
 
-	modules          map[string]string 
-	peerStartModules map[string]string
-
-	lock sync.RWMutex
-	once sync.Once
-)
-
-func init() {
-	logger = logging.MustGetLogger(pkgLogID)
-	Reset()
-	initgrpclogger()
+	
+	
+	
+	Writer io.Writer
 }
 
 
-func Reset() {
-	modules = make(map[string]string)
-	lock = sync.RWMutex{}
 
-	defaultOutput = os.Stderr
-	InitBackend(SetFormat(defaultFormat), defaultOutput)
-	InitFromSpec("")
+
+type Logging struct {
+	*ModuleLevels
+
+	mutex          sync.RWMutex
+	encoding       Encoding
+	encoderConfig  zapcore.EncoderConfig
+	multiFormatter *fabenc.MultiFormatter
+	writer         zapcore.WriteSyncer
 }
 
 
-func SetFormat(formatSpec string) logging.Formatter {
-	if formatSpec == "" {
-		formatSpec = defaultFormat
+
+func New(c Config) (*Logging, error) {
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.NameKey = "name"
+
+	s := &Logging{
+		ModuleLevels: &ModuleLevels{
+			defaultLevel: defaultLevel,
+		},
+		encoderConfig:  encoderConfig,
+		multiFormatter: fabenc.NewMultiFormatter(),
 	}
-	return logging.MustStringFormatter(formatSpec)
-}
 
-
-
-func InitBackend(formatter logging.Formatter, output io.Writer) {
-	backend := logging.NewLogBackend(output, "", 0)
-	backendFormatter := logging.NewBackendFormatter(backend, formatter)
-	logging.SetBackend(backendFormatter).SetLevel(defaultLevel, "")
-}
-
-
-func DefaultLevel() string {
-	return defaultLevel.String()
-}
-
-
-func GetModuleLevel(module string) string {
-	
-	
-	
-	level := logging.GetLevel(module).String()
-	return level
-}
-
-
-
-
-func SetModuleLevel(moduleRegExp string, level string) (string, error) {
-	return setModuleLevel(moduleRegExp, level, true, false)
-}
-
-func setModuleLevel(moduleRegExp string, level string, isRegExp bool, revert bool) (string, error) {
-	var re *regexp.Regexp
-	logLevel, err := logging.LogLevel(level)
+	err := s.Reset(c)
 	if err != nil {
-		logger.Warningf("Invalid logging level '%s' - ignored", level)
+		return nil, err
+	}
+	return s, nil
+}
+
+
+func (s *Logging) Reset(c Config) error {
+	err := s.SetFormat(c.Format)
+	if err != nil {
+		return err
+	}
+
+	if c.LogSpec == "" {
+		c.LogSpec = "INFO"
+	}
+	err = s.ActivateSpec(c.LogSpec)
+	if err != nil {
+		return err
+	}
+
+	if c.Writer == nil {
+		c.Writer = os.Stderr
+	}
+	s.SetWriter(c.Writer)
+
+	var formatter logging.Formatter
+	if s.Encoding() == JSON {
+		formatter = SetFormat(defaultFormat)
 	} else {
-		if !isRegExp || revert {
-			logging.SetLevel(logLevel, moduleRegExp)
-			logger.Debugf("Module '%s' logger enabled for log level '%s'", moduleRegExp, level)
-		} else {
-			re, err = regexp.Compile(moduleRegExp)
-			if err != nil {
-				logger.Warningf("Invalid regular expression: %s", moduleRegExp)
-				return "", err
-			}
-			lock.Lock()
-			defer lock.Unlock()
-			for module := range modules {
-				if re.MatchString(module) {
-					logging.SetLevel(logging.Level(logLevel), module)
-					modules[module] = logLevel.String()
-					logger.Debugf("Module '%s' logger enabled for log level '%s'", module, logLevel)
-				}
-			}
-		}
-	}
-	return logLevel.String(), err
-}
-
-
-
-func MustGetLogger(module string) *logging.Logger {
-	l := logging.MustGetLogger(module)
-	lock.Lock()
-	defer lock.Unlock()
-	modules[module] = GetModuleLevel(module)
-	return l
-}
-
-
-
-
-
-func InitFromSpec(spec string) string {
-	levelAll := defaultLevel
-	var err error
-
-	if spec != "" {
-		fields := strings.Split(spec, ":")
-		for _, field := range fields {
-			split := strings.Split(field, "=")
-			switch len(split) {
-			case 1:
-				if levelAll, err = logging.LogLevel(field); err != nil {
-					logger.Warningf("Logging level '%s' not recognized, defaulting to '%s': %s", field, defaultLevel, err)
-					levelAll = defaultLevel 
-				}
-			case 2:
-				
-				levelSingle, err := logging.LogLevel(split[1])
-				if err != nil {
-					logger.Warningf("Invalid logging level in '%s' ignored", field)
-					continue
-				}
-
-				if split[0] == "" {
-					logger.Warningf("Invalid logging override specification '%s' ignored - no module specified", field)
-				} else {
-					modules := strings.Split(split[0], ",")
-					for _, module := range modules {
-						logger.Debugf("Setting logging level for module '%s' to '%s'", module, levelSingle)
-						logging.SetLevel(levelSingle, module)
-					}
-				}
-			default:
-				logger.Warningf("Invalid logging override '%s' ignored - missing ':'?", field)
-			}
-		}
+		formatter = SetFormat(c.Format)
 	}
 
-	logging.SetLevel(levelAll, "") 
+	InitBackend(formatter, c.Writer)
 
-	
-	
-	for k := range modules {
-		MustGetLogger(k)
-	}
-	
-	MustGetLogger(pkgLogID)
-
-	return levelAll.String()
-}
-
-
-
-func SetPeerStartupModulesMap() {
-	lock.Lock()
-	defer lock.Unlock()
-
-	once.Do(func() {
-		peerStartModules = make(map[string]string)
-		for k, v := range modules {
-			peerStartModules[k] = v
-		}
-	})
-}
-
-
-
-
-func GetPeerStartupLevel(module string) string {
-	if module != "" {
-		if level, ok := peerStartModules[module]; ok {
-			return level
-		}
-	}
-
-	return ""
-}
-
-
-
-func RevertToPeerStartupLevels() error {
-	lock.RLock()
-	defer lock.RUnlock()
-	for key := range peerStartModules {
-		_, err := setModuleLevel(key, peerStartModules[key], false, true)
-		if err != nil {
-			return err
-		}
-	}
-	logger.Info("Log levels reverted to the levels defined at the end of peer startup")
 	return nil
+}
+
+
+
+
+
+func (s *Logging) SetFormat(format string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if format == "" {
+		format = defaultFormat
+	}
+
+	if format == "json" {
+		s.encoding = JSON
+		return nil
+	}
+
+	formatters, err := fabenc.ParseFormat(format)
+	if err != nil {
+		return err
+	}
+	s.multiFormatter.SetFormatters(formatters)
+	s.encoding = CONSOLE
+
+	return nil
+}
+
+
+
+
+func (s *Logging) SetWriter(w io.Writer) {
+	var sw zapcore.WriteSyncer
+	switch t := w.(type) {
+	case *os.File:
+		sw = zapcore.Lock(t)
+	case zapcore.WriteSyncer:
+		sw = t
+	default:
+		sw = zapcore.AddSync(w)
+	}
+
+	s.mutex.Lock()
+	s.writer = sw
+	s.mutex.Unlock()
+}
+
+
+
+
+func (s *Logging) Write(b []byte) (int, error) {
+	s.mutex.RLock()
+	w := s.writer
+	s.mutex.RUnlock()
+
+	return w.Write(b)
+}
+
+
+
+func (s *Logging) Sync() error {
+	s.mutex.RLock()
+	w := s.writer
+	s.mutex.RUnlock()
+
+	return w.Sync()
+}
+
+
+
+func (s *Logging) Encoding() Encoding {
+	s.mutex.RLock()
+	e := s.encoding
+	s.mutex.RUnlock()
+	return e
+}
+
+
+
+
+func (s *Logging) ZapLogger(module string) *zap.Logger {
+	s.mutex.RLock()
+	level := s.Level(module)
+	s.SetLevel(module, level)
+	core := &Core{
+		LevelEnabler: s.LevelEnabler(module),
+		Encoders: map[Encoding]zapcore.Encoder{
+			JSON:    zapcore.NewJSONEncoder(s.encoderConfig),
+			CONSOLE: fabenc.NewFormatEncoder(s.multiFormatter),
+		},
+		Selector: s,
+		Output:   s,
+	}
+	s.mutex.RUnlock()
+
+	return NewZapLogger(core).Named(module)
+}
+
+
+
+
+func (s *Logging) Logger(module string) *FabricLogger {
+	zl := s.ZapLogger(module)
+	return NewFabricLogger(zl)
 }

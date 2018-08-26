@@ -12,7 +12,6 @@ import (
 
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/op/go-logging"
 )
 
 
@@ -50,7 +49,7 @@ type PayloadsBufferImpl struct {
 
 	mutex sync.RWMutex
 
-	logger *logging.Logger
+	logger util.Logger
 }
 
 

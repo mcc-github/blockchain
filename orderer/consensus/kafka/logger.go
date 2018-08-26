@@ -13,7 +13,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/mcc-github/blockchain/common/flogging"
-	logging "github.com/op/go-logging"
+	"go.uber.org/zap"
 )
 
 const (
@@ -21,21 +21,14 @@ const (
 	saramaLogID = pkgLogID + "/sarama"
 )
 
-var logger *logging.Logger
-
+var logger = flogging.MustGetLogger(pkgLogID)
 var saramaLogger eventLogger
 
 
 func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
-
-
-func init() {
 	loggingProvider := flogging.MustGetLogger(saramaLogID)
-	loggingProvider.ExtraCalldepth = 3
 	saramaEventLogger := &saramaLoggerImpl{
-		logger: loggingProvider,
+		logger: loggingProvider.WithOptions(zap.AddCallerSkip(3)),
 		eventListenerSupport: &eventListenerSupport{
 			listeners: make(map[string][]chan string),
 		},
@@ -69,8 +62,12 @@ type eventLogger interface {
 	RemoveListener(substr string, listener <-chan string)
 }
 
+type debugger interface {
+	Debug(...interface{})
+}
+
 type saramaLoggerImpl struct {
-	logger               *logging.Logger
+	logger               debugger
 	eventListenerSupport *eventListenerSupport
 }
 

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -24,7 +25,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	putils "github.com/mcc-github/blockchain/protos/utils"
-	"github.com/op/go-logging"
+	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -193,19 +194,20 @@ func TestPreprocessProtoBlock(t *testing.T) {
 	flags = lutils.NewTxValidationFlags(len(gb.Data.Data))
 	flags.SetFlag(0, peer.TxValidationCode_BAD_HEADER_EXTENSION)
 	gb.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = flags
+
 	
-	backend := logging.NewMemoryBackend(1)
-	logging.SetBackend(backend)
+	oldLogger := logger
+	defer func() { logger = oldLogger }()
+	l, recorder := floggingtest.NewTestLogger(t)
+	logger = l
+
 	_, err = preprocessProtoBlock(nil, allwaysValidKVfunc, gb, false)
 	assert.NoError(t, err)
-	expected := fmt.Sprintf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
-		" marked as invalid by committer. Reason code [%s]",
-		util.GetTestChainID(), blockNum, 0, txid, peer.TxValidationCode_BAD_HEADER_EXTENSION.String())
-	t.Log(expected)
-	assert.Equal(t, expected, memoryRecordN(backend, 0).Message())
-	
-	t.Log(memoryRecordN(backend, 0).Message())
-
+	expected := fmt.Sprintf(
+		"Channel [%s]: Block [%d] Transaction index [%d] TxId [%s] marked as invalid by committer. Reason code [%s]",
+		util.GetTestChainID(), blockNum, 0, txid, peer.TxValidationCode_BAD_HEADER_EXTENSION,
+	)
+	assert.NotEmpty(t, recorder.MessagesContaining(expected))
 }
 
 func TestPreprocessProtoBlockInvalidWriteset(t *testing.T) {

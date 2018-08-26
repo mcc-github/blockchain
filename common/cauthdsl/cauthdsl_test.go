@@ -14,16 +14,12 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
 	"github.com/mcc-github/blockchain/msp"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	mb "github.com/mcc-github/blockchain/protos/msp"
-	logging "github.com/op/go-logging"
 	"github.com/stretchr/testify/assert"
 )
-
-func init() {
-	logging.SetLevel(logging.DEBUG, "")
-}
 
 var invalidSignature = []byte("badsigned")
 
@@ -289,13 +285,11 @@ func TestDeserializeIdentityError(t *testing.T) {
 	spe, err := compile(policy.Rule, policy.Identities, &mockDeserializer{fail: errors.New("myError")})
 	assert.NoError(t, err)
 
-	
-	var buf bytes.Buffer
-	backend := logging.NewLogBackend(&buf, "", 0)
-	cauthdslLogger.SetBackend(logging.AddModuleLevel(backend))
-	defer func() {
-		flogging.Reset()
-	}()
+	logger, recorder := floggingtest.NewTestLogger(t)
+	defer func(old *flogging.FabricLogger) {
+		cauthdslLogger = old
+	}(cauthdslLogger)
+	cauthdslLogger = logger
 
 	
 	signedData, used := toSignedData([][]byte{nil}, [][]byte{nil}, [][]byte{nil})
@@ -303,5 +297,5 @@ func TestDeserializeIdentityError(t *testing.T) {
 
 	
 	assert.False(t, ret)
-	assert.Contains(t, buf.String(), "Principal deserialization failure (myError) for identity ")
+	assert.Contains(t, string(recorder.Buffer().Contents()), "Principal deserialization failure (myError) for identity")
 }

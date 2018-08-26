@@ -22,7 +22,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/identity"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
@@ -128,7 +127,7 @@ type commImpl struct {
 	pubSub         *util.PubSub
 	peerIdentity   api.PeerIdentityType
 	idMapper       identity.Mapper
-	logger         *logging.Logger
+	logger         util.Logger
 	opts           []grpc.DialOption
 	secureDialOpts func() []grpc.DialOption
 	connStore      *connectionStore

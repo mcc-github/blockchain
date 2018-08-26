@@ -26,7 +26,6 @@ import (
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
-	"github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
 
@@ -315,7 +314,7 @@ func (vm *DockerVM) Start(ccid ccintf.CCID,
 
 			
 			containerLogger := flogging.MustGetLogger(containerName)
-			logging.SetLevel(logging.GetLevel("peer"), containerName)
+			flogging.SetModuleLevel(flogging.GetModuleLevel("peer"), containerName)
 
 			for {
 				

@@ -12,18 +12,15 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-
-	"github.com/op/go-logging"
 )
 
 const pkgLogID = "common/ledger/blockledger/file"
 
-var logger *logging.Logger
+var logger = flogging.MustGetLogger(pkgLogID)
 
 var closedChan chan struct{}
 
 func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
 	closedChan = make(chan struct{})
 	close(closedChan)
 }

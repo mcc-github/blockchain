@@ -13,7 +13,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/op/go-logging"
 	"github.com/spf13/viper"
 
 	"github.com/mcc-github/blockchain/bccsp/factory"
@@ -23,22 +22,6 @@ import (
 )
 
 var configLogger = flogging.MustGetLogger("config")
-
-
-func SetupTestLogging() {
-	level, err := logging.LogLevel(viper.GetString("logging.level"))
-	if err == nil {
-		
-		logging.SetLevel(level, "main")
-		logging.SetLevel(level, "server")
-		logging.SetLevel(level, "peer")
-	} else {
-		configLogger.Warningf("Log level not recognized '%s', defaulting to %s: %s", viper.GetString("logging.level"), logging.ERROR, err)
-		logging.SetLevel(logging.ERROR, "main")
-		logging.SetLevel(logging.ERROR, "server")
-		logging.SetLevel(logging.ERROR, "peer")
-	}
-}
 
 
 func SetupTestConfig() {
@@ -59,8 +42,6 @@ func SetupTestConfig() {
 	if err != nil {            
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
-
-	SetupTestLogging()
 
 	
 	var numProcsDesired = viper.GetInt("peer.gomaxprocs")

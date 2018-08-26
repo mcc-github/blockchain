@@ -15,19 +15,19 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
-	"github.com/mcc-github/blockchain/common/flogging"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
-	"github.com/op/go-logging"
+	logging "github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
@@ -164,33 +164,50 @@ func IsEnabledForLogLevel(logLevel string) bool {
 	return chaincodeLogger.IsEnabledFor(lvl)
 }
 
+var loggingSetup sync.Once
+
 
 
 
 func SetupChaincodeLogging() {
+	loggingSetup.Do(setupChaincodeLogging)
+}
+
+func setupChaincodeLogging() {
+	
+	const defaultLogFormat = "%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}"
+	const defaultLevel = logging.INFO
+
 	viper.SetEnvPrefix("CORE")
 	viper.AutomaticEnv()
 	replacer := strings.NewReplacer(".", "_")
 	viper.SetEnvKeyReplacer(replacer)
 
 	
-	logFormat := flogging.SetFormat(viper.GetString("chaincode.logging.format"))
-	flogging.InitBackend(logFormat, logOutput)
+	logFormat := viper.GetString("chaincode.logging.format")
+	if logFormat == "" {
+		logFormat = defaultLogFormat
+	}
+
+	formatter := logging.MustStringFormatter(logFormat)
+	backend := logging.NewLogBackend(os.Stderr, "", 0)
+	backendFormatter := logging.NewBackendFormatter(backend, formatter)
+	logging.SetBackend(backendFormatter).SetLevel(defaultLevel, "")
 
 	
 	chaincodeLogLevelString := viper.GetString("chaincode.logging.level")
 	if chaincodeLogLevelString == "" {
-		chaincodeLogger.Infof("Chaincode log level not provided; defaulting to: %s", flogging.DefaultLevel())
-		flogging.InitFromSpec(flogging.DefaultLevel())
-	} else {
-		_, err := LogLevel(chaincodeLogLevelString)
-		if err == nil {
-			flogging.InitFromSpec(chaincodeLogLevelString)
-		} else {
-			chaincodeLogger.Warningf("Error: '%s' for chaincode log level: %s; defaulting to %s", err, chaincodeLogLevelString, flogging.DefaultLevel())
-			flogging.InitFromSpec(flogging.DefaultLevel())
-		}
+		chaincodeLogger.Infof("Chaincode log level not provided; defaulting to: %s", defaultLevel.String())
+		chaincodeLogLevelString = defaultLevel.String()
 	}
+
+	_, err := LogLevel(chaincodeLogLevelString)
+	if err != nil {
+		chaincodeLogger.Warningf("Error: '%s' for chaincode log level: %s; defaulting to %s", err, chaincodeLogLevelString, defaultLevel.String())
+		chaincodeLogLevelString = defaultLevel.String()
+	}
+
+	initFromSpec(chaincodeLogLevelString, defaultLevel)
 
 	
 	
@@ -210,6 +227,45 @@ func SetupChaincodeLogging() {
 	
 	buildLevel := viper.GetString("chaincode.buildlevel")
 	chaincodeLogger.Infof("Chaincode (build level: %s) starting up ...", buildLevel)
+}
+
+
+func initFromSpec(spec string, defaultLevel logging.Level) {
+	levelAll := defaultLevel
+	var err error
+
+	fields := strings.Split(spec, ":")
+	for _, field := range fields {
+		split := strings.Split(field, "=")
+		switch len(split) {
+		case 1:
+			if levelAll, err = logging.LogLevel(field); err != nil {
+				chaincodeLogger.Warningf("Logging level '%s' not recognized, defaulting to '%s': %s", field, defaultLevel, err)
+				levelAll = defaultLevel 
+			}
+		case 2:
+			
+			levelSingle, err := logging.LogLevel(split[1])
+			if err != nil {
+				chaincodeLogger.Warningf("Invalid logging level in '%s' ignored", field)
+				continue
+			}
+
+			if split[0] == "" {
+				chaincodeLogger.Warningf("Invalid logging override specification '%s' ignored - no module specified", field)
+			} else {
+				modules := strings.Split(split[0], ",")
+				for _, module := range modules {
+					chaincodeLogger.Debugf("Setting logging level for module '%s' to '%s'", module, levelSingle)
+					logging.SetLevel(levelSingle, module)
+				}
+			}
+		default:
+			chaincodeLogger.Warningf("Invalid logging override '%s' ignored - missing ':'?", field)
+		}
+	}
+
+	logging.SetLevel(levelAll, "") 
 }
 
 

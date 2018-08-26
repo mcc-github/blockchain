@@ -14,26 +14,34 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
 
 const pkgLogID = "orderer/ledger/ramledger"
 
-var logger *logging.Logger
-
-func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
+var logger = flogging.MustGetLogger(pkgLogID)
 
 type cursor struct {
 	list *simpleList
 }
 
 type simpleList struct {
+	lock   sync.RWMutex
 	next   *simpleList
 	signal chan struct{}
 	block  *cb.Block
+}
+
+func (s *simpleList) getNext() *simpleList {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.next
+}
+
+func (s *simpleList) setNext(n *simpleList) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.next = n
 }
 
 type ramLedger struct {
@@ -49,8 +57,9 @@ type ramLedger struct {
 func (cu *cursor) Next() (*cb.Block, cb.Status) {
 	
 	for {
-		if cu.list.next != nil {
-			cu.list = cu.list.next
+		next := cu.list.getNext()
+		if next != nil {
+			cu.list = next
 			return cu.list.block, cb.Status_SUCCESS
 		}
 		<-cu.list.signal
@@ -111,7 +120,7 @@ func (rl *ramLedger) Iterator(startPosition *ab.SeekPosition) (blockledger.Itera
 			if list.block.Header.Number == specified-1 {
 				break
 			}
-			list = list.next 
+			list = list.getNext() 
 		}
 	}
 	cursor := &cursor{list: list}
@@ -155,14 +164,15 @@ func (rl *ramLedger) Append(block *cb.Block) error {
 }
 
 func (rl *ramLedger) appendBlock(block *cb.Block) {
-	rl.newest.next = &simpleList{
+	next := &simpleList{
 		signal: make(chan struct{}),
 		block:  block,
 	}
+	rl.newest.setNext(next)
 
 	lastSignal := rl.newest.signal
 	logger.Debugf("Sending signal that block %d has a successor", rl.newest.block.Header.Number)
-	rl.newest = rl.newest.next
+	rl.newest = rl.newest.getNext()
 	close(lastSignal)
 
 	rl.size++
@@ -170,7 +180,7 @@ func (rl *ramLedger) appendBlock(block *cb.Block) {
 	if rl.size > rl.maxSize {
 		logger.Debugf("RAM ledger max size about to be exceeded, removing oldest item: %d",
 			rl.oldest.block.Header.Number)
-		rl.oldest = rl.oldest.next
+		rl.oldest = rl.oldest.getNext()
 		rl.size--
 	}
 }

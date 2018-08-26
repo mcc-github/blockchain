@@ -20,7 +20,6 @@ import (
 	ccdef "github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/deliver"
-	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/localmsp"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/viperutil"
@@ -145,8 +144,6 @@ func serve(args []string) error {
 	
 	
 	grpc.EnableTracing = true
-
-	flogging.SetPeerStartupModulesMap()
 
 	logger.Infof("Starting %s", version.GetInfo())
 

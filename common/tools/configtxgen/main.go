@@ -24,7 +24,6 @@ import (
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
 
-	logging "github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
 
@@ -233,8 +232,6 @@ func main() {
 		printVersion()
 		os.Exit(exitCode)
 	}
-
-	logging.SetLevel(logging.INFO, "")
 
 	
 	defer func() {

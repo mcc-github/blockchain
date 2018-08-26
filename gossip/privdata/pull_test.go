@@ -25,14 +25,12 @@ import (
 	fcommon "github.com/mcc-github/blockchain/protos/common"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
 func init() {
-	logging.SetLevel(logging.DEBUG, util.LoggingPrivModule)
 	policy2Filter = make(map[privdata.CollectionAccessPolicy]privdata.Filter)
 }
 

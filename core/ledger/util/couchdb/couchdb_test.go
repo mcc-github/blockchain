@@ -17,7 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	logging "github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	ledgertestutil "github.com/mcc-github/blockchain/core/ledger/testutil"
 	"github.com/mcc-github/blockchain/integration/runner"
@@ -82,7 +82,7 @@ func testMain(m *testing.M) int {
 	viper.Set("ledger.state.couchDBConfig.createGlobalChangesDB", true)
 
 	
-	logging.SetModuleLevel("couchdb", "Debug")
+	flogging.SetModuleLevel("couchdb", "Debug")
 
 	viper.Set("logging.peer", "debug")
 

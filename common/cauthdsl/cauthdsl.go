@@ -14,8 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	mb "github.com/mcc-github/blockchain/protos/msp"
-
-	"github.com/op/go-logging"
+	"go.uber.org/zap/zapcore"
 )
 
 var cauthdslLogger = flogging.MustGetLogger("cauthdsl")
@@ -93,7 +92,7 @@ func compile(policy *cb.SignaturePolicy, identities []*mb.MSPPrincipal, deserial
 					cauthdslLogger.Debugf("%p skipping identity %d because it has already been used", signedData, i)
 					continue
 				}
-				if cauthdslLogger.IsEnabledFor(logging.DEBUG) {
+				if cauthdslLogger.IsEnabledFor(zapcore.DebugLevel) {
 					
 					cauthdslLogger.Debugf("%p processing identity %d with bytes of %x", signedData, i, sd.Identity)
 				}

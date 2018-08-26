@@ -7,13 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package chaincode
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/msp"
 	ccapi "github.com/mcc-github/blockchain/peer/chaincode/api"
@@ -24,7 +23,6 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
-	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
@@ -172,14 +170,10 @@ func TestInvokeCmdSimulateESCCPluginResponse(t *testing.T) {
 	mockCF.EndorserClients[0] = common.GetMockEndorserClient(mockResponse, nil)
 
 	
-	var buffer bytes.Buffer
-	logger.SetBackend(logging.AddModuleLevel(logging.NewLogBackend(&buffer, "", 0)))
-	
-	defer func() {
-		flogging.Reset()
-	}()
-	
-	buffer.Reset()
+	oldLogger := logger
+	defer func() { logger = oldLogger }()
+	l, recorder := floggingtest.NewTestLogger(t)
+	logger = l
 
 	cmd := invokeCmd(mockCF)
 	addFlags(cmd)
@@ -190,8 +184,9 @@ func TestInvokeCmdSimulateESCCPluginResponse(t *testing.T) {
 	assert.NoError(t, err, "Run chaincode invoke cmd error")
 	err = cmd.Execute()
 	assert.Nil(t, err)
-	assert.Regexp(t, "Chaincode invoke successful", buffer.String())
-	assert.Regexp(t, fmt.Sprintf("result: <nil>"), buffer.String())
+
+	assert.NotEmpty(t, recorder.MessagesContaining("Chaincode invoke successful"), "missing invoke success log record")
+	assert.NotEmpty(t, recorder.MessagesContaining("result: <nil>"), "missing result log record")
 }
 
 func TestInvokeCmdEndorsementError(t *testing.T) {

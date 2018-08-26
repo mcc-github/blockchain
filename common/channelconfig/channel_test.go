@@ -15,13 +15,8 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	cb "github.com/mcc-github/blockchain/protos/common"
 
-	logging "github.com/op/go-logging"
 	"github.com/stretchr/testify/assert"
 )
-
-func init() {
-	logging.SetLevel(logging.DEBUG, "")
-}
 
 func TestInterface(t *testing.T) {
 	_ = Channel(&ChannelConfig{})

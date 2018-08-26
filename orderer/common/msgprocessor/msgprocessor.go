@@ -13,7 +13,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	logging "github.com/op/go-logging"
 )
 
 const (
@@ -24,11 +23,7 @@ const (
 	epoch      = 0
 )
 
-var logger *logging.Logger
-
-func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
+var logger = flogging.MustGetLogger(pkgLogID)
 
 
 

@@ -28,7 +28,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/peer"
 	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protos/utils"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -39,11 +38,7 @@ const (
 	transientBlockRetentionDefault   = 1000
 )
 
-var logger *logging.Logger 
-
-func init() {
-	logger = util.GetLogger(util.LoggingPrivModule, "")
-}
+var logger = util.GetLogger(util.LoggingPrivModule, "")
 
 
 type TransientStore interface {

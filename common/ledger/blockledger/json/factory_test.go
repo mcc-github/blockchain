@@ -23,13 +23,8 @@ import (
 	"path"
 	"testing"
 
-	logging "github.com/op/go-logging"
 	"github.com/stretchr/testify/assert"
 )
-
-func init() {
-	logging.SetLevel(logging.DEBUG, "")
-}
 
 
 func TestErrorMkdir(t *testing.T) {

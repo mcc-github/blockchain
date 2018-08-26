@@ -159,7 +159,7 @@ chaincode:
   car:
     runtime: $(BASE_DOCKER_NS)/blockchain-baseos:$(ARCH)-$(BASE_VERSION)
   java:
-    Dockerfile: $(DOCKER_NS)/blockchain-javaenv:$(ARCH)-$(PROJECT_VERSION)
+    runtime: $(DOCKER_NS)/blockchain-javaenv:$(ARCH)-$(PROJECT_VERSION)
   node:
       runtime: $(BASE_DOCKER_NS)/blockchain-baseimage:$(ARCH)-$(BASE_VERSION)
   startuptimeout: 300s

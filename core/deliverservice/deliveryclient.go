@@ -19,17 +19,12 @@ import (
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/op/go-logging"
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
-var logger *logging.Logger 
-
-func init() {
-	logger = flogging.MustGetLogger("deliveryClient")
-}
+var logger = flogging.MustGetLogger("deliveryClient")
 
 const (
 	defaultReConnectTotalTimeThreshold = time.Second * 60 * 60

@@ -15,7 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/op/go-logging"
 )
 
 type msgImpl struct {
@@ -65,7 +64,7 @@ type adapterImpl struct {
 
 	channel common.ChainID
 
-	logger *logging.Logger
+	logger util.Logger
 
 	doneCh   chan struct{}
 	stopOnce *sync.Once

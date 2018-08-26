@@ -230,13 +230,14 @@ func DockerBuild(opts DockerBuildOptions) error {
 		cw.Close()
 		return fmt.Errorf("Error waiting for container to complete: %s", err)
 	}
+
+	
 	cw.Close()
+	if err := cw.Wait(); err != nil {
+		logger.Errorf("attach wait failed: %s", err)
+	}
 
 	if retval > 0 {
-		
-		if err := cw.Wait(); err != nil {
-			logger.Errorf("attach wait failed: %s", err)
-		}
 		return fmt.Errorf("Error returned from build: %d \"%s\"", retval, stdout.String())
 	}
 

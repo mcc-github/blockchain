@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"go.uber.org/zap/zapcore"
@@ -24,6 +25,23 @@ import (
 
 
 var formatRegexp = regexp.MustCompile(`%{(color|id|level|message|module|shortfunc|time)(?::(.*?))?}`)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -62,6 +80,40 @@ func ParseFormat(spec string) ([]Formatter, error) {
 	}
 
 	return formatters, nil
+}
+
+
+
+
+type MultiFormatter struct {
+	mutex      sync.RWMutex
+	formatters []Formatter
+}
+
+
+
+
+func NewMultiFormatter(formatters ...Formatter) *MultiFormatter {
+	return &MultiFormatter{
+		formatters: formatters,
+	}
+}
+
+
+
+func (m *MultiFormatter) Format(w io.Writer, entry zapcore.Entry, fields []zapcore.Field) {
+	m.mutex.RLock()
+	for i := range m.formatters {
+		m.formatters[i].Format(w, entry, fields)
+	}
+	m.mutex.RUnlock()
+}
+
+
+func (m *MultiFormatter) SetFormatters(formatters []Formatter) {
+	m.mutex.Lock()
+	m.formatters = formatters
+	m.mutex.Unlock()
 }
 
 
@@ -167,7 +219,7 @@ func newMessageFormatter(f string) MessageFormatter {
 
 
 func (m MessageFormatter) Format(w io.Writer, entry zapcore.Entry, fields []zapcore.Field) {
-	fmt.Fprintf(w, m.FormatVerb, entry.Message)
+	fmt.Fprintf(w, m.FormatVerb, strings.TrimRight(entry.Message, "\n"))
 }
 
 
