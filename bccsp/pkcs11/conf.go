@@ -87,7 +87,9 @@ type PKCS11Opts struct {
 	Label      string `mapstructure:"label" json:"label"`
 	Pin        string `mapstructure:"pin" json:"pin"`
 	SoftVerify bool   `mapstructure:"softwareverify,omitempty" json:"softwareverify,omitempty"`
+	Immutable  bool   `mapstructure:"immutable,omitempty" json:"immutable,omitempty"`
 }
+
 
 
 type FileKeystoreOpts struct {

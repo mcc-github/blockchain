@@ -855,8 +855,10 @@ func (lscc *LifeCycleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		}
 
 		
-		if (!ac.Capabilities().PrivateChannelData() && len(args) > 6) ||
-			(ac.Capabilities().PrivateChannelData() && len(args) > 7) {
+		if !ac.Capabilities().PrivateChannelData() && len(args) > 6 {
+			return shim.Error(PrivateChannelDataNotAvailable("").Error())
+		}
+		if ac.Capabilities().PrivateChannelData() && len(args) > 7 {
 			return shim.Error(InvalidArgsLenErr(len(args)).Error())
 		}
 

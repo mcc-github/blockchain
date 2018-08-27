@@ -244,7 +244,7 @@ func TestDeploy(t *testing.T) {
 	
 	
 	errMessage := InvalidArgsLenErr(7).Error()
-	testDeploy(t, "example02", "1.0", path, false, false, true, InvalidArgsLenErr(7).Error(), scc, stub, []byte("collections"))
+	testDeploy(t, "example02", "1.0", path, false, false, true, PrivateChannelDataNotAvailable("").Error(), scc, stub, []byte("collections"))
 
 	
 	mocksccProvider := (&mscc.MocksccProviderFactory{
