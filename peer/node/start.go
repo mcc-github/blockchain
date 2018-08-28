@@ -88,12 +88,6 @@ const (
 var chaincodeDevMode bool
 var orderingEndpoint string
 
-
-
-
-
-const XXXDefaultChannelMSPID = "SampleOrg"
-
 func startCmd() *cobra.Command {
 	
 	flags := nodeStartCmd.Flags()
@@ -160,11 +154,14 @@ func serve(args []string) error {
 		&car.Platform{},
 	)
 
+	deployedCCInfoProvider := &lscc.DeployedCCInfoProvider{}
+
 	
 	ledgermgmt.Initialize(
 		&ledgermgmt.Initializer{
-			CustomTxProcessors: peer.ConfigTxProcessors,
-			PlatformRegistry:   pr,
+			CustomTxProcessors:            peer.ConfigTxProcessors,
+			PlatformRegistry:              pr,
+			DeployedChaincodeInfoProvider: deployedCCInfoProvider,
 		})
 
 	
@@ -343,7 +340,7 @@ func serve(args []string) error {
 			logger.Panicf("Failed subscribing to chaincode lifecycle updates")
 		}
 		cceventmgmt.GetMgr().Register(cid, sub)
-	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName), pr)
+	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName), pr, deployedCCInfoProvider)
 
 	if viper.GetBool("peer.discovery.enabled") {
 		registerDiscoveryService(peerServer, policyMgr, lifecycle)

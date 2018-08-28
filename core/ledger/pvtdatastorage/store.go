@@ -45,6 +45,7 @@ type Store interface {
 	GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error)
 	
 	
+	GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error)
 	
 	
 	
@@ -52,7 +53,9 @@ type Store interface {
 	
 	
 	
-	Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missing []*ledger.MissingPrivateData) error
+	
+	
+	Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missing *ledger.MissingPrivateDataList) error
 	
 	Commit() error
 	

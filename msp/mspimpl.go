@@ -334,7 +334,7 @@ func (msp *bccspmsp) hasOURoleInternal(id *identity, mspRole m.MSPRole_MSPRoleTy
 
 
 func (msp *bccspmsp) DeserializeIdentity(serializedID []byte) (Identity, error) {
-	mspLogger.Infof("Obtaining identity")
+	mspLogger.Debug("Obtaining identity")
 
 	
 	sId := &m.SerializedIdentity{}

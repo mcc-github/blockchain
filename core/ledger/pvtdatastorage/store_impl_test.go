@@ -46,6 +46,9 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 	cs.SetBTL("ns-1", "coll-2", 0)
 	cs.SetBTL("ns-2", "coll-1", 0)
 	cs.SetBTL("ns-2", "coll-2", 0)
+	cs.SetBTL("ns-3", "coll-1", 0)
+	cs.SetBTL("ns-4", "coll-1", 0)
+	cs.SetBTL("ns-4", "coll-2", 0)
 	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
 	env := NewTestStoreEnv(t, "TestStoreBasicCommitAndRetrieval", btlPolicy)
 	defer env.Cleanup()
@@ -57,11 +60,32 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 	}
 
 	
+	blk1MissingData := &ledger.MissingPrivateDataList{}
+
+	
+	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
+	blk1MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+	blk1MissingData.Add("tx1", 1, "ns-2", "coll-1", true)
+	blk1MissingData.Add("tx1", 1, "ns-2", "coll-2", true)
+	
+	blk1MissingData.Add("tx2", 2, "ns-3", "coll-1", true)
+	
+	blk1MissingData.Add("tx4", 4, "ns-4", "coll-1", false)
+	blk1MissingData.Add("tx4", 4, "ns-4", "coll-2", false)
+
+	
+	blk2MissingData := &ledger.MissingPrivateDataList{}
+	
+	blk2MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
+	blk2MissingData.Add("tx1", 3, "ns-1", "coll-1", true)
+	blk2MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+
+	
 	assert.NoError(store.Prepare(0, nil, nil))
 	assert.NoError(store.Commit())
 
 	
-	assert.NoError(store.Prepare(1, testData, nil))
+	assert.NoError(store.Prepare(1, testData, blk1MissingData))
 	assert.NoError(store.Commit())
 
 	
@@ -101,6 +125,41 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 	_, ok := err.(*ErrOutOfRange)
 	assert.True(ok)
 	assert.Nil(retrievedData)
+
+	
+	assert.NoError(store.Prepare(2, testData, blk2MissingData))
+	assert.NoError(store.Commit())
+
+	
+	
+	
+
+	expectedMissingPvtDataInfo := make(ledger.MissingPvtDataInfo)
+	
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-1", "coll-1")
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-1", "coll-2")
+	expectedMissingPvtDataInfo.Add(2, 3, "ns-1", "coll-1")
+
+	missingPvtDataInfo, err := store.GetMissingPvtDataInfoForMostRecentBlocks(1)
+	assert.NoError(err)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
+
+	
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-1", "coll-1")
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-1", "coll-2")
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-2", "coll-1")
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-2", "coll-2")
+
+	
+	expectedMissingPvtDataInfo.Add(1, 2, "ns-3", "coll-1")
+
+	missingPvtDataInfo, err = store.GetMissingPvtDataInfoForMostRecentBlocks(2)
+	assert.NoError(err)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
+
+	missingPvtDataInfo, err = store.GetMissingPvtDataInfoForMostRecentBlocks(10)
+	assert.NoError(err)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
 }
 
 func TestExpiryDataNotIncluded(t *testing.T) {
@@ -110,12 +169,29 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	cs.SetBTL("ns-1", "coll-2", 0)
 	cs.SetBTL("ns-2", "coll-1", 0)
 	cs.SetBTL("ns-2", "coll-2", 2)
+	cs.SetBTL("ns-3", "coll-1", 1)
+	cs.SetBTL("ns-3", "coll-2", 0)
 	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
 
 	env := NewTestStoreEnv(t, ledgerid, btlPolicy)
 	defer env.Cleanup()
 	assert := assert.New(t)
 	store := env.TestStore
+
+	
+	blk1MissingData := &ledger.MissingPrivateDataList{}
+	
+	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
+	blk1MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+	
+	blk1MissingData.Add("tx4", 4, "ns-3", "coll-1", false)
+	blk1MissingData.Add("tx4", 4, "ns-3", "coll-2", false)
+
+	
+	blk2MissingData := &ledger.MissingPrivateDataList{}
+	
+	blk2MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
+	blk2MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
 
 	
 	assert.NoError(store.Prepare(0, nil, nil))
@@ -126,7 +202,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 	}
-	assert.NoError(store.Prepare(1, testDataForBlk1, nil))
+	assert.NoError(store.Prepare(1, testDataForBlk1, blk1MissingData))
 	assert.NoError(store.Commit())
 
 	
@@ -134,7 +210,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 		produceSamplePvtdata(t, 3, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 		produceSamplePvtdata(t, 5, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 	}
-	assert.NoError(store.Prepare(2, testDataForBlk2, nil))
+	assert.NoError(store.Prepare(2, testDataForBlk2, blk2MissingData))
 	assert.NoError(store.Commit())
 
 	retrievedData, _ := store.GetPvtDataByBlockNum(1, nil)
@@ -143,6 +219,20 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 		assert.Equal(data.SeqInBlock, testDataForBlk1[i].SeqInBlock)
 		assert.True(proto.Equal(data.WriteSet, testDataForBlk1[i].WriteSet))
 	}
+
+	
+	expectedMissingPvtDataInfo := make(ledger.MissingPvtDataInfo)
+	
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-1", "coll-1")
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-1", "coll-2")
+
+	
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-1", "coll-1")
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-1", "coll-2")
+
+	missingPvtDataInfo, err := store.GetMissingPvtDataInfoForMostRecentBlocks(10)
+	assert.NoError(err)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
 
 	
 	assert.NoError(store.Prepare(3, nil, nil))
@@ -155,6 +245,18 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	}
 	retrievedData, _ = store.GetPvtDataByBlockNum(1, nil)
 	testutil.AssertEquals(t, retrievedData, expectedPvtdataFromBlock1)
+
+	
+	expectedMissingPvtDataInfo = make(ledger.MissingPvtDataInfo)
+	
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-1", "coll-1")
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-1", "coll-2")
+	
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-1", "coll-2")
+
+	missingPvtDataInfo, err = store.GetMissingPvtDataInfoForMostRecentBlocks(10)
+	assert.NoError(err)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
 
 	
 	assert.NoError(store.Prepare(4, nil, nil))
@@ -175,6 +277,19 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	}
 	retrievedData, _ = store.GetPvtDataByBlockNum(2, nil)
 	testutil.AssertEquals(t, retrievedData, expectedPvtdataFromBlock2)
+
+	
+	expectedMissingPvtDataInfo = make(ledger.MissingPvtDataInfo)
+	
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-1", "coll-2")
+
+	
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-1", "coll-2")
+
+	missingPvtDataInfo, err = store.GetMissingPvtDataInfoForMostRecentBlocks(10)
+	assert.NoError(err)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
+
 }
 
 func TestStorePurge(t *testing.T) {
@@ -185,6 +300,8 @@ func TestStorePurge(t *testing.T) {
 	cs.SetBTL("ns-1", "coll-2", 0)
 	cs.SetBTL("ns-2", "coll-1", 0)
 	cs.SetBTL("ns-2", "coll-2", 4)
+	cs.SetBTL("ns-3", "coll-1", 1)
+	cs.SetBTL("ns-3", "coll-2", 0)
 	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
 
 	env := NewTestStoreEnv(t, ledgerid, btlPolicy)
@@ -197,28 +314,60 @@ func TestStorePurge(t *testing.T) {
 	assert.NoError(s.Commit())
 
 	
+	blk1MissingData := &ledger.MissingPrivateDataList{}
+	
+	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
+	blk1MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+	
+	blk1MissingData.Add("tx4", 4, "ns-3", "coll-1", false)
+	blk1MissingData.Add("tx4", 4, "ns-3", "coll-2", false)
+
+	
 	testDataForBlk1 := []*ledger.TxPvtData{
 		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 	}
-	assert.NoError(s.Prepare(1, testDataForBlk1, nil))
+	assert.NoError(s.Prepare(1, testDataForBlk1, blk1MissingData))
 	assert.NoError(s.Commit())
 
 	
 	assert.NoError(s.Prepare(2, nil, nil))
 	assert.NoError(s.Commit())
 	
+	ns1_coll1 := &dataKey{nsCollBlk: nsCollBlk{ns: "ns-1", coll: "coll-1", blkNum: 1}, txNum: 2}
+	ns2_coll2 := &dataKey{nsCollBlk: nsCollBlk{ns: "ns-2", coll: "coll-2", blkNum: 1}, txNum: 2}
+
+	
+	ns1_coll1_elgMD := &missingDataKey{nsCollBlk: nsCollBlk{ns: "ns-1", coll: "coll-1", blkNum: 1}, isEligible: true}
+	ns1_coll2_elgMD := &missingDataKey{nsCollBlk: nsCollBlk{ns: "ns-1", coll: "coll-2", blkNum: 1}, isEligible: true}
+
+	
+	ns3_coll1_inelgMD := &missingDataKey{nsCollBlk: nsCollBlk{ns: "ns-3", coll: "coll-1", blkNum: 1}, isEligible: false}
+	ns3_coll2_inelgMD := &missingDataKey{nsCollBlk: nsCollBlk{ns: "ns-3", coll: "coll-2", blkNum: 1}, isEligible: false}
+
 	testWaitForPurgerRoutineToFinish(s)
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+	assert.True(testDataKeyExists(t, s, ns1_coll1))
+	assert.True(testDataKeyExists(t, s, ns2_coll2))
+
+	assert.True(testMissingDataKeyExists(t, s, ns1_coll1_elgMD))
+	assert.True(testMissingDataKeyExists(t, s, ns1_coll2_elgMD))
+
+	assert.True(testMissingDataKeyExists(t, s, ns3_coll1_inelgMD))
+	assert.True(testMissingDataKeyExists(t, s, ns3_coll2_inelgMD))
 
 	
 	assert.NoError(s.Prepare(3, nil, nil))
 	assert.NoError(s.Commit())
 	
 	testWaitForPurgerRoutineToFinish(s)
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+	assert.True(testDataKeyExists(t, s, ns1_coll1))
+	assert.True(testDataKeyExists(t, s, ns2_coll2))
+	
+	assert.True(testMissingDataKeyExists(t, s, ns1_coll1_elgMD))
+	assert.True(testMissingDataKeyExists(t, s, ns1_coll2_elgMD))
+	
+	assert.True(testMissingDataKeyExists(t, s, ns3_coll1_inelgMD))
+	assert.True(testMissingDataKeyExists(t, s, ns3_coll2_inelgMD))
 
 	
 	assert.NoError(s.Prepare(4, nil, nil))
@@ -226,27 +375,33 @@ func TestStorePurge(t *testing.T) {
 	
 	
 	testWaitForPurgerRoutineToFinish(s)
-	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+	assert.False(testDataKeyExists(t, s, ns1_coll1))
+	assert.True(testDataKeyExists(t, s, ns2_coll2))
+	
+	assert.False(testMissingDataKeyExists(t, s, ns1_coll1_elgMD))
+	assert.True(testMissingDataKeyExists(t, s, ns1_coll2_elgMD))
+	
+	assert.False(testMissingDataKeyExists(t, s, ns3_coll1_inelgMD))
+	assert.True(testMissingDataKeyExists(t, s, ns3_coll2_inelgMD))
 
 	
 	assert.NoError(s.Prepare(5, nil, nil))
 	assert.NoError(s.Commit())
 	
 	testWaitForPurgerRoutineToFinish(s)
-	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+	assert.False(testDataKeyExists(t, s, ns1_coll1))
+	assert.True(testDataKeyExists(t, s, ns2_coll2))
 
 	
 	assert.NoError(s.Prepare(6, nil, nil))
 	assert.NoError(s.Commit())
 	
 	testWaitForPurgerRoutineToFinish(s)
-	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
-	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+	assert.False(testDataKeyExists(t, s, ns1_coll1))
+	assert.False(testDataKeyExists(t, s, ns2_coll2))
 
 	
-	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{nsCollBlk: nsCollBlk{ns: "ns-1", coll: "coll-2", blkNum: 1}, txNum: 2}))
 }
 
 func TestStoreState(t *testing.T) {
@@ -317,6 +472,13 @@ func testLastCommittedBlockHeight(expectedBlockHt uint64, assert *assert.Asserti
 
 func testDataKeyExists(t *testing.T, s Store, dataKey *dataKey) bool {
 	dataKeyBytes := encodeDataKey(dataKey)
+	val, err := s.(*store).db.Get(dataKeyBytes)
+	assert.NoError(t, err)
+	return len(val) != 0
+}
+
+func testMissingDataKeyExists(t *testing.T, s Store, missingDataKey *missingDataKey) bool {
+	dataKeyBytes := encodeMissingDataKey(missingDataKey)
 	val, err := s.(*store).db.Get(dataKeyBytes)
 	assert.NoError(t, err)
 	return len(val) != 0

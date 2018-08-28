@@ -285,6 +285,12 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 
 
 
+func (l *kvLedger) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
+	return l.blockStore.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
+}
+
+
+
 func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
 	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
 	l.blockAPIsRWLock.RLock()
@@ -322,7 +328,7 @@ func (l *kvLedger) CommitPvtData(pvtData []*ledger.BlockPvtData) ([]*ledger.Pvtd
 }
 
 func (l *kvLedger) GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error) {
-	return nil, fmt.Errorf("not yet implemented")
+	return l, nil
 }
 
 

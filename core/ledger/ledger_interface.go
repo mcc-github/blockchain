@@ -19,6 +19,7 @@ import (
 type Initializer struct {
 	StateListeners                []StateListener
 	DeployedChaincodeInfoProvider DeployedChaincodeInfoProvider
+	MembershipInfoProvider        MembershipInfoProvider
 }
 
 
@@ -203,10 +204,14 @@ type TxPvtData struct {
 
 type MissingPrivateData struct {
 	TxId       string
-	SeqInBlock int
+	SeqInBlock uint64
 	Namespace  string
 	Collection string
-	Eligible   bool
+	IsEligible bool
+}
+
+type MissingPrivateDataList struct {
+	List []*MissingPrivateData
 }
 
 
@@ -214,13 +219,17 @@ type MissingPrivateData struct {
 type BlockAndPvtData struct {
 	Block        *common.Block
 	BlockPvtData map[uint64]*TxPvtData
-	Missing      []*MissingPrivateData
+	Missing      *MissingPrivateDataList
 }
 
 
 type BlockPvtData struct {
 	BlockNum  uint64
 	WriteSets map[uint64]*TxPvtData
+}
+
+func (missing *MissingPrivateDataList) Add(txId string, txNum uint64, ns, coll string, isEligible bool) {
+	missing.List = append(missing.List, &MissingPrivateData{txId, txNum, ns, coll, isEligible})
 }
 
 
@@ -344,13 +353,30 @@ type MissingBlockPvtdataInfo map[uint64][]*MissingCollectionPvtDataInfo
 
 
 type MissingCollectionPvtDataInfo struct {
-	ChaincodeName, CollectionName string
+	Namespace, Collection string
 }
 
 
 type CollectionConfigInfo struct {
 	CollectionConfig   *common.CollectionConfigPackage
 	CommittingBlockNum uint64
+}
+
+func (missingPvtDataInfo MissingPvtDataInfo) Add(blkNum, txNum uint64, ns, coll string) {
+	missingBlockPvtDataInfo, ok := missingPvtDataInfo[blkNum]
+	if !ok {
+		missingBlockPvtDataInfo = make(MissingBlockPvtdataInfo)
+		missingPvtDataInfo[blkNum] = missingBlockPvtDataInfo
+	}
+
+	if _, ok := missingBlockPvtDataInfo[txNum]; !ok {
+		missingBlockPvtDataInfo[txNum] = []*MissingCollectionPvtDataInfo{}
+	}
+
+	missingBlockPvtDataInfo[txNum] = append(missingBlockPvtDataInfo[txNum],
+		&MissingCollectionPvtDataInfo{
+			Namespace:  ns,
+			Collection: coll})
 }
 
 
@@ -412,6 +438,13 @@ type ChaincodeLifecycleDetails struct {
 	HashChanged        bool     
 	CollectionsUpdated []string 
 	CollectionsRemoved []string 
+}
+
+
+
+type MembershipInfoProvider interface {
+	
+	AmMemberOf(channelName string, collectionPolicyConfig *common.CollectionPolicyConfig) (bool, error)
 }
 
 

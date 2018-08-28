@@ -11,23 +11,19 @@ import (
 )
 
 
-type MembershipInfoProvider interface {
-	
-	AmMemberOf(collectionPolicyConfig *common.CollectionPolicyConfig) (bool, error)
-}
-
-type membershipProvider struct {
+type MembershipProvider struct {
 	selfSignedData common.SignedData
 	cf             CollectionFilter
-	channelName    string
 }
 
-func NewMembershipInfoProvider(channelName string, selfSignedData common.SignedData, filter CollectionFilter) MembershipInfoProvider {
-	return &membershipProvider{channelName: channelName, selfSignedData: selfSignedData, cf: filter}
+
+func NewMembershipInfoProvider(selfSignedData common.SignedData, filter CollectionFilter) *MembershipProvider {
+	return &MembershipProvider{selfSignedData: selfSignedData, cf: filter}
 }
 
-func (m *membershipProvider) AmMemberOf(collectionPolicyConfig *common.CollectionPolicyConfig) (bool, error) {
-	filt, err := m.cf.AccessFilter(m.channelName, collectionPolicyConfig)
+
+func (m *MembershipProvider) AmMemberOf(channelName string, collectionPolicyConfig *common.CollectionPolicyConfig) (bool, error) {
+	filt, err := m.cf.AccessFilter(channelName, collectionPolicyConfig)
 	if err != nil {
 		return false, err
 	}
