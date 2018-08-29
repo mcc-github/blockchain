@@ -8,7 +8,6 @@ package comm
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/mcc-github/blockchain/gossip/common"
 )
@@ -19,7 +18,7 @@ import (
 type ChannelDeMultiplexer struct {
 	channels []*channel
 	lock     *sync.RWMutex
-	closed   int32
+	closed   bool
 }
 
 
@@ -27,7 +26,6 @@ func NewChannelDemultiplexer() *ChannelDeMultiplexer {
 	return &ChannelDeMultiplexer{
 		channels: make([]*channel, 0),
 		lock:     &sync.RWMutex{},
-		closed:   int32(0),
 	}
 }
 
@@ -37,22 +35,19 @@ type channel struct {
 }
 
 func (m *ChannelDeMultiplexer) isClosed() bool {
-	return atomic.LoadInt32(&m.closed) == int32(1)
+	return m.closed
 }
 
 
 
 func (m *ChannelDeMultiplexer) Close() {
-	defer func() {
-		
-		recover()
-	}()
-	atomic.StoreInt32(&m.closed, int32(1))
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	m.closed = true
 	for _, ch := range m.channels {
 		close(ch.ch)
 	}
+	m.channels = nil
 }
 
 
@@ -67,19 +62,12 @@ func (m *ChannelDeMultiplexer) AddChannel(predicate common.MessageAcceptor) chan
 
 
 func (m *ChannelDeMultiplexer) DeMultiplex(msg interface{}) {
-	defer func() {
-		recover()
-	}() 
-
+	m.lock.RLock()
+	defer m.lock.RUnlock()
 	if m.isClosed() {
 		return
 	}
-
-	m.lock.RLock()
-	channels := m.channels
-	m.lock.RUnlock()
-
-	for _, ch := range channels {
+	for _, ch := range m.channels {
 		if ch.pred(msg) {
 			ch.ch <- msg
 		}
