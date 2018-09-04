@@ -352,13 +352,27 @@ func (v *VsccValidatorImpl) txWritesToNamespace(ns *rwsetutil.NsRwSet) bool {
 	}
 
 	
-	if !v.support.Capabilities().PrivateChannelData() {
-		return false
+	if v.support.Capabilities().PrivateChannelData() {
+		
+		for _, c := range ns.CollHashedRwSets {
+			if c.HashedRwSet != nil && len(c.HashedRwSet.HashedWrites) > 0 {
+				return true
+			}
+
+			
+			if v.support.Capabilities().KeyLevelEndorsement() {
+				
+				if c.HashedRwSet != nil && len(c.HashedRwSet.MetadataWrites) > 0 {
+					return true
+				}
+			}
+		}
 	}
 
 	
-	for _, c := range ns.CollHashedRwSets {
-		if c.HashedRwSet != nil && len(c.HashedRwSet.HashedWrites) > 0 {
+	if v.support.Capabilities().KeyLevelEndorsement() {
+		
+		if ns.KvRwSet != nil && len(ns.KvRwSet.MetadataWrites) > 0 {
 			return true
 		}
 	}

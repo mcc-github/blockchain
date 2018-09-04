@@ -25,6 +25,7 @@ import (
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/testdata"
 	ccp "github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/handlers/validation/api"
+	"github.com/mcc-github/blockchain/core/handlers/validation/builtin"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
@@ -55,7 +56,11 @@ func setupLedgerAndValidator(t *testing.T) (ledger.PeerLedger, txvalidator.Valid
 	return setupLedgerAndValidatorExplicit(t, &mockconfig.MockApplicationCapabilities{}, plugin)
 }
 
-func setupLedgerAndValidatorExplicit(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin *mocks.Plugin) (ledger.PeerLedger, txvalidator.Validator) {
+func setupLedgerAndValidatorExplicit(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin validation.Plugin) (ledger.PeerLedger, txvalidator.Validator) {
+	return setupLedgerAndValidatorExplicitWithMSP(t, cpb, plugin, nil)
+}
+
+func setupLedgerAndValidatorExplicitWithMSP(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin validation.Plugin, mspMgr msp.MSPManager) (ledger.PeerLedger, txvalidator.Validator) {
 	viper.Set("peer.fileSystemPath", "/tmp/blockchain/validatortest")
 	ledgermgmt.InitializeTestEnv()
 	gb, err := ctxt.MakeGenesisBlock("TestLedger")
@@ -65,7 +70,7 @@ func setupLedgerAndValidatorExplicit(t *testing.T, cpb *mockconfig.MockApplicati
 	vcs := struct {
 		*mocktxvalidator.Support
 		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: cpb}, semaphore.NewWeighted(10)}
+	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: cpb, MSPManagerVal: mspMgr}, semaphore.NewWeighted(10)}
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 	pm := &mocks.PluginMapper{}
 	factory := &mocks.PluginFactory{}
@@ -237,9 +242,14 @@ func TestInvokeNoRWSet(t *testing.T) {
 
 	
 	
-	plugin.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("tx is invalid")).Once()
 	t.Run("Post-1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicit(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true}, plugin)
+		mspmgr := &mocks2.MSPManager{}
+		idThatSatisfiesPrincipal := &mocks2.Identity{}
+		idThatSatisfiesPrincipal.SatisfiesPrincipalReturns(errors.New("principal not satisfied"))
+		idThatSatisfiesPrincipal.GetIdentifierReturns(&msp.IdentityIdentifier{})
+		mspmgr.DeserializeIdentityReturns(idThatSatisfiesPrincipal, nil)
+
+		l, v := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true}, &builtin.DefaultValidation{}, mspmgr)
 		defer ledgermgmt.CleanupTestEnv()
 		defer l.Close()
 
@@ -248,7 +258,32 @@ func TestInvokeNoRWSet(t *testing.T) {
 		putCCInfo(l, ccID, signedByAnyMember([]string{"SampleOrg"}), t)
 
 		tx := getEnv(ccID, nil, createRWset(t), t)
-		b := &common.Block{Data: &common.BlockData{Data: [][]byte{utils.MarshalOrPanic(tx)}}}
+		b := &common.Block{Data: &common.BlockData{Data: [][]byte{utils.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{}}
+
+		err := v.Validate(b)
+		assert.NoError(t, err)
+		assertInvalid(b, t, peer.TxValidationCode_ENDORSEMENT_POLICY_FAILURE)
+	})
+
+	
+	
+	t.Run("Post-1.3Capability", func(t *testing.T) {
+		mspmgr := &mocks2.MSPManager{}
+		idThatSatisfiesPrincipal := &mocks2.Identity{}
+		idThatSatisfiesPrincipal.SatisfiesPrincipalReturns(errors.New("principal not satisfied"))
+		idThatSatisfiesPrincipal.GetIdentifierReturns(&msp.IdentityIdentifier{})
+		mspmgr.DeserializeIdentityReturns(idThatSatisfiesPrincipal, nil)
+
+		l, v := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, V1_3ValidationRv: true}, &builtin.DefaultValidation{}, mspmgr)
+		defer ledgermgmt.CleanupTestEnv()
+		defer l.Close()
+
+		ccID := "mycc"
+
+		putCCInfo(l, ccID, signedByAnyMember([]string{"SampleOrg"}), t)
+
+		tx := getEnv(ccID, nil, createRWset(t), t)
+		b := &common.Block{Data: &common.BlockData{Data: [][]byte{utils.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 1}}
 
 		err := v.Validate(b)
 		assert.NoError(t, err)
@@ -387,6 +422,77 @@ func TestInvokeOKPvtDataOnly(t *testing.T) {
 
 	rwsetBuilder := rwsetutil.NewRWSetBuilder()
 	rwsetBuilder.AddToPvtAndHashedWriteSet(ccID, "mycollection", "somekey", nil)
+	rwset, err := rwsetBuilder.GetTxSimulationResults()
+	assert.NoError(t, err)
+	rwsetBytes, err := rwset.GetPubSimulationBytes()
+	assert.NoError(t, err)
+
+	tx := getEnv(ccID, nil, rwsetBytes, t)
+	b := &common.Block{Data: &common.BlockData{Data: [][]byte{utils.MarshalOrPanic(tx)}}}
+
+	plugin.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("tx is invalid"))
+
+	err = v.Validate(b)
+	assert.NoError(t, err)
+	assertInvalid(b, t, peer.TxValidationCode_ENDORSEMENT_POLICY_FAILURE)
+}
+
+func TestInvokeOKMetaUpdateOnly(t *testing.T) {
+	plugin := &mocks.Plugin{}
+	plugin.On("Init", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	l, v := setupLedgerAndValidatorExplicit(t, &mockconfig.MockApplicationCapabilities{}, plugin)
+	defer ledgermgmt.CleanupTestEnv()
+	defer l.Close()
+
+	v.(*txvalidator.TxValidator).Support.(struct {
+		*mocktxvalidator.Support
+		*semaphore.Weighted
+	}).ACVal = &mockconfig.MockApplicationCapabilities{KeyLevelEndorsementRv: true}
+
+	ccID := "mycc"
+
+	putCCInfo(l, ccID, signedByAnyMember([]string{"SampleOrg"}), t)
+
+	rwsetBuilder := rwsetutil.NewRWSetBuilder()
+	rwsetBuilder.AddToMetadataWriteSet(ccID, "somekey", map[string][]byte{})
+	rwset, err := rwsetBuilder.GetTxSimulationResults()
+	assert.NoError(t, err)
+	rwsetBytes, err := rwset.GetPubSimulationBytes()
+	assert.NoError(t, err)
+
+	tx := getEnv(ccID, nil, rwsetBytes, t)
+	b := &common.Block{Data: &common.BlockData{Data: [][]byte{utils.MarshalOrPanic(tx)}}}
+
+	plugin.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("tx is invalid"))
+
+	err = v.Validate(b)
+	assert.NoError(t, err)
+	assertInvalid(b, t, peer.TxValidationCode_ENDORSEMENT_POLICY_FAILURE)
+}
+
+func TestInvokeOKPvtMetaUpdateOnly(t *testing.T) {
+	plugin := &mocks.Plugin{}
+	plugin.On("Init", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	l, v := setupLedgerAndValidatorExplicit(t, &mockconfig.MockApplicationCapabilities{}, plugin)
+	defer ledgermgmt.CleanupTestEnv()
+	defer l.Close()
+
+	v.(*txvalidator.TxValidator).Support.(struct {
+		*mocktxvalidator.Support
+		*semaphore.Weighted
+	}).ACVal = &mockconfig.MockApplicationCapabilities{
+		KeyLevelEndorsementRv: true,
+		PrivateChannelDataRv:  true,
+	}
+
+	ccID := "mycc"
+
+	putCCInfo(l, ccID, signedByAnyMember([]string{"SampleOrg"}), t)
+
+	rwsetBuilder := rwsetutil.NewRWSetBuilder()
+	rwsetBuilder.AddToHashedMetadataWriteSet(ccID, "mycollection", "somekey", map[string][]byte{})
 	rwset, err := rwsetBuilder.GetTxSimulationResults()
 	assert.NoError(t, err)
 	rwsetBytes, err := rwset.GetPubSimulationBytes()

@@ -8,6 +8,8 @@ package nwo
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -24,6 +26,7 @@ type Chaincode struct {
 	Policy            string
 	Lang              string
 	CollectionsConfig string 
+	PackageFile       string
 }
 
 
@@ -38,19 +41,44 @@ func DeployChaincode(n *Network, channel string, orderer *Orderer, chaincode Cha
 	}
 
 	
+	if chaincode.PackageFile == "" {
+		tempFile, err := ioutil.TempFile("", "chaincode-package")
+		Expect(err).NotTo(HaveOccurred())
+		tempFile.Close()
+		defer os.Remove(tempFile.Name())
+		chaincode.PackageFile = tempFile.Name()
+	}
+
+	
+	PackageChaincode(n, chaincode, peers[0])
+
+	
 	InstallChaincode(n, chaincode, peers...)
 
 	
 	InstantiateChaincode(n, channel, orderer, chaincode, peers[0], peers...)
 }
 
+func PackageChaincode(n *Network, chaincode Chaincode, peer *Peer) {
+	sess, err := n.PeerAdminSession(peer, commands.ChaincodePackage{
+		Name:       chaincode.Name,
+		Version:    chaincode.Version,
+		Path:       chaincode.Path,
+		Lang:       chaincode.Lang,
+		OutputFile: chaincode.PackageFile,
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+}
+
 func InstallChaincode(n *Network, chaincode Chaincode, peers ...*Peer) {
 	for _, p := range peers {
 		sess, err := n.PeerAdminSession(p, commands.ChaincodeInstall{
-			Name:    chaincode.Name,
-			Version: chaincode.Version,
-			Path:    chaincode.Path,
-			Lang:    chaincode.Lang,
+			Name:        chaincode.Name,
+			Version:     chaincode.Version,
+			Path:        chaincode.Path,
+			Lang:        chaincode.Lang,
+			PackageFile: chaincode.PackageFile,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))

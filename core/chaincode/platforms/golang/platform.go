@@ -138,7 +138,7 @@ func (goPlatform *Platform) ValidateCodePackage(code []byte) error {
 	
 	
 	
-	re := regexp.MustCompile(`(/)?src/.*`)
+	re := regexp.MustCompile(`^(/)?(src|META-INF)/.*`)
 	is := bytes.NewReader(code)
 	gr, err := gzip.NewReader(is)
 	if err != nil {
