@@ -48,6 +48,16 @@ func InitializeTestEnvWithCustomProcessors(customTxProcessors customtx.Processor
 }
 
 
+
+
+func InitializeExistingTestEnvWithCustomProcessors(customTxProcessors customtx.Processors) {
+	customtx.InitializeTestEnv(customTxProcessors)
+	initialize(&Initializer{
+		CustomTxProcessors: customTxProcessors,
+	})
+}
+
+
 func CleanupTestEnv() {
 	Close()
 	remove()

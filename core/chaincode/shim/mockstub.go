@@ -61,6 +61,9 @@ type MockStub struct {
 	PvtState map[string]map[string][]byte
 
 	
+	EndorsementPolicies map[string]map[string][]byte
+
+	
 	ChaincodeEventsChannel chan *pb.ChaincodeEvent
 
 	Decorations map[string][]byte
@@ -372,6 +375,35 @@ func (stub *MockStub) SetEvent(name string, payload []byte) error {
 	return nil
 }
 
+func (stub *MockStub) SetStateValidationParameter(key string, ep []byte) error {
+	return stub.SetPrivateDataValidationParameter("", key, ep)
+}
+
+func (stub *MockStub) GetStateValidationParameter(key string) ([]byte, error) {
+	return stub.GetPrivateDataValidationParameter("", key)
+}
+
+func (stub *MockStub) SetPrivateDataValidationParameter(collection, key string, ep []byte) error {
+	m, in := stub.EndorsementPolicies[collection]
+	if !in {
+		stub.EndorsementPolicies[collection] = make(map[string][]byte)
+		m, in = stub.EndorsementPolicies[collection]
+	}
+
+	m[key] = ep
+	return nil
+}
+
+func (stub *MockStub) GetPrivateDataValidationParameter(collection, key string) ([]byte, error) {
+	m, in := stub.EndorsementPolicies[collection]
+
+	if !in {
+		return nil, nil
+	}
+
+	return m[key], nil
+}
+
 
 func NewMockStub(name string, cc Chaincode) *MockStub {
 	mockLogger.Debug("MockStub(", name, cc, ")")
@@ -380,6 +412,7 @@ func NewMockStub(name string, cc Chaincode) *MockStub {
 	s.cc = cc
 	s.State = make(map[string][]byte)
 	s.PvtState = make(map[string]map[string][]byte)
+	s.EndorsementPolicies = make(map[string]map[string][]byte)
 	s.Invokables = make(map[string]*MockStub)
 	s.Keys = list.New()
 	s.ChaincodeEventsChannel = make(chan *pb.ChaincodeEvent, 100) 

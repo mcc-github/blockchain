@@ -135,3 +135,8 @@ type queryResponseBuilder interface {
 type registry interface {
 	chaincode.Registry
 }
+
+
+type applicationConfigRetriever interface {
+	chaincode.ApplicationConfigRetriever
+}

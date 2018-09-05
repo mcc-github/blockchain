@@ -220,14 +220,6 @@ func TestCertExpiration(t *testing.T) {
 	
 	defer identity.SetIdentityUsageThreshold(idUsageThreshold)
 
-	
-	usageThreshold := identity.GetIdentityUsageThreshold()
-	identity.SetIdentityUsageThreshold(time.Second)
-	
-	defer func() {
-		identity.SetIdentityUsageThreshold(usageThreshold)
-	}()
-
 	g1 := newGossipInstance(4321, 0, 0, 1)
 	defer g1.Stop()
 	time.Sleep(identity.GetIdentityUsageThreshold() * 2)

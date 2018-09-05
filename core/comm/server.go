@@ -112,7 +112,8 @@ func NewGRPCServerFromListener(listener net.Listener, serverConfig ServerConfig)
 			}
 
 			
-			creds := NewServerTransportCredentials(grpcServer.tlsConfig)
+			creds := NewServerTransportCredentials(grpcServer.tlsConfig,
+				serverConfig.Logger)
 			serverOpts = append(serverOpts, grpc.Creds(creds))
 		} else {
 			return nil, errors.New("serverConfig.SecOpts must contain both Key and " +

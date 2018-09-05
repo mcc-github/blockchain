@@ -52,5 +52,14 @@ type Committer interface {
 	GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, error)
 
 	
+	
+	
+	
+	CommitPvtData(blockPvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error)
+
+	
+	GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error)
+
+	
 	Close()
 }

@@ -100,13 +100,13 @@ func (ap *ApplicationProvider) V1_3Validation() bool {
 
 
 func (ap *ApplicationProvider) MetadataLifecycle() bool {
-	return ap.v13
+	return false
 }
 
 
 
 func (ap *ApplicationProvider) KeyLevelEndorsement() bool {
-	return ap.v12 || ap.v13
+	return ap.v13
 }
 
 

@@ -51,13 +51,14 @@ const (
 
 
 type ChaincodeStub struct {
-	TxID           string
-	ChannelId      string
-	chaincodeEvent *pb.ChaincodeEvent
-	args           [][]byte
-	handler        *Handler
-	signedProposal *pb.SignedProposal
-	proposal       *pb.Proposal
+	TxID                       string
+	ChannelId                  string
+	chaincodeEvent             *pb.ChaincodeEvent
+	args                       [][]byte
+	handler                    *Handler
+	signedProposal             *pb.SignedProposal
+	proposal                   *pb.Proposal
+	validationParameterMetakey string
 
 	
 	creator   []byte
@@ -395,6 +396,7 @@ func (stub *ChaincodeStub) init(handler *Handler, channelId string, txid string,
 	stub.handler = handler
 	stub.signedProposal = signedProposal
 	stub.decorations = input.Decorations
+	stub.validationParameterMetakey = pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 
 	
 	
@@ -454,6 +456,23 @@ func (stub *ChaincodeStub) GetState(key string) ([]byte, error) {
 	
 	collection := ""
 	return stub.handler.handleGetState(collection, key, stub.ChannelId, stub.TxID)
+}
+
+
+func (stub *ChaincodeStub) SetStateValidationParameter(key string, ep []byte) error {
+	return stub.handler.handlePutStateMetadataEntry("", key, stub.validationParameterMetakey, ep, stub.ChannelId, stub.TxID)
+}
+
+
+func (stub *ChaincodeStub) GetStateValidationParameter(key string) ([]byte, error) {
+	md, err := stub.handler.handleGetStateMetadata("", key, stub.ChannelId, stub.TxID)
+	if err != nil {
+		return nil, err
+	}
+	if ep, ok := md[stub.validationParameterMetakey]; ok {
+		return ep, nil
+	}
+	return nil, nil
 }
 
 
@@ -553,6 +572,23 @@ func (stub *ChaincodeStub) GetPrivateDataQueryResult(collection, query string) (
 		channelId: stub.ChannelId,
 		txid:      stub.TxID,
 		response:  response}}, nil
+}
+
+
+func (stub *ChaincodeStub) GetPrivateDataValidationParameter(collection, key string) ([]byte, error) {
+	md, err := stub.handler.handleGetStateMetadata(collection, key, stub.ChannelId, stub.TxID)
+	if err != nil {
+		return nil, err
+	}
+	if ep, ok := md[stub.validationParameterMetakey]; ok {
+		return ep, nil
+	}
+	return nil, nil
+}
+
+
+func (stub *ChaincodeStub) SetPrivateDataValidationParameter(collection, key string, ep []byte) error {
+	return stub.handler.handlePutStateMetadataEntry(collection, key, stub.validationParameterMetakey, ep, stub.ChannelId, stub.TxID)
 }
 
 

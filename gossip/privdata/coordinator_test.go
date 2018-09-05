@@ -22,6 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/transientstore"
+	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
@@ -198,6 +199,11 @@ type committerMock struct {
 	mock.Mock
 }
 
+func (mock *committerMock) GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error) {
+	args := mock.Called()
+	return args.Get(0).(ledger.MissingPvtDataTracker), args.Error(1)
+}
+
 func (mock *committerMock) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, error) {
 	args := mock.Called()
 	return args.Get(0).(ledger.ConfigHistoryRetriever), args.Error(1)
@@ -211,6 +217,11 @@ func (mock *committerMock) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsC
 func (mock *committerMock) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error {
 	args := mock.Called(blockAndPvtData)
 	return args.Error(0)
+}
+
+func (mock *committerMock) CommitPvtData(blockPvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error) {
+	args := mock.Called(blockPvtData)
+	return args.Get(0).([]*ledger.PvtdataHashMismatch), args.Error(1)
 }
 
 func (mock *committerMock) GetPvtDataAndBlockByNum(seqNum uint64) (*ledger.BlockAndPvtData, error) {
@@ -258,11 +269,11 @@ func (v *validatorMock) Validate(block *common.Block) error {
 	return nil
 }
 
-type digests []DigKey
+type digests []privdatacommon.DigKey
 
 func (d digests) Equal(other digests) bool {
-	flatten := func(d digests) map[DigKey]struct{} {
-		m := map[DigKey]struct{}{}
+	flatten := func(d digests) map[privdatacommon.DigKey]struct{} {
+		m := map[privdatacommon.DigKey]struct{}{}
 		for _, dig := range d {
 			m[dig] = struct{}{}
 		}
@@ -289,7 +300,7 @@ func (fc *fetchCall) expectingEndorsers(orgs ...string) *fetchCall {
 	return fc
 }
 
-func (fc *fetchCall) expectingDigests(digests []DigKey) *fetchCall {
+func (fc *fetchCall) expectingDigests(digests []privdatacommon.DigKey) *fetchCall {
 	fc.fetcher.expectedDigests = digests
 	return fc
 }
@@ -302,7 +313,7 @@ func (fc *fetchCall) Return(returnArguments ...interface{}) *mock.Call {
 type fetcherMock struct {
 	t *testing.T
 	mock.Mock
-	expectedDigests   []DigKey
+	expectedDigests   []privdatacommon.DigKey
 	expectedEndorsers map[string]struct{}
 }
 
@@ -313,7 +324,7 @@ func (f *fetcherMock) On(methodName string, arguments ...interface{}) *fetchCall
 	}
 }
 
-func (f *fetcherMock) fetch(dig2src dig2sources, _ uint64) (*FetchedPvtDataContainer, error) {
+func (f *fetcherMock) fetch(dig2src dig2sources) (*privdatacommon.FetchedPvtDataContainer, error) {
 	for _, endorsements := range dig2src {
 		for _, endorsement := range endorsements {
 			_, exists := f.expectedEndorsers[string(endorsement.Endorser)]
@@ -328,7 +339,7 @@ func (f *fetcherMock) fetch(dig2src dig2sources, _ uint64) (*FetchedPvtDataConta
 	assert.Empty(f.t, f.expectedEndorsers)
 	args := f.Called(dig2src)
 	if args.Get(1) == nil {
-		return args.Get(0).(*FetchedPvtDataContainer), nil
+		return args.Get(0).(*privdatacommon.FetchedPvtDataContainer), nil
 	}
 	return nil, args.Get(1).(error)
 }
@@ -853,12 +864,12 @@ func TestCoordinatorToFilterOutPvtRWSetsWithWrongHash(t *testing.T) {
 		Validator:       &validatorMock{},
 	}, peerSelfSignedData)
 
-	fetcher.On("fetch", mock.Anything).expectingDigests([]DigKey{
+	fetcher.On("fetch", mock.Anything).expectingDigests([]privdatacommon.DigKey{
 		{
 			TxId: "tx1", Namespace: "ns1", Collection: "c1", BlockSeq: 1,
 		},
-	}).expectingEndorsers("org1").Return(&FetchedPvtDataContainer{
-		AvailableElemenets: []*proto.PvtDataElement{
+	}).expectingEndorsers("org1").Return(&privdatacommon.FetchedPvtDataContainer{
+		AvailableElements: []*proto.PvtDataElement{
 			{
 				Digest: &proto.PvtDataDigest{
 					BlockSeq:   1,
@@ -976,15 +987,15 @@ func TestCoordinatorStoreBlock(t *testing.T) {
 	
 	
 	
-	fetcher.On("fetch", mock.Anything).expectingDigests([]DigKey{
+	fetcher.On("fetch", mock.Anything).expectingDigests([]privdatacommon.DigKey{
 		{
 			TxId: "tx1", Namespace: "ns1", Collection: "c2", BlockSeq: 1,
 		},
 		{
 			TxId: "tx2", Namespace: "ns2", Collection: "c1", BlockSeq: 1, SeqInBlock: 1,
 		},
-	}).expectingEndorsers("org1").Return(&FetchedPvtDataContainer{
-		AvailableElemenets: []*proto.PvtDataElement{
+	}).expectingEndorsers("org1").Return(&privdatacommon.FetchedPvtDataContainer{
+		AvailableElements: []*proto.PvtDataElement{
 			{
 				Digest: &proto.PvtDataDigest{
 					BlockSeq:   1,
@@ -1030,12 +1041,12 @@ func TestCoordinatorStoreBlock(t *testing.T) {
 	
 	block = bf.AddTxn("tx3", "ns3", hash, "c3").create()
 	fetcher = &fetcherMock{t: t}
-	fetcher.On("fetch", mock.Anything).expectingDigests([]DigKey{
+	fetcher.On("fetch", mock.Anything).expectingDigests([]privdatacommon.DigKey{
 		{
 			TxId: "tx3", Namespace: "ns3", Collection: "c3", BlockSeq: 1,
 		},
-	}).Return(&FetchedPvtDataContainer{
-		AvailableElemenets: []*proto.PvtDataElement{
+	}).Return(&privdatacommon.FetchedPvtDataContainer{
+		AvailableElements: []*proto.PvtDataElement{
 			{
 				Digest: &proto.PvtDataDigest{
 					BlockSeq:   1,
@@ -1158,12 +1169,12 @@ func TestProceedWithoutPrivateData(t *testing.T) {
 
 	fetcher := &fetcherMock{t: t}
 	
-	fetcher.On("fetch", mock.Anything).expectingDigests([]DigKey{
+	fetcher.On("fetch", mock.Anything).expectingDigests([]privdatacommon.DigKey{
 		{
 			TxId: "tx1", Namespace: "ns3", Collection: "c2", BlockSeq: 1,
 		},
-	}).Return(&FetchedPvtDataContainer{
-		AvailableElemenets: []*proto.PvtDataElement{
+	}).Return(&privdatacommon.FetchedPvtDataContainer{
+		AvailableElements: []*proto.PvtDataElement{
 			{
 				Digest: &proto.PvtDataDigest{
 					BlockSeq:   1,

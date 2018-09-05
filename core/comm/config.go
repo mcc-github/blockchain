@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"time"
 
+	"github.com/mcc-github/blockchain/common/flogging"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 )
@@ -56,6 +57,8 @@ type ServerConfig struct {
 	
 	
 	UnaryInterceptors []grpc.UnaryServerInterceptor
+	
+	Logger *flogging.FabricLogger
 }
 
 

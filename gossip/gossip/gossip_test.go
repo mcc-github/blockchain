@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -18,8 +19,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"reflect"
 
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/gossip/api"

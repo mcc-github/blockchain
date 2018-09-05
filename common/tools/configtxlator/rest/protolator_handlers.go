@@ -25,12 +25,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/tools/protolator"
 
-	
-	_ "github.com/mcc-github/blockchain/protos/common"
-	_ "github.com/mcc-github/blockchain/protos/msp"
-	_ "github.com/mcc-github/blockchain/protos/orderer"
-	_ "github.com/mcc-github/blockchain/protos/peer"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/gorilla/mux"
 )

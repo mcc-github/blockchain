@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net"
 
+	"github.com/mcc-github/blockchain/common/flogging"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/credentials"
 )
@@ -29,19 +30,25 @@ var (
 
 
 
-func NewServerTransportCredentials(serverConfig *tls.Config) credentials.TransportCredentials {
+func NewServerTransportCredentials(
+	serverConfig *tls.Config,
+	logger *flogging.FabricLogger) credentials.TransportCredentials {
+
 	
 	
 	serverConfig.NextProtos = alpnProtoStr
 	
 	serverConfig.MinVersion = tls.VersionTLS12
 	serverConfig.MaxVersion = tls.VersionTLS12
-	return &serverCreds{serverConfig}
+	return &serverCreds{
+		serverConfig: serverConfig,
+		logger:       logger}
 }
 
 
 type serverCreds struct {
 	serverConfig *tls.Config
+	logger       *flogging.FabricLogger
 }
 
 
@@ -54,6 +61,10 @@ func (sc *serverCreds) ClientHandshake(context.Context,
 func (sc *serverCreds) ServerHandshake(rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
 	conn := tls.Server(rawConn, sc.serverConfig)
 	if err := conn.Handshake(); err != nil {
+		if sc.logger != nil {
+			sc.logger.With("remote address",
+				conn.RemoteAddr().String()).Errorf("TLS handshake failed with error %s", err)
+		}
 		return nil, nil, err
 	}
 	return conn, credentials.TLSInfo{State: conn.ConnectionState()}, nil
@@ -69,7 +80,7 @@ func (sc *serverCreds) Info() credentials.ProtocolInfo {
 
 
 func (sc *serverCreds) Clone() credentials.TransportCredentials {
-	creds := NewServerTransportCredentials(sc.serverConfig)
+	creds := NewServerTransportCredentials(sc.serverConfig, sc.logger)
 	return creds
 }
 

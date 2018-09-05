@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
@@ -104,6 +105,13 @@ type UUIDGeneratorFunc func() string
 func (u UUIDGeneratorFunc) New() string { return u() }
 
 
+type ApplicationConfigRetriever interface {
+	
+	
+	GetApplicationConfig(cid string) (channelconfig.Application, bool)
+}
+
+
 type Handler struct {
 	
 	Keepalive time.Duration
@@ -133,6 +141,8 @@ type Handler struct {
 	LedgerGetter LedgerGetter
 	
 	UUIDGenerator UUIDGenerator
+	
+	AppConfig ApplicationConfigRetriever
 
 	
 	
@@ -205,6 +215,10 @@ func (h *Handler) handleMessageReadyState(msg *pb.ChaincodeMessage) error {
 	case pb.ChaincodeMessage_QUERY_STATE_CLOSE:
 		go h.HandleTransaction(msg, h.HandleQueryStateClose)
 
+	case pb.ChaincodeMessage_GET_STATE_METADATA:
+		go h.HandleTransaction(msg, h.HandleGetStateMetadata)
+	case pb.ChaincodeMessage_PUT_STATE_METADATA:
+		go h.HandleTransaction(msg, h.HandlePutStateMetadata)
 	default:
 		return fmt.Errorf("[%s] Fabric side handler cannot handle message (%s) while in ready state", msg.Txid, msg.Type)
 	}
@@ -530,6 +544,29 @@ func (h *Handler) registerTxid(msg *pb.ChaincodeMessage) bool {
 	return false
 }
 
+func (h *Handler) checkMetadataCap(msg *pb.ChaincodeMessage) error {
+	ac, there := h.AppConfig.GetApplicationConfig(msg.ChannelId)
+	var err error
+	if !there {
+		err = errors.Errorf("[%s]Failed to get application config for invoked chaincode. Sending %s",
+			shorttxid(msg.Txid),
+			pb.ChaincodeMessage_ERROR,
+		)
+		chaincodeLogger.Errorf(err.Error())
+		return err
+	}
+
+	if !ac.Capabilities().KeyLevelEndorsement() {
+		err = errors.Errorf("[%s]Request to invoke metadata function not supported. Sending %s",
+			shorttxid(msg.Txid),
+			pb.ChaincodeMessage_ERROR,
+		)
+		chaincodeLogger.Errorf(err.Error())
+		return err
+	}
+	return nil
+}
+
 
 func (h *Handler) HandleGetState(msg *pb.ChaincodeMessage, txContext *TransactionContext) (*pb.ChaincodeMessage, error) {
 	key := string(msg.Payload)
@@ -553,6 +590,45 @@ func (h *Handler) HandleGetState(msg *pb.ChaincodeMessage, txContext *Transactio
 	}
 	if res == nil {
 		chaincodeLogger.Debugf("[%s] No state associated with key: %s. Sending %s with an empty payload", shorttxid(msg.Txid), key, pb.ChaincodeMessage_RESPONSE)
+	}
+
+	
+	return &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: res, Txid: msg.Txid, ChannelId: msg.ChannelId}, nil
+}
+
+
+func (h *Handler) HandleGetStateMetadata(msg *pb.ChaincodeMessage, txContext *TransactionContext) (*pb.ChaincodeMessage, error) {
+	err := h.checkMetadataCap(msg)
+	if err != nil {
+		return nil, errors.Wrap(err, "metadata not supported")
+	}
+
+	getStateMetadata := &pb.GetStateMetadata{}
+	err = proto.Unmarshal(msg.Payload, getStateMetadata)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshal failed")
+	}
+
+	chaincodeName := h.ChaincodeName()
+	chaincodeLogger.Debugf("[%s] getting state metadata for chaincode %s, key %s, channel %s", shorttxid(msg.Txid), chaincodeName, getStateMetadata.Key, txContext.ChainID)
+
+	var metadata map[string][]byte
+	if isCollectionSet(getStateMetadata.Collection) {
+		metadata, err = txContext.TXSimulator.GetPrivateDataMetadata(chaincodeName, getStateMetadata.Collection, getStateMetadata.Key)
+	} else {
+		metadata, err = txContext.TXSimulator.GetStateMetadata(chaincodeName, getStateMetadata.Key)
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var metadataResult pb.StateMetadataResult
+	for metakey := range metadata {
+		md := &pb.StateMetadata{Metakey: metakey, Value: metadata[metakey]}
+		metadataResult.Entries = append(metadataResult.Entries, md)
+	}
+	res, err := proto.Marshal(&metadataResult)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	
@@ -778,6 +854,34 @@ func (h *Handler) HandlePutState(msg *pb.ChaincodeMessage, txContext *Transactio
 	return &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Txid: msg.Txid, ChannelId: msg.ChannelId}, nil
 }
 
+func (h *Handler) HandlePutStateMetadata(msg *pb.ChaincodeMessage, txContext *TransactionContext) (*pb.ChaincodeMessage, error) {
+	err := h.checkMetadataCap(msg)
+	if err != nil {
+		return nil, errors.Wrap(err, "metadata not supported")
+	}
+
+	putStateMetadata := &pb.PutStateMetadata{}
+	err = proto.Unmarshal(msg.Payload, putStateMetadata)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshal failed")
+	}
+
+	metadata := make(map[string][]byte)
+	metadata[putStateMetadata.Metadata.Metakey] = putStateMetadata.Metadata.Value
+
+	chaincodeName := h.ChaincodeName()
+	if isCollectionSet(putStateMetadata.Collection) {
+		err = txContext.TXSimulator.SetPrivateDataMetadata(chaincodeName, putStateMetadata.Collection, putStateMetadata.Key, metadata)
+	} else {
+		err = txContext.TXSimulator.SetStateMetadata(chaincodeName, putStateMetadata.Key, metadata)
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Txid: msg.Txid, ChannelId: msg.ChannelId}, nil
+}
+
 func (h *Handler) HandleDelState(msg *pb.ChaincodeMessage, txContext *TransactionContext) (*pb.ChaincodeMessage, error) {
 	delState := &pb.DelState{}
 	err := proto.Unmarshal(msg.Payload, delState)
@@ -949,6 +1053,11 @@ func (h *Handler) setChaincodeProposal(signedProp *pb.SignedProposal, prop *pb.P
 
 func (h *Handler) State() State { return h.state }
 func (h *Handler) Close()       { h.TXContexts.Close() }
+
+
+func (h *Handler) GetApplicationConfig(chainID string) (channelconfig.Application, bool) {
+	return h.AppConfig.GetApplicationConfig(chainID)
+}
 
 type State int
 

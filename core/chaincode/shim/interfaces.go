@@ -29,6 +29,9 @@ type Chaincode interface {
 
 
 
+
+
+
 type ChaincodeStubInterface interface {
 	
 	
@@ -96,6 +99,14 @@ type ChaincodeStubInterface interface {
 	
 	
 	DelState(key string) error
+
+	
+	SetStateValidationParameter(key string, ep []byte) error
+
+	
+	
+	
+	GetStateValidationParameter(key string) ([]byte, error)
 
 	
 	
@@ -185,6 +196,15 @@ type ChaincodeStubInterface interface {
 	
 	
 	DelPrivateData(collection, key string) error
+
+	
+	
+	SetPrivateDataValidationParameter(collection, key string, ep []byte) error
+
+	
+	
+	
+	GetPrivateDataValidationParameter(collection, key string) ([]byte, error)
 
 	
 	
