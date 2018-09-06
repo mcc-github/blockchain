@@ -11,7 +11,9 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -45,7 +47,52 @@ func (javaPlatform *Platform) ValidatePath(rawPath string) error {
 }
 
 func (javaPlatform *Platform) ValidateCodePackage(code []byte) error {
+	if len(code) == 0 {
+		
+		return nil
+	}
+
 	
+	filesToMatch := regexp.MustCompile(`^(/)?src/((src|META-INF)/.*|(build\.gradle|settings\.gradle|pom\.xml))`)
+	filesToIgnore := regexp.MustCompile(`.*\.class$`)
+	is := bytes.NewReader(code)
+	gr, err := gzip.NewReader(is)
+	if err != nil {
+		return fmt.Errorf("failure opening codepackage gzip stream: %s", err)
+	}
+	tr := tar.NewReader(gr)
+
+	for {
+		header, err := tr.Next()
+		if err != nil {
+			if err == io.EOF {
+				
+				break
+			} else {
+				return err
+			}
+		}
+
+		
+		
+		
+		if !filesToMatch.MatchString(header.Name) || filesToIgnore.MatchString(header.Name) {
+			return fmt.Errorf("illegal file detected in payload: \"%s\"", header.Name)
+		}
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		if header.Mode&^0100666 != 0 {
+			return fmt.Errorf("illegal file mode detected for file %s: %o", header.Name, header.Mode)
+		}
+	}
 	return nil
 }
 

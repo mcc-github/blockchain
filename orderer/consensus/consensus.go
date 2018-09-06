@@ -68,6 +68,8 @@ type Chain interface {
 }
 
 
+
+
 type ConsenterSupport interface {
 	crypto.LocalSigner
 	msgprocessor.Processor

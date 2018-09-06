@@ -18,19 +18,19 @@ func line(A *ECP2,B *ECP2,Qx *FP,Qy *FP) *FP12 {
 		ZZ:=NewFP2copy(A.getz())  
 		YZ:=NewFP2copy(YY)        
 		YZ.mul(ZZ)                
-		XX.sqr()	               
-		YY.sqr()	               
-		ZZ.sqr()			       
+		XX.sqr()			
+		YY.sqr()			
+		ZZ.sqr()			
 			
 		YZ.imul(4)
 		YZ.neg(); YZ.norm()       
 		YZ.pmul(Qy);               
 
 		XX.imul(6)                
-		XX.pmul(Qx);               
+		XX.pmul(Qx);              
 
 		sb:=3*CURVE_B_I
-		ZZ.imul(sb); 	
+		ZZ.imul(sb); 			
 		if SEXTIC_TWIST == D_TYPE {	
 			ZZ.div_ip2();
 		}
@@ -96,23 +96,24 @@ func line(A *ECP2,B *ECP2,Qx *FP,Qy *FP) *FP12 {
 		}
 		A.Add(B);
 	}
+
+
 	return NewFP12fp4s(a,b,c)
 }
 
 
-func Ate(P *ECP2,Q *ECP) *FP12 {
+func Ate(P1 *ECP2,Q1 *ECP) *FP12 {
 	f:=NewFP2bigs(NewBIGints(Fra),NewBIGints(Frb))
 	x:=NewBIGints(CURVE_Bnx)
 	n:=NewBIGcopy(x)
 	K:=NewECP2()
 	var lv *FP12
 	
-	if SEXTIC_TWIST==M_TYPE {
-		f.inverse();
-		f.norm();
-	}
-
 	if CURVE_PAIRING_TYPE == BN {
+		if SEXTIC_TWIST==M_TYPE {
+			f.inverse();
+			f.norm();
+		}
 		n.pmul(6)
 		if SIGN_OF_X==POSITIVEX {
 			n.inc(2)
@@ -127,6 +128,10 @@ func Ate(P *ECP2,Q *ECP) *FP12 {
 	n3.pmul(3);
 	n3.norm();
 
+	P:=NewECP2(); P.Copy(P1); P.Affine()
+	Q:=NewECP(); Q.Copy(Q1); Q.Affine()
+
+
 	Qx:=NewFPcopy(Q.getx())
 	Qy:=NewFPcopy(Q.gety())
 
@@ -134,6 +139,11 @@ func Ate(P *ECP2,Q *ECP) *FP12 {
 	r:=NewFP12int(1)
 
 	A.Copy(P)
+
+	NP:=NewECP2()
+	NP.Copy(P)
+	NP.neg()
+
 	nb:=n3.nbits()
 
 	for i:=nb-2;i>=1;i-- {
@@ -146,11 +156,15 @@ func Ate(P *ECP2,Q *ECP) *FP12 {
 			r.smul(lv,SEXTIC_TWIST)
 		}	
 		if bt==-1 {
-			P.neg()
-			lv=line(A,P,Qx,Qy)
+			
+			lv=line(A,NP,Qx,Qy)
 			r.smul(lv,SEXTIC_TWIST)
-			P.neg()
+			
 		}		
+	}
+
+	if SIGN_OF_X==NEGATIVEX {
+		r.conj()
 	}
 
 
@@ -158,7 +172,7 @@ func Ate(P *ECP2,Q *ECP) *FP12 {
 
 	if CURVE_PAIRING_TYPE == BN {
 		if SIGN_OF_X==NEGATIVEX {
-			r.conj()
+			
 			A.neg()
 		}
 
@@ -170,25 +184,24 @@ func Ate(P *ECP2,Q *ECP) *FP12 {
 		K.neg()
 		lv=line(A,K,Qx,Qy)
 		r.smul(lv,SEXTIC_TWIST)
-	}
+	} 
 
 	return r
 }
 
 
-func Ate2(P *ECP2,Q *ECP,R *ECP2,S *ECP) *FP12 {
+func Ate2(P1 *ECP2,Q1 *ECP,R1 *ECP2,S1 *ECP) *FP12 {
 	f:=NewFP2bigs(NewBIGints(Fra),NewBIGints(Frb))
 	x:=NewBIGints(CURVE_Bnx)
 	n:=NewBIGcopy(x)
 	K:=NewECP2()
 	var lv *FP12
 
-	if SEXTIC_TWIST==M_TYPE {
-		f.inverse();
-		f.norm();
-	}
-
 	if CURVE_PAIRING_TYPE == BN {
+		if SEXTIC_TWIST==M_TYPE {
+			f.inverse();
+			f.norm();
+		}
 		n.pmul(6); 
 		if SIGN_OF_X==POSITIVEX {
 			n.inc(2)
@@ -203,6 +216,12 @@ func Ate2(P *ECP2,Q *ECP,R *ECP2,S *ECP) *FP12 {
 	n3.pmul(3);
 	n3.norm();
 
+	P:=NewECP2(); P.Copy(P1); P.Affine()
+	Q:=NewECP(); Q.Copy(Q1); Q.Affine()
+	R:=NewECP2(); R.Copy(R1); R.Affine()
+	S:=NewECP(); S.Copy(S1); S.Affine()
+
+
 	Qx:=NewFPcopy(Q.getx())
 	Qy:=NewFPcopy(Q.gety())
 	Sx:=NewFPcopy(S.getx())
@@ -214,6 +233,14 @@ func Ate2(P *ECP2,Q *ECP,R *ECP2,S *ECP) *FP12 {
 
 	A.Copy(P)
 	B.Copy(R)
+	NP:=NewECP2()
+	NP.Copy(P)
+	NP.neg()
+	NR:=NewECP2()
+	NR.Copy(R)
+	NR.neg()
+
+
 	nb:=n3.nbits()
 
 	for i:=nb-2;i>=1;i-- {
@@ -230,22 +257,25 @@ func Ate2(P *ECP2,Q *ECP,R *ECP2,S *ECP) *FP12 {
 			r.smul(lv,SEXTIC_TWIST)
 		}
 		if bt==-1 {
-			P.neg(); 
-			lv=line(A,P,Qx,Qy)
+			
+			lv=line(A,NP,Qx,Qy)
 			r.smul(lv,SEXTIC_TWIST)
-			P.neg(); 
-			R.neg()
-			lv=line(B,R,Sx,Sy)
+			
+			
+			lv=line(B,NR,Sx,Sy)
 			r.smul(lv,SEXTIC_TWIST)
-			R.neg()
+			
 		}
 	}
 
+	if SIGN_OF_X==NEGATIVEX {
+		r.conj()
+	}
 
 
 	if CURVE_PAIRING_TYPE == BN {
 		if SIGN_OF_X==NEGATIVEX {
-			r.conj()
+		
 			A.neg()
 			B.neg()
 		}
@@ -488,11 +518,11 @@ func gs(e *BIG) []*BIG {
 func G1mul(P *ECP,e *BIG) *ECP {
 	var R *ECP
 	if (USE_GLV) {
-		P.Affine()
+		
 		R=NewECP()
 		R.Copy(P)
 		Q:=NewECP()
-		Q.Copy(P)
+		Q.Copy(P); Q.Affine()
 		q:=NewBIGints(CURVE_Order)
 		cru:=NewFPbig(NewBIGints(CURVE_Cru))
 		t:=NewBIGint(0)
@@ -514,7 +544,8 @@ func G1mul(P *ECP,e *BIG) *ECP {
 			u[1].copy(t)
 			Q.neg()
 		}
-
+		u[0].norm()
+		u[1].norm()
 		R=R.Mul2(u[0],Q,u[1])
 			
 	} else {
@@ -539,7 +570,7 @@ func G2mul(P *ECP2,e *BIG) *ECP2 {
 		u:=gs(e)
 
 		t:=NewBIGint(0)
-		P.Affine()
+		
 		Q=append(Q,NewECP2());  Q[0].Copy(P);
 		for i:=1;i<4;i++ {
 			Q=append(Q,NewECP2()); Q[i].Copy(Q[i-1])
@@ -553,6 +584,7 @@ func G2mul(P *ECP2,e *BIG) *ECP2 {
 				u[i].copy(t)
 				Q[i].neg()
 			}
+			u[i].norm()
 		}
 
 		R=mul4(Q,u)
@@ -589,6 +621,7 @@ func GTpow(d *FP12,e *BIG) *FP12 {
 				u[i].copy(t)
 				g[i].conj()
 			}
+			u[i].norm()			
 		}
 		r=pow4(g,u)
 	} else {

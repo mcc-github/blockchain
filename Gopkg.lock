@@ -3,6 +3,17 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:41531922c7f47d5157308b4dd1abc6142c4c583845ce424ed9664db867fa48cf"
+  name = "code.cloudfoundry.org/clock"
+  packages = [
+    ".",
+    "fakeclock",
+  ]
+  pruneopts = "NUT"
+  revision = "02e53af36e6c978af692887ed449b74026d76fec"
+
+[[projects]]
+  branch = "master"
   digest = "1:81f8c061c3d18ed1710957910542bc17d2b789c6cd19e0f654c30b35fd255ca5"
   name = "github.com/Azure/go-ansiterm"
   packages = [
@@ -99,7 +110,7 @@
   revision = "c6cef34830231743494fe2969284df7b82cc0ad0"
 
 [[projects]]
-  digest = "1:ac7677503bfe84b5948c9d90801898dee66719e296d86c0246e16f897695e5fb"
+  digest = "1:870c424b15d487042f1da88e513d3d4c6cd73190f1862f5fd37528edff739baa"
   name = "github.com/coreos/etcd"
   packages = [
     "raft",
@@ -119,7 +130,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:584c673f75b2b3cfdb8005293d10f6a831253269ddd7326c65fa90eab5e203f1"
+  digest = "1:6d8b72910f779ed03d4a06fe4a6bba34c76c4285b6a81bd12a1f1e47b2f2089a"
   name = "github.com/docker/docker"
   packages = [
     "api/types",
@@ -284,14 +295,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1787f0512309054888eeabe19450c41893a64ab68b7ba06083b5bcf7c103e7d4"
+  digest = "1:b1c26a7393cb28a859e794f8eb364f5bae72ad9762e301325c50c7fa43544667"
   name = "github.com/mcc-github/blockchain-amcl"
   packages = [
     "amcl",
     "amcl/FP256BN",
   ]
   pruneopts = "NUT"
-  revision = "ea8d504acd07754482414591d1ae105ff448dea2"
+  revision = "6b78f7a22d950103fb2669aabb969f56d42d283b"
 
 [[projects]]
   digest = "1:406338ad39ab2e37b7f4452906442a3dbf0eb3379dd1f06aafb5c07e769a5fbb"
@@ -838,12 +849,15 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "code.cloudfoundry.org/clock",
+    "code.cloudfoundry.org/clock/fakeclock",
     "github.com/Knetic/govaluate",
     "github.com/Shopify/sarama",
     "github.com/Shopify/sarama/mocks",
     "github.com/alecthomas/template",
     "github.com/cactus/go-statsd-client/statsd",
     "github.com/coreos/etcd/raft",
+    "github.com/coreos/etcd/raft/raftpb",
     "github.com/davecgh/go-spew/spew",
     "github.com/fsouza/go-dockerclient",
     "github.com/golang/protobuf/jsonpb",

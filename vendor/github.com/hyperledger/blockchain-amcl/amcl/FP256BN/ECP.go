@@ -19,13 +19,16 @@ const CURVE_PAIRING_TYPE int=BN
 const SEXTIC_TWIST int=M_TYPE
 const SIGN_OF_X int=NEGATIVEX
 
+const HASH_TYPE int=32
+const AESKEY int=16
+
 
 
 type ECP struct {
 	x *FP
 	y *FP
 	z *FP
-	INF bool
+
 }
 
 
@@ -33,8 +36,12 @@ func NewECP() *ECP {
 	E:=new(ECP)
 	E.x=NewFPint(0)
 	E.y=NewFPint(1)
-	E.z=NewFPint(0)
-	E.INF=true
+	if CURVETYPE==EDWARDS {
+		E.z=NewFPint(1)
+	} else {
+		E.z=NewFPint(0)
+	}
+
 	return E
 }
 
@@ -47,15 +54,15 @@ func NewECPbigs(ix *BIG,iy *BIG) *ECP {
 	rhs:=RHS(E.x)
 
 	if CURVETYPE==MONTGOMERY {
-		if rhs.jacobi()==1 {
-			E.INF=false
-		} else {E.inf()}
+		if rhs.jacobi()!=1 {
+			E.inf()
+		}
 	} else {
 		y2:=NewFPcopy(E.y)
 		y2.sqr()
-		if y2.Equals(rhs) {
-			E.INF=false
-		} else {E.inf()}
+		if !y2.Equals(rhs) {
+			E.inf()
+		}
 	}
 	return E
 }
@@ -71,7 +78,7 @@ func NewECPbigint(ix *BIG,s int) *ECP {
 		ny:=rhs.sqrt()
 		if ny.redc().parity()!=s {ny.neg()}
 		E.y.copy(ny)
-		E.INF=false
+		
 	} else {E.inf()}
 	return E;
 }
@@ -85,27 +92,27 @@ func NewECPbig(ix *BIG) *ECP {
 	E.z=NewFPint(1)
 	if rhs.jacobi()==1 {
 		if CURVETYPE!=MONTGOMERY {E.y.copy(rhs.sqrt())}
-		E.INF=false
-	} else {E.INF=true}
+		
+	} else {E.inf()}
 	return E
 }
 
 
 func (E *ECP) Is_infinity() bool {
-	if E.INF {return true}
+
 	E.x.reduce(); E.z.reduce()
 	if CURVETYPE==EDWARDS {
 		E.y.reduce();
-		E.INF=(E.x.iszilch() && E.y.Equals(E.z))
+		return (E.x.iszilch() && E.y.Equals(E.z))
 	} 
 	if CURVETYPE==WEIERSTRASS {
 		E.y.reduce();
-		E.INF=(E.x.iszilch() && E.z.iszilch())
+		return (E.x.iszilch() && E.z.iszilch())
 	}
 	if CURVETYPE==MONTGOMERY {
-		E.INF=E.z.iszilch()
+		return E.z.iszilch()
 	}
-	return E.INF
+	return true
 }
 
 
@@ -113,12 +120,6 @@ func (E *ECP) cswap(Q *ECP,d int) {
 	E.x.cswap(Q.x,d)
 	if CURVETYPE!=MONTGOMERY {E.y.cswap(Q.y,d)}
 	E.z.cswap(Q.z,d)
-
-	bd:=true
-	if d==0 {bd=false}
-	bd=bd&&(E.INF!=Q.INF)
-	E.INF=(bd!=E.INF)
-	Q.INF=(bd!=Q.INF)
 
 }
 
@@ -128,9 +129,6 @@ func (E *ECP) cmove(Q *ECP,d int) {
 	if CURVETYPE!=MONTGOMERY {E.y.cmove(Q.y,d)}
 	E.z.cmove(Q.z,d);
 
-	bd:=true
-	if d==0 {bd=false}
-	E.INF=(E.INF!=((E.INF!=Q.INF)&&bd))
 }
 
 
@@ -145,7 +143,7 @@ func (E *ECP) Copy(P *ECP) {
 	E.x.copy(P.x);
 	if CURVETYPE!=MONTGOMERY {E.y.copy(P.y)}
 	E.z.copy(P.z);
-	E.INF=P.INF;
+
 }
 
 
@@ -184,7 +182,7 @@ func (E *ECP) selector(W []*ECP,b int32) {
 
 
 func (E *ECP) inf() {
-	E.INF=true;
+
 	E.x.zero()
 	if CURVETYPE!=MONTGOMERY {E.y.one()}
 	if CURVETYPE!=EDWARDS {
@@ -194,8 +192,8 @@ func (E *ECP) inf() {
 
 
 func( E *ECP) Equals(Q *ECP) bool {
-	if E.Is_infinity() && Q.Is_infinity() {return true}
-	if E.Is_infinity() || Q.Is_infinity() {return false}
+
+
 
 	a:=NewFPint(0)
 	b:=NewFPint(0)
@@ -234,6 +232,7 @@ func RHS(x *FP) *FP {
 		one:=NewFPint(1)
 		b.mul(r)
 		b.sub(one)
+		b.norm()
 		if CURVE_A==-1 {r.neg()}
 		r.sub(one); r.norm()
 		b.inverse()
@@ -267,18 +266,20 @@ func (E *ECP) Affine() {
 
 
 func (E *ECP) GetX() *BIG {
-	E.Affine()
-	return E.x.redc()
+	W:=NewECP(); W.Copy(E)
+	W.Affine()
+	return W.x.redc()
 }
 
 func (E *ECP) GetY() *BIG {
-	E.Affine()
-	return E.y.redc()
+	W:=NewECP(); W.Copy(E)
+	W.Affine()
+	return W.y.redc()
 }
 
 
 func (E *ECP) GetS() int {
-	E.Affine()
+	
 	y:=E.GetY()
 	return y.parity()
 }
@@ -296,20 +297,29 @@ func (E *ECP) getz() *FP {
 }
 
 
-func (E *ECP) ToBytes(b []byte) {
+func (E *ECP) ToBytes(b []byte,compress bool) {
 	var t [int(MODBYTES)]byte
 	MB:=int(MODBYTES)
-	if CURVETYPE!=MONTGOMERY {
-		b[0]=0x04
-	} else {b[0]=0x02}
-	
-	E.Affine()
-	E.x.redc().ToBytes(t[:])
+	W:=NewECP(); W.Copy(E);
+	W.Affine()
+	W.x.redc().ToBytes(t[:])
 	for i:=0;i<MB;i++ {b[i+1]=t[i]}
-	if CURVETYPE!=MONTGOMERY {
-		E.y.redc().ToBytes(t[:])
-		for i:=0;i<MB;i++ {b[i+MB+1]=t[i]}
+
+	if CURVETYPE==MONTGOMERY {
+		b[0]=0x06
+		return;
+	} 
+
+	if compress {
+		b[0]=0x02
+		if W.y.redc().parity()==1 {b[0]=0x03}
+		return;
 	}
+	
+	b[0]=0x04
+
+	W.y.redc().ToBytes(t[:])
+	for i:=0;i<MB;i++ {b[i+MB+1]=t[i]}
 }
 
 
@@ -322,27 +332,38 @@ func ECP_fromBytes(b []byte) *ECP {
 	px:=FromBytes(t[:])
 	if comp(px,p)>=0 {return NewECP()}
 
-	if (b[0]==0x04) {
+	if CURVETYPE==MONTGOMERY {
+		return NewECPbig(px)
+	}
+
+	if b[0]==0x04 {
 		for i:=0;i<MB;i++ {t[i]=b[i+MB+1]}
 		py:=FromBytes(t[:])
 		if comp(py,p)>=0 {return NewECP()}
 		return NewECPbigs(px,py)
-	} else {return NewECPbig(px)}
+	}
+
+	if b[0]==0x02 || b[0]==0x03 {
+		return NewECPbigint(px,int(b[0]&1))
+	}
+
+	return NewECP()
 }
 
 
 func (E *ECP) toString() string {
-	if E.Is_infinity() {return "infinity"}
-	E.Affine();
+	W:=NewECP(); W.Copy(E);
+	W.Affine()
+	if W.Is_infinity() {return "infinity"}
 	if CURVETYPE==MONTGOMERY {
-		return "("+E.x.redc().toString()+")"
-	} else {return "("+E.x.redc().toString()+","+E.y.redc().toString()+")"}
+		return "("+W.x.redc().toString()+")"
+	} else {return "("+W.x.redc().toString()+","+W.y.redc().toString()+")"}
 }
 
 
 func (E *ECP) dbl() {
 
-	if E.INF {return}
+
 	if CURVETYPE==WEIERSTRASS {
 		if CURVE_A==0 {
 			t0:=NewFPcopy(E.y)                          
@@ -468,7 +489,7 @@ func (E *ECP) dbl() {
 		BB:=NewFPint(0)
 		C:=NewFPint(0)
 	
-		if E.INF {return}
+	
 
 		A.add(E.z); A.norm()
 		AA.copy(A); AA.sqr()
@@ -489,12 +510,6 @@ func (E *ECP) dbl() {
 
 
 func (E *ECP) Add(Q *ECP) {
-
-	if E.INF {
-		E.Copy(Q)
-		return
-	}
-	if Q.INF {return}
 
 	if CURVETYPE==WEIERSTRASS {
 		if CURVE_A==0 {
@@ -709,9 +724,9 @@ func (E *ECP) dadd(Q *ECP,W *ECP) {
 
 
 func (E *ECP) Sub(Q *ECP) {
-	Q.neg()
-	E.Add(Q)
-	Q.neg()
+	NQ:=NewECP(); NQ.Copy(Q);
+	NQ.neg()
+	E.Add(NQ)
 }
 
 
@@ -771,7 +786,7 @@ func (E *ECP) mul(e *BIG) *ECP {
 		var W []*ECP
 		var w [1+(NLEN*int(BASEBITS)+3)/4]int8
 
-		E.Affine();
+		
 
 		Q.Copy(E);
 		Q.dbl();
@@ -836,8 +851,8 @@ func (E *ECP) Mul2(e *BIG,Q *ECP,f *BIG) *ECP {
 	
 	var w [1+(NLEN*int(BASEBITS)+1)/2]int8		
 
-	E.Affine()
-	Q.Affine()
+	
+	
 
 	te.copy(e)
 	tf.copy(f)
@@ -898,21 +913,57 @@ func (E *ECP) Mul2(e *BIG,Q *ECP,f *BIG) *ECP {
 	return S
 }
 
+func (E *ECP) cfp() {
+	cf:=CURVE_Cof_I;
+	if cf==1 {return}
+	if cf==4 {
+		E.dbl(); E.dbl()
+		
+		return;
+	} 
+	if cf==8 {
+		E.dbl(); E.dbl(); E.dbl()
+		
+		return;
+	}
+	c:=NewBIGints(CURVE_Cof);
+	E.Copy(E.mul(c));
+}
+
 func ECP_mapit(h []byte) *ECP {
 	q:=NewBIGints(Modulus)
 	x:=FromBytes(h[:])
 	x.Mod(q)
 	var P *ECP
+
 	for true {
-		P=NewECPbigint(x,0)
+		for true {
+			if CURVETYPE!=MONTGOMERY {
+				P=NewECPbigint(x,0)
+			} else {
+				P=NewECPbig(x)
+			}
+			x.inc(1); x.norm()
+			if !P.Is_infinity() {break}
+		}
+		P.cfp()
 		if !P.Is_infinity() {break}
-		x.inc(1); x.norm()
 	}
-	if CURVE_PAIRING_TYPE!=BN {
-		c:=NewBIGints(CURVE_Cof)
-		P=P.mul(c)
-	}	
+			
 	return P
+}
+
+func ECP_generator() *ECP {
+	var G *ECP
+
+	gx:=NewBIGints(CURVE_Gx)
+	if CURVETYPE!=MONTGOMERY {
+		gy:=NewBIGints(CURVE_Gy)
+		G=NewECPbigs(gx,gy)
+	} else {
+		G=NewECPbig(gx)
+	}
+	return G
 }
 
 

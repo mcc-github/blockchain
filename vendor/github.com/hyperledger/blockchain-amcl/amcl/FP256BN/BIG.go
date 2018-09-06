@@ -316,12 +316,13 @@ func (r *BIG) shl(k uint) {
 
 
 func (r *BIG) nbits() int {
+	t:=NewBIGcopy(r)
 	k:=NLEN-1
-	r.norm()
-	for (k>=0 && r.w[k]==0) {k--}
+	t.norm()
+	for (k>=0 && t.w[k]==0) {k--}
 	if k<0 {return 0}
 	bts:=int(BASEBITS)*k;
-	c:=r.w[k];
+	c:=t.w[k];
 	for c!=0 {c/=2; bts++}
 	return bts
 }
@@ -353,6 +354,12 @@ func (r *BIG) toString() string {
 func (r *BIG) add(x *BIG) {
 	for i:=0;i<NLEN;i++ {
 		r.w[i]=r.w[i]+x.w[i] 
+	}
+}
+
+func (r *BIG) or(x *BIG) {
+	for i:=0;i<NLEN;i++ {
+		r.w[i]=r.w[i]|x.w[i] 
 	}
 }
 
@@ -432,8 +439,9 @@ func (r *BIG) pmul(c int) Chunk {
 
 
 func (r *BIG) tobytearray(b []byte,n int) {
-	r.norm();
+	
 	c:=NewBIGcopy(r)
+	c.norm();
 
 	for i:=int(MODBYTES)-1;i>=0;i-- {
 		b[i+n]=byte(c.w[0])
@@ -561,7 +569,8 @@ func (r *BIG) invmod2m() {
 }
 
 
-func (r *BIG) Mod(m *BIG) {
+func (r *BIG) Mod(m1 *BIG) {
+	m:=NewBIGcopy(m1)
 	sr:=NewBIG()
 	r.norm()
 	if comp(r,m)<0 {return}
@@ -586,7 +595,8 @@ func (r *BIG) Mod(m *BIG) {
 }
 
 
-func (r *BIG) div(m *BIG) {
+func (r *BIG) div(m1 *BIG) {
+	m:=NewBIGcopy(m1)
 	var d int
 	k:=0
 	r.norm();
@@ -660,7 +670,9 @@ func Randomnum(q *BIG,rng *amcl.RAND) *BIG {
 
 
 
-func Modmul(a,b,m *BIG) *BIG {
+func Modmul(a1,b1,m *BIG) *BIG {
+	a:=NewBIGcopy(a1)
+	b:=NewBIGcopy(b1)
 	a.Mod(m)
 	b.Mod(m)
 	d:=mul(a,b);
@@ -668,14 +680,16 @@ func Modmul(a,b,m *BIG) *BIG {
 }
 
 
-func Modsqr(a,m *BIG) *BIG {
+func Modsqr(a1,m *BIG) *BIG {
+	a:=NewBIGcopy(a1)
 	a.Mod(m)
 	d:=sqr(a)
 	return d.mod(m)
 }
 
 
-func Modneg(a,m *BIG) *BIG {
+func Modneg(a1,m *BIG) *BIG {
+	a:=NewBIGcopy(a1)
 	a.Mod(m)
 	return m.Minus(a)
 }
@@ -727,20 +741,20 @@ func (r *BIG) Invmodp(p *BIG) {
 	one:=NewBIGint(1)
 	for (comp(u,one)!=0 && comp(v,one)!=0) {
 		for u.parity()==0 {
-			u.shr(1);
+			u.fshr(1);
 			if x1.parity()!=0 {
 				x1.add(p)
 				x1.norm()
 			}
-			x1.shr(1)
+			x1.fshr(1)
 		}
 		for v.parity()==0 {
-			v.shr(1);
+			v.fshr(1);
 			if x2.parity()!=0 {
 				x2.add(p)
 				x2.norm()
 			}
-			x2.shr(1)
+			x2.fshr(1)
 		}
 		if comp(u,v)>=0 {
 			u.sub(v)
@@ -772,7 +786,8 @@ func (r *BIG) Invmodp(p *BIG) {
 }
 
 
-func (r *BIG) powmod(e *BIG,m *BIG) *BIG {
+func (r *BIG) powmod(e1 *BIG,m *BIG) *BIG {
+	e:=NewBIGcopy(e1)
 	r.norm()
 	e.norm()
 	a:=NewBIGint(1)

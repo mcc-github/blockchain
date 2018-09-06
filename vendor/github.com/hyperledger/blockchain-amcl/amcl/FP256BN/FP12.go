@@ -60,9 +60,39 @@ func (F *FP12) norm() {
 }
 
 func (F *FP12) iszilch() bool {
-	F.reduce()
+	
 	return (F.a.iszilch() && F.b.iszilch() && F.c.iszilch())
 }
+
+
+func (F *FP12) cmove(g *FP12,d int) {
+	F.a.cmove(g.a,d)
+	F.b.cmove(g.b,d)
+	F.c.cmove(g.c,d)
+}
+
+
+func (F *FP12) selector(g []*FP12,b int32) {
+
+	m:=b>>31
+	babs:=(b^m)-m
+
+	babs=(babs-1)/2
+
+	F.cmove(g[0],teq(babs,0))  
+	F.cmove(g[1],teq(babs,1))
+	F.cmove(g[2],teq(babs,2))
+	F.cmove(g[3],teq(babs,3))
+	F.cmove(g[4],teq(babs,4))
+	F.cmove(g[5],teq(babs,5))
+	F.cmove(g[6],teq(babs,6))
+	F.cmove(g[7],teq(babs,7))
+ 
+ 	invF:=NewFP12copy(F) 
+	invF.conj()
+	F.cmove(invF,int(m&1))
+}
+
 
 func (F *FP12) Isunity() bool {
 	one:=NewFP4int(1)
@@ -553,77 +583,81 @@ func (F *FP12) Compow(e *BIG,r *BIG) *FP4 {
 
 
 
- func pow4(q []*FP12,u []*BIG) *FP12 {
-	var a [4]int8
+
+
+func pow4(q []*FP12,u []*BIG) *FP12 {
 	var g []*FP12
-	var s []*FP12
-	c:=NewFP12int(1)
-	p:=NewFP12int(0)
 	var w [NLEN*int(BASEBITS)+1]int8
+	var s [NLEN*int(BASEBITS)+1]int8
 	var t []*BIG
+	r:=NewFP12int(0)
+	p:=NewFP12int(0)
 	mt:=NewBIGint(0)
 
 	for i:=0;i<4;i++ {
 		t=append(t,NewBIGcopy(u[i]))
 	}
 
-	s=append(s,NewFP12int(0))
-	s=append(s,NewFP12int(0))
+	g=append(g,NewFP12copy(q[0]))	
+	g=append(g,NewFP12copy(g[0])); g[1].Mul(q[1])	
+	g=append(g,NewFP12copy(g[0])); g[2].Mul(q[2])	
+	g=append(g,NewFP12copy(g[1])); g[3].Mul(q[2])	
+	g=append(g,NewFP12copy(g[0])); g[4].Mul(q[3])	
+	g=append(g,NewFP12copy(g[1])); g[5].Mul(q[3])	
+	g=append(g,NewFP12copy(g[2])); g[6].Mul(q[3])	
+	g=append(g,NewFP12copy(g[3])); g[7].Mul(q[3])	
 
-	g=append(g,NewFP12copy(q[0])); s[0].Copy(q[1]); s[0].conj(); g[0].Mul(s[0])
-	g=append(g,NewFP12copy(g[0]))
-	g=append(g,NewFP12copy(g[0]))
-	g=append(g,NewFP12copy(g[0]))
-	g=append(g,NewFP12copy(q[0])); g[4].Mul(q[1])
-	g=append(g,NewFP12copy(g[4]))
-	g=append(g,NewFP12copy(g[4]))
-	g=append(g,NewFP12copy(g[4]))
 
-	s[1].Copy(q[2]); s[0].Copy(q[3]); s[0].conj(); s[1].Mul(s[0])
-	s[0].Copy(s[1]); s[0].conj(); g[1].Mul(s[0])
-	g[2].Mul(s[1])
-	g[5].Mul(s[0])
-	g[6].Mul(s[1])
-	s[1].Copy(q[2]); s[1].Mul(q[3])
-	s[0].Copy(s[1]); s[0].conj(); g[0].Mul(s[0])
-	g[3].Mul(s[1])
-	g[4].Mul(s[0])
-	g[7].Mul(s[1])
+	pb:=1-t[0].parity()
+	t[0].inc(pb)
 
 
 
+	mt.zero()
 	for i:=0;i<4;i++ {
-		if t[i].parity()==0 {
-			t[i].inc(1); t[i].norm()
-			c.Mul(q[i])
-		}
-		mt.add(t[i]); mt.norm()
+		t[i].norm()
+		mt.or(t[i])
 	}
-	c.conj()
-	nb:=1+mt.nbits()
+
+	nb:=1+mt.nbits();
 
 
-	for j:=0;j<nb;j++ {
-		for i:=0;i<4;i++ {
-			a[i]=int8(t[i].lastbits(2)-2)
-			t[i].dec(int(a[i])); t[i].norm();
-			t[i].fshr(1)
-		}
-		w[j]=(8*a[0]+4*a[1]+2*a[2]+a[3])
+	s[nb-1]=1
+	for i:=0;i<nb-1;i++ {
+		t[0].fshr(1)
+		s[i]=2*int8(t[0].parity())-1
 	}
-	w[nb]=int8(8*t[0].lastbits(2)+4*t[1].lastbits(2)+2*t[2].lastbits(2)+t[3].lastbits(2))
-	p.Copy(g[(w[nb]-1)/2])
 
-	for i:=nb-1;i>=0;i-- {
-		m:=w[i]>>7
-		j:=(w[i]^m)-m  
-		j=(j-1)/2
-		s[0].Copy(g[j]); s[1].Copy(g[j]); s[1].conj()
+
+	for i:=0; i<nb; i++ {
+		w[i]=0
+		k:=1
+		for j:=1; j<4; j++ {
+			bt:=s[i]*int8(t[j].parity())
+			t[j].fshr(1)
+			t[j].dec(int(bt)>>1)
+			t[j].norm()
+			w[i]+=bt*int8(k)
+			k*=2
+		}
+	}
+
+
+	p.selector(g,int32(2*w[nb-1]+1))  
+	for i:=nb-2;i>=0;i-- {
 		p.usqr()
-		p.Mul(s[m&1]);
+		r.selector(g,int32(2*w[i]+s[i]))
+		p.Mul(r)
 	}
-	p.Mul(c)  
+
+
+	r.Copy(q[0]); r.conj()   
+	r.Mul(p)
+	p.cmove(r,pb)
+
 	p.reduce()
 	return p;
 }
+
+
 

@@ -16,19 +16,17 @@ const (
 	RoleTypeMember = RoleType("MEMBER")
 	
 	RoleTypePeer = RoleType("PEER")
-	
-	RoleTypeClient = RoleType("CLIENT")
 )
 
 
 
 
 type RoleTypeDoesNotExistError struct {
-	roleType RoleType
+	RoleType RoleType
 }
 
 func (r *RoleTypeDoesNotExistError) Error() string {
-	return fmt.Sprintf("Role type %s does not exist", r.roleType)
+	return fmt.Sprintf("role type %s does not exist", r.RoleType)
 }
 
 
