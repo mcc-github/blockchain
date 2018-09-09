@@ -125,7 +125,20 @@ type QueryExecutor interface {
 	
 	
 	
+	
+	
+	GetStateRangeScanIteratorWithMetadata(namespace string, startKey, endKey string, metadata map[string]interface{}) (QueryResultsIterator, error)
+	
+	
+	
+	
 	ExecuteQuery(namespace, query string) (commonledger.ResultsIterator, error)
+	
+	
+	
+	
+	
+	ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (QueryResultsIterator, error)
 	
 	GetPrivateData(namespace, collection, key string) ([]byte, error)
 	
@@ -191,6 +204,13 @@ type TxSimulator interface {
 	
 	
 	GetTxSimulationResults() (*TxSimulationResults, error)
+}
+
+
+type QueryResultsIterator interface {
+	commonledger.ResultsIterator
+	
+	GetBookmarkAndClose() string
 }
 
 

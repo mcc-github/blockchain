@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1129,6 +1130,56 @@ func TestQueries(t *testing.T) {
 		return
 	}
 
+	type PageResponse struct {
+		Bookmark string   `json:"bookmark"`
+		Keys     []string `json:"keys"`
+	}
+
+	
+	f = "keysByPage"
+	args = util.ToChaincodeArgs(f, "marble001", "marble011", "2", "")
+
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+	nextBlockNumber++
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		return
+	}
+	queryPage := &PageResponse{}
+
+	json.Unmarshal(retval, &queryPage)
+
+	expectedResult := []string{"marble001", "marble002"}
+
+	if !reflect.DeepEqual(expectedResult, queryPage.Keys) {
+		t.Fail()
+		t.Logf("Error detected with the paginated range query. Returned: %v  should have returned: %v", queryPage.Keys, expectedResult)
+		return
+	}
+
+	
+	args = util.ToChaincodeArgs(f, "marble001", "marble011", "2", queryPage.Bookmark)
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+	nextBlockNumber++
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		return
+	}
+
+	json.Unmarshal(retval, &queryPage)
+
+	expectedResult = []string{"marble003", "marble004"}
+
+	if !reflect.DeepEqual(expectedResult, queryPage.Keys) {
+		t.Fail()
+		t.Logf("Error detected with the paginated range query second page. Returned: %v  should have returned: %v    %v", queryPage.Keys, expectedResult, queryPage.Bookmark)
+		return
+	}
+
 	
 	
 	if ledgerconfig.IsCouchDBEnabled() == true {
@@ -1233,6 +1284,55 @@ func TestQueries(t *testing.T) {
 		if len(keys) != 5 {
 			t.Fail()
 			t.Logf("Error detected with the rich query, should have returned 5 but returned %v", len(keys))
+			return
+		}
+
+		
+		f = "queryByPage"
+		args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}", "2", "")
+
+		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+		_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+		nextBlockNumber++
+		if err != nil {
+			t.Fail()
+			t.Logf("Error invoking <%s>: %s", ccID, err)
+			return
+		}
+
+		queryPage := &PageResponse{}
+
+		json.Unmarshal(retval, &queryPage)
+
+		expectedResult := []string{"marble001", "marble003"}
+
+		if !reflect.DeepEqual(expectedResult, queryPage.Keys) {
+			t.Fail()
+			t.Logf("Error detected with the paginated range query. Returned: %v  should have returned: %v", queryPage.Keys, expectedResult)
+			return
+		}
+
+		
+		args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}", "2", queryPage.Bookmark)
+
+		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+		_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+		nextBlockNumber++
+		if err != nil {
+			t.Fail()
+			t.Logf("Error invoking <%s>: %s", ccID, err)
+			return
+		}
+
+		queryPage = &PageResponse{}
+
+		json.Unmarshal(retval, &queryPage)
+
+		expectedResult = []string{"marble005", "marble007"}
+
+		if !reflect.DeepEqual(expectedResult, queryPage.Keys) {
+			t.Fail()
+			t.Logf("Error detected with the paginated range query. Returned: %v  should have returned: %v", queryPage.Keys, expectedResult)
 			return
 		}
 

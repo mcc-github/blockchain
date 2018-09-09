@@ -123,7 +123,7 @@ func TestUpdateBatchIterator(t *testing.T) {
 	checkItrResults(t, batch.GetRangeScanIterator("non-existing-ns", "", ""), nil)
 }
 
-func checkItrResults(t *testing.T, itr ResultsIterator, expectedResults []*VersionedKV) {
+func checkItrResults(t *testing.T, itr QueryResultsIterator, expectedResults []*VersionedKV) {
 	for i := 0; i < len(expectedResults); i++ {
 		res, _ := itr.Next()
 		testutil.AssertEquals(t, res, expectedResults[i])
@@ -132,4 +132,33 @@ func checkItrResults(t *testing.T, itr ResultsIterator, expectedResults []*Versi
 	testutil.AssertNoError(t, err, "")
 	testutil.AssertNil(t, lastRes)
 	itr.Close()
+}
+
+
+func TestPaginatedRangeValidation(t *testing.T) {
+
+	queryOptions := make(map[string]interface{})
+	queryOptions["limit"] = int32(10)
+
+	err := ValidateRangeMetadata(queryOptions)
+	testutil.AssertNoError(t, err, "An error was thrown for a valid option")
+
+	queryOptions = make(map[string]interface{})
+	queryOptions["limit"] = float32(10.2)
+
+	err = ValidateRangeMetadata(queryOptions)
+	testutil.AssertError(t, err, "An should have been thrown for an invalid option")
+
+	queryOptions = make(map[string]interface{})
+	queryOptions["limit"] = "10"
+
+	err = ValidateRangeMetadata(queryOptions)
+	testutil.AssertError(t, err, "An should have been thrown for an invalid option")
+
+	queryOptions = make(map[string]interface{})
+	queryOptions["limit1"] = int32(10)
+
+	err = ValidateRangeMetadata(queryOptions)
+	testutil.AssertError(t, err, "An should have been thrown for an invalid option")
+
 }

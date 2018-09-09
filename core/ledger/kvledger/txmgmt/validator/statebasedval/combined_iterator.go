@@ -122,6 +122,11 @@ func (itr *combinedIterator) Close() {
 	itr.dbItr.Close()
 }
 
+func (itr *combinedIterator) GetBookmarkAndClose() string {
+	itr.Close()
+	return ""
+}
+
 
 
 func (itr *combinedIterator) serveEndKeyIfNeeded() (statedb.QueryResult, error) {

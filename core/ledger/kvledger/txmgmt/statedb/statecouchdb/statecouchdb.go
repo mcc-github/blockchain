@@ -254,28 +254,98 @@ func (vdb *VersionedDB) GetStateMultipleKeys(namespace string, keys []string) ([
 
 
 func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	return vdb.GetStateRangeScanIteratorWithMetadata(namespace, startKey, endKey, nil)
+}
+
+const optionBookmark = "bookmark"
+const optionLimit = "limit"
+const returnCount = "count"
+
+
+
+
+
+func (vdb *VersionedDB) GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
+
+	logger.Debugf("Entering GetStateRangeScanIteratorWithMetadata  namespace: %s  startKey: %s  endKey: %s  metadata: %v", namespace, startKey, endKey, metadata)
+
 	
-	queryLimit := ledgerconfig.GetQueryLimit()
+	internalQueryLimit := int32(ledgerconfig.GetInternalQueryLimit())
+	requestedLimit := int32(0)
+	
+	if metadata != nil {
+		
+		err := statedb.ValidateRangeMetadata(metadata)
+		if err != nil {
+			return nil, err
+		}
+		if limitOption, ok := metadata[optionLimit]; ok {
+			requestedLimit = limitOption.(int32)
+		}
+	}
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
 		return nil, err
 	}
-	queryResult, err := db.ReadDocRange(startKey, endKey, queryLimit, querySkip)
-	if err != nil {
-		logger.Errorf("Error calling ReadDocRange(): %s", err.Error())
-		return nil, err
+	return newQueryScanner(namespace, db, "", internalQueryLimit, requestedLimit, "", startKey, endKey)
+}
+
+func (scanner *queryScanner) getNextStateRangeScanResults() error {
+
+	queryLimit := scanner.queryDefinition.internalQueryLimit
+	if scanner.paginationInfo.requestedLimit > 0 {
+		moreResultsNeeded := scanner.paginationInfo.requestedLimit - scanner.resultsInfo.totalRecordsReturned
+		if moreResultsNeeded < scanner.queryDefinition.internalQueryLimit {
+			queryLimit = moreResultsNeeded
+		}
 	}
-	logger.Debugf("Exiting GetStateRangeScanIterator")
-	return newQueryScanner(namespace, *queryResult), nil
+	queryResult, nextStartKey, err := scanner.db.ReadDocRange(scanner.queryDefinition.startKey, scanner.queryDefinition.endKey,
+		queryLimit)
+	if err != nil {
+		logger.Debugf("Error calling ReadDocRange(): %s\n", err.Error())
+		return err
+	}
+
+	scanner.resultsInfo.results = queryResult
+	scanner.queryDefinition.startKey = nextStartKey
+	scanner.paginationInfo.cursor = 0
+
+	return nil
 }
 
 
 func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIterator, error) {
+
+	queryResult, err := vdb.ExecuteQueryWithMetadata(namespace, query, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return queryResult, nil
+}
+
+
+func (vdb *VersionedDB) ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
+
+	logger.Debugf("Entering ExecuteQueryWithMetadata  namespace: %s,  query: %s,  metadata: %v", namespace, query, metadata)
 	
-	queryLimit := ledgerconfig.GetQueryLimit()
+	internalQueryLimit := int32(ledgerconfig.GetInternalQueryLimit())
+	bookmark := ""
+	requestedLimit := int32(0)
 	
-	
-	queryString, err := applyAdditionalQueryOptions(query, queryLimit, 0)
+	if metadata != nil {
+		err := validateQueryMetadata(metadata)
+		if err != nil {
+			return nil, err
+		}
+		if limitOption, ok := metadata[optionLimit]; ok {
+			requestedLimit = limitOption.(int32)
+		}
+		if bookmarkOption, ok := metadata[optionBookmark]; ok {
+			bookmark = bookmarkOption.(string)
+		}
+	}
+	queryString, err := applyAdditionalQueryOptions(query, internalQueryLimit, bookmark)
 	if err != nil {
 		logger.Errorf("Error calling applyAdditionalQueryOptions(): %s", err.Error())
 		return nil, err
@@ -284,13 +354,63 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
 	if err != nil {
 		return nil, err
 	}
-	queryResult, err := db.QueryDocuments(queryString)
-	if err != nil {
-		logger.Errorf("Error calling QueryDocuments(): %s", err.Error())
-		return nil, err
+	return newQueryScanner(namespace, db, queryString, internalQueryLimit, requestedLimit, bookmark, "", "")
+}
+
+
+
+func (scanner *queryScanner) executeQueryWithBookmark() error {
+
+	queryLimit := scanner.queryDefinition.internalQueryLimit
+	if scanner.paginationInfo.requestedLimit > 0 {
+		if scanner.paginationInfo.requestedLimit-scanner.resultsInfo.totalRecordsReturned < scanner.queryDefinition.internalQueryLimit {
+			queryLimit = scanner.paginationInfo.requestedLimit - scanner.resultsInfo.totalRecordsReturned
+		}
 	}
-	logger.Debugf("Exiting ExecuteQuery")
-	return newQueryScanner(namespace, *queryResult), nil
+
+	queryString, err := applyAdditionalQueryOptions(scanner.queryDefinition.query,
+		queryLimit, scanner.paginationInfo.bookmark)
+	if err != nil {
+		logger.Debugf("Error calling applyAdditionalQueryOptions(): %s\n", err.Error())
+		return err
+	}
+
+	queryResult, bookmark, err := scanner.db.QueryDocuments(queryString)
+	if err != nil {
+		logger.Debugf("Error calling QueryDocuments(): %s\n", err.Error())
+		return err
+	}
+
+	scanner.resultsInfo.results = queryResult
+	scanner.paginationInfo.bookmark = bookmark
+	scanner.paginationInfo.cursor = 0
+
+	return nil
+}
+
+func validateQueryMetadata(metadata map[string]interface{}) error {
+	for key, keyVal := range metadata {
+		switch key {
+
+		case optionBookmark:
+			
+			if _, ok := keyVal.(string); ok {
+				continue
+			}
+			return fmt.Errorf("Invalid entry, \"bookmark\" must be a string")
+
+		case optionLimit:
+			
+			if _, ok := keyVal.(int32); ok {
+				continue
+			}
+			return fmt.Errorf("Invalid entry, \"limit\" must be an int32")
+
+		default:
+			return fmt.Errorf("Invalid entry, option %s not recognized", key)
+		}
+	}
+	return nil
 }
 
 
@@ -396,10 +516,10 @@ func (vdb *VersionedDB) GetLatestSavePoint() (*version.Height, error) {
 }
 
 
-func applyAdditionalQueryOptions(queryString string, queryLimit, querySkip int) (string, error) {
+func applyAdditionalQueryOptions(queryString string, queryLimit int32, queryBookmark string) (string, error) {
 	const jsonQueryFields = "fields"
 	const jsonQueryLimit = "limit"
-	const jsonQuerySkip = "skip"
+	const jsonQueryBookmark = "bookmark"
 	
 	jsonQueryMap := make(map[string]interface{})
 	
@@ -424,9 +544,9 @@ func applyAdditionalQueryOptions(queryString string, queryLimit, querySkip int) 
 	
 	jsonQueryMap[jsonQueryLimit] = queryLimit
 	
-	
-	
-	jsonQueryMap[jsonQuerySkip] = querySkip
+	if queryBookmark != "" {
+		jsonQueryMap[jsonQueryBookmark] = queryBookmark
+	}
 	
 	editedQuery, err := json.Marshal(jsonQueryMap)
 	if err != nil {
@@ -437,21 +557,89 @@ func applyAdditionalQueryOptions(queryString string, queryLimit, querySkip int) 
 }
 
 type queryScanner struct {
-	cursor    int
-	namespace string
-	results   []couchdb.QueryResult
+	namespace       string
+	db              *couchdb.CouchDatabase
+	queryDefinition *queryDefinition
+	paginationInfo  *paginationInfo
+	resultsInfo     *resultsInfo
 }
 
-func newQueryScanner(namespace string, queryResults []couchdb.QueryResult) *queryScanner {
-	return &queryScanner{-1, namespace, queryResults}
+type queryDefinition struct {
+	startKey           string
+	endKey             string
+	query              string
+	internalQueryLimit int32
+}
+
+type paginationInfo struct {
+	cursor         int32
+	requestedLimit int32
+	bookmark       string
+}
+
+type resultsInfo struct {
+	totalRecordsReturned int32
+	results              []*couchdb.QueryResult
+}
+
+func newQueryScanner(namespace string, db *couchdb.CouchDatabase, query string, internalQueryLimit,
+	limit int32, bookmark, startKey, endKey string) (*queryScanner, error) {
+
+	scanner := &queryScanner{namespace, db, &queryDefinition{startKey, endKey, query, internalQueryLimit}, &paginationInfo{-1, limit, bookmark}, &resultsInfo{0, nil}}
+	var err error
+
+	
+	if scanner.queryDefinition.query != "" {
+		err = scanner.executeQueryWithBookmark()
+	} else {
+		err = scanner.getNextStateRangeScanResults()
+	}
+	if err != nil {
+		return nil, err
+	}
+	scanner.paginationInfo.cursor = -1
+
+	return scanner, nil
 }
 
 func (scanner *queryScanner) Next() (statedb.QueryResult, error) {
-	scanner.cursor++
-	if scanner.cursor >= len(scanner.results) {
+
+	
+	if len(scanner.resultsInfo.results) == 0 {
 		return nil, nil
 	}
-	selectedResultRecord := scanner.results[scanner.cursor]
+
+	
+	scanner.paginationInfo.cursor++
+
+	
+	
+	if scanner.paginationInfo.cursor >= scanner.queryDefinition.internalQueryLimit {
+
+		var err error
+		
+		if scanner.queryDefinition.query != "" {
+			err = scanner.executeQueryWithBookmark()
+		} else {
+			err = scanner.getNextStateRangeScanResults()
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		
+		if len(scanner.resultsInfo.results) == 0 {
+			return nil, nil
+		}
+
+	}
+
+	
+	if scanner.paginationInfo.cursor >= int32(len(scanner.resultsInfo.results)) {
+		return nil, nil
+	}
+
+	selectedResultRecord := scanner.resultsInfo.results[scanner.paginationInfo.cursor]
 	key := selectedResultRecord.ID
 
 	
@@ -459,6 +647,9 @@ func (scanner *queryScanner) Next() (statedb.QueryResult, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	scanner.resultsInfo.totalRecordsReturned++
+
 	return &statedb.VersionedKV{
 		CompositeKey:   statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
 		VersionedValue: *kv.VersionedValue}, nil
@@ -466,4 +657,15 @@ func (scanner *queryScanner) Next() (statedb.QueryResult, error) {
 
 func (scanner *queryScanner) Close() {
 	scanner = nil
+}
+
+func (scanner *queryScanner) GetBookmarkAndClose() string {
+	retval := ""
+	if scanner.queryDefinition.query != "" {
+		retval = scanner.paginationInfo.bookmark
+	} else {
+		retval = scanner.queryDefinition.startKey
+	}
+	scanner.Close()
+	return retval
 }

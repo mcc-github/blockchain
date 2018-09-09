@@ -157,6 +157,25 @@ func (c *validationContext) addDependency(kid *ledgerKeyID, txnum uint64, dep *t
 	c.depsByLedgerKeyIDMap[*kid][txnum] = dep
 }
 
+func (c *validationContext) dependenciesForTxnum(kid *ledgerKeyID, txnum uint64) []*txDependency {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	var deps []*txDependency
+
+	dl, in := c.depsByLedgerKeyIDMap[*kid]
+	if in {
+		deps = make([]*txDependency, 0, len(dl))
+		for depTxnum, dep := range dl {
+			if depTxnum < txnum {
+				deps = append(deps, dep)
+			}
+		}
+	}
+
+	return deps
+}
+
 func (c *validationContext) getOrCreateDependencyByTxnum(txnum uint64) *txDependency {
 	c.mutex.RLock()
 	dep, ok := c.depsByTxnumMap[txnum]
@@ -185,16 +204,23 @@ func (c *validationContext) waitForValidationResults(kid *ledgerKeyID, blockNum 
 	
 	
 	
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	dl, in := c.depsByLedgerKeyIDMap[*kid]
-	if in {
-		for depTxnum, dep := range dl {
-			if depTxnum < txnum {
-				if valErr := dep.waitForAndRetrieveValidationResult(kid.cc); valErr == nil {
-					err := &ValidationParameterUpdatedError{kid.key, blockNum}
-					return err
-				}
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+	for _, dep := range c.dependenciesForTxnum(kid, txnum) {
+		if valErr := dep.waitForAndRetrieveValidationResult(kid.cc); valErr == nil {
+			return &ValidationParameterUpdatedError{
+				Key:    kid.key,
+				Height: blockNum,
 			}
 		}
 	}
@@ -205,8 +231,6 @@ func (c *validationContext) waitForValidationResults(kid *ledgerKeyID, blockNum 
 
 
 type KeyLevelValidationParameterManagerImpl struct {
-	
-	mutex         sync.RWMutex
 	StateFetcher  validation.StateFetcher
 	validationCtx validationContext
 }

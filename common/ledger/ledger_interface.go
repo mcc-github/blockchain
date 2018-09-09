@@ -45,6 +45,12 @@ type ResultsIterator interface {
 }
 
 
+type QueryResultsIterator interface {
+	ResultsIterator
+	GetBookmarkAndClose() string
+}
+
+
 type QueryResult interface{}
 
 

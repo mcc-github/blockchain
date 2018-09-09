@@ -121,18 +121,47 @@ func (vdb *versionedDB) GetStateMultipleKeys(namespace string, keys []string) ([
 
 
 func (vdb *versionedDB) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	return vdb.GetStateRangeScanIteratorWithMetadata(namespace, startKey, endKey, nil)
+}
+
+const optionLimit = "limit"
+
+
+func (vdb *versionedDB) GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
+
+	requestedLimit := int32(0)
+	
+	if metadata != nil {
+		
+		err := statedb.ValidateRangeMetadata(metadata)
+		if err != nil {
+			return nil, err
+		}
+		if limitOption, ok := metadata[optionLimit]; ok {
+			requestedLimit = limitOption.(int32)
+		}
+	}
+
+	
 	compositeStartKey := constructCompositeKey(namespace, startKey)
 	compositeEndKey := constructCompositeKey(namespace, endKey)
 	if endKey == "" {
 		compositeEndKey[len(compositeEndKey)-1] = lastKeyIndicator
 	}
 	dbItr := vdb.db.GetIterator(compositeStartKey, compositeEndKey)
-	return newKVScanner(namespace, dbItr), nil
+
+	return newKVScanner(namespace, dbItr, requestedLimit), nil
+
 }
 
 
 func (vdb *versionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIterator, error) {
 	return nil, errors.New("ExecuteQuery not supported for leveldb")
+}
+
+
+func (vdb *versionedDB) ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
+	return nil, errors.New("ExecuteQueryWithMetadata not supported for leveldb")
 }
 
 
@@ -187,18 +216,26 @@ func splitCompositeKey(compositeKey []byte) (string, string) {
 }
 
 type kvScanner struct {
-	namespace string
-	dbItr     iterator.Iterator
+	namespace            string
+	dbItr                iterator.Iterator
+	requestedLimit       int32
+	totalRecordsReturned int32
 }
 
-func newKVScanner(namespace string, dbItr iterator.Iterator) *kvScanner {
-	return &kvScanner{namespace, dbItr}
+func newKVScanner(namespace string, dbItr iterator.Iterator, requestedLimit int32) *kvScanner {
+	return &kvScanner{namespace, dbItr, requestedLimit, 0}
 }
 
 func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
+
+	if scanner.requestedLimit > 0 && scanner.totalRecordsReturned >= scanner.requestedLimit {
+		return nil, nil
+	}
+
 	if !scanner.dbItr.Next() {
 		return nil, nil
 	}
+
 	dbKey := scanner.dbItr.Key()
 	dbVal := scanner.dbItr.Value()
 	dbValCopy := make([]byte, len(dbVal))
@@ -208,6 +245,9 @@ func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	scanner.totalRecordsReturned++
+
 	return &statedb.VersionedKV{
 		CompositeKey: statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
 		
@@ -217,4 +257,15 @@ func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
 
 func (scanner *kvScanner) Close() {
 	scanner.dbItr.Release()
+}
+
+func (scanner *kvScanner) GetBookmarkAndClose() string {
+	retval := ""
+	if scanner.dbItr.Next() {
+		dbKey := scanner.dbItr.Key()
+		_, key := splitCompositeKey(dbKey)
+		retval = key
+	}
+	scanner.Close()
+	return retval
 }

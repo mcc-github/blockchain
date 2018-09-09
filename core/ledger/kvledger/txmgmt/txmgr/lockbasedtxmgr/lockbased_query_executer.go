@@ -6,7 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 package lockbasedtxmgr
 
 import (
-	"github.com/mcc-github/blockchain/common/ledger"
+	commonledger "github.com/mcc-github/blockchain/common/ledger"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/storageutil"
 )
 
@@ -50,13 +51,27 @@ func (q *lockBasedQueryExecutor) GetStateMultipleKeys(namespace string, keys []s
 
 
 
-func (q *lockBasedQueryExecutor) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ledger.ResultsIterator, error) {
+func (q *lockBasedQueryExecutor) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (commonledger.ResultsIterator, error) {
 	return q.helper.getStateRangeScanIterator(namespace, startKey, endKey)
 }
 
 
-func (q *lockBasedQueryExecutor) ExecuteQuery(namespace, query string) (ledger.ResultsIterator, error) {
+
+
+
+
+func (q *lockBasedQueryExecutor) GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (ledger.QueryResultsIterator, error) {
+	return q.helper.getStateRangeScanIteratorWithMetadata(namespace, startKey, endKey, metadata)
+}
+
+
+func (q *lockBasedQueryExecutor) ExecuteQuery(namespace, query string) (commonledger.ResultsIterator, error) {
 	return q.helper.executeQuery(namespace, query)
+}
+
+
+func (q *lockBasedQueryExecutor) ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (ledger.QueryResultsIterator, error) {
+	return q.helper.executeQueryWithMetadata(namespace, query, metadata)
 }
 
 
@@ -83,12 +98,12 @@ func (q *lockBasedQueryExecutor) GetPrivateDataMultipleKeys(namespace, collectio
 }
 
 
-func (q *lockBasedQueryExecutor) GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (ledger.ResultsIterator, error) {
+func (q *lockBasedQueryExecutor) GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (commonledger.ResultsIterator, error) {
 	return q.helper.getPrivateDataRangeScanIterator(namespace, collection, startKey, endKey)
 }
 
 
-func (q *lockBasedQueryExecutor) ExecuteQueryOnPrivateData(namespace, collection, query string) (ledger.ResultsIterator, error) {
+func (q *lockBasedQueryExecutor) ExecuteQueryOnPrivateData(namespace, collection, query string) (commonledger.ResultsIterator, error) {
 	return q.helper.executeQueryOnPrivateData(namespace, collection, query)
 }
 

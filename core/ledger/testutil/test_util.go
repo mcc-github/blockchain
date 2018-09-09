@@ -74,7 +74,8 @@ func SetupCoreYAMLConfig() {
 
 func ResetConfigToDefaultValues() {
 	
-	viper.Set("ledger.state.couchDBConfig.queryLimit", 10000)
+	viper.Set("ledger.state.totalQueryLimit", 10000)
+	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 1000)
 	viper.Set("ledger.state.stateDatabase", "goleveldb")
 	viper.Set("ledger.history.enableHistoryDatabase", false)
 	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", true)

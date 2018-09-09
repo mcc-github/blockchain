@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package statedb
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
@@ -38,7 +39,17 @@ type VersionedDB interface {
 	
 	GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
 	
+	
+	
+	
+	
+	GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (QueryResultsIterator, error)
+	
 	ExecuteQuery(namespace, query string) (ResultsIterator, error)
+	
+	
+	
+	ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (QueryResultsIterator, error)
 	
 	
 	
@@ -104,6 +115,12 @@ type VersionedKV struct {
 type ResultsIterator interface {
 	Next() (QueryResult, error)
 	Close()
+}
+
+
+type QueryResultsIterator interface {
+	ResultsIterator
+	GetBookmarkAndClose() string
 }
 
 
@@ -201,7 +218,7 @@ func (batch *UpdateBatch) GetUpdates(ns string) map[string]*VersionedValue {
 
 
 
-func (batch *UpdateBatch) GetRangeScanIterator(ns string, startKey string, endKey string) ResultsIterator {
+func (batch *UpdateBatch) GetRangeScanIterator(ns string, startKey string, endKey string) QueryResultsIterator {
 	return newNsIterator(ns, startKey, endKey, batch)
 }
 
@@ -257,4 +274,31 @@ func (itr *nsIterator) Next() (QueryResult, error) {
 
 func (itr *nsIterator) Close() {
 	
+}
+
+
+func (itr *nsIterator) GetBookmarkAndClose() string {
+	
+	return ""
+}
+
+const optionLimit = "limit"
+
+
+func ValidateRangeMetadata(metadata map[string]interface{}) error {
+	for key, keyVal := range metadata {
+		switch key {
+
+		case optionLimit:
+			
+			if _, ok := keyVal.(int32); ok {
+				continue
+			}
+			return fmt.Errorf("Invalid entry, \"limit\" must be a int32")
+
+		default:
+			return fmt.Errorf("Invalid entry, option %s not recognized", key)
+		}
+	}
+	return nil
 }
