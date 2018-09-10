@@ -227,35 +227,7 @@ func serve(args []string) error {
 	pb.RegisterDeliverServer(peerServer.Server(), abServer)
 
 	
-	chaincodeInstallPath := ccprovider.GetChaincodeInstallPathFromViper()
-	ccprovider.SetChaincodesPath(chaincodeInstallPath)
-
-	packageProvider := &persistence.PackageProvider{
-		LegacyPP: &ccprovider.CCInfoFSImpl{},
-		Store: &persistence.Store{
-			Path:       chaincodeInstallPath,
-			ReadWriter: &persistence.FilesystemIO{},
-		},
-	}
-
-	
-	ca, err := tlsgen.NewCA()
-	if err != nil {
-		logger.Panic("Failed creating authentication layer:", err)
-	}
-	ccSrv, ccEndpoint, err := createChaincodeServer(ca, peerHost)
-	if err != nil {
-		logger.Panicf("Failed to create chaincode server: %s", err)
-	}
-	chaincodeSupport, ccp, sccp := registerChaincodeSupport(
-		ccSrv,
-		ccEndpoint,
-		ca,
-		packageProvider,
-		aclProvider,
-		pr,
-	)
-	go ccSrv.Start()
+	chaincodeSupport, ccp, sccp, packageProvider := startChaincodeServer(peerHost, aclProvider, pr)
 
 	logger.Debugf("Running peer")
 
@@ -625,6 +597,44 @@ func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca
 	pb.RegisterChaincodeSupportServer(grpcServer.Server(), ccSrv)
 
 	return chaincodeSupport, ccp, sccp
+}
+
+
+
+
+
+func startChaincodeServer(peerHost string, aclProvider aclmgmt.ACLProvider, pr *platforms.Registry) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider, *persistence.PackageProvider) {
+	
+	chaincodeInstallPath := ccprovider.GetChaincodeInstallPathFromViper()
+	ccprovider.SetChaincodesPath(chaincodeInstallPath)
+
+	packageProvider := &persistence.PackageProvider{
+		LegacyPP: &ccprovider.CCInfoFSImpl{},
+		Store: &persistence.Store{
+			Path:       chaincodeInstallPath,
+			ReadWriter: &persistence.FilesystemIO{},
+		},
+	}
+
+	
+	ca, err := tlsgen.NewCA()
+	if err != nil {
+		logger.Panic("Failed creating authentication layer:", err)
+	}
+	ccSrv, ccEndpoint, err := createChaincodeServer(ca, peerHost)
+	if err != nil {
+		logger.Panicf("Failed to create chaincode server: %s", err)
+	}
+	chaincodeSupport, ccp, sccp := registerChaincodeSupport(
+		ccSrv,
+		ccEndpoint,
+		ca,
+		packageProvider,
+		aclProvider,
+		pr,
+	)
+	go ccSrv.Start()
+	return chaincodeSupport, ccp, sccp, packageProvider
 }
 
 func adminHasSeparateListener(peerListenAddr string, adminListenAddress string) bool {
