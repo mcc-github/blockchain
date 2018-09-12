@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/msp"
@@ -245,4 +246,20 @@ func TestGetDefaultSigner(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInitCmd(t *testing.T) {
+	defer viper.Reset()
+
+	
+	flogging.MustGetLogger("test")
+	flogging.SetModuleLevel("test", "error")
+	assert.Equal(t, "error", flogging.Global.Level("test").String())
+	flogging.MustGetLogger("chaincode")
+	assert.Equal(t, flogging.Global.DefaultLevel().String(), flogging.Global.Level("chaincode").String())
+
+	viper.Set("logging_level", "chaincode=debug")
+	common.InitCmd(nil, nil)
+	assert.Equal(t, "debug", flogging.Global.Level("chaincode").String())
+	assert.Equal(t, "error", flogging.Global.Level("test").String())
 }

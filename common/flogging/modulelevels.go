@@ -43,9 +43,9 @@ func (m *ModuleLevels) DefaultLevel() zapcore.Level {
 
 
 
-func (m *ModuleLevels) Reset() {
+func (m *ModuleLevels) ResetLevels() {
 	m.mutex.Lock()
-	m.levels = map[string]zapcore.Level{}
+	m.levels = nil
 	m.defaultLevel = zapcore.InfoLevel
 	m.mutex.Unlock()
 }
@@ -55,7 +55,7 @@ func (m *ModuleLevels) Reset() {
 
 
 func (m *ModuleLevels) ActivateSpec(spec string) error {
-	levelAll := m.defaultLevel
+	var levelAll *zapcore.Level
 	updates := map[string]zapcore.Level{}
 
 	fields := strings.Split(spec, ":")
@@ -63,8 +63,8 @@ func (m *ModuleLevels) ActivateSpec(spec string) error {
 		split := strings.Split(field, "=")
 		switch len(split) {
 		case 1: 
-			levelAll = NameToLevel(field)
-
+			l := NameToLevel(field)
+			levelAll = &l
 		case 2: 
 			level := NameToLevel(split[1])
 			if split[0] == "" {
@@ -81,8 +81,15 @@ func (m *ModuleLevels) ActivateSpec(spec string) error {
 		}
 	}
 
-	m.Reset()
-	m.SetDefaultLevel(NameToLevel(levelAll.String()))
+	
+	if levelAll != nil {
+		l := *levelAll
+		m.SetDefaultLevel(l)
+		for module := range m.Levels() {
+			m.SetLevel(module, l)
+		}
+	}
+
 	for module, level := range updates {
 		m.SetLevel(module, level)
 	}
@@ -123,6 +130,7 @@ func (m *ModuleLevels) Level(module string) zapcore.Level {
 		l = m.defaultLevel
 	}
 	m.mutex.RUnlock()
+
 	return l
 }
 

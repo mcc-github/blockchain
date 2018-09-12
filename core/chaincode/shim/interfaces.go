@@ -138,8 +138,6 @@ type ChaincodeStubInterface interface {
 	
 	
 	
-	
-	
 	GetStateByRangeWithPagination(startKey, endKey string, pageSize int32,
 		bookmark string) (StateQueryIteratorInterface, *pb.QueryResponseMetadata, error)
 
@@ -157,8 +155,6 @@ type ChaincodeStubInterface interface {
 	
 	GetStateByPartialCompositeKey(objectType string, keys []string) (StateQueryIteratorInterface, error)
 
-	
-	
 	
 	
 	
@@ -210,12 +206,6 @@ type ChaincodeStubInterface interface {
 	
 	GetQueryResult(query string) (StateQueryIteratorInterface, error)
 
-	
-	
-	
-	
-	
-	
 	
 	
 	

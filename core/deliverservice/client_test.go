@@ -738,10 +738,6 @@ func TestDisconnectAndDisableEndpoint(t *testing.T) {
 	
 	cl.Disconnect(true)
 
-	go func() {
-		cl.Recv()
-	}()
-
 	
 	assert.True(t, waitForWithTimeout(time.Millisecond*100, func() bool {
 		return os1.ConnCount() == 1 || os2.ConnCount() == 1

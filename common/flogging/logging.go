@@ -67,7 +67,7 @@ func New(c Config) (*Logging, error) {
 		multiFormatter: fabenc.NewMultiFormatter(),
 	}
 
-	err := s.Reset(c)
+	err := s.Apply(c)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func New(c Config) (*Logging, error) {
 }
 
 
-func (s *Logging) Reset(c Config) error {
+func (s *Logging) Apply(c Config) error {
 	err := s.SetFormat(c.Format)
 	if err != nil {
 		return err
@@ -84,7 +84,8 @@ func (s *Logging) Reset(c Config) error {
 	if c.LogSpec == "" {
 		c.LogSpec = "INFO"
 	}
-	err = s.ActivateSpec(c.LogSpec)
+
+	err = s.ModuleLevels.ActivateSpec(c.LogSpec)
 	if err != nil {
 		return err
 	}
@@ -186,10 +187,10 @@ func (s *Logging) Encoding() Encoding {
 
 func (s *Logging) ZapLogger(module string) *zap.Logger {
 	s.mutex.RLock()
-	level := s.Level(module)
-	s.SetLevel(module, level)
+	level := s.ModuleLevels.Level(module)
+	s.ModuleLevels.SetLevel(module, level)
 	core := &Core{
-		LevelEnabler: s.LevelEnabler(module),
+		LevelEnabler: s.ModuleLevels.LevelEnabler(module),
 		Encoders: map[Encoding]zapcore.Encoder{
 			JSON:    zapcore.NewJSONEncoder(s.encoderConfig),
 			CONSOLE: fabenc.NewFormatEncoder(s.multiFormatter),

@@ -36,7 +36,7 @@ func init() {
 
 
 func Init(config Config) {
-	err := Global.Reset(config)
+	err := Global.Apply(config)
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +46,8 @@ func Init(config Config) {
 
 
 func Reset() {
-	Global.Reset(Config{})
+	Global.ResetLevels()
+	Global.Apply(Config{})
 }
 
 

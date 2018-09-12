@@ -238,7 +238,7 @@ func SetLogLevelFromViper(module string) error {
 	
 	module = strings.Replace(module, ".", "/", -1)
 	
-	err = flogging.SetModuleLevel("^"+module, logLevelFromViper)
+	err = flogging.SetModuleLevels("^"+module, logLevelFromViper)
 	return err
 }
 
@@ -292,7 +292,6 @@ func configFromEnv(prefix string) (address, override string, clientConfig comm.C
 }
 
 func InitCmd(cmd *cobra.Command, args []string) {
-
 	err := InitConfig(CmdRoot)
 	if err != nil { 
 		mainLogger.Errorf("Fatal error when initializing %s config : %s", CmdRoot, err)

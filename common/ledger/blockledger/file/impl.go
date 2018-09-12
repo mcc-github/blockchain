@@ -18,13 +18,6 @@ const pkgLogID = "common/ledger/blockledger/file"
 
 var logger = flogging.MustGetLogger(pkgLogID)
 
-var closedChan chan struct{}
-
-func init() {
-	closedChan = make(chan struct{})
-	close(closedChan)
-}
-
 
 type FileLedger struct {
 	blockStore FileLedgerBlockStore

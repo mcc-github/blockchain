@@ -374,7 +374,7 @@ func NewConsortiumGroup(conf *genesisconfig.Consortium) (*cb.ConfigGroup, error)
 
 
 
-func NewChannelCreateConfigUpdate(channelID string, orderingSystemChannelGroup *cb.ConfigGroup, conf *genesisconfig.Profile) (*cb.ConfigUpdate, error) {
+func NewChannelCreateConfigUpdate(channelID string, conf *genesisconfig.Profile) (*cb.ConfigUpdate, error) {
 	if conf.Application == nil {
 		return nil, errors.New("cannot define a new channel with no Application section")
 	}
@@ -391,52 +391,16 @@ func NewChannelCreateConfigUpdate(channelID string, orderingSystemChannelGroup *
 
 	var template, newChannelGroup *cb.ConfigGroup
 
-	if orderingSystemChannelGroup != nil {
-		
-		if orderingSystemChannelGroup.Groups == nil {
-			return nil, errors.New("missing all channel groups")
-		}
-
-		consortiums, ok := orderingSystemChannelGroup.Groups[channelconfig.ConsortiumsGroupKey]
-		if !ok {
-			return nil, errors.New("bad consortiums group")
-		}
-
-		consortium, ok := consortiums.Groups[conf.Consortium]
-		if !ok {
-			return nil, errors.Errorf("bad consortium: %s", conf.Consortium)
-		}
-
-		template = proto.Clone(orderingSystemChannelGroup).(*cb.ConfigGroup)
-		template.Groups[channelconfig.ApplicationGroupKey] = proto.Clone(consortium).(*cb.ConfigGroup)
-		
-		
-		
-		template.Groups[channelconfig.ApplicationGroupKey].Groups["*IllegalKey*!"] = &cb.ConfigGroup{}
-		delete(template.Groups, channelconfig.ConsortiumsGroupKey)
-
-		newChannelGroup = proto.Clone(orderingSystemChannelGroup).(*cb.ConfigGroup)
-		delete(newChannelGroup.Groups, channelconfig.ConsortiumsGroupKey)
-		newChannelGroup.Groups[channelconfig.ApplicationGroupKey].Values = ag.Values
-		newChannelGroup.Groups[channelconfig.ApplicationGroupKey].Policies = ag.Policies
-
-		for orgName, org := range template.Groups[channelconfig.ApplicationGroupKey].Groups {
-			if _, ok := ag.Groups[orgName]; ok {
-				newChannelGroup.Groups[channelconfig.ApplicationGroupKey].Groups[orgName] = org
-			}
-		}
-	} else {
-		newChannelGroup = &cb.ConfigGroup{
-			Groups: map[string]*cb.ConfigGroup{
-				channelconfig.ApplicationGroupKey: ag,
-			},
-		}
-
-		
-		template = proto.Clone(newChannelGroup).(*cb.ConfigGroup)
-		template.Groups[channelconfig.ApplicationGroupKey].Values = nil
-		template.Groups[channelconfig.ApplicationGroupKey].Policies = nil
+	newChannelGroup = &cb.ConfigGroup{
+		Groups: map[string]*cb.ConfigGroup{
+			channelconfig.ApplicationGroupKey: ag,
+		},
 	}
+
+	
+	template = proto.Clone(newChannelGroup).(*cb.ConfigGroup)
+	template.Groups[channelconfig.ApplicationGroupKey].Values = nil
+	template.Groups[channelconfig.ApplicationGroupKey].Policies = nil
 
 	updt, err := update.Compute(&cb.Config{ChannelGroup: template}, &cb.Config{ChannelGroup: newChannelGroup})
 	if err != nil {
@@ -457,8 +421,8 @@ func NewChannelCreateConfigUpdate(channelID string, orderingSystemChannelGroup *
 }
 
 
-func MakeChannelCreationTransaction(channelID string, signer crypto.LocalSigner, orderingSystemChannelConfigGroup *cb.ConfigGroup, conf *genesisconfig.Profile) (*cb.Envelope, error) {
-	newChannelConfigUpdate, err := NewChannelCreateConfigUpdate(channelID, orderingSystemChannelConfigGroup, conf)
+func MakeChannelCreationTransaction(channelID string, signer crypto.LocalSigner, conf *genesisconfig.Profile) (*cb.Envelope, error) {
+	newChannelConfigUpdate, err := NewChannelCreateConfigUpdate(channelID, conf)
 	if err != nil {
 		return nil, errors.Wrap(err, "config update generation failure")
 	}
