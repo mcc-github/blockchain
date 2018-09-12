@@ -108,6 +108,9 @@ func (s *lockBasedTxSimulator) GetPrivateDataRangeScanIterator(namespace, collec
 
 
 func (s *lockBasedTxSimulator) SetPrivateDataMetadata(namespace, collection, key string, metadata map[string][]byte) error {
+	if err := s.helper.validateCollName(namespace, collection); err != nil {
+		return err
+	}
 	if err := s.checkWritePrecondition(key, nil); err != nil {
 		return err
 	}
