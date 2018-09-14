@@ -17,7 +17,6 @@ import (
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/peer"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
@@ -179,7 +178,7 @@ func (cs *ChaincodeSupport) HandleChaincodeStream(stream ccintf.ChaincodeStream)
 		SystemCCProvider:           cs.SystemCCProvider,
 		SystemCCVersion:            util.GetSysCCVersion(),
 		InstantiationPolicyChecker: CheckInstantiationPolicyFunc(ccprovider.CheckInstantiationPolicy),
-		QueryResponseBuilder:       &QueryResponseGenerator{MaxResultLimit: 100, TotalQueryLimit: ledgerconfig.GetTotalQueryLimit()},
+		QueryResponseBuilder:       &QueryResponseGenerator{MaxResultLimit: 100},
 		UUIDGenerator:              UUIDGeneratorFunc(util.GenerateUUID),
 		LedgerGetter:               peer.Default,
 		AppConfig:                  cs.appConfig,

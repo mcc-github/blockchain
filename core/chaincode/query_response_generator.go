@@ -13,8 +13,7 @@ import (
 )
 
 type QueryResponseGenerator struct {
-	MaxResultLimit  int
-	TotalQueryLimit int
+	MaxResultLimit int
 }
 
 

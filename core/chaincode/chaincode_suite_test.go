@@ -33,8 +33,8 @@ type historyQueryExecutor interface {
 }
 
 
-type resultsIterator interface {
-	commonledger.ResultsIterator
+type queryResultsIterator interface {
+	commonledger.QueryResultsIterator
 }
 
 
