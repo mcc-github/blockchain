@@ -668,8 +668,13 @@ func TestShutdown(t *testing.T) {
 	node2.c.Configure(testChannel, []cluster.RemoteNode{node1.nodeInfo})
 	
 	node1.c.Configure(testChannel, []cluster.RemoteNode{node2.nodeInfo})
+	gt := gomega.NewGomegaWithT(t)
+	gt.Eventually(func() (bool, error) {
+		_, err := node2.c.Remote(testChannel, node1.nodeInfo.ID)
+		return true, err
+	}).Should(gomega.BeTrue())
+
 	stub, err := node2.c.Remote(testChannel, node1.nodeInfo.ID)
-	assert.NoError(t, err)
 	
 	_, err = stub.Step(testStepReq)
 	assert.EqualError(t, err, "rpc error: code = Unknown desc = channel test doesn't exist")

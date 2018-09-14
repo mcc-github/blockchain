@@ -345,13 +345,13 @@ func (s *store) GetMinTransientBlkHt() (uint64, error) {
 	
 	startKey := createPurgeIndexByHeightRangeStartKey(0)
 	iter := s.db.GetIterator(startKey, nil)
+	defer iter.Release()
 	
 	if iter.Next() {
 		dbKey := iter.Key()
 		_, _, blockHeight := splitCompositeKeyOfPurgeIndexByHeight(dbKey)
 		return blockHeight, nil
 	}
-	iter.Release()
 	
 	
 	
