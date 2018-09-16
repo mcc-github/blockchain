@@ -58,6 +58,20 @@ type reconciler struct {
 }
 
 
+
+type NoOpReconciler struct {
+}
+
+func (*NoOpReconciler) Start() {
+	
+	logger.Debug("Private data reconciliation has been disabled")
+}
+
+func (*NoOpReconciler) Stop() {
+	
+}
+
+
 type ReconcilerConfig struct {
 	sleepInterval time.Duration
 	batchSize     int
@@ -80,14 +94,12 @@ func GetReconcilerConfig() ReconcilerConfig {
 
 
 func NewReconciler(c committer.Committer, fetcher ReconciliationFetcher, config ReconcilerConfig) Reconciler {
-	r := &reconciler{
+	return &reconciler{
 		config:                config,
 		Committer:             c,
 		ReconciliationFetcher: fetcher,
 		stopChan:              make(chan struct{}),
 	}
-
-	return r
 }
 
 func (r *reconciler) Stop() {

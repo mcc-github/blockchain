@@ -22,8 +22,10 @@ type HandlerRegistry struct {
 }
 
 type LaunchState struct {
-	done chan struct{}
-	err  error
+	mutex    sync.Mutex
+	notified bool
+	done     chan struct{}
+	err      error
 }
 
 func NewLaunchState() *LaunchState {
@@ -32,11 +34,25 @@ func NewLaunchState() *LaunchState {
 	}
 }
 
-func (l *LaunchState) Done() <-chan struct{} { return l.done }
-func (l *LaunchState) Err() error            { return l.err }
+func (l *LaunchState) Done() <-chan struct{} {
+	return l.done
+}
+
+func (l *LaunchState) Err() error {
+	l.mutex.Lock()
+	err := l.err
+	l.mutex.Unlock()
+	return err
+}
+
 func (l *LaunchState) Notify(err error) {
-	l.err = err
-	close(l.done)
+	l.mutex.Lock()
+	if !l.notified {
+		l.notified = true
+		l.err = err
+		close(l.done)
+	}
+	l.mutex.Unlock()
 }
 
 
@@ -70,16 +86,26 @@ func (r *HandlerRegistry) hasLaunched(chaincode string) bool {
 
 
 
-func (r *HandlerRegistry) Launching(cname string) (*LaunchState, error) {
+func (r *HandlerRegistry) Launching(cname string) (*LaunchState, bool) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	if r.hasLaunched(cname) {
-		return nil, errors.Errorf("chaincode %s has already been launched", cname)
+
+	
+	if launchState, ok := r.launching[cname]; ok {
+		return launchState, true
 	}
 
+	
+	if _, ok := r.handlers[cname]; ok {
+		launchState := NewLaunchState()
+		launchState.Notify(nil)
+		return launchState, true
+	}
+
+	
 	launchState := NewLaunchState()
 	r.launching[cname] = launchState
-	return launchState, nil
+	return launchState, false
 }
 
 
@@ -90,7 +116,6 @@ func (r *HandlerRegistry) Ready(cname string) {
 
 	launchStatus := r.launching[cname]
 	if launchStatus != nil {
-		delete(r.launching, cname)
 		launchStatus.Notify(nil)
 	}
 }

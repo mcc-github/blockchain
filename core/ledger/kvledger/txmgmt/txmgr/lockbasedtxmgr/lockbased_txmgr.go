@@ -142,6 +142,9 @@ func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
 
 
 func (txmgr *LockBasedTxMgr) Shutdown() {
+	
+	
+	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
 	txmgr.db.Close()
 }
 

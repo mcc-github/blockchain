@@ -20,7 +20,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/integration/helpers"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	"github.com/mcc-github/blockchain/integration/nwo/blockchainconfig"
@@ -135,19 +135,18 @@ type Network struct {
 	NetworkID         string
 	EventuallyTimeout time.Duration
 
-	CACertificateBundlePath string
-	PortsByBrokerID         map[string]Ports
-	PortsByOrdererID        map[string]Ports
-	PortsByPeerID           map[string]Ports
-	Organizations           []*Organization
-	SystemChannel           *SystemChannel
-	Channels                []*Channel
-	Consensus               *Consensus
-	Orderers                []*Orderer
-	Peers                   []*Peer
-	Profiles                []*Profile
-	Consortiums             []*Consortium
-	Templates               *Templates
+	PortsByBrokerID  map[string]Ports
+	PortsByOrdererID map[string]Ports
+	PortsByPeerID    map[string]Ports
+	Organizations    []*Organization
+	SystemChannel    *SystemChannel
+	Channels         []*Channel
+	Consensus        *Consensus
+	Orderers         []*Orderer
+	Peers            []*Peer
+	Profiles         []*Profile
+	Consortiums      []*Consortium
+	Templates        *Templates
 
 	colorIndex uint
 }
@@ -473,6 +472,16 @@ func (n *Network) ProfileForChannel(channelName string) string {
 
 
 
+func (n *Network) CACertsBundlePath() string {
+	return filepath.Join(
+		n.RootDir,
+		"crypto",
+		"ca-certs.pem",
+	)
+}
+
+
+
 
 
 
@@ -555,16 +564,14 @@ func (n *Network) Bootstrap() {
 
 
 func (n *Network) concatenateTLSCACertificates() {
-	tlsCertificatesFilePath := filepath.Join(n.RootDir, "crypto", "tlsCACerts.pem")
-	concatenatedTLSCABytes := bytes.Buffer{}
+	bundle := &bytes.Buffer{}
 	for _, tlsCertPath := range n.listTLSCACertificates() {
 		certBytes, err := ioutil.ReadFile(tlsCertPath)
 		Expect(err).NotTo(HaveOccurred())
-		concatenatedTLSCABytes.Write(certBytes)
+		bundle.Write(certBytes)
 	}
-	err := ioutil.WriteFile(tlsCertificatesFilePath, concatenatedTLSCABytes.Bytes(), 0660)
+	err := ioutil.WriteFile(n.CACertsBundlePath(), bundle.Bytes(), 0660)
 	Expect(err).NotTo(HaveOccurred())
-	n.CACertificateBundlePath = tlsCertificatesFilePath
 }
 
 
@@ -573,7 +580,7 @@ func (n *Network) listTLSCACertificates() []string {
 	fileName2Path := make(map[string]string)
 	filepath.Walk(filepath.Join(n.RootDir, "crypto"), func(path string, info os.FileInfo, err error) error {
 		
-		if strings.Index(info.Name(), "tlsca") == 0 && strings.Contains(info.Name(), "-cert.pem") {
+		if strings.HasPrefix(info.Name(), "tlsca") && strings.Contains(info.Name(), "-cert.pem") {
 			fileName2Path[info.Name()] = path
 		}
 		return nil
@@ -764,7 +771,7 @@ func (n *Network) ConfigTxGen(command Command) (*gexec.Session, error) {
 
 func (n *Network) Discover(command Command) (*gexec.Session, error) {
 	cmd := NewCommand(n.Components.Discover(), command)
-	cmd.Args = append(cmd.Args, "--peerTLSCA", n.CACertificateBundlePath)
+	cmd.Args = append(cmd.Args, "--peerTLSCA", n.CACertsBundlePath())
 	return n.StartSession(cmd, command.SessionName())
 }
 
@@ -924,7 +931,7 @@ func (n *Network) peerCommand(command Command, env ...string) *exec.Cmd {
 	cmd.Env = append(cmd.Env, env...)
 	if ConnectsToOrderer(command) {
 		cmd.Args = append(cmd.Args, "--tls")
-		cmd.Args = append(cmd.Args, "--cafile", n.CACertificateBundlePath)
+		cmd.Args = append(cmd.Args, "--cafile", n.CACertsBundlePath())
 	}
 
 	
@@ -935,7 +942,7 @@ func (n *Network) peerCommand(command Command, env ...string) *exec.Cmd {
 	requiredPeerAddresses := flagCount("--peerAddresses", cmd.Args)
 	for i := 0; i < requiredPeerAddresses; i++ {
 		cmd.Args = append(cmd.Args, "--tlsRootCertFiles")
-		cmd.Args = append(cmd.Args, n.CACertificateBundlePath)
+		cmd.Args = append(cmd.Args, n.CACertsBundlePath())
 	}
 	return cmd
 }

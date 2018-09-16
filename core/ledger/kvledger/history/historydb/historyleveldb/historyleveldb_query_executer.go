@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package historyleveldb
 
 import (
+	"bytes"
+
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/util"
@@ -58,32 +60,53 @@ func newHistoryScanner(compositePartialKey []byte, namespace string, key string,
 }
 
 func (scanner *historyScanner) Next() (commonledger.QueryResult, error) {
-	if !scanner.dbItr.Next() {
-		return nil, nil
-	}
-	historyKey := scanner.dbItr.Key() 
+	for {
+		if !scanner.dbItr.Next() {
+			return nil, nil
+		}
+		historyKey := scanner.dbItr.Key() 
 
-	
-	_, blockNumTranNumBytes := historydb.SplitCompositeHistoryKey(historyKey, scanner.compositePartialKey)
-	blockNum, bytesConsumed := util.DecodeOrderPreservingVarUint64(blockNumTranNumBytes[0:])
-	tranNum, _ := util.DecodeOrderPreservingVarUint64(blockNumTranNumBytes[bytesConsumed:])
-	logger.Debugf("Found history record for namespace:%s key:%s at blockNumTranNum %v:%v\n",
-		scanner.namespace, scanner.key, blockNum, tranNum)
+		
+		_, blockNumTranNumBytes := historydb.SplitCompositeHistoryKey(historyKey, scanner.compositePartialKey)
 
-	
-	tranEnvelope, err := scanner.blockStore.RetrieveTxByBlockNumTranNum(blockNum, tranNum)
-	if err != nil {
-		return nil, err
-	}
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		if bytes.Contains(blockNumTranNumBytes[:len(blockNumTranNumBytes)-1], historydb.CompositeKeySep) {
+			logger.Debugf("Some other key [%#v] found in the range while scanning history for key [%#v]. Skipping...",
+				historyKey, scanner.key)
+			continue
+		}
+		blockNum, bytesConsumed := util.DecodeOrderPreservingVarUint64(blockNumTranNumBytes[0:])
+		tranNum, _ := util.DecodeOrderPreservingVarUint64(blockNumTranNumBytes[bytesConsumed:])
+		logger.Debugf("Found history record for namespace:%s key:%s at blockNumTranNum %v:%v\n",
+			scanner.namespace, scanner.key, blockNum, tranNum)
 
-	
-	queryResult, err := getKeyModificationFromTran(tranEnvelope, scanner.namespace, scanner.key)
-	if err != nil {
-		return nil, err
+		
+		tranEnvelope, err := scanner.blockStore.RetrieveTxByBlockNumTranNum(blockNum, tranNum)
+		if err != nil {
+			return nil, err
+		}
+
+		
+		queryResult, err := getKeyModificationFromTran(tranEnvelope, scanner.namespace, scanner.key)
+		if err != nil {
+			return nil, err
+		}
+		logger.Debugf("Found historic key value for namespace:%s key:%s from transaction %s\n",
+			scanner.namespace, scanner.key, queryResult.(*queryresult.KeyModification).TxId)
+		return queryResult, nil
 	}
-	logger.Debugf("Found historic key value for namespace:%s key:%s from transaction %s\n",
-		scanner.namespace, scanner.key, queryResult.(*queryresult.KeyModification).TxId)
-	return queryResult, nil
 }
 
 func (scanner *historyScanner) Close() {

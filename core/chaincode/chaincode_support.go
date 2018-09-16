@@ -157,12 +157,7 @@ func (cs *ChaincodeSupport) Launch(chainID, chaincodeName, chaincodeVersion stri
 
 
 func (cs *ChaincodeSupport) Stop(ccci *ccprovider.ChaincodeContainerInfo) error {
-	err := cs.Runtime.Stop(ccci)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return cs.Runtime.Stop(ccci)
 }
 
 
