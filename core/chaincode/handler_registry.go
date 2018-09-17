@@ -65,24 +65,6 @@ func NewHandlerRegistry(allowUnsolicitedRegistration bool) *HandlerRegistry {
 }
 
 
-func (r *HandlerRegistry) HasLaunched(chaincode string) bool {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	return r.hasLaunched(chaincode)
-}
-
-func (r *HandlerRegistry) hasLaunched(chaincode string) bool {
-	if _, ok := r.handlers[chaincode]; ok {
-		return true
-	}
-	if _, ok := r.launching[chaincode]; ok {
-		return true
-	}
-	return false
-}
-
-
 
 
 

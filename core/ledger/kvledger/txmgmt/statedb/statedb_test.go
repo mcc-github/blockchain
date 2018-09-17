@@ -88,6 +88,7 @@ func TestPutGetDeleteExistsGetUpdates(t *testing.T) {
 	
 	batch.Delete("ns1", "key2", version.NewHeight(1, 2))
 	
+	
 	actualResult = batch.Exists("ns1", "key2")
 	expectedResult = true
 	testutil.AssertEquals(t, actualResult, expectedResult)
