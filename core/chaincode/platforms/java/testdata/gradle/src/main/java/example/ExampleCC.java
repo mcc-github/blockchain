@@ -4,6 +4,7 @@ import io.netty.handler.ssl.OpenSsl;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.mcc-github.blockchain.shim.ChaincodeBase;
+import org.mcc-github.blockchain.shim.ChaincodeStub;
 
 public class ExampleCC extends ChaincodeBase {
 

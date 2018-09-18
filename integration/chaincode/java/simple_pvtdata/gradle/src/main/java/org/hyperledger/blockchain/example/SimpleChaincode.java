@@ -5,6 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 */
 package org.mcc-github.blockchain.example;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import com.google.protobuf.ByteString;
@@ -19,6 +20,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class SimpleChaincode extends ChaincodeBase {
 
     private static Log _logger = LogFactory.getLog(SimpleChaincode.class);
+
+    public static String COLLECTION = "simplecollection";
 
     @Override
     public Response init(ChaincodeStub stub) {
@@ -76,15 +79,26 @@ public class SimpleChaincode extends ChaincodeBase {
         String accountFromKey = args.get(0);
         String accountToKey = args.get(1);
 
-        String accountFromValueStr = stub.getStringState(accountFromKey);
-        if (accountFromValueStr == null) {
-            return newErrorResponse(String.format("Entity %s not found", accountFromKey));
+        _logger.info(String.format("Arguments : %s, %s, %s", accountFromKey, accountToKey, args.get(2)));
+
+        String accountFromValueStr;
+        accountFromValueStr = stub.getPrivateDataUTF8(COLLECTION, accountFromKey);
+        _logger.info(String.format("Get value for %s=%s from private data", accountFromKey, accountFromValueStr));
+        if (accountFromValueStr == null || accountFromValueStr.isEmpty()) {
+            accountFromValueStr = stub.getStringState(accountFromKey);
+            if (accountFromValueStr == null || accountFromValueStr.isEmpty()) {
+                return newErrorResponse(String.format("Entity %s not found", accountFromKey));
+            }
         }
         int accountFromValue = Integer.parseInt(accountFromValueStr);
 
-        String accountToValueStr = stub.getStringState(accountToKey);
-        if (accountToValueStr == null) {
-            return newErrorResponse(String.format("Entity %s not found", accountToKey));
+        String accountToValueStr;
+        accountToValueStr = stub.getPrivateDataUTF8(COLLECTION, accountToKey);
+        if (accountToValueStr == null || accountToValueStr.isEmpty()) {
+            accountToValueStr = stub.getStringState(accountToKey);
+            if (accountToValueStr == null || accountToValueStr.isEmpty()) {
+                return newErrorResponse(String.format("Entity %s not found", accountToKey));
+            }
         }
         int accountToValue = Integer.parseInt(accountToValueStr);
 
@@ -100,12 +114,12 @@ public class SimpleChaincode extends ChaincodeBase {
         _logger.info(String.format("new value of A: %s", accountFromValue));
         _logger.info(String.format("new value of B: %s", accountToValue));
 
-        stub.putStringState(accountFromKey, Integer.toString(accountFromValue));
-        stub.putStringState(accountToKey, Integer.toString(accountToValue));
+        stub.putPrivateData(COLLECTION, accountFromKey, Integer.toString(accountFromValue));
+        stub.putPrivateData(COLLECTION, accountToKey, Integer.toString(accountToValue));
 
         _logger.info("Transfer complete");
 
-        return newSuccessResponse("invoke finished successfully", ByteString.copyFrom(accountFromKey + ": " + accountFromValue + " " + accountToKey + ": " + accountToValue, UTF_8).toByteArray());
+        return newSuccessResponse("invoke finished successfully");
     }
 
     // Deletes an entity from state
@@ -116,6 +130,7 @@ public class SimpleChaincode extends ChaincodeBase {
         String key = args.get(0);
         // Delete the key from the state in ledger
         stub.delState(key);
+        stub.delPrivateData(COLLECTION, key);
         return newSuccessResponse();
     }
 
@@ -126,9 +141,13 @@ public class SimpleChaincode extends ChaincodeBase {
         }
         String key = args.get(0);
         //byte[] stateBytes
-        String val	= stub.getStringState(key);
-        if (val == null) {
-            return newErrorResponse(String.format("Error: state for %s is null", key));
+        String val;
+        val = new String(stub.getPrivateData(COLLECTION, key), StandardCharsets.UTF_8);
+        if (val == null || val.isEmpty()) {
+            val = stub.getStringState(key);
+            if (val == null) {
+                return newErrorResponse(String.format("Error: state for %s is null", key));
+            }
         }
         _logger.info(String.format("Query Response:\nName: %s, Amount: %s\n", key, val));
         return newSuccessResponse(val, ByteString.copyFrom(val, UTF_8).toByteArray());
