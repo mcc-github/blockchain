@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package deliverclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -20,7 +21,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 

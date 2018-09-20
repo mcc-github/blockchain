@@ -206,13 +206,16 @@ const (
 	
 )
 
-var mspTypeStrings []string = []string{"bccsp", "idemix"}
+var mspTypeStrings = map[ProviderType]string{
+	FABRIC: "bccsp",
+	IDEMIX: "idemix",
+}
 
 
 func ProviderTypeToString(id ProviderType) string {
-	if int(id) < 0 || int(id) > len(mspTypeStrings) {
-		return ""
+	if res, found := mspTypeStrings[id]; found {
+		return res
 	}
 
-	return mspTypeStrings[id]
+	return ""
 }

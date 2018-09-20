@@ -7,12 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package accesscontrol
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/util"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 )

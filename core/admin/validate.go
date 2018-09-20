@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package admin
 
 import (
+	"context"
 	"time"
 
 	"github.com/mcc-github/blockchain/common/util"
@@ -14,7 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 var (

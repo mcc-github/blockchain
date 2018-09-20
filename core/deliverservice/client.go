@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package deliverclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -17,7 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 

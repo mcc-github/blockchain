@@ -17,10 +17,10 @@ limitations under the License.
 package clilogging
 
 import (
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	"context"
 
+	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/spf13/cobra"
-	"golang.org/x/net/context"
 )
 
 func getLevelCmd(cf *LoggingCmdFactory) *cobra.Command {

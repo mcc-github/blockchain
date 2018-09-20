@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -17,7 +18,6 @@ import (
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/utils"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"gopkg.in/cheggaaa/pb.v1"
 )

@@ -8,6 +8,7 @@ package comm_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -26,7 +27,6 @@ import (
 	"github.com/mcc-github/blockchain/core/comm"
 	testpb "github.com/mcc-github/blockchain/core/comm/testdata/grpc"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"

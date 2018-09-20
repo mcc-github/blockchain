@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package txvalidator
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
@@ -26,7 +27,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 

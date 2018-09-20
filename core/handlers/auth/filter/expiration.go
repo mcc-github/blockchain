@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package filter
 
 import (
+	"context"
 	"time"
 
 	"github.com/mcc-github/blockchain/common/crypto"
@@ -14,7 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 

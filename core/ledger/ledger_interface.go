@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package ledger
 
 import (
+	"fmt"
+
 	"github.com/golang/protobuf/proto"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -416,6 +418,26 @@ type NotFoundInIndexErr string
 
 func (NotFoundInIndexErr) Error() string {
 	return "Entry not found in index"
+}
+
+
+
+type CollConfigNotDefinedError struct {
+	Ns string
+}
+
+func (e *CollConfigNotDefinedError) Error() string {
+	return fmt.Sprintf("collection config not defined for chaincode [%s], pass the collection configuration upon chaincode definition/instantiation", e.Ns)
+}
+
+
+
+type InvalidCollNameError struct {
+	Ns, Coll string
+}
+
+func (e *InvalidCollNameError) Error() string {
+	return fmt.Sprintf("collection [%s] not defined in the collection config for chaincode [%s]", e.Coll, e.Ns)
 }
 
 

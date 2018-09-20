@@ -364,19 +364,19 @@ func TestGetTxCCInstance(t *testing.T) {
 
 func TestInvalidTXsForUpgradeCC(t *testing.T) {
 	txsChaincodeNames := map[int]*sysccprovider.ChaincodeInstance{
-		0: {"chain0", "cc0", "v0"}, 
-		1: {"chain1", "cc0", "v0"}, 
-		2: {"chain1", "lscc", ""},  
-		3: {"chain1", "cc0", "v0"}, 
-		4: {"chain1", "cc0", "v1"}, 
-		5: {"chain1", "cc1", "v0"}, 
-		6: {"chain1", "lscc", ""},  
-		7: {"chain1", "lscc", ""},  
+		0: {ChainID: "chain0", ChaincodeName: "cc0", ChaincodeVersion: "v0"}, 
+		1: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v0"}, 
+		2: {ChainID: "chain1", ChaincodeName: "lscc", ChaincodeVersion: ""},  
+		3: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v0"}, 
+		4: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v1"}, 
+		5: {ChainID: "chain1", ChaincodeName: "cc1", ChaincodeVersion: "v0"}, 
+		6: {ChainID: "chain1", ChaincodeName: "lscc", ChaincodeVersion: ""},  
+		7: {ChainID: "chain1", ChaincodeName: "lscc", ChaincodeVersion: ""},  
 	}
 	upgradedChaincodes := map[int]*sysccprovider.ChaincodeInstance{
-		2: {"chain1", "cc0", "v1"},
-		6: {"chain1", "cc0", "v2"},
-		7: {"chain1", "cc0", "v3"},
+		2: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v1"},
+		6: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v2"},
+		7: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v3"},
 	}
 
 	txsfltr := ledgerUtil.NewTxValidationFlags(8)

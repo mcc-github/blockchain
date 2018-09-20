@@ -7,7 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package nwo
 
 import (
+	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/mcc-github/blockchain/integration/helpers"
 	"github.com/mcc-github/blockchain/integration/runner"
@@ -20,7 +22,8 @@ type Components struct {
 }
 
 var RequiredImages = []string{
-	"mcc-github/blockchain-ccenv:latest",
+	fmt.Sprintf("mcc-github/blockchain-ccenv:%s-latest", runtime.GOARCH),
+	fmt.Sprintf("mcc-github/blockchain-javaenv:%s-latest", runtime.GOARCH),
 	runner.CouchDBDefaultImage,
 	runner.KafkaDefaultImage,
 	runner.ZooKeeperDefaultImage,

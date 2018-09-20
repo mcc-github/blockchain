@@ -7,9 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package server
 
 import (
+	"context"
+
 	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 

@@ -12,6 +12,7 @@ import (
 
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
@@ -59,9 +60,29 @@ func (p *policyChecker) checkSBAndCCEP(cc, coll, key string, blockNum, txNum uin
 	
 	vp, err := p.vpmgr.GetValidationParameterForKey(cc, coll, key, blockNum, txNum)
 	if err != nil {
-		switch err := err.(type) {
+		
+		switch err := errors.Cause(err).(type) {
+		
+		
+		
 		case *ValidationParameterUpdatedError:
 			return policyErr(err)
+		
+		
+		
+		
+		
+		case *ledger.CollConfigNotDefinedError, *ledger.InvalidCollNameError:
+			logger.Warningf(errors.WithMessage(err, "skipping key-level validation").Error())
+			err = nil
+		
+		
+		
+		
+		
+		
+		
+		
 		default:
 			return &commonerrors.VSCCExecutionFailureError{
 				Err: err,

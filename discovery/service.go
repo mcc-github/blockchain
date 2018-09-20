@@ -8,6 +8,7 @@ package discovery
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"fmt"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 var (

@@ -7,13 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package performance
 
 import (
+	"context"
 	"io"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 )

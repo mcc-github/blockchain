@@ -7,9 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package main
 
 import (
+	"context"
+
 	"github.com/mcc-github/blockchain/core/handlers/auth"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"golang.org/x/net/context"
 )
 
 

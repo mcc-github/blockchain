@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package filter
 
 import (
+	"context"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/context"
 )
 
 type mutator func([]byte) []byte

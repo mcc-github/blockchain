@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/errors"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -260,6 +261,48 @@ func TestKeylevelValidationPolicyRetrievalFailure(t *testing.T) {
 	err := validator.Validate("cc", 1, 1, rwsb, prp, []byte("CCEP"), []*pb.Endorsement{})
 	assert.Error(t, err)
 	assert.IsType(t, &errors.VSCCExecutionFailureError{}, err)
+}
+
+func TestKeylevelValidationLedgerFailures(t *testing.T) {
+	
+	
+	
+	
+	
+
+	rwsb := rwsetBytes(t, "cc")
+	prp := []byte("barf")
+
+	t.Run("CollConfigNotDefinedError", func(t *testing.T) {
+		mr := &mockState{GetStateMetadataErr: &ledger.CollConfigNotDefinedError{Ns: "mycc"}}
+		ms := &mockStateFetcher{FetchStateRv: mr}
+		pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
+		validator := NewKeyLevelValidator(&mockPolicyEvaluator{}, pm)
+
+		err := validator.Validate("cc", 1, 0, rwsb, prp, []byte("CCEP"), []*pb.Endorsement{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("InvalidCollNameError", func(t *testing.T) {
+		mr := &mockState{GetStateMetadataErr: &ledger.InvalidCollNameError{Ns: "mycc", Coll: "mycoll"}}
+		ms := &mockStateFetcher{FetchStateRv: mr}
+		pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
+		validator := NewKeyLevelValidator(&mockPolicyEvaluator{}, pm)
+
+		err := validator.Validate("cc", 1, 0, rwsb, prp, []byte("CCEP"), []*pb.Endorsement{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("I/O error", func(t *testing.T) {
+		mr := &mockState{GetStateMetadataErr: fmt.Errorf("some I/O error")}
+		ms := &mockStateFetcher{FetchStateRv: mr}
+		pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
+		validator := NewKeyLevelValidator(&mockPolicyEvaluator{}, pm)
+
+		err := validator.Validate("cc", 1, 0, rwsb, prp, []byte("CCEP"), []*pb.Endorsement{})
+		assert.Error(t, err)
+		assert.IsType(t, &errors.VSCCExecutionFailureError{}, err)
+	})
 }
 
 func TestCCEPValidation(t *testing.T) {

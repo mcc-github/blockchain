@@ -171,7 +171,7 @@ func x509Template() x509.Certificate {
 	
 	expiry := 3650 * 24 * time.Hour
 	
-	notBefore := time.Now().Add(-5 * time.Minute).UTC()
+	notBefore := time.Now().Round(time.Minute).Add(-5 * time.Minute).UTC()
 
 	
 	x509 := x509.Certificate{
