@@ -240,7 +240,7 @@ func (cr *channelResponse) Peers(invocationChain ...*discovery.ChaincodeCall) ([
 	return parsePeers(discovery.PeerMembershipQueryType, cr.response, cr.channel, invocationChain...)
 }
 
-func (cr *channelResponse) Endorsers(invocationChain InvocationChain, ps PrioritySelector, ef ExclusionFilter) (Endorsers, error) {
+func (cr *channelResponse) Endorsers(invocationChain InvocationChain, f Filter) (Endorsers, error) {
 	
 	
 	if err, exists := cr.response[key{
@@ -266,7 +266,7 @@ func (cr *channelResponse) Endorsers(invocationChain InvocationChain, ps Priorit
 	
 	for _, index := range rand.Perm(len(desc.layouts)) {
 		layout := desc.layouts[index]
-		endorsers, canLayoutBeSatisfied := selectPeersForLayout(desc.endorsersByGroups, layout, ps, ef)
+		endorsers, canLayoutBeSatisfied := selectPeersForLayout(desc.endorsersByGroups, layout, f)
 		if canLayoutBeSatisfied {
 			return endorsers, nil
 		}
@@ -274,11 +274,33 @@ func (cr *channelResponse) Endorsers(invocationChain InvocationChain, ps Priorit
 	return nil, errors.New("no endorsement combination can be satisfied")
 }
 
-func selectPeersForLayout(endorsersByGroups map[string][]*Peer, layout map[string]int, ps PrioritySelector, ef ExclusionFilter) (Endorsers, bool) {
+type filter struct {
+	ef ExclusionFilter
+	ps PrioritySelector
+}
+
+
+
+func NewFilter(ps PrioritySelector, ef ExclusionFilter) Filter {
+	return &filter{
+		ef: ef,
+		ps: ps,
+	}
+}
+
+
+func (f *filter) Filter(endorsers Endorsers) Endorsers {
+	return endorsers.Shuffle().Filter(f.ef).Sort(f.ps)
+}
+
+
+var NoFilter = NewFilter(NoPriorities, NoExclusion)
+
+func selectPeersForLayout(endorsersByGroups map[string][]*Peer, layout map[string]int, f Filter) (Endorsers, bool) {
 	var endorsers []*Peer
 	for grp, count := range layout {
-		shuffledEndorsers := Endorsers(endorsersByGroups[grp]).Shuffle()
-		endorsersOfGrp := shuffledEndorsers.Filter(ef).Sort(ps)
+		endorsersOfGrp := f.Filter(Endorsers(endorsersByGroups[grp]))
+
 		
 		
 		if len(endorsersOfGrp) < count {

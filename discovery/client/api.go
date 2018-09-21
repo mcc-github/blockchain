@@ -50,8 +50,7 @@ type ChannelResponse interface {
 	
 	
 	
-	
-	Endorsers(invocationChain InvocationChain, ps PrioritySelector, ef ExclusionFilter) (Endorsers, error)
+	Endorsers(invocationChain InvocationChain, f Filter) (Endorsers, error)
 }
 
 

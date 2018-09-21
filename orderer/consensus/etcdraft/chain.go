@@ -28,9 +28,6 @@ import (
 
 
 
-
-
-
 type Storage interface {
 	raft.Storage
 	Append(entries []raftpb.Entry) error
@@ -60,11 +57,10 @@ type Chain struct {
 	submitC  chan *orderer.SubmitRequest
 	commitC  chan *common.Block
 	observeC chan<- uint64 
+	haltC    chan struct{}
+	doneC    chan struct{}
 
-	haltC chan struct{}
-	doneC chan struct{}
-
-	clock clock.Clock 
+	clock clock.Clock
 
 	support consensus.ConsenterSupport
 
@@ -171,11 +167,28 @@ func (c *Chain) Submit(req *orderer.SubmitRequest, sender uint64) error {
 }
 
 func (c *Chain) serveRequest() {
-	clocking := false
-	timer := c.clock.NewTimer(c.support.SharedConfig().BatchTimeout())
+	ticking := false
+	timer := c.clock.NewTimer(time.Second)
+	
+	
 	if !timer.Stop() {
-		
 		<-timer.C()
+	}
+
+	
+	start := func() {
+		if !ticking {
+			ticking = true
+			timer.Reset(c.support.SharedConfig().BatchTimeout())
+		}
+	}
+
+	stop := func() {
+		if !timer.Stop() && ticking {
+			
+			<-timer.C()
+		}
+		ticking = false
 	}
 
 	for {
@@ -196,24 +209,18 @@ func (c *Chain) serveRequest() {
 
 			batches, _ := c.support.BlockCutter().Ordered(msg.Content)
 			if len(batches) == 0 {
-				if !clocking {
-					clocking = true
-					timer.Reset(c.support.SharedConfig().BatchTimeout())
-				}
+				start()
 				continue
 			}
 
-			if !timer.Stop() && clocking {
-				<-timer.C()
-			}
-			clocking = false
+			stop()
 
 			if err := c.commitBatches(batches...); err != nil {
 				c.logger.Errorf("Failed to commit block: %s", err)
 			}
 
 		case <-timer.C():
-			clocking = false
+			ticking = false
 
 			batch := c.support.BlockCutter().Cut()
 			if len(batch) == 0 {

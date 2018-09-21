@@ -10,12 +10,8 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"testing"
-
-	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
-	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
-
 	"os"
+	"testing"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
@@ -23,6 +19,8 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
+	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
+	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
 	ledgertestutil "github.com/mcc-github/blockchain/core/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"

@@ -19,6 +19,8 @@ type Category int
 const (
 	
 	PvtdataExpiry Category = iota
+	
+	MetadataPresenceIndicator
 )
 
 

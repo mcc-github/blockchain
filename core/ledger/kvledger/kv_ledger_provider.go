@@ -57,14 +57,14 @@ func NewProvider() (ledger.PeerLedgerProvider, error) {
 	
 	idStore := openIDStore(ledgerconfig.GetLedgerProviderPath())
 	ledgerStoreProvider := ledgerstorage.NewProvider()
+	bookkeepingProvider := bookkeeping.NewProvider()
 	
-	vdbProvider, err := privacyenabledstate.NewCommonStorageDBProvider()
+	vdbProvider, err := privacyenabledstate.NewCommonStorageDBProvider(bookkeepingProvider)
 	if err != nil {
 		return nil, err
 	}
 	
 	historydbProvider := historyleveldb.NewHistoryDBProvider()
-	bookkeepingProvider := bookkeeping.NewProvider()
 	logger.Info("ledger provider Initialized")
 	provider := &Provider{idStore, ledgerStoreProvider,
 		vdbProvider, historydbProvider, nil, nil, bookkeepingProvider, nil}

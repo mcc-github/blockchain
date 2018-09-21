@@ -13,6 +13,11 @@ import (
 )
 
 
+type Filter interface {
+	Filter(endorsers Endorsers) Endorsers
+}
+
+
 
 type ExclusionFilter interface {
 	

@@ -15,13 +15,13 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
-	"github.com/mcc-github/blockchain/protos/common"
-
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
+	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
 
@@ -36,10 +36,11 @@ const (
 
 type CommonStorageDBProvider struct {
 	statedb.VersionedDBProvider
+	bookkeepingProvider bookkeeping.Provider
 }
 
 
-func NewCommonStorageDBProvider() (DBProvider, error) {
+func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider) (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
 	var err error
 	if ledgerconfig.IsCouchDBEnabled() {
@@ -49,7 +50,7 @@ func NewCommonStorageDBProvider() (DBProvider, error) {
 	} else {
 		vdbProvider = stateleveldb.NewVersionedDBProvider()
 	}
-	return &CommonStorageDBProvider{vdbProvider}, nil
+	return &CommonStorageDBProvider{vdbProvider, bookkeeperProvider}, nil
 }
 
 
@@ -58,7 +59,9 @@ func (p *CommonStorageDBProvider) GetDBHandle(id string) (DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewCommonStorageDB(vdb, id)
+	bookkeeper := p.bookkeepingProvider.GetDBHandle(id, bookkeeping.MetadataPresenceIndicator)
+	metadataHint := newMetadataHint(bookkeeper)
+	return NewCommonStorageDB(vdb, id, metadataHint)
 }
 
 
@@ -70,12 +73,13 @@ func (p *CommonStorageDBProvider) Close() {
 
 type CommonStorageDB struct {
 	statedb.VersionedDB
+	metadataHint *metadataHint
 }
 
 
 
-func NewCommonStorageDB(vdb statedb.VersionedDB, ledgerid string) (DB, error) {
-	return &CommonStorageDB{VersionedDB: vdb}, nil
+func NewCommonStorageDB(vdb statedb.VersionedDB, ledgerid string, metadataHint *metadataHint) (DB, error) {
+	return &CommonStorageDB{vdb, metadataHint}, nil
 }
 
 
@@ -197,7 +201,37 @@ func (s *CommonStorageDB) ApplyPrivacyAwareUpdates(updates *UpdateBatch, height 
 	combinedUpdates := updates.PubUpdates
 	addPvtUpdates(combinedUpdates, updates.PvtUpdates)
 	addHashedUpdates(combinedUpdates, updates.HashUpdates, !s.BytesKeySuppoted())
+	s.metadataHint.setMetadataUsedFlag(updates)
 	return s.VersionedDB.ApplyUpdates(combinedUpdates.UpdateBatch, height)
+}
+
+
+
+
+
+
+func (s *CommonStorageDB) GetStateMetadata(namespace, key string) ([]byte, error) {
+	if !s.metadataHint.metadataEverUsedFor(namespace) {
+		return nil, nil
+	}
+	vv, err := s.GetState(namespace, key)
+	if err != nil || vv == nil {
+		return nil, err
+	}
+	return vv.Metadata, nil
+}
+
+
+
+func (s *CommonStorageDB) GetPrivateDataMetadataByHash(namespace, collection string, keyHash []byte) ([]byte, error) {
+	if !s.metadataHint.metadataEverUsedFor(namespace) {
+		return nil, nil
+	}
+	vv, err := s.GetValueHash(namespace, collection, keyHash)
+	if err != nil || vv == nil {
+		return nil, err
+	}
+	return vv.Metadata, nil
 }
 
 func (s *CommonStorageDB) getCollectionConfigMap(chaincodeDefinition *cceventmgmt.ChaincodeDefinition) (map[string]bool, error) {
@@ -254,17 +288,14 @@ func (s *CommonStorageDB) getCollectionConfigMap(chaincodeDefinition *cceventmgm
 
 
 func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt.ChaincodeDefinition, dbArtifactsTar []byte) error {
-
 	
 	indexCapable, ok := s.VersionedDB.(statedb.IndexCapable)
 	if !ok {
 		return nil
 	}
-
 	if chaincodeDefinition == nil {
 		return errors.New("chaincode definition not found while creating couchdb index")
 	}
-
 	dbArtifacts, err := ccprovider.ExtractFileEntries(dbArtifactsTar, indexCapable.GetDBType())
 	if err != nil {
 		logger.Errorf("Index creation: error extracting db artifacts from tar for chaincode [%s]: %s", chaincodeDefinition.Name, err)
@@ -296,7 +327,6 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 			if !ok {
 				logger.Errorf("Error processing index for chaincode [%s]: cannot create an index for an undefined collection=[%s]", chaincodeDefinition.Name, collectionName)
 			} else {
-
 				err := indexCapable.ProcessIndexesForChaincodeDeploy(derivePvtDataNs(chaincodeDefinition.Name, collectionName),
 					archiveDirectoryEntries)
 				if err != nil {

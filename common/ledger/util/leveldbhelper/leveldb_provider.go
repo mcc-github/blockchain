@@ -81,6 +81,9 @@ func (h *DBHandle) Delete(key []byte, sync bool) error {
 
 
 func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
+	if len(batch.KVs) == 0 {
+		return nil
+	}
 	levelBatch := &leveldb.Batch{}
 	for k, v := range batch.KVs {
 		key := constructLevelKey(h.dbName, []byte(k))

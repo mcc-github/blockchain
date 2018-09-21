@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
+
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/integration/runner"
@@ -36,15 +38,17 @@ var testEnvs = []TestEnv{&LevelDBCommonStorageTestEnv{}, &CouchDBCommonStorageTe
 
 
 type LevelDBCommonStorageTestEnv struct {
-	t        testing.TB
-	provider DBProvider
+	t                 testing.TB
+	provider          DBProvider
+	bookkeeperTestEnv *bookkeeping.TestEnv
 }
 
 
 func (env *LevelDBCommonStorageTestEnv) Init(t testing.TB) {
 	viper.Set("ledger.state.stateDatabase", "")
 	removeDBPath(t)
-	dbProvider, err := NewCommonStorageDBProvider()
+	env.bookkeeperTestEnv = bookkeeping.NewTestEnv(t)
+	dbProvider, err := NewCommonStorageDBProvider(env.bookkeeperTestEnv.TestProvider)
 	assert.NoError(t, err)
 	env.t = t
 	env.provider = dbProvider
@@ -65,6 +69,7 @@ func (env *LevelDBCommonStorageTestEnv) GetName() string {
 
 func (env *LevelDBCommonStorageTestEnv) Cleanup() {
 	env.provider.Close()
+	env.bookkeeperTestEnv.Cleanup()
 	removeDBPath(env.t)
 }
 
@@ -72,10 +77,11 @@ func (env *LevelDBCommonStorageTestEnv) Cleanup() {
 
 
 type CouchDBCommonStorageTestEnv struct {
-	t            testing.TB
-	provider     DBProvider
-	openDbIds    map[string]bool
-	couchCleanup func()
+	t                 testing.TB
+	provider          DBProvider
+	bookkeeperTestEnv *bookkeeping.TestEnv
+	openDbIds         map[string]bool
+	couchCleanup      func()
 }
 
 func (env *CouchDBCommonStorageTestEnv) setupCouch() string {
@@ -106,7 +112,9 @@ func (env *CouchDBCommonStorageTestEnv) Init(t testing.TB) {
 	viper.Set("ledger.state.couchDBConfig.maxRetries", 3)
 	viper.Set("ledger.state.couchDBConfig.maxRetriesOnStartup", 10)
 	viper.Set("ledger.state.couchDBConfig.requestTimeout", time.Second*35)
-	dbProvider, err := NewCommonStorageDBProvider()
+
+	env.bookkeeperTestEnv = bookkeeping.NewTestEnv(t)
+	dbProvider, err := NewCommonStorageDBProvider(env.bookkeeperTestEnv.TestProvider)
 	assert.NoError(t, err)
 	env.t = t
 	env.provider = dbProvider
@@ -131,6 +139,7 @@ func (env *CouchDBCommonStorageTestEnv) Cleanup() {
 	for id := range env.openDbIds {
 		statecouchdb.CleanupDB(id)
 	}
+	env.bookkeeperTestEnv.Cleanup()
 	env.provider.Close()
 	env.couchCleanup()
 }
