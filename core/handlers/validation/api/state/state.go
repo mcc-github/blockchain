@@ -26,7 +26,7 @@ type State interface {
 	GetStateMetadata(namespace, key string) (map[string][]byte, error)
 
 	
-	GetPrivateDataMetadata(namespace, collection, key string) (map[string][]byte, error)
+	GetPrivateDataMetadataByHash(namespace, collection string, keyhash []byte) (map[string][]byte, error)
 
 	
 	Done()

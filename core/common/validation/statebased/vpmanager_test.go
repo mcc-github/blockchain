@@ -26,11 +26,11 @@ import (
 )
 
 type mockState struct {
-	GetStateMetadataRv        map[string][]byte
-	GetStateMetadataErr       error
-	GetPrivateDataMetadataRv  map[string][]byte
-	GetPrivateDataMetadataErr error
-	DoneCalled                bool
+	GetStateMetadataRv              map[string][]byte
+	GetStateMetadataErr             error
+	GetPrivateDataMetadataByHashRv  map[string][]byte
+	GetPrivateDataMetadataByHashErr error
+	DoneCalled                      bool
 }
 
 func (ms *mockState) GetStateMultipleKeys(namespace string, keys []string) ([][]byte, error) {
@@ -45,8 +45,8 @@ func (ms *mockState) GetStateMetadata(namespace, key string) (map[string][]byte,
 	return ms.GetStateMetadataRv, ms.GetStateMetadataErr
 }
 
-func (ms *mockState) GetPrivateDataMetadata(namespace, collection, key string) (map[string][]byte, error) {
-	return ms.GetPrivateDataMetadataRv, ms.GetPrivateDataMetadataErr
+func (ms *mockState) GetPrivateDataMetadataByHash(namespace, collection string, keyhash []byte) (map[string][]byte, error) {
+	return ms.GetPrivateDataMetadataByHashRv, ms.GetPrivateDataMetadataByHashErr
 }
 
 func (ms *mockState) Done() {
@@ -73,10 +73,10 @@ func (ms *mockStateFetcher) FetchState() (validation.State, error) {
 	var rv *mockState
 	if ms.FetchStateRv != nil {
 		rv = &mockState{
-			GetPrivateDataMetadataErr: ms.FetchStateRv.GetPrivateDataMetadataErr,
-			GetStateMetadataErr:       ms.FetchStateRv.GetStateMetadataErr,
-			GetPrivateDataMetadataRv:  ms.FetchStateRv.GetPrivateDataMetadataRv,
-			GetStateMetadataRv:        ms.FetchStateRv.GetStateMetadataRv,
+			GetPrivateDataMetadataByHashErr: ms.FetchStateRv.GetPrivateDataMetadataByHashErr,
+			GetStateMetadataErr:             ms.FetchStateRv.GetStateMetadataErr,
+			GetPrivateDataMetadataByHashRv:  ms.FetchStateRv.GetPrivateDataMetadataByHashRv,
+			GetStateMetadataRv:              ms.FetchStateRv.GetStateMetadataRv,
 		}
 		ms.mutex.Lock()
 		if ms.returnedStates != nil {
@@ -95,7 +95,7 @@ func TestSimple(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{
 		StateFetcher: ms,
@@ -186,7 +186,7 @@ func TestDependencyNoConflict(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -230,7 +230,7 @@ func TestDependencyConflict(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -273,7 +273,7 @@ func TestMultipleDependencyNoConflict(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -323,7 +323,7 @@ func TestMultipleDependencyConflict(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -367,7 +367,7 @@ func TestPvtDependencyNoConflict(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -405,7 +405,7 @@ func TestPvtDependencyConflict(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -445,7 +445,7 @@ func TestBlockValidationTerminatesBeforeNewBlock(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -468,8 +468,8 @@ func TestLedgerErrors(t *testing.T) {
 	
 
 	mr := &mockState{
-		GetStateMetadataErr:       fmt.Errorf("Ledger error"),
-		GetPrivateDataMetadataErr: fmt.Errorf("Ledger error"),
+		GetStateMetadataErr:             fmt.Errorf("Ledger error"),
+		GetPrivateDataMetadataByHashErr: fmt.Errorf("Ledger error"),
 	}
 	ms := &mockStateFetcher{FetchStateRv: mr, FetchStateErr: fmt.Errorf("Ledger error")}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
@@ -542,7 +542,7 @@ func TestBadRwsetIsNoDependency(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -580,7 +580,7 @@ func TestWritesIntoDifferentNamespaces(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -617,7 +617,7 @@ func TestCombinedCalls(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 
@@ -677,7 +677,7 @@ func TestForRaces(t *testing.T) {
 
 	vpMetadataKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 	spe := cauthdsl.SignedByMspMember("foo")
-	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
+	mr := &mockState{GetStateMetadataRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}, GetPrivateDataMetadataByHashRv: map[string][]byte{vpMetadataKey: utils.MarshalOrPanic(spe)}}
 	ms := &mockStateFetcher{FetchStateRv: mr}
 	pm := &KeyLevelValidationParameterManagerImpl{StateFetcher: ms}
 

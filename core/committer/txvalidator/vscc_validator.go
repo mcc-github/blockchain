@@ -22,14 +22,16 @@ import (
 
 
 type VsccValidatorImpl struct {
+	chainID         string
 	support         Support
 	sccprovider     sysccprovider.SystemChaincodeProvider
 	pluginValidator *PluginValidator
 }
 
 
-func newVSCCValidator(support Support, sccp sysccprovider.SystemChaincodeProvider, pluginValidator *PluginValidator) *VsccValidatorImpl {
+func newVSCCValidator(chainID string, support Support, sccp sysccprovider.SystemChaincodeProvider, pluginValidator *PluginValidator) *VsccValidatorImpl {
 	return &VsccValidatorImpl{
+		chainID:         chainID,
 		support:         support,
 		sccprovider:     sccp,
 		pluginValidator: pluginValidator,
@@ -38,8 +40,8 @@ func newVSCCValidator(support Support, sccp sysccprovider.SystemChaincodeProvide
 
 
 func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode) {
-	logger.Debugf("VSCCValidateTx starts for bytes %p", envBytes)
-	defer logger.Debugf("VSCCValidateTx completes env bytes %p", envBytes)
+	chainID := v.chainID
+	logger.Debugf("[%s] VSCCValidateTx starts for bytes %p", chainID, envBytes)
 
 	
 	hdrExt, err := utils.GetChaincodeHeaderExtension(payload.Header)
@@ -242,7 +244,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 			}
 		}
 	}
-
+	logger.Debugf("[%s] VSCCValidateTx completes env bytes %p", chainID, envBytes)
 	return nil, peer.TxValidationCode_VALID
 }
 

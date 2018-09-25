@@ -18,10 +18,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	ledgertestutil "github.com/mcc-github/blockchain/core/ledger/testutil"
 	"github.com/mcc-github/blockchain/integration/runner"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 const badConnectURL = "couchdb:5990"
@@ -112,7 +112,7 @@ func TestDBConnectionDef(t *testing.T) {
 	
 	_, err := CreateConnectionDefinition(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create database connection definition"))
+	assert.NoError(t, err, "Error when trying to create database connection definition")
 
 }
 
@@ -121,26 +121,26 @@ func TestDBBadConnectionDef(t *testing.T) {
 	
 	_, err := CreateConnectionDefinition(badParseConnectURL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertError(t, err, fmt.Sprintf("Did not receive error when trying to create database connection definition with a bad hostname"))
+	assert.Error(t, err, "Did not receive error when trying to create database connection definition with a bad hostname")
 
 }
 
 func TestEncodePathElement(t *testing.T) {
 
 	encodedString := encodePathElement("testelement")
-	testutil.AssertEquals(t, encodedString, "testelement")
+	assert.Equal(t, "testelement", encodedString)
 
 	encodedString = encodePathElement("test element")
-	testutil.AssertEquals(t, encodedString, "test%20element")
+	assert.Equal(t, "test%20element", encodedString)
 
 	encodedString = encodePathElement("/test element")
-	testutil.AssertEquals(t, encodedString, "%2Ftest%20element")
+	assert.Equal(t, "%2Ftest%20element", encodedString)
 
 	encodedString = encodePathElement("/test element:")
-	testutil.AssertEquals(t, encodedString, "%2Ftest%20element:")
+	assert.Equal(t, "%2Ftest%20element:", encodedString)
 
 	encodedString = encodePathElement("/test+ element:")
-	testutil.AssertEquals(t, encodedString, "%2Ftest%2B%20element:")
+	assert.Equal(t, "%2Ftest%2B%20element:", encodedString)
 
 }
 
@@ -160,71 +160,71 @@ func TestBadCouchDBInstance(t *testing.T) {
 
 	
 	_, err := CreateCouchDatabase(&badCouchDBInstance, "baddbtest")
-	testutil.AssertError(t, err, "Error should have been thrown with CreateCouchDatabase and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with CreateCouchDatabase and invalid connection")
 
 	
 	err = CreateSystemDatabasesIfNotExist(&badCouchDBInstance)
-	testutil.AssertError(t, err, "Error should have been thrown with CreateSystemDatabasesIfNotExist and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with CreateSystemDatabasesIfNotExist and invalid connection")
 
 	
 	err = badDB.CreateDatabaseIfNotExist()
-	testutil.AssertError(t, err, "Error should have been thrown with CreateDatabaseIfNotExist and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with CreateDatabaseIfNotExist and invalid connection")
 
 	
 	_, _, err = badDB.GetDatabaseInfo()
-	testutil.AssertError(t, err, "Error should have been thrown with GetDatabaseInfo and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with GetDatabaseInfo and invalid connection")
 
 	
 	_, _, err = badCouchDBInstance.VerifyCouchConfig()
-	testutil.AssertError(t, err, "Error should have been thrown with VerifyCouchConfig and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with VerifyCouchConfig and invalid connection")
 
 	
 	_, err = badDB.EnsureFullCommit()
-	testutil.AssertError(t, err, "Error should have been thrown with EnsureFullCommit and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with EnsureFullCommit and invalid connection")
 
 	
 	_, err = badDB.DropDatabase()
-	testutil.AssertError(t, err, "Error should have been thrown with DropDatabase and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with DropDatabase and invalid connection")
 
 	
 	_, _, err = badDB.ReadDoc("1")
-	testutil.AssertError(t, err, "Error should have been thrown with ReadDoc and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with ReadDoc and invalid connection")
 
 	
 	_, err = badDB.SaveDoc("1", "1", nil)
-	testutil.AssertError(t, err, "Error should have been thrown with SaveDoc and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with SaveDoc and invalid connection")
 
 	
 	err = badDB.DeleteDoc("1", "1")
-	testutil.AssertError(t, err, "Error should have been thrown with DeleteDoc and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with DeleteDoc and invalid connection")
 
 	
 	_, _, err = badDB.ReadDocRange("1", "2", 1000)
-	testutil.AssertError(t, err, "Error should have been thrown with ReadDocRange and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with ReadDocRange and invalid connection")
 
 	
 	_, _, err = badDB.QueryDocuments("1")
-	testutil.AssertError(t, err, "Error should have been thrown with QueryDocuments and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with QueryDocuments and invalid connection")
 
 	
 	_, err = badDB.BatchRetrieveDocumentMetadata(nil)
-	testutil.AssertError(t, err, "Error should have been thrown with BatchRetrieveDocumentMetadata and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with BatchRetrieveDocumentMetadata and invalid connection")
 
 	
 	_, err = badDB.BatchUpdateDocuments(nil)
-	testutil.AssertError(t, err, "Error should have been thrown with BatchUpdateDocuments and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with BatchUpdateDocuments and invalid connection")
 
 	
 	_, err = badDB.ListIndex()
-	testutil.AssertError(t, err, "Error should have been thrown with ListIndex and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with ListIndex and invalid connection")
 
 	
 	_, err = badDB.CreateIndex("")
-	testutil.AssertError(t, err, "Error should have been thrown with CreateIndex and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with CreateIndex and invalid connection")
 
 	
 	err = badDB.DeleteIndex("", "")
-	testutil.AssertError(t, err, "Error should have been thrown with DeleteIndex and invalid connection")
+	assert.Error(t, err, "Error should have been thrown with DeleteIndex and invalid connection")
 
 }
 
@@ -232,22 +232,22 @@ func TestDBCreateSaveWithoutRevision(t *testing.T) {
 
 	database := "testdbcreatesavewithoutrevision"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	_, saveerr := db.SaveDoc("2", "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 }
 
@@ -255,26 +255,26 @@ func TestDBCreateEnsureFullCommit(t *testing.T) {
 
 	database := "testdbensurefullcommit"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	_, saveerr := db.SaveDoc("2", "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, commiterr := db.EnsureFullCommit()
-	testutil.AssertNoError(t, commiterr, fmt.Sprintf("Error when trying to ensure a full commit"))
+	assert.NoError(t, commiterr, "Error when trying to ensure a full commit")
 }
 
 func TestDBBadDatabaseName(t *testing.T) {
@@ -282,33 +282,33 @@ func TestDBBadDatabaseName(t *testing.T) {
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	_, dberr := CreateCouchDatabase(couchInstance, "testDB")
-	testutil.AssertError(t, dberr, "Error should have been thrown for an invalid db name")
+	assert.Error(t, dberr, "Error should have been thrown for an invalid db name")
 
 	
 	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	_, dberr = CreateCouchDatabase(couchInstance, "test132")
-	testutil.AssertNoError(t, dberr, fmt.Sprintf("Error when testing a valid database name"))
+	assert.NoError(t, dberr, "Error when testing a valid database name")
 
 	
 	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	_, dberr = CreateCouchDatabase(couchInstance, "test1234~!@#$%^&*()[]{}.")
-	testutil.AssertError(t, dberr, "Error should have been thrown for an invalid db name")
+	assert.Error(t, dberr, "Error should have been thrown for an invalid db name")
 
 	
 	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	_, dberr = CreateCouchDatabase(couchInstance, "a12345678901234567890123456789012345678901234"+
 		"56789012345678901234567890123456789012345678901234567890123456789012345678901234567890"+
 		"12345678901234567890123456789012345678901234567890123456789012345678901234567890123456"+
 		"78901234567890123456789012345678901234567890")
-	testutil.AssertError(t, dberr, fmt.Sprintf("Error should have been thrown for invalid database name"))
+	assert.Error(t, dberr, "Error should have been thrown for invalid database name")
 
 }
 
@@ -318,20 +318,20 @@ func TestDBBadConnection(t *testing.T) {
 	
 	_, err := CreateCouchInstance(badConnectURL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for a bad connection"))
+	assert.Error(t, err, "Error should have been thrown for a bad connection")
 }
 
 func TestBadDBCredentials(t *testing.T) {
 
 	database := "testdbbadcredentials"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	_, err = CreateCouchInstance(couchDBDef.URL, "fred", "fred",
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for bad credentials"))
+	assert.Error(t, err, "Error should have been thrown for bad credentials")
 
 }
 
@@ -355,55 +355,55 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 
 	database := "testdbcreatedatabaseandpersist"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		maxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	dbResp, _, errdb := db.GetDatabaseInfo()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve database information"))
-	testutil.AssertEquals(t, dbResp.DbName, database)
+	assert.NoError(t, errdb, "Error when trying to retrieve database information")
+	assert.Equal(t, database, dbResp.DbName)
 
 	
 	_, saveerr := db.SaveDoc("idWith/slash", "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	dbGetResp, _, geterr := db.ReadDoc("idWith/slash")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
 	assetResp := &Asset{}
 	geterr = json.Unmarshal(dbGetResp.JSONValue, &assetResp)
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
-	testutil.AssertEquals(t, assetResp.Owner, "jerry")
+	assert.Equal(t, "jerry", assetResp.Owner)
 
 	
 	_, saveerr = db.SaveDoc("1", "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	dbGetResp, _, geterr = db.ReadDoc("1")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
 	assetResp = &Asset{}
 	geterr = json.Unmarshal(dbGetResp.JSONValue, &assetResp)
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
-	testutil.AssertEquals(t, assetResp.Owner, "jerry")
+	assert.Equal(t, "jerry", assetResp.Owner)
 
 	
 	assetResp.Owner = "bob"
@@ -413,18 +413,18 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 
 	
 	_, saveerr = db.SaveDoc("1", "", &CouchDoc{JSONValue: assetDocUpdated, Attachments: nil})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save the updated document"))
+	assert.NoError(t, saveerr, "Error when trying to save the updated document")
 
 	
 	dbGetResp, _, geterr = db.ReadDoc("1")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
 	assetResp = &Asset{}
 	json.Unmarshal(dbGetResp.JSONValue, &assetResp)
 
 	
-	testutil.AssertEquals(t, assetResp.Owner, "bob")
+	assert.Equal(t, "bob", assetResp.Owner)
 
 	testBytes2 := []byte(`test attachment 2`)
 
@@ -437,15 +437,15 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 
 	
 	_, saveerr = db.SaveDoc("2", "", &CouchDoc{JSONValue: nil, Attachments: attachments2})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	dbGetResp, _, geterr = db.ReadDoc("2")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
 	testattach := dbGetResp.Attachments[0].AttachmentBytes
-	testutil.AssertEquals(t, testattach, testBytes2)
+	assert.Equal(t, testBytes2, testattach)
 
 	testBytes3 := []byte{}
 
@@ -458,15 +458,15 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 
 	
 	_, saveerr = db.SaveDoc("3", "", &CouchDoc{JSONValue: nil, Attachments: attachments3})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	dbGetResp, _, geterr = db.ReadDoc("3")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
 	testattach = dbGetResp.Attachments[0].AttachmentBytes
-	testutil.AssertEquals(t, testattach, testBytes3)
+	assert.Equal(t, testBytes3, testattach)
 
 	testBytes4a := []byte(`test attachment 4a`)
 	attachment4a := &AttachmentInfo{}
@@ -486,20 +486,20 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 
 	
 	_, saveerr = db.SaveDoc("4", "", &CouchDoc{JSONValue: assetJSON, Attachments: attachments4})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save the updated document"))
+	assert.NoError(t, saveerr, "Error when trying to save the updated document")
 
 	
 	dbGetResp, _, geterr = db.ReadDoc("4")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	for _, attach4 := range dbGetResp.Attachments {
 
 		currentName := attach4.Name
 		if currentName == "data1" {
-			testutil.AssertEquals(t, attach4.AttachmentBytes, testBytes4a)
+			assert.Equal(t, testBytes4a, attach4.AttachmentBytes)
 		}
 		if currentName == "data2" {
-			testutil.AssertEquals(t, attach4.AttachmentBytes, testBytes4b)
+			assert.Equal(t, testBytes4b, attach4.AttachmentBytes)
 		}
 
 	}
@@ -522,47 +522,47 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 
 	
 	_, saveerr = db.SaveDoc("5", "", &CouchDoc{JSONValue: assetJSON, Attachments: attachments5})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save the updated document"))
+	assert.NoError(t, saveerr, "Error when trying to save the updated document")
 
 	
 	dbGetResp, _, geterr = db.ReadDoc("5")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	for _, attach5 := range dbGetResp.Attachments {
 
 		currentName := attach5.Name
 		if currentName == "data1" {
-			testutil.AssertEquals(t, attach5.AttachmentBytes, testBytes5a)
+			assert.Equal(t, testBytes5a, attach5.AttachmentBytes)
 		}
 		if currentName == "data2" {
-			testutil.AssertEquals(t, attach5.AttachmentBytes, testBytes5b)
+			assert.Equal(t, testBytes5b, attach5.AttachmentBytes)
 		}
 
 	}
 
 	
 	_, saveerr = db.SaveDoc(string([]byte{0xff, 0xfe, 0xfd}), "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertError(t, saveerr, fmt.Sprintf("Error should have been thrown when saving a document with an invalid ID"))
+	assert.Error(t, saveerr, "Error should have been thrown when saving a document with an invalid ID")
 
 	
 	_, _, readerr := db.ReadDoc(string([]byte{0xff, 0xfe, 0xfd}))
-	testutil.AssertError(t, readerr, fmt.Sprintf("Error should have been thrown when reading a document with an invalid ID"))
+	assert.Error(t, readerr, "Error should have been thrown when reading a document with an invalid ID")
 
 	
 	_, errdbdrop := db.DropDatabase()
-	testutil.AssertNoError(t, errdbdrop, fmt.Sprintf("Error dropping database"))
+	assert.NoError(t, errdbdrop, "Error dropping database")
 
 	
 	_, _, errdbinfo := db.GetDatabaseInfo()
-	testutil.AssertError(t, errdbinfo, fmt.Sprintf("Error should have been thrown for missing database"))
+	assert.Error(t, errdbinfo, "Error should have been thrown for missing database")
 
 	
 	_, saveerr = db.SaveDoc("6", "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertError(t, saveerr, fmt.Sprintf("Error should have been thrown while attempting to save to a deleted database"))
+	assert.Error(t, saveerr, "Error should have been thrown while attempting to save to a deleted database")
 
 	
 	_, _, geterr = db.ReadDoc("6")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error should not have been thrown for a missing database, nil value is returned"))
+	assert.NoError(t, geterr, "Error should not have been thrown for a missing database, nil value is returned")
 
 }
 
@@ -570,7 +570,7 @@ func TestDBRequestTimeout(t *testing.T) {
 
 	database := "testdbrequesttimeout"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
@@ -580,12 +580,12 @@ func TestDBRequestTimeout(t *testing.T) {
 	
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, 3, impossibleTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thown while trying to create a couchdb instance with a connection timeout"))
+	assert.Error(t, err, "Error should have been thown while trying to create a couchdb instance with a connection timeout")
 
 	
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		-1, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown while attempting to create a database"))
+	assert.Error(t, err, "Error should have been thrown while attempting to create a database")
 
 }
 
@@ -593,39 +593,39 @@ func TestDBTimeoutConflictRetry(t *testing.T) {
 
 	database := "testdbtimeoutretry"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	dbResp, _, errdb := db.GetDatabaseInfo()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve database information"))
-	testutil.AssertEquals(t, dbResp.DbName, database)
+	assert.NoError(t, errdb, "Error when trying to retrieve database information")
+	assert.Equal(t, database, dbResp.DbName)
 
 	
 	_, saveerr := db.SaveDoc("1", "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, _, geterr := db.ReadDoc("1")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
 	_, saveerr = db.SaveDoc("1", "1-11111111111111111111111111111111", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document with a revision conflict"))
+	assert.NoError(t, saveerr, "Error when trying to save a document with a revision conflict")
 
 	
 	deleteerr := db.DeleteDoc("1", "1-11111111111111111111111111111111")
-	testutil.AssertNoError(t, deleteerr, fmt.Sprintf("Error when trying to delete a document with a revision conflict"))
+	assert.NoError(t, deleteerr, "Error when trying to delete a document with a revision conflict")
 
 }
 
@@ -633,13 +633,13 @@ func TestDBBadNumberOfRetries(t *testing.T) {
 
 	database := "testdbbadretries"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		-1, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown while attempting to create a database"))
+	assert.Error(t, err, "Error should have been thrown while attempting to create a database")
 
 }
 
@@ -647,29 +647,29 @@ func TestDBBadJSON(t *testing.T) {
 
 	database := "testdbbadjson"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	dbResp, _, errdb := db.GetDatabaseInfo()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve database information"))
-	testutil.AssertEquals(t, dbResp.DbName, database)
+	assert.NoError(t, errdb, "Error when trying to retrieve database information")
+	assert.Equal(t, database, dbResp.DbName)
 
 	badJSON := []byte(`{"asset_name"}`)
 
 	
 	_, saveerr := db.SaveDoc("1", "", &CouchDoc{JSONValue: badJSON, Attachments: nil})
-	testutil.AssertError(t, saveerr, fmt.Sprintf("Error should have been thrown for a bad JSON"))
+	assert.Error(t, saveerr, "Error should have been thrown for a bad JSON")
 
 }
 
@@ -677,23 +677,23 @@ func TestPrefixScan(t *testing.T) {
 
 	database := "testprefixscan"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	dbResp, _, errdb := db.GetDatabaseInfo()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve database information"))
-	testutil.AssertEquals(t, dbResp.DbName, database)
+	assert.NoError(t, errdb, "Error when trying to retrieve database information")
+	assert.Equal(t, database, dbResp.DbName)
 
 	
 	for i := 0; i < 20; i++ {
@@ -701,34 +701,34 @@ func TestPrefixScan(t *testing.T) {
 		id2 := string(0) + string(i) + string(1)
 		id3 := string(0) + string(i) + string(utf8.MaxRune-1)
 		_, saveerr := db.SaveDoc(id1, "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-		testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+		assert.NoError(t, saveerr, "Error when trying to save a document")
 		_, saveerr = db.SaveDoc(id2, "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-		testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+		assert.NoError(t, saveerr, "Error when trying to save a document")
 		_, saveerr = db.SaveDoc(id3, "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-		testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+		assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	}
 	startKey := string(0) + string(10)
 	endKey := startKey + string(utf8.MaxRune)
 	_, _, geterr := db.ReadDoc(endKey)
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to get lastkey"))
+	assert.NoError(t, geterr, "Error when trying to get lastkey")
 
 	resultsPtr, _, geterr := db.ReadDocRange(startKey, endKey, 1000)
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to perform a range scan"))
-	testutil.AssertNotNil(t, resultsPtr)
+	assert.NoError(t, geterr, "Error when trying to perform a range scan")
+	assert.NotNil(t, resultsPtr)
 	results := resultsPtr
-	testutil.AssertEquals(t, len(results), 3)
-	testutil.AssertEquals(t, results[0].ID, string(0)+string(10)+string(0))
-	testutil.AssertEquals(t, results[1].ID, string(0)+string(10)+string(1))
-	testutil.AssertEquals(t, results[2].ID, string(0)+string(10)+string(utf8.MaxRune-1))
+	assert.Equal(t, 3, len(results))
+	assert.Equal(t, string(0)+string(10)+string(0), results[0].ID)
+	assert.Equal(t, string(0)+string(10)+string(1), results[1].ID)
+	assert.Equal(t, string(0)+string(10)+string(utf8.MaxRune-1), results[2].ID)
 
 	
 	_, errdbdrop := db.DropDatabase()
-	testutil.AssertNoError(t, errdbdrop, fmt.Sprintf("Error dropping database"))
+	assert.NoError(t, errdbdrop, "Error dropping database")
 
 	
 	_, _, errdbinfo := db.GetDatabaseInfo()
-	testutil.AssertError(t, errdbinfo, fmt.Sprintf("Error should have been thrown for missing database"))
+	assert.Error(t, errdbinfo, "Error should have been thrown for missing database")
 
 }
 
@@ -736,7 +736,7 @@ func TestDBSaveAttachment(t *testing.T) {
 
 	database := "testdbsaveattachment"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	byteText := []byte(`This is a test document.  This is only a test`)
@@ -752,22 +752,22 @@ func TestDBSaveAttachment(t *testing.T) {
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	_, saveerr := db.SaveDoc("10", "", &CouchDoc{JSONValue: nil, Attachments: attachments})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	couchDoc, _, geterr2 := db.ReadDoc("10")
-	testutil.AssertNoError(t, geterr2, fmt.Sprintf("Error when trying to retrieve a document with attachment"))
-	testutil.AssertNotNil(t, couchDoc.Attachments)
-	testutil.AssertEquals(t, couchDoc.Attachments[0].AttachmentBytes, byteText)
+	assert.NoError(t, geterr2, "Error when trying to retrieve a document with attachment")
+	assert.NotNil(t, couchDoc.Attachments)
+	assert.Equal(t, byteText, couchDoc.Attachments[0].AttachmentBytes)
 
 }
 
@@ -775,34 +775,34 @@ func TestDBDeleteDocument(t *testing.T) {
 
 	database := "testdbdeletedocument"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	_, saveerr := db.SaveDoc("2", "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, _, readErr := db.ReadDoc("2")
-	testutil.AssertNoError(t, readErr, fmt.Sprintf("Error when trying to retrieve a document with attachment"))
+	assert.NoError(t, readErr, "Error when trying to retrieve a document with attachment")
 
 	
 	deleteErr := db.DeleteDoc("2", "")
-	testutil.AssertNoError(t, deleteErr, fmt.Sprintf("Error when trying to delete a document"))
+	assert.NoError(t, deleteErr, "Error when trying to delete a document")
 
 	
 	readValue, _, _ := db.ReadDoc("2")
-	testutil.AssertNil(t, readValue)
+	assert.Nil(t, readValue)
 
 }
 
@@ -810,37 +810,37 @@ func TestDBDeleteNonExistingDocument(t *testing.T) {
 
 	database := "testdbdeletenonexistingdocument"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	deleteErr := db.DeleteDoc("2", "")
-	testutil.AssertNoError(t, deleteErr, fmt.Sprintf("Error when trying to delete a non existing document"))
+	assert.NoError(t, deleteErr, "Error when trying to delete a non existing document")
 }
 
 func TestCouchDBVersion(t *testing.T) {
 
 	err := checkCouchDBVersion("2.0.0")
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error should not have been thrown for valid version"))
+	assert.NoError(t, err, "Error should not have been thrown for valid version")
 
 	err = checkCouchDBVersion("4.5.0")
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error should not have been thrown for valid version"))
+	assert.NoError(t, err, "Error should not have been thrown for valid version")
 
 	err = checkCouchDBVersion("1.6.5.4")
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for invalid version"))
+	assert.Error(t, err, "Error should have been thrown for invalid version")
 
 	err = checkCouchDBVersion("0.0.0.0")
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for invalid version"))
+	assert.Error(t, err, "Error should have been thrown for invalid version")
 
 }
 
@@ -848,7 +848,7 @@ func TestIndexOperations(t *testing.T) {
 
 	database := "testindexoperations"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	byteJSON1 := []byte(`{"_id":"1", "asset_name":"marble1","color":"blue","size":1,"owner":"jerry"}`)
@@ -865,12 +865,12 @@ func TestIndexOperations(t *testing.T) {
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	batchUpdateDocs := []*CouchDoc{}
 
@@ -886,30 +886,30 @@ func TestIndexOperations(t *testing.T) {
 	batchUpdateDocs = append(batchUpdateDocs, &CouchDoc{JSONValue: byteJSON10, Attachments: nil})
 
 	_, err = db.BatchUpdateDocuments(batchUpdateDocs)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error adding batch of documents"))
+	assert.NoError(t, err, "Error adding batch of documents")
 
 	
 	indexDefSize := `{"index":{"fields":[{"size":"desc"}]},"ddoc":"indexSizeSortDoc", "name":"indexSizeSortName","type":"json"}`
 
 	
 	_, err = db.CreateIndex(indexDefSize)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while creating an index"))
+	assert.NoError(t, err, "Error thrown while creating an index")
 
 	
 	
 	time.Sleep(100 * time.Millisecond)
 	listResult, err := db.ListIndex()
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while retrieving indexes"))
+	assert.NoError(t, err, "Error thrown while retrieving indexes")
 
 	
-	testutil.AssertEquals(t, len(listResult), 1)
+	assert.Equal(t, 1, len(listResult))
 
 	
 	for _, elem := range listResult {
-		testutil.AssertEquals(t, elem.DesignDocument, "indexSizeSortDoc")
-		testutil.AssertEquals(t, elem.Name, "indexSizeSortName")
+		assert.Equal(t, "indexSizeSortDoc", elem.DesignDocument)
+		assert.Equal(t, "indexSizeSortName", elem.Name)
 		
-		testutil.AssertEquals(t, strings.Contains(elem.Definition, `"fields":[{"size":"desc"}]`), true)
+		assert.Equal(t, true, strings.Contains(elem.Definition, `"fields":[{"size":"desc"}]`))
 	}
 
 	
@@ -917,103 +917,103 @@ func TestIndexOperations(t *testing.T) {
 
 	
 	_, err = db.CreateIndex(indexDefColor)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while creating an index"))
+	assert.NoError(t, err, "Error thrown while creating an index")
 
 	
 	
 	time.Sleep(100 * time.Millisecond)
 	listResult, err = db.ListIndex()
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while retrieving indexes"))
+	assert.NoError(t, err, "Error thrown while retrieving indexes")
 
 	
-	testutil.AssertEquals(t, len(listResult), 2)
+	assert.Equal(t, 2, len(listResult))
 
 	
 	err = db.DeleteIndex("indexSizeSortDoc", "indexSizeSortName")
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while deleting an index"))
+	assert.NoError(t, err, "Error thrown while deleting an index")
 
 	
 	
 	time.Sleep(100 * time.Millisecond)
 	listResult, err = db.ListIndex()
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while retrieving indexes"))
+	assert.NoError(t, err, "Error thrown while retrieving indexes")
 
 	
-	testutil.AssertEquals(t, len(listResult), 1)
+	assert.Equal(t, 1, len(listResult))
 
 	
 	for _, elem := range listResult {
 		err = db.DeleteIndex(elem.DesignDocument, elem.Name)
-		testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while deleting an index"))
+		assert.NoError(t, err, "Error thrown while deleting an index")
 	}
 
 	
 	
 	time.Sleep(100 * time.Millisecond)
 	listResult, err = db.ListIndex()
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while retrieving indexes"))
-	testutil.AssertEquals(t, len(listResult), 0)
+	assert.NoError(t, err, "Error thrown while retrieving indexes")
+	assert.Equal(t, 0, len(listResult))
 
 	
 	queryString := `{"selector":{"size": {"$gt": 0}},"fields": ["_id", "_rev", "owner", "asset_name", "color", "size"], "sort":[{"size":"desc"}], "limit": 10,"skip": 0}`
 
 	
 	_, _, err = db.QueryDocuments(queryString)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have thrown while querying without a valid index"))
+	assert.Error(t, err, "Error should have thrown while querying without a valid index")
 
 	
 	_, err = db.CreateIndex(indexDefSize)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while creating an index"))
+	assert.NoError(t, err, "Error thrown while creating an index")
 
 	
 	time.Sleep(100 * time.Millisecond)
 
 	
 	_, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while querying with an index"))
+	assert.NoError(t, err, "Error thrown while querying with an index")
 
 	
 	indexDefSize = `{"index":{"fields":[{"data.size":"desc"},{"data.owner":"desc"}]},"ddoc":"indexSizeOwnerSortDoc", "name":"indexSizeOwnerSortName","type":"json"}`
 
 	
 	dbResp, err := db.CreateIndex(indexDefSize)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while creating an index"))
+	assert.NoError(t, err, "Error thrown while creating an index")
 
 	
-	testutil.AssertEquals(t, dbResp.Result, "created")
+	assert.Equal(t, "created", dbResp.Result)
 
 	
 	time.Sleep(100 * time.Millisecond)
 
 	
 	dbResp, err = db.CreateIndex(indexDefSize)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while creating an index"))
+	assert.NoError(t, err, "Error thrown while creating an index")
 
 	
-	testutil.AssertEquals(t, dbResp.Result, "exists")
+	assert.Equal(t, "exists", dbResp.Result)
 
 	
 	
 	time.Sleep(100 * time.Millisecond)
 	listResult, err = db.ListIndex()
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while retrieving indexes"))
+	assert.NoError(t, err, "Error thrown while retrieving indexes")
 
 	
-	testutil.AssertEquals(t, len(listResult), 2)
+	assert.Equal(t, 2, len(listResult))
 
 	
 	indexDefSize = `{"index"{"fields":[{"data.size":"desc"},{"data.owner":"desc"}]},"ddoc":"indexSizeOwnerSortDoc", "name":"indexSizeOwnerSortName","type":"json"}`
 
 	
 	_, err = db.CreateIndex(indexDefSize)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for an invalid index JSON"))
+	assert.Error(t, err, "Error should have been thrown for an invalid index JSON")
 
 	
 	indexDefSize = `{"index":{"fields2":[{"data.size":"desc"},{"data.owner":"desc"}]},"ddoc":"indexSizeOwnerSortDoc", "name":"indexSizeOwnerSortName","type":"json"}`
 
 	
 	_, err = db.CreateIndex(indexDefSize)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for an invalid index definition"))
+	assert.Error(t, err, "Error should have been thrown for an invalid index definition")
 
 }
 
@@ -1118,182 +1118,182 @@ func TestRichQuery(t *testing.T) {
 
 	database := "testrichquery"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	_, saveerr := db.SaveDoc("marble01", "", &CouchDoc{JSONValue: byteJSON01, Attachments: attachments1})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble02", "", &CouchDoc{JSONValue: byteJSON02, Attachments: attachments2})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble03", "", &CouchDoc{JSONValue: byteJSON03, Attachments: attachments3})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble04", "", &CouchDoc{JSONValue: byteJSON04, Attachments: attachments4})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble05", "", &CouchDoc{JSONValue: byteJSON05, Attachments: attachments5})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble06", "", &CouchDoc{JSONValue: byteJSON06, Attachments: attachments6})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble07", "", &CouchDoc{JSONValue: byteJSON07, Attachments: attachments7})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble08", "", &CouchDoc{JSONValue: byteJSON08, Attachments: attachments8})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble09", "", &CouchDoc{JSONValue: byteJSON09, Attachments: attachments9})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble10", "", &CouchDoc{JSONValue: byteJSON10, Attachments: attachments10})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble11", "", &CouchDoc{JSONValue: byteJSON11, Attachments: attachments11})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	_, saveerr = db.SaveDoc("marble12", "", &CouchDoc{JSONValue: byteJSON12, Attachments: attachments12})
-	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
+	assert.NoError(t, saveerr, "Error when trying to save a document")
 
 	
 	queryString := `{"selector":{"owner":}}`
 
 	_, _, err = db.QueryDocuments(queryString)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for bad json"))
+	assert.Error(t, err, "Error should have been thrown for bad json")
 
 	
 	queryString = `{"selector":{"owner":{"$eq":"jerry"}}}`
 
 	queryResult, _, err := db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 3)
+	assert.Equal(t, 3, len(queryResult))
 
 	
 	queryString = `{"selector":{"owner":"jerry"}}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 3)
+	assert.Equal(t, 3, len(queryResult))
 
 	
 	queryString = `{"selector":{"owner":{"$eq":"jerry"}},"fields": ["owner","asset_name","color","size"]}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 3)
+	assert.Equal(t, 3, len(queryResult))
 
 	
 	queryString = `{"selector":{"$or":[{"owner":{"$eq":"jerry"}},{"owner": {"$eq": "frank"}}]}}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 4)
+	assert.Equal(t, 4, len(queryResult))
 
 	
 	queryString = `{"selector":{"color":"green","$or":[{"owner":"tom"},{"owner":"frank"}]}}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 2)
+	assert.Equal(t, 2, len(queryResult))
 
 	
 	queryString = `{"selector":{"$and":[{"size":{"$gte":2}},{"size":{"$lte":5}}]}}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 4)
+	assert.Equal(t, 4, len(queryResult))
 
 	
 	queryString = `{"selector":{"$and":[{"size":{"$gte":3}},{"size":{"$lte":10}},{"$not":{"size":7}}]}}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 7)
+	assert.Equal(t, 7, len(queryResult))
 
 	
 	queryString = `{"selector":{"$and":[{"size":{"$gte":2}},{"size":{"$lte":10}},{"$nor":[{"size":3},{"size":5},{"size":7}]}]}}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 6)
+	assert.Equal(t, 6, len(queryResult))
 
 	
 	queryResult, _, err = db.ReadDocRange("marble02", "marble06", 10000)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a range query"))
+	assert.NoError(t, err, "Error when attempting to execute a range query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 4)
+	assert.Equal(t, 4, len(queryResult))
 
 	
 	queryString = `{"selector":{"owner":{"$eq":"tom"}}}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 8)
+	assert.Equal(t, 8, len(queryResult))
 
 	
 	queryString = `{"selector":{"owner":{"$eq":"tom"}},"limit":2}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
+	assert.NoError(t, err, "Error when attempting to execute a query")
 
 	
-	testutil.AssertEquals(t, len(queryResult), 2)
+	assert.Equal(t, 2, len(queryResult))
 
 	
 	queryString = `{"selector":{"owner":"tom"}, "use_index":["indexOwnerDoc","indexOwner"]}`
 
 	_, _, err = db.QueryDocuments(queryString)
-	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for an invalid index"))
+	assert.Error(t, err, "Error should have been thrown for an invalid index")
 
 	
 	indexDefSize := `{"index":{"fields":[{"size":"desc"}]},"ddoc":"indexSizeSortDoc", "name":"indexSizeSortName","type":"json"}`
 
 	
 	_, err = db.CreateIndex(indexDefSize)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error thrown while creating an index"))
+	assert.NoError(t, err, "Error thrown while creating an index")
 
 	
 	time.Sleep(100 * time.Millisecond)
@@ -1302,23 +1302,23 @@ func TestRichQuery(t *testing.T) {
 	queryString = `{"selector":{"size":{"$gt":0}}, "use_index":["indexSizeSortDoc","indexSizeSortName"]}`
 
 	_, _, err = db.QueryDocuments(queryString)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query with a valid index"))
+	assert.NoError(t, err, "Error when attempting to execute a query with a valid index")
 
 	
 	queryString = `{"selector":{"owner":{"$eq":"tom"}}, "use_index":"indexSizeSortName"}`
 
 	
 	_, _, err = db.QueryDocuments(queryString)
-	testutil.AssertError(t, err, fmt.Sprintf("400 error should have been thrown for a missing index"))
-	testutil.AssertEquals(t, strings.Contains(err.Error(), "Status Code:400"), true)
+	assert.Error(t, err, "400 error should have been thrown for a missing index")
+	assert.Equal(t, true, strings.Contains(err.Error(), "Status Code:400"))
 
 	
 	queryString = `{"selector":{"owner":{"$eq":"tom"}}, "use_index":["indexSizeSortDoc","indexSizeSortName"]}`
 
 	
 	_, _, err = db.QueryDocuments(queryString)
-	testutil.AssertError(t, err, fmt.Sprintf("500 error should have been thrown for a missing index with design doc specified"))
-	testutil.AssertEquals(t, strings.Contains(err.Error(), "Status Code:500"), true)
+	assert.Error(t, err, "500 error should have been thrown for a missing index with design doc specified")
+	assert.Equal(t, true, strings.Contains(err.Error(), "Status Code:500"))
 
 }
 
@@ -1375,18 +1375,18 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 
 	database := "testbatch"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	batchUpdateDocs := []*CouchDoc{}
 
@@ -1405,59 +1405,59 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 	batchUpdateDocs = append(batchUpdateDocs, value6)
 
 	batchUpdateResp, err := db.BatchUpdateDocuments(batchUpdateDocs)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to update a batch of documents"))
+	assert.NoError(t, err, "Error when attempting to update a batch of documents")
 
 	
 	for _, updateDoc := range batchUpdateResp {
-		testutil.AssertEquals(t, updateDoc.Ok, true)
+		assert.Equal(t, true, updateDoc.Ok)
 	}
 
 	
 	
 	dbGetResp, _, geterr := db.ReadDoc("marble01")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when attempting read a document"))
+	assert.NoError(t, geterr, "Error when attempting read a document")
 
 	assetResp := &Asset{}
 	geterr = json.Unmarshal(dbGetResp.JSONValue, &assetResp)
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 	
-	testutil.AssertEquals(t, assetResp.Owner, "jerry")
+	assert.Equal(t, "jerry", assetResp.Owner)
 
 	
 	
 	
 	dbGetResp, _, geterr = db.ReadDoc("marble06#$&'()*+,/:;=?@[]")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when attempting read a document"))
+	assert.NoError(t, geterr, "Error when attempting read a document")
 
 	assetResp = &Asset{}
 	geterr = json.Unmarshal(dbGetResp.JSONValue, &assetResp)
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 	
-	testutil.AssertEquals(t, assetResp.Owner, "jerry")
+	assert.Equal(t, "jerry", assetResp.Owner)
 
 	
 	
 	dbGetResp, _, geterr = db.ReadDoc("marble03")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when attempting read a document"))
+	assert.NoError(t, geterr, "Error when attempting read a document")
 	
 	attachments := dbGetResp.Attachments
 	
 	retrievedAttachment := attachments[0]
 	
-	testutil.AssertEquals(t, attachment3.AttachmentBytes, retrievedAttachment.AttachmentBytes)
+	assert.Equal(t, retrievedAttachment.AttachmentBytes, attachment3.AttachmentBytes)
 	
 	
 	batchUpdateDocs = []*CouchDoc{}
 	batchUpdateDocs = append(batchUpdateDocs, value1)
 	batchUpdateDocs = append(batchUpdateDocs, value2)
 	batchUpdateResp, err = db.BatchUpdateDocuments(batchUpdateDocs)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to update a batch of documents"))
+	assert.NoError(t, err, "Error when attempting to update a batch of documents")
 	
 	
 	for _, updateDoc := range batchUpdateResp {
-		testutil.AssertEquals(t, updateDoc.Ok, false)
-		testutil.AssertEquals(t, updateDoc.Error, updateDocumentConflictError)
-		testutil.AssertEquals(t, updateDoc.Reason, updateDocumentConflictReason)
+		assert.Equal(t, false, updateDoc.Ok)
+		assert.Equal(t, updateDocumentConflictError, updateDoc.Error)
+		assert.Equal(t, updateDocumentConflictReason, updateDoc.Reason)
 	}
 
 	
@@ -1469,7 +1469,7 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 	keys = append(keys, "marble03")
 
 	batchRevs, err := db.BatchRetrieveDocumentMetadata(keys)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting retrieve revisions"))
+	assert.NoError(t, err, "Error when attempting retrieve revisions")
 
 	batchUpdateDocs = []*CouchDoc{}
 
@@ -1490,10 +1490,10 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 
 	
 	batchUpdateResp, err = db.BatchUpdateDocuments(batchUpdateDocs)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to update a batch of documents"))
+	assert.NoError(t, err, "Error when attempting to update a batch of documents")
 	
 	for _, updateDoc := range batchUpdateResp {
-		testutil.AssertEquals(t, updateDoc.Ok, true)
+		assert.Equal(t, true, updateDoc.Ok)
 	}
 
 	
@@ -1505,7 +1505,7 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 	keys = append(keys, "marble04")
 
 	batchRevs, err = db.BatchRetrieveDocumentMetadata(keys)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting retrieve revisions"))
+	assert.NoError(t, err, "Error when attempting retrieve revisions")
 
 	batchUpdateDocs = []*CouchDoc{}
 
@@ -1525,26 +1525,26 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 
 	
 	batchUpdateResp, err = db.BatchUpdateDocuments(batchUpdateDocs)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to update a batch of documents"))
+	assert.NoError(t, err, "Error when attempting to update a batch of documents")
 
 	
 	for _, updateDoc := range batchUpdateResp {
-		testutil.AssertEquals(t, updateDoc.Ok, true)
+		assert.Equal(t, true, updateDoc.Ok)
 	}
 
 	
 	dbGetResp, _, geterr = db.ReadDoc("marble02")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
-	testutil.AssertNil(t, dbGetResp)
+	assert.Nil(t, dbGetResp)
 
 	
 	dbGetResp, _, geterr = db.ReadDoc("marble04")
-	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to retrieve a document"))
+	assert.NoError(t, geterr, "Error when trying to retrieve a document")
 
 	
-	testutil.AssertNil(t, dbGetResp)
+	assert.Nil(t, dbGetResp)
 
 }
 
@@ -1576,18 +1576,18 @@ func TestDatabaseSecuritySettings(t *testing.T) {
 
 	database := "testdbsecuritysettings"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	
 	securityPermissions := &DatabaseSecurity{}
@@ -1596,34 +1596,34 @@ func TestDatabaseSecuritySettings(t *testing.T) {
 
 	
 	err = db.ApplyDatabaseSecurity(securityPermissions)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to apply database security"))
+	assert.NoError(t, err, "Error when trying to apply database security")
 
 	
 	databaseSecurity, err := db.GetDatabaseSecurity()
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when retrieving database security"))
+	assert.NoError(t, err, "Error when retrieving database security")
 
 	
-	testutil.AssertEquals(t, databaseSecurity.Admins.Names[0], "admin")
+	assert.Equal(t, "admin", databaseSecurity.Admins.Names[0])
 
 	
-	testutil.AssertEquals(t, databaseSecurity.Members.Names[0], "admin")
+	assert.Equal(t, "admin", databaseSecurity.Members.Names[0])
 
 	
 	securityPermissions = &DatabaseSecurity{}
 
 	
 	err = db.ApplyDatabaseSecurity(securityPermissions)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to apply database security"))
+	assert.NoError(t, err, "Error when trying to apply database security")
 
 	
 	databaseSecurity, err = db.GetDatabaseSecurity()
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when retrieving database security"))
+	assert.NoError(t, err, "Error when retrieving database security")
 
 	
-	testutil.AssertEquals(t, len(databaseSecurity.Admins.Names), 0)
+	assert.Equal(t, 0, len(databaseSecurity.Admins.Names))
 
 	
-	testutil.AssertEquals(t, len(databaseSecurity.Members.Names), 0)
+	assert.Equal(t, 0, len(databaseSecurity.Members.Names))
 
 }
 
@@ -1631,30 +1631,30 @@ func TestURLWithSpecialCharacters(t *testing.T) {
 
 	database := "testdb+with+plus_sign"
 	err := cleanup(database)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
+	assert.NoError(t, err, "Error when trying to cleanup  Error: %s", err)
 	defer cleanup(database)
 
 	
 	finalURL, err := url.Parse("http://127.0.0.1:5984")
-	testutil.AssertNoError(t, err, "error thrown while parsing couchdb url")
+	assert.NoError(t, err, "error thrown while parsing couchdb url")
 
 	
 	couchdbURL := constructCouchDBUrl(finalURL, database, "_index", "designdoc", "json", "indexname")
-	testutil.AssertEquals(t, couchdbURL.String(), "http://127.0.0.1:5984/testdb%2Bwith%2Bplus_sign/_index/designdoc/json/indexname")
+	assert.Equal(t, "http://127.0.0.1:5984/testdb%2Bwith%2Bplus_sign/_index/designdoc/json/indexname", couchdbURL.String())
 
 	
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
+	assert.NoError(t, err, "Error when trying to create couch instance")
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
 	
 	errdb := db.CreateDatabaseIfNotExist()
-	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
+	assert.NoError(t, errdb, "Error when trying to create database")
 
 	dbInfo, _, errInfo := db.GetDatabaseInfo()
-	testutil.AssertNoError(t, errInfo, fmt.Sprintf("Error when trying to get database info"))
+	assert.NoError(t, errInfo, "Error when trying to get database info")
 
-	testutil.AssertEquals(t, dbInfo.DbName, database)
+	assert.Equal(t, database, dbInfo.DbName)
 
 }

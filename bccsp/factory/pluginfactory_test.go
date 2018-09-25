@@ -16,12 +16,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+
+
+var raceEnabled bool
+
 func buildPlugin(lib string, t *testing.T) {
 	t.Helper()
 	
 	if _, err := os.Stat(lib); err != nil {
 		
-		cmd := exec.Command("go", "build", "-buildmode=plugin", "github.com/mcc-github/blockchain/examples/plugins/bccsp")
+		cmd := exec.Command("go", "build", "-buildmode=plugin")
+		if raceEnabled {
+			cmd.Args = append(cmd.Args, "-race")
+		}
+		cmd.Args = append(cmd.Args, "github.com/mcc-github/blockchain/examples/plugins/bccsp")
 		err := cmd.Run()
 		if err != nil {
 			t.Fatalf("Could not build plugin: [%s]", err)

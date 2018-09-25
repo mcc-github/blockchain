@@ -52,11 +52,12 @@ func testValidationWithNTXes(t *testing.T, ledger ledger2.PeerLedger, gbHash []b
 		*mocktxvalidator.Support
 		*semaphore.Weighted
 	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: &config.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
-	tValidator := &TxValidator{vcs, mockVsccValidator}
+	tValidator := &TxValidator{"", vcs, mockVsccValidator}
 
 	bcInfo, _ := ledger.GetBlockchainInfo()
-	testutil.AssertEquals(t, bcInfo, &common.BlockchainInfo{
-		Height: 1, CurrentBlockHash: gbHash, PreviousBlockHash: nil})
+	assert.Equal(t, &common.BlockchainInfo{
+		Height: 1, CurrentBlockHash: gbHash, PreviousBlockHash: nil,
+	}, bcInfo)
 
 	sr := [][]byte{}
 	for i := 0; i < nBlocks; i++ {
@@ -127,11 +128,12 @@ func TestBlockValidationDuplicateTXId(t *testing.T) {
 		*mocktxvalidator.Support
 		*semaphore.Weighted
 	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: acv}, semaphore.NewWeighted(10)}
-	tValidator := &TxValidator{vcs, mockVsccValidator}
+	tValidator := &TxValidator{"", vcs, mockVsccValidator}
 
 	bcInfo, _ := ledger.GetBlockchainInfo()
-	testutil.AssertEquals(t, bcInfo, &common.BlockchainInfo{
-		Height: 1, CurrentBlockHash: gbHash, PreviousBlockHash: nil})
+	assert.Equal(t, &common.BlockchainInfo{
+		Height: 1, CurrentBlockHash: gbHash, PreviousBlockHash: nil,
+	}, bcInfo)
 
 	envs := []*common.Envelope{}
 	env, _, err := testutil.ConstructTransaction(t, pubSimulationResBytes, "", true)
@@ -214,7 +216,7 @@ func TestTxValidationFailure_InvalidTxid(t *testing.T) {
 		*mocktxvalidator.Support
 		*semaphore.Weighted
 	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: &config.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
-	tValidator := &TxValidator{vcs, &validator.MockVsccValidator{}}
+	tValidator := &TxValidator{"", vcs, &validator.MockVsccValidator{}}
 
 	mockSigner, err := mspmgmt.GetLocalMSP().GetDefaultSigningIdentity()
 	assert.NoError(t, err)

@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/integration/runner"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
 )
 
 
@@ -80,7 +80,6 @@ type CouchDBCommonStorageTestEnv struct {
 	t                 testing.TB
 	provider          DBProvider
 	bookkeeperTestEnv *bookkeeping.TestEnv
-	openDbIds         map[string]bool
 	couchCleanup      func()
 }
 
@@ -118,14 +117,12 @@ func (env *CouchDBCommonStorageTestEnv) Init(t testing.TB) {
 	assert.NoError(t, err)
 	env.t = t
 	env.provider = dbProvider
-	env.openDbIds = make(map[string]bool)
 }
 
 
 func (env *CouchDBCommonStorageTestEnv) GetDBHandle(id string) DB {
 	db, err := env.provider.GetDBHandle(id)
 	assert.NoError(env.t, err)
-	env.openDbIds[id] = true
 	return db
 }
 
@@ -136,9 +133,9 @@ func (env *CouchDBCommonStorageTestEnv) GetName() string {
 
 
 func (env *CouchDBCommonStorageTestEnv) Cleanup() {
-	for id := range env.openDbIds {
-		statecouchdb.CleanupDB(id)
-	}
+	csdbProvider, _ := env.provider.(*CommonStorageDBProvider)
+	statecouchdb.CleanupDB(env.t, csdbProvider.VersionedDBProvider)
+
 	env.bookkeeperTestEnv.Cleanup()
 	env.provider.Close()
 	env.couchCleanup()

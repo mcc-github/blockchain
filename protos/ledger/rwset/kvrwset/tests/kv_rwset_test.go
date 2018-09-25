@@ -22,8 +22,8 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -35,12 +35,12 @@ const (
 
 func TestKVRWSetV1BackwardCompatible(t *testing.T) {
 	protoBytes, err := ioutil.ReadFile(binaryTestFileName)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	kvrwset1 := &kvrwset.KVRWSet{}
-	testutil.AssertNoError(t, proto.Unmarshal(protoBytes, kvrwset1), "")
+	assert.NoError(t, proto.Unmarshal(protoBytes, kvrwset1))
 	kvrwset2 := constructSampleKVRWSet()
 	t.Logf("kvrwset1=%s, kvrwset2=%s", spew.Sdump(kvrwset1), spew.Sdump(kvrwset2))
-	testutil.AssertEquals(t, kvrwset1, kvrwset2)
+	assert.Equal(t, kvrwset2, kvrwset1)
 }
 
 
@@ -49,8 +49,8 @@ func TestKVRWSetV1BackwardCompatible(t *testing.T) {
 
 func testPrepareBinaryFileSampleKVRWSetV1(t *testing.T) {
 	b, err := proto.Marshal(constructSampleKVRWSet())
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNoError(t, ioutil.WriteFile(binaryTestFileName, b, 0775), "")
+	assert.NoError(t, err)
+	assert.NoError(t, ioutil.WriteFile(binaryTestFileName, b, 0775))
 }
 
 func constructSampleKVRWSet() *kvrwset.KVRWSet {

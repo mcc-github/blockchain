@@ -17,7 +17,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
@@ -244,7 +243,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 		produceSamplePvtdata(t, 4, []string{"ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 	}
 	retrievedData, _ = store.GetPvtDataByBlockNum(1, nil)
-	testutil.AssertEquals(t, retrievedData, expectedPvtdataFromBlock1)
+	assert.Equal(expectedPvtdataFromBlock1, retrievedData)
 
 	
 	expectedMissingPvtDataInfo = make(ledger.MissingPvtDataInfo)
@@ -268,7 +267,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 		produceSamplePvtdata(t, 4, []string{"ns-1:coll-2", "ns-2:coll-1"}),
 	}
 	retrievedData, _ = store.GetPvtDataByBlockNum(1, nil)
-	testutil.AssertEquals(t, retrievedData, expectedPvtdataFromBlock1)
+	assert.Equal(expectedPvtdataFromBlock1, retrievedData)
 
 	
 	expectedPvtdataFromBlock2 := []*ledger.TxPvtData{
@@ -276,7 +275,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 		produceSamplePvtdata(t, 5, []string{"ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 	}
 	retrievedData, _ = store.GetPvtDataByBlockNum(2, nil)
-	testutil.AssertEquals(t, retrievedData, expectedPvtdataFromBlock2)
+	assert.Equal(expectedPvtdataFromBlock2, retrievedData)
 
 	
 	expectedMissingPvtDataInfo = make(ledger.MissingPvtDataInfo)

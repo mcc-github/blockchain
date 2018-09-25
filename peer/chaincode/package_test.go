@@ -11,10 +11,20 @@ import (
 	"github.com/golang/protobuf/proto"
 
 	"github.com/mcc-github/blockchain/msp"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/peer/common"
 	pcommon "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 )
+
+func TestMain(m *testing.M) {
+	err := msptesttools.LoadMSPSetupForTesting()
+	if err != nil {
+		panic(fmt.Sprintf("Fatal error when reading MSP config: %s", err))
+	}
+
+	os.Exit(m.Run())
+}
 
 func newTempDir() string {
 	tempDir, err := ioutil.TempDir("/tmp", "packagetest-")
@@ -74,7 +84,6 @@ func TestCDSPackage(t *testing.T) {
 
 
 func createSignedCDSPackage(args []string, sign bool) error {
-	InitMSP()
 	var signer msp.SigningIdentity
 	var err error
 	if sign {

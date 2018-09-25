@@ -75,6 +75,7 @@ func (q *lockBasedQueryExecutor) GetPrivateDataMetadata(namespace, collection, k
 	return q.helper.getPrivateDataMetadata(namespace, collection, key)
 }
 
+
 func (q *lockBasedQueryExecutor) GetPrivateDataMetadataByHash(namespace, collection string, keyhash []byte) (map[string][]byte, error) {
 	return q.helper.getPrivateDataMetadataByHash(namespace, collection, keyhash)
 }

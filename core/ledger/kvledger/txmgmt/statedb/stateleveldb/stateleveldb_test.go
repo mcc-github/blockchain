@@ -20,11 +20,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/commontests"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
@@ -65,8 +65,8 @@ func testCompositeKey(t *testing.T, dbName string, ns string, key string) {
 	compositeKey := constructCompositeKey(ns, key)
 	t.Logf("compositeKey=%#v", compositeKey)
 	ns1, key1 := splitCompositeKey(compositeKey)
-	testutil.AssertEquals(t, ns1, ns)
-	testutil.AssertEquals(t, key1, key)
+	assert.Equal(t, ns, ns1)
+	assert.Equal(t, key, key1)
 }
 
 
@@ -74,11 +74,11 @@ func TestQueryOnLevelDB(t *testing.T) {
 	env := NewTestVDBEnv(t)
 	defer env.Cleanup()
 	db, err := env.DBProvider.GetDBHandle("testquery")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	db.Open()
 	defer db.Close()
 	batch := statedb.NewUpdateBatch()
-	jsonValue1 := "{\"asset_name\": \"marble1\",\"color\": \"blue\",\"size\": 1,\"owner\": \"tom\"}"
+	jsonValue1 := `{"asset_name": "marble1","color": "blue","size": 1,"owner": "tom"}`
 	batch.Put("ns1", "key1", []byte(jsonValue1), version.NewHeight(1, 1))
 
 	savePoint := version.NewHeight(2, 22)
@@ -87,9 +87,9 @@ func TestQueryOnLevelDB(t *testing.T) {
 	
 	
 	
-	itr, err := db.ExecuteQuery("ns1", "{\"selector\":{\"owner\":\"jerry\"}}")
-	testutil.AssertError(t, err, "ExecuteQuery not supported for leveldb")
-	testutil.AssertNil(t, itr)
+	itr, err := db.ExecuteQuery("ns1", `{"selector":{"owner":"jerry"}}`)
+	assert.Error(t, err, "ExecuteQuery not supported for leveldb")
+	assert.Nil(t, itr)
 }
 
 func TestGetStateMultipleKeys(t *testing.T) {
@@ -109,14 +109,14 @@ func TestUtilityFunctions(t *testing.T) {
 	defer env.Cleanup()
 
 	db, err := env.DBProvider.GetDBHandle("testutilityfunctions")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	byteKeySupported := db.BytesKeySuppoted()
-	testutil.AssertEquals(t, byteKeySupported, true)
+	assert.True(t, byteKeySupported)
 
 	
-	testutil.AssertNoError(t, db.ValidateKeyValue("testKey", []byte("testValue")), "leveldb should accept all key-values")
+	assert.NoError(t, db.ValidateKeyValue("testKey", []byte("testValue")), "leveldb should accept all key-values")
 }
 
 func TestValueAndMetadataWrites(t *testing.T) {

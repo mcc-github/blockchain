@@ -20,21 +20,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 
 func TestGetStateMultipleKeys(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db, err := dbProvider.GetDBHandle("testgetmultiplekeys")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	sp, err := db.GetLatestSavePoint()
-	testutil.AssertNoError(t, err, "Error upon GetLatestSavePoint()")
-	testutil.AssertNil(t, sp)
+	assert.NoError(t, err, "Error upon GetLatestSavePoint()")
+	assert.Nil(t, sp)
 
 	batch := statedb.NewUpdateBatch()
 	expectedValues := make([]*statedb.VersionedValue, 2)
@@ -52,24 +52,24 @@ func TestGetStateMultipleKeys(t *testing.T, dbProvider statedb.VersionedDBProvid
 	db.ApplyUpdates(batch, savePoint)
 
 	actualValues, _ := db.GetStateMultipleKeys("ns1", []string{"key1", "key2"})
-	testutil.AssertEquals(t, actualValues, expectedValues)
+	assert.Equal(t, expectedValues, actualValues)
 }
 
 
 func TestBasicRW(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db, err := dbProvider.GetDBHandle("testbasicrw")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	sp, err := db.GetLatestSavePoint()
-	testutil.AssertNoError(t, err, "Error upon GetLatestSavePoint()")
-	testutil.AssertNil(t, sp)
+	assert.NoError(t, err, "Error upon GetLatestSavePoint()")
+	assert.Nil(t, sp)
 
 	
 	
 	val, err := db.GetState("ns", "key1")
-	testutil.AssertNoError(t, err, "Should receive nil rather than error upon reading non existent key")
-	testutil.AssertNil(t, val)
+	assert.NoError(t, err, "Should receive nil rather than error upon reading non existent key")
+	assert.Nil(t, val)
 
 	batch := statedb.NewUpdateBatch()
 	vv1 := statedb.VersionedValue{Value: []byte("value1"), Version: version.NewHeight(1, 1)}
@@ -86,27 +86,27 @@ func TestBasicRW(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db.ApplyUpdates(batch, savePoint)
 
 	vv, _ := db.GetState("ns1", "key1")
-	testutil.AssertEquals(t, vv, &vv1)
+	assert.Equal(t, &vv1, vv)
 
 	vv, _ = db.GetState("ns2", "key4")
-	testutil.AssertEquals(t, vv, &vv4)
+	assert.Equal(t, &vv4, vv)
 
 	vv, _ = db.GetState("ns2", "key5")
-	testutil.AssertEquals(t, vv, &vv5)
+	assert.Equal(t, &vv5, vv)
 
 	sp, err = db.GetLatestSavePoint()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertEquals(t, sp, savePoint)
+	assert.NoError(t, err)
+	assert.Equal(t, savePoint, sp)
 
 }
 
 
 func TestMultiDBBasicRW(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db1, err := dbProvider.GetDBHandle("testmultidbbasicrw")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	db2, err := dbProvider.GetDBHandle("testmultidbbasicrw2")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	batch1 := statedb.NewUpdateBatch()
 	vv1 := statedb.VersionedValue{Value: []byte("value1_db1"), Version: version.NewHeight(1, 1)}
@@ -125,24 +125,24 @@ func TestMultiDBBasicRW(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db2.ApplyUpdates(batch2, savePoint2)
 
 	vv, _ := db1.GetState("ns1", "key1")
-	testutil.AssertEquals(t, vv, &vv1)
+	assert.Equal(t, &vv1, vv)
 
 	sp, err := db1.GetLatestSavePoint()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertEquals(t, sp, savePoint1)
+	assert.NoError(t, err)
+	assert.Equal(t, savePoint1, sp)
 
 	vv, _ = db2.GetState("ns1", "key1")
-	testutil.AssertEquals(t, vv, &vv3)
+	assert.Equal(t, &vv3, vv)
 
 	sp, err = db2.GetLatestSavePoint()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertEquals(t, sp, savePoint2)
+	assert.NoError(t, err)
+	assert.Equal(t, savePoint2, sp)
 }
 
 
 func TestDeletes(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db, err := dbProvider.GetDBHandle("testdeletes")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	batch := statedb.NewUpdateBatch()
 	vv1 := statedb.VersionedValue{Value: []byte("value1"), Version: version.NewHeight(1, 1)}
@@ -157,27 +157,27 @@ func TestDeletes(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	batch.Delete("ns", "key3", version.NewHeight(1, 5))
 	savePoint := version.NewHeight(1, 5)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	vv, _ := db.GetState("ns", "key2")
-	testutil.AssertEquals(t, vv, &vv2)
+	assert.Equal(t, &vv2, vv)
 
 	vv, err = db.GetState("ns", "key3")
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, vv)
+	assert.NoError(t, err)
+	assert.Nil(t, vv)
 
 	batch = statedb.NewUpdateBatch()
 	batch.Delete("ns", "key2", version.NewHeight(1, 6))
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	vv, err = db.GetState("ns", "key2")
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, vv)
+	assert.NoError(t, err)
+	assert.Nil(t, vv)
 }
 
 
 func TestIterator(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db, err := dbProvider.GetDBHandle("testiterator")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	db.Open()
 	defer db.Close()
 	batch := statedb.NewUpdateBatch()
@@ -210,16 +210,16 @@ func testItr(t *testing.T, itr statedb.ResultsIterator, expectedKeys []string) {
 		queryResult, _ := itr.Next()
 		vkv := queryResult.(*statedb.VersionedKV)
 		key := vkv.Key
-		testutil.AssertEquals(t, key, expectedKey)
+		assert.Equal(t, expectedKey, key)
 	}
 	_, err := itr.Next()
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 }
 
 
 func TestQuery(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db, err := dbProvider.GetDBHandle("testquery")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	db.Open()
 	defer db.Close()
 	batch := statedb.NewUpdateBatch()
@@ -263,235 +263,235 @@ func TestQuery(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 
 	
 	itr, err := db.ExecuteQuery("ns1", `{"selector":{"owner":"jerry"}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err := itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord := queryResult1.(*statedb.VersionedKV)
 	stringRecord := string(versionedQueryRecord.Value)
 	bFoundRecord := strings.Contains(stringRecord, "jerry")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err := itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult2)
 
 	
 	itr, err = db.ExecuteQuery("ns2", `{"selector":{"owner":"jerry"}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord = queryResult1.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "jerry")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult2)
 
 	
 	itr, err = db.ExecuteQuery("ns3", `{"selector":{"owner":"jerry"}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult1)
 
 	
 	itr, err = db.ExecuteQuery("ns1", "this is an invalid query string")
-	testutil.AssertError(t, err, "Should have received an error for invalid query string")
+	assert.Error(t, err, "Should have received an error for invalid query string")
 
 	
 	itr, err = db.ExecuteQuery("ns1", `{"selector":{"owner":"not_a_valid_name"}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult3, err := itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult3)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult3)
 
 	
 	itr, err = db.ExecuteQuery("ns1", `{"selector":{"owner":"jerry"},"fields": ["owner", "asset_name", "color", "size"]}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord = queryResult1.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "jerry")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult2)
 
 	
 	itr, err = db.ExecuteQuery("ns2", `{"selector":{"owner":"jerry"},"fields": ["owner", "asset_name", "color", "size"]}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord = queryResult1.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "jerry")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult2)
 
 	
 	itr, err = db.ExecuteQuery("ns3", `{"selector":{"owner":"jerry"},"fields": ["owner", "asset_name", "color", "size"]}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult1)
 
 	
 	itr, err = db.ExecuteQuery("ns1", `{"selector":{"$and":[{"size":{"$gt": 5}},{"size":{"$lt":8}},{"$not":{"size":6}}]}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord = queryResult1.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "fred")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult2)
 
 	
 	itr, err = db.ExecuteQuery("ns2", `{"selector":{"$and":[{"size":{"$gt": 5}},{"size":{"$lt":8}},{"$not":{"size":6}}]}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord = queryResult1.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "fred")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult2)
 
 	
 	itr, err = db.ExecuteQuery("ns3", `{"selector":{"$and":[{"size":{"$gt": 5}},{"size":{"$lt":8}},{"$not":{"size":6}}]}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult1)
 
 	
 	itr, err = db.ExecuteQuery("ns1", `{"selector":{"color":"green","$or":[{"owner":"fred"},{"owner":"mary"}]}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord = queryResult1.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "green")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult2)
 	versionedQueryRecord = queryResult2.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "green")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult3, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult3)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult3)
 
 	
 	itr, err = db.ExecuteQuery("ns2", `{"selector":{"color":"green","$or":[{"owner":"fred"},{"owner":"mary"}]}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord = queryResult1.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "green")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult2)
 	versionedQueryRecord = queryResult2.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "green")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult3, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult3)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult3)
 
 	
 	itr, err = db.ExecuteQuery("ns3", `{"selector":{"color":"green","$or":[{"owner":"fred"},{"owner":"mary"}]}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult1)
 
 	
 	
 	itr, err = db.ExecuteQuery("ns1", `{"selector":{"$and":[{"size":{"$eq": 1000007}}]}}`)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	queryResult1, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNotNil(t, queryResult1)
+	assert.NoError(t, err)
+	assert.NotNil(t, queryResult1)
 	versionedQueryRecord = queryResult1.(*statedb.VersionedKV)
 	stringRecord = string(versionedQueryRecord.Value)
 	bFoundRecord = strings.Contains(stringRecord, "joe")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 	bFoundRecord = strings.Contains(stringRecord, "1000007")
-	testutil.AssertEquals(t, bFoundRecord, true)
+	assert.True(t, bFoundRecord)
 
 	
 	queryResult2, err = itr.Next()
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNil(t, queryResult2)
+	assert.NoError(t, err)
+	assert.Nil(t, queryResult2)
 
 }
 
@@ -499,7 +499,7 @@ func TestQuery(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 func TestGetVersion(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 
 	db, err := dbProvider.GetDBHandle("testgetversion")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	batch := statedb.NewUpdateBatch()
 	vv1 := statedb.VersionedValue{Value: []byte("value1"), Version: version.NewHeight(1, 1)}
@@ -513,7 +513,7 @@ func TestGetVersion(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	batch.Put("ns", "key4", vv2.Value, vv4.Version)
 	savePoint := version.NewHeight(1, 5)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	if bulkdb, ok := db.(statedb.BulkOptimizable); ok {
@@ -523,13 +523,13 @@ func TestGetVersion(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 
 	
 	resp, err := db.GetVersion("ns", "key2")
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertEquals(t, resp, version.NewHeight(1, 2))
+	assert.NoError(t, err)
+	assert.Equal(t, version.NewHeight(1, 2), resp)
 
 	
 	resp, err = db.GetVersion("ns2", "key2")
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertEquals(t, resp, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, resp)
 
 	
 	if bulkdb, ok := db.(statedb.BulkOptimizable); ok {
@@ -547,8 +547,8 @@ func TestGetVersion(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 
 		
 		resp, err := db.GetVersion("ns", "key3")
-		testutil.AssertNoError(t, err, "")
-		testutil.AssertEquals(t, resp, version.NewHeight(1, 3))
+		assert.NoError(t, err)
+		assert.Equal(t, version.NewHeight(1, 3), resp)
 
 	}
 }
@@ -556,7 +556,7 @@ func TestGetVersion(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 
 func TestSmallBatchSize(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db, err := dbProvider.GetDBHandle("testsmallbatchsize")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	db.Open()
 	defer db.Close()
 	batch := statedb.NewUpdateBatch()
@@ -589,44 +589,44 @@ func TestSmallBatchSize(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	
 
 	vv, _ := db.GetState("ns1", "key1")
-	testutil.AssertEquals(t, vv.Value, jsonValue1)
+	assert.JSONEq(t, string(jsonValue1), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key2")
-	testutil.AssertEquals(t, vv.Value, jsonValue2)
+	assert.JSONEq(t, string(jsonValue2), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key3")
-	testutil.AssertEquals(t, vv.Value, jsonValue3)
+	assert.JSONEq(t, string(jsonValue3), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key4")
-	testutil.AssertEquals(t, vv.Value, jsonValue4)
+	assert.JSONEq(t, string(jsonValue4), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key5")
-	testutil.AssertEquals(t, vv.Value, jsonValue5)
+	assert.JSONEq(t, string(jsonValue5), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key6")
-	testutil.AssertEquals(t, vv.Value, jsonValue6)
+	assert.JSONEq(t, string(jsonValue6), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key7")
-	testutil.AssertEquals(t, vv.Value, jsonValue7)
+	assert.JSONEq(t, string(jsonValue7), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key8")
-	testutil.AssertEquals(t, vv.Value, jsonValue8)
+	assert.JSONEq(t, string(jsonValue8), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key9")
-	testutil.AssertEquals(t, vv.Value, jsonValue9)
+	assert.JSONEq(t, string(jsonValue9), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key10")
-	testutil.AssertEquals(t, vv.Value, jsonValue10)
+	assert.JSONEq(t, string(jsonValue10), string(vv.Value))
 
 	vv, _ = db.GetState("ns1", "key11")
-	testutil.AssertEquals(t, vv.Value, jsonValue11)
+	assert.JSONEq(t, string(jsonValue11), string(vv.Value))
 }
 
 
 func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 
 	db, err := dbProvider.GetDBHandle("testbatchretry")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	batch := statedb.NewUpdateBatch()
 	vv1 := statedb.VersionedValue{Value: []byte("value1"), Version: version.NewHeight(1, 1)}
@@ -640,7 +640,7 @@ func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBPr
 	batch.Put("ns", "key4", vv4.Value, vv4.Version)
 	savePoint := version.NewHeight(1, 5)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	if bulkdb, ok := db.(statedb.BulkOptimizable); ok {
@@ -655,7 +655,7 @@ func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBPr
 	batch.Put("ns", "key4", vv4.Value, vv4.Version)
 	savePoint = version.NewHeight(1, 6)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	batch = statedb.NewUpdateBatch()
@@ -663,7 +663,7 @@ func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBPr
 	batch.Put("ns", "key3", vv3.Value, vv3.Version)
 	savePoint = version.NewHeight(1, 7)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	
@@ -672,7 +672,7 @@ func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBPr
 	batch.Put("ns", "key3", vv3.Value, vv3.Version)
 	savePoint = version.NewHeight(1, 8)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	jsonValue5 := []byte(`{"asset_name": "marble5","color": "blue","size": 5,"owner": "fred"}`)
@@ -693,7 +693,7 @@ func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBPr
 	batch.Put("ns1", "key8", jsonValue8, version.NewHeight(1, 12))
 	savePoint = version.NewHeight(1, 6)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	if bulkdb, ok := db.(statedb.BulkOptimizable); ok {
@@ -709,7 +709,7 @@ func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBPr
 	batch.Put("ns1", "key8", jsonValue8, version.NewHeight(1, 12))
 	savePoint = version.NewHeight(1, 6)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	
@@ -718,7 +718,7 @@ func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBPr
 	batch.Put("ns1", "key7", jsonValue7, version.NewHeight(1, 14))
 	savePoint = version.NewHeight(1, 15)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	
@@ -727,14 +727,14 @@ func TestBatchWithIndividualRetry(t *testing.T, dbProvider statedb.VersionedDBPr
 	batch.Put("ns1", "key7", jsonValue7, version.NewHeight(1, 17))
 	savePoint = version.NewHeight(1, 18)
 	err = db.ApplyUpdates(batch, savePoint)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 }
 
 
 func TestValueAndMetadataWrites(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db, err := dbProvider.GetDBHandle("testvalueandmetadata")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	batch := statedb.NewUpdateBatch()
 
 	vv1 := statedb.VersionedValue{Value: []byte("value1"), Metadata: []byte("metadata1"), Version: version.NewHeight(1, 1)}
@@ -749,22 +749,22 @@ func TestValueAndMetadataWrites(t *testing.T, dbProvider statedb.VersionedDBProv
 	db.ApplyUpdates(batch, version.NewHeight(2, 5))
 
 	vv, _ := db.GetState("ns1", "key1")
-	testutil.AssertEquals(t, vv, &vv1)
+	assert.Equal(t, &vv1, vv)
 
 	vv, _ = db.GetState("ns1", "key2")
-	testutil.AssertEquals(t, vv, &vv2)
+	assert.Equal(t, &vv2, vv)
 
 	vv, _ = db.GetState("ns2", "key3")
-	testutil.AssertEquals(t, vv, &vv3)
+	assert.Equal(t, &vv3, vv)
 
 	vv, _ = db.GetState("ns2", "key4")
-	testutil.AssertEquals(t, vv, &vv4)
+	assert.Equal(t, &vv4, vv)
 }
 
 
 func TestPaginatedRangeQuery(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 	db, err := dbProvider.GetDBHandle("testpaginatedrangequery")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	db.Open()
 	defer db.Close()
 	batch := statedb.NewUpdateBatch()
@@ -858,23 +858,23 @@ func TestPaginatedRangeQuery(t *testing.T, dbProvider statedb.VersionedDBProvide
 	
 	returnKeys := []string{}
 	_, err = executeRangeQuery(t, db, "ns1", "key1", "key15", int32(0), returnKeys)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	returnKeys = []string{"key1", "key10", "key11", "key12", "key13", "key14"}
 	_, err = executeRangeQuery(t, db, "ns1", "key1", "key15", int32(10), returnKeys)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	
 	returnKeys = []string{"key1", "key10"}
 	nextStartKey, err := executeRangeQuery(t, db, "ns1", "key1", "key22", int32(2), returnKeys)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	returnKeys = []string{"key11", "key12"}
 	_, err = executeRangeQuery(t, db, "ns1", nextStartKey, "key22", int32(2), returnKeys)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 2)
@@ -883,12 +883,12 @@ func TestPaginatedRangeQuery(t *testing.T, dbProvider statedb.VersionedDBProvide
 	
 	returnKeys = []string{}
 	_, err = executeRangeQuery(t, db, "ns1", "key1", "key15", int32(0), returnKeys)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	returnKeys = []string{"key1", "key10", "key11", "key12"}
 	_, err = executeRangeQuery(t, db, "ns1", "key1", "key15", int32(4), returnKeys)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	
 	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 1000)
@@ -938,12 +938,12 @@ func executeRangeQuery(t *testing.T, db statedb.VersionedDB, namespace, startKey
 func TestItrWithoutClose(t *testing.T, itr statedb.ResultsIterator, expectedKeys []string) {
 	for _, expectedKey := range expectedKeys {
 		queryResult, err := itr.Next()
-		testutil.AssertNoError(t, err, "An unexpected error was thrown during iterator Next()")
+		assert.NoError(t, err, "An unexpected error was thrown during iterator Next()")
 		vkv := queryResult.(*statedb.VersionedKV)
 		key := vkv.Key
-		testutil.AssertEquals(t, key, expectedKey)
+		assert.Equal(t, expectedKey, key)
 	}
 	queryResult, err := itr.Next()
-	testutil.AssertNoError(t, err, "An unexpected error was thrown during iterator Next()")
-	testutil.AssertNil(t, queryResult)
+	assert.NoError(t, err, "An unexpected error was thrown during iterator Next()")
+	assert.Nil(t, queryResult)
 }

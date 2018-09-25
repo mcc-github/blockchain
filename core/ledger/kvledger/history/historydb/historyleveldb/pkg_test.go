@@ -21,17 +21,16 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
-
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 
@@ -61,11 +60,11 @@ func newTestHistoryEnv(t *testing.T) *levelDBLockBasedHistoryEnv {
 	testBookkeepingEnv := bookkeeping.NewTestEnv(t)
 
 	txMgr, err := lockbasedtxmgr.NewLockBasedTxMgr(testLedgerID, testDB, nil, nil, testBookkeepingEnv.TestProvider)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	testHistoryDBProvider := NewHistoryDBProvider()
 	testHistoryDB, err := testHistoryDBProvider.GetDBHandle("TestHistoryDB")
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 
 	return &levelDBLockBasedHistoryEnv{t,
 		blockStorageTestEnv, testDBEnv, testBookkeepingEnv,

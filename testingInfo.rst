@@ -6,7 +6,7 @@ Testing
 
 Unit test
 ~~~~~~~~~
-See :doc:`building Hyperledger Fabric <dev-setup/build>` for unit testing instructions.
+See `building Hyperledger Fabric <http://mcc-github-blockchain.readthedocs.io/en/latest/dev-setup/build.html>` for unit testing instructions.
 
 See `Unit test coverage reports <https://jenkins.mcc-github.org/view/blockchain/job/blockchain-merge-x86_64/>`__
 

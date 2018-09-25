@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
@@ -58,23 +57,23 @@ func TestHostConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load docker HostConfig wrong, error: %s", err.Error())
 	}
-	testutil.AssertNotEquals(t, hostConfig.LogConfig, nil)
-	testutil.AssertEquals(t, hostConfig.LogConfig.Type, "json-file")
-	testutil.AssertEquals(t, hostConfig.LogConfig.Config["max-size"], "50m")
-	testutil.AssertEquals(t, hostConfig.LogConfig.Config["max-file"], "5")
+	assert.NotNil(t, hostConfig.LogConfig)
+	assert.Equal(t, "json-file", hostConfig.LogConfig.Type)
+	assert.Equal(t, "50m", hostConfig.LogConfig.Config["max-size"])
+	assert.Equal(t, "5", hostConfig.LogConfig.Config["max-file"])
 }
 
 func TestGetDockerHostConfig(t *testing.T) {
 	coreutil.SetupTestConfig()
 	hostConfig = nil 
 	hostConfig := getDockerHostConfig()
-	testutil.AssertNotNil(t, hostConfig)
-	testutil.AssertEquals(t, hostConfig.NetworkMode, "host")
-	testutil.AssertEquals(t, hostConfig.LogConfig.Type, "json-file")
-	testutil.AssertEquals(t, hostConfig.LogConfig.Config["max-size"], "50m")
-	testutil.AssertEquals(t, hostConfig.LogConfig.Config["max-file"], "5")
-	testutil.AssertEquals(t, hostConfig.Memory, int64(1024*1024*1024*2))
-	testutil.AssertEquals(t, hostConfig.CPUShares, int64(0))
+	assert.NotNil(t, hostConfig)
+	assert.Equal(t, "host", hostConfig.NetworkMode)
+	assert.Equal(t, "json-file", hostConfig.LogConfig.Type)
+	assert.Equal(t, "50m", hostConfig.LogConfig.Config["max-size"])
+	assert.Equal(t, "5", hostConfig.LogConfig.Config["max-file"])
+	assert.Equal(t, int64(1024*1024*1024*2), hostConfig.Memory)
+	assert.Equal(t, int64(0), hostConfig.CPUShares)
 }
 
 func Test_Start(t *testing.T) {

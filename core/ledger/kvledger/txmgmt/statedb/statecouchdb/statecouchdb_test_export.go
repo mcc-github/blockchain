@@ -6,11 +6,11 @@ SPDX-License-Identifier: Apache-2.0
 package statecouchdb
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
-	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
 )
 
 
@@ -30,19 +30,24 @@ func NewTestVDBEnv(t testing.TB) *TestVDBEnv {
 }
 
 
-func (env *TestVDBEnv) Cleanup(dbName string) {
+func (env *TestVDBEnv) Cleanup() {
 	env.t.Logf("Cleaningup TestVDBEnv")
+	CleanupDB(env.t, env.DBProvider)
+
 	env.DBProvider.Close()
-	CleanupDB(dbName)
 }
 
+func CleanupDB(t testing.TB, dbProvider statedb.VersionedDBProvider) {
+	couchdbProvider, _ := dbProvider.(*VersionedDBProvider)
+	for _, v := range couchdbProvider.databases {
+		if _, err := v.metadataDB.DropDatabase(); err != nil {
+			assert.Failf(t, "DropDatabase %s fails. err: %v", v.metadataDB.DBName, err)
+		}
 
-func CleanupDB(dbName string) {
-	
-	couchDBDef := couchdb.GetCouchDBDefinition()
-	couchInstance, _ := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
-	db := couchdb.CouchDatabase{CouchInstance: couchInstance, DBName: strings.ToLower(dbName)}
-	
-	db.DropDatabase()
+		for _, db := range v.namespaceDBs {
+			if _, err := db.DropDatabase(); err != nil {
+				assert.Failf(t, "DropDatabase %s fails. err: %v", db.DBName, err)
+			}
+		}
+	}
 }

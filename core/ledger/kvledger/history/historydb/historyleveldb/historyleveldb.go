@@ -196,6 +196,14 @@ func (historyDB *historyDB) ShouldRecover(lastAvailableBlock uint64) (bool, uint
 
 func (historyDB *historyDB) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
 	block := blockAndPvtdata.Block
+
+	
+	if block.Header.Number%1000 == 0 {
+		logger.Infof("Recommitting block [%d] to history database", block.Header.Number)
+	} else {
+		logger.Debugf("Recommitting block [%d] to history database", block.Header.Number)
+	}
+
 	if err := historyDB.Commit(block); err != nil {
 		return err
 	}

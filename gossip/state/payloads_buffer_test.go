@@ -147,3 +147,119 @@ func TestPayloadsBufferImpl_ConcurrentPush(t *testing.T) {
 	
 	assert.Equal(t, 1, buffer.Size())
 }
+
+
+func TestPayloadsBufferImpl_Interleave(t *testing.T) {
+	buffer := NewPayloadsBuffer(1)
+	assert.Equal(t, buffer.Next(), uint64(1))
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+	payload, err := randomPayloadWithSeqNum(1)
+	assert.NoError(t, err, "generating random payload failed")
+	buffer.Push(payload)
+
+	payload, err = randomPayloadWithSeqNum(2)
+	assert.NoError(t, err, "generating random payload failed")
+	buffer.Push(payload)
+
+	select {
+	case <-buffer.Ready():
+	case <-time.After(500 * time.Millisecond):
+		t.Error("buffer wasn't ready after 500 ms for first sequence")
+	}
+
+	
+	for payload := buffer.Pop(); payload != nil; payload = buffer.Pop() {
+	}
+
+	
+	select {
+	case <-buffer.Ready():
+		t.Error("buffer should not be ready as no new sequences have come")
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	
+	
+	
+	payload, err = randomPayloadWithSeqNum(3)
+	assert.NoError(t, err, "generating random payload failed")
+	buffer.Push(payload)
+
+	select {
+	case <-buffer.Ready():
+	case <-time.After(500 * time.Millisecond):
+		t.Error("buffer wasn't ready after 500 ms for second sequence")
+	}
+	payload = buffer.Pop()
+	assert.NotNil(t, payload, "payload should not be nil")
+
+	
+
+	
+	payload, err = randomPayloadWithSeqNum(4)
+	assert.NoError(t, err, "generating random payload failed")
+	buffer.Push(payload)
+
+	
+	payload = buffer.Pop()
+	assert.NotNil(t, payload, "payload should not be nil")
+
+	
+	payload, err = randomPayloadWithSeqNum(5)
+	assert.NoError(t, err, "generating random payload failed")
+	buffer.Push(payload)
+
+	
+	payload = buffer.Pop()
+	assert.NotNil(t, payload, "payload should not be nil")
+
+	
+	
+	
+	select {
+	case <-buffer.Ready():
+		
+		
+		
+		t.Log("buffer ready (1) -- should be error")
+		t.Fail()
+	case <-time.After(500 * time.Millisecond):
+		t.Log("buffer not ready (1)")
+	}
+	payload = buffer.Pop()
+	t.Logf("payload: %v", payload)
+	assert.Nil(t, payload, "payload should be nil")
+
+	select {
+	case <-buffer.Ready():
+		
+		
+		
+		t.Log("buffer ready (2) -- should be error")
+		t.Fail()
+	case <-time.After(500 * time.Millisecond):
+		t.Log("buffer not ready (2)")
+	}
+	payload = buffer.Pop()
+	assert.Nil(t, payload, "payload should be nil")
+	t.Logf("payload: %v", payload)
+
+	select {
+	case <-buffer.Ready():
+		t.Error("buffer ready (3)")
+	case <-time.After(500 * time.Millisecond):
+		t.Log("buffer not ready (3) -- good")
+	}
+}

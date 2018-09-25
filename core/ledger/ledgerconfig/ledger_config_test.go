@@ -5,9 +5,9 @@ package ledgerconfig
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	ledgertestutil "github.com/mcc-github/blockchain/core/ledger/testutil"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIsCouchDBEnabledDefault(t *testing.T) {
@@ -21,7 +21,7 @@ func TestIsCouchDBEnabledDefault(t *testing.T) {
 		defer viper.Set("ledger.state.stateDatabase", "CouchDB")
 	}
 	defaultValue := IsCouchDBEnabled()
-	testutil.AssertEquals(t, defaultValue, false) 
+	assert.False(t, defaultValue) 
 }
 
 func TestIsCouchDBEnabled(t *testing.T) {
@@ -29,72 +29,43 @@ func TestIsCouchDBEnabled(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.state.stateDatabase", "CouchDB")
 	updatedValue := IsCouchDBEnabled()
-	testutil.AssertEquals(t, updatedValue, true) 
+	assert.True(t, updatedValue) 
 }
 
 func TestLedgerConfigPathDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
-	testutil.AssertEquals(t,
-		GetRootPath(),
-		"/var/mcc-github/production/ledgersData")
-	testutil.AssertEquals(t,
-		GetLedgerProviderPath(),
-		"/var/mcc-github/production/ledgersData/ledgerProvider")
-	testutil.AssertEquals(t,
-		GetStateLevelDBPath(),
-		"/var/mcc-github/production/ledgersData/stateLeveldb")
-	testutil.AssertEquals(t,
-		GetHistoryLevelDBPath(),
-		"/var/mcc-github/production/ledgersData/historyLeveldb")
-	testutil.AssertEquals(t,
-		GetBlockStorePath(),
-		"/var/mcc-github/production/ledgersData/chains")
-	testutil.AssertEquals(t,
-		GetPvtdataStorePath(),
-		"/var/mcc-github/production/ledgersData/pvtdataStore")
-	testutil.AssertEquals(t,
-		GetInternalBookkeeperPath(),
-		"/var/mcc-github/production/ledgersData/bookkeeper")
-
+	assert.Equal(t, "/var/mcc-github/production/ledgersData", GetRootPath())
+	assert.Equal(t, "/var/mcc-github/production/ledgersData/ledgerProvider", GetLedgerProviderPath())
+	assert.Equal(t, "/var/mcc-github/production/ledgersData/stateLeveldb", GetStateLevelDBPath())
+	assert.Equal(t, "/var/mcc-github/production/ledgersData/historyLeveldb", GetHistoryLevelDBPath())
+	assert.Equal(t, "/var/mcc-github/production/ledgersData/chains", GetBlockStorePath())
+	assert.Equal(t, "/var/mcc-github/production/ledgersData/pvtdataStore", GetPvtdataStorePath())
+	assert.Equal(t, "/var/mcc-github/production/ledgersData/bookkeeper", GetInternalBookkeeperPath())
 }
 
 func TestLedgerConfigPath(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("peer.fileSystemPath", "/tmp/mcc-github/production")
-	testutil.AssertEquals(t,
-		GetRootPath(),
-		"/tmp/mcc-github/production/ledgersData")
-	testutil.AssertEquals(t,
-		GetLedgerProviderPath(),
-		"/tmp/mcc-github/production/ledgersData/ledgerProvider")
-	testutil.AssertEquals(t,
-		GetStateLevelDBPath(),
-		"/tmp/mcc-github/production/ledgersData/stateLeveldb")
-	testutil.AssertEquals(t,
-		GetHistoryLevelDBPath(),
-		"/tmp/mcc-github/production/ledgersData/historyLeveldb")
-	testutil.AssertEquals(t,
-		GetBlockStorePath(),
-		"/tmp/mcc-github/production/ledgersData/chains")
-	testutil.AssertEquals(t,
-		GetPvtdataStorePath(),
-		"/tmp/mcc-github/production/ledgersData/pvtdataStore")
-	testutil.AssertEquals(t,
-		GetInternalBookkeeperPath(),
-		"/tmp/mcc-github/production/ledgersData/bookkeeper")
+	assert.Equal(t, "/tmp/mcc-github/production/ledgersData", GetRootPath())
+	assert.Equal(t, "/tmp/mcc-github/production/ledgersData/ledgerProvider", GetLedgerProviderPath())
+	assert.Equal(t, "/tmp/mcc-github/production/ledgersData/stateLeveldb", GetStateLevelDBPath())
+	assert.Equal(t, "/tmp/mcc-github/production/ledgersData/historyLeveldb", GetHistoryLevelDBPath())
+	assert.Equal(t, "/tmp/mcc-github/production/ledgersData/chains", GetBlockStorePath())
+	assert.Equal(t, "/tmp/mcc-github/production/ledgersData/pvtdataStore", GetPvtdataStorePath())
+	assert.Equal(t, "/tmp/mcc-github/production/ledgersData/bookkeeper", GetInternalBookkeeperPath())
 }
 
 func TestGetTotalLimitDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defaultValue := GetTotalQueryLimit()
-	testutil.AssertEquals(t, defaultValue, 10000) 
+	assert.Equal(t, 10000, defaultValue) 
 }
 
 func TestGetTotalLimitUnset(t *testing.T) {
 	viper.Reset()
 	defaultValue := GetTotalQueryLimit()
-	testutil.AssertEquals(t, defaultValue, 10000) 
+	assert.Equal(t, 10000, defaultValue) 
 }
 
 func TestGetTotalLimit(t *testing.T) {
@@ -102,19 +73,19 @@ func TestGetTotalLimit(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.state.totalQueryLimit", 5000)
 	updatedValue := GetTotalQueryLimit()
-	testutil.AssertEquals(t, updatedValue, 5000) 
+	assert.Equal(t, 5000, updatedValue) 
 }
 
 func TestGetQueryLimitDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defaultValue := GetInternalQueryLimit()
-	testutil.AssertEquals(t, defaultValue, 1000) 
+	assert.Equal(t, 1000, defaultValue) 
 }
 
 func TestGetQueryLimitUnset(t *testing.T) {
 	viper.Reset()
 	defaultValue := GetInternalQueryLimit()
-	testutil.AssertEquals(t, defaultValue, 1000) 
+	assert.Equal(t, 1000, defaultValue) 
 }
 
 func TestGetQueryLimit(t *testing.T) {
@@ -122,19 +93,19 @@ func TestGetQueryLimit(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 5000)
 	updatedValue := GetInternalQueryLimit()
-	testutil.AssertEquals(t, updatedValue, 5000) 
+	assert.Equal(t, 5000, updatedValue) 
 }
 
 func TestMaxBatchUpdateSizeDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defaultValue := GetMaxBatchUpdateSize()
-	testutil.AssertEquals(t, defaultValue, 1000) 
+	assert.Equal(t, 1000, defaultValue) 
 }
 
 func TestMaxBatchUpdateSizeUnset(t *testing.T) {
 	viper.Reset()
 	defaultValue := GetMaxBatchUpdateSize()
-	testutil.AssertEquals(t, defaultValue, 500) 
+	assert.Equal(t, 500, defaultValue) 
 }
 
 func TestMaxBatchUpdateSize(t *testing.T) {
@@ -142,27 +113,27 @@ func TestMaxBatchUpdateSize(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.state.couchDBConfig.maxBatchUpdateSize", 2000)
 	updatedValue := GetMaxBatchUpdateSize()
-	testutil.AssertEquals(t, updatedValue, 2000) 
+	assert.Equal(t, 2000, updatedValue) 
 }
 
 func TestPvtdataStorePurgeIntervalDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defaultValue := GetPvtdataStorePurgeInterval()
-	testutil.AssertEquals(t, defaultValue, uint64(100)) 
+	assert.Equal(t, uint64(100), defaultValue) 
 }
 
 func TestPvtdataStorePurgeIntervalUnset(t *testing.T) {
 	viper.Reset()
 	defaultValue := GetPvtdataStorePurgeInterval()
-	testutil.AssertEquals(t, defaultValue, uint64(100)) 
+	assert.Equal(t, uint64(100), defaultValue) 
 }
 
 func TestIsQueryReadHasingEnabled(t *testing.T) {
-	testutil.AssertEquals(t, IsQueryReadsHashingEnabled(), true)
+	assert.True(t, IsQueryReadsHashingEnabled())
 }
 
 func TestGetMaxDegreeQueryReadsHashing(t *testing.T) {
-	testutil.AssertEquals(t, GetMaxDegreeQueryReadsHashing(), uint32(50))
+	assert.Equal(t, uint32(50), GetMaxDegreeQueryReadsHashing())
 }
 
 func TestPvtdataStorePurgeInterval(t *testing.T) {
@@ -170,13 +141,13 @@ func TestPvtdataStorePurgeInterval(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.pvtdataStore.purgeInterval", 1000)
 	updatedValue := GetPvtdataStorePurgeInterval()
-	testutil.AssertEquals(t, updatedValue, uint64(1000)) 
+	assert.Equal(t, uint64(1000), updatedValue) 
 }
 
 func TestIsHistoryDBEnabledDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defaultValue := IsHistoryDBEnabled()
-	testutil.AssertEquals(t, defaultValue, false) 
+	assert.False(t, defaultValue) 
 }
 
 func TestIsHistoryDBEnabledTrue(t *testing.T) {
@@ -184,7 +155,7 @@ func TestIsHistoryDBEnabledTrue(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.history.enableHistoryDatabase", true)
 	updatedValue := IsHistoryDBEnabled()
-	testutil.AssertEquals(t, updatedValue, true) 
+	assert.True(t, updatedValue) 
 }
 
 func TestIsHistoryDBEnabledFalse(t *testing.T) {
@@ -192,19 +163,19 @@ func TestIsHistoryDBEnabledFalse(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.history.enableHistoryDatabase", false)
 	updatedValue := IsHistoryDBEnabled()
-	testutil.AssertEquals(t, updatedValue, false) 
+	assert.False(t, updatedValue) 
 }
 
 func TestIsAutoWarmIndexesEnabledDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defaultValue := IsAutoWarmIndexesEnabled()
-	testutil.AssertEquals(t, defaultValue, true) 
+	assert.True(t, defaultValue) 
 }
 
 func TestIsAutoWarmIndexesEnabledUnset(t *testing.T) {
 	viper.Reset()
 	defaultValue := IsAutoWarmIndexesEnabled()
-	testutil.AssertEquals(t, defaultValue, true) 
+	assert.True(t, defaultValue) 
 }
 
 func TestIsAutoWarmIndexesEnabledTrue(t *testing.T) {
@@ -212,7 +183,7 @@ func TestIsAutoWarmIndexesEnabledTrue(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", true)
 	updatedValue := IsAutoWarmIndexesEnabled()
-	testutil.AssertEquals(t, updatedValue, true) 
+	assert.True(t, updatedValue) 
 }
 
 func TestIsAutoWarmIndexesEnabledFalse(t *testing.T) {
@@ -220,19 +191,19 @@ func TestIsAutoWarmIndexesEnabledFalse(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", false)
 	updatedValue := IsAutoWarmIndexesEnabled()
-	testutil.AssertEquals(t, updatedValue, false) 
+	assert.False(t, updatedValue) 
 }
 
 func TestGetWarmIndexesAfterNBlocksDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defaultValue := GetWarmIndexesAfterNBlocks()
-	testutil.AssertEquals(t, defaultValue, 1) 
+	assert.Equal(t, 1, defaultValue) 
 }
 
 func TestGetWarmIndexesAfterNBlocksUnset(t *testing.T) {
 	viper.Reset()
 	defaultValue := GetWarmIndexesAfterNBlocks()
-	testutil.AssertEquals(t, defaultValue, 1) 
+	assert.Equal(t, 1, defaultValue) 
 }
 
 func TestGetWarmIndexesAfterNBlocks(t *testing.T) {
@@ -240,11 +211,11 @@ func TestGetWarmIndexesAfterNBlocks(t *testing.T) {
 	defer ledgertestutil.ResetConfigToDefaultValues()
 	viper.Set("ledger.state.couchDBConfig.warmIndexesAfterNBlocks", 10)
 	updatedValue := GetWarmIndexesAfterNBlocks()
-	testutil.AssertEquals(t, updatedValue, 10)
+	assert.Equal(t, 10, updatedValue)
 }
 
 func TestGetMaxBlockfileSize(t *testing.T) {
-	testutil.AssertEquals(t, GetMaxBlockfileSize(), 67108864)
+	assert.Equal(t, 67108864, GetMaxBlockfileSize())
 }
 
 func setUpCoreYAMLConfig() {

@@ -73,12 +73,12 @@ func ConstructBytesProposalResponsePayload(chainID string, ccid *pb.ChaincodeID,
 
 
 
-func ConstructSingedTxEnvWithDefaultSigner(chainID string, ccid *pb.ChaincodeID, response *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte) (*common.Envelope, string, error) {
-	return ConstructSingedTxEnv(chainID, ccid, response, simulationResults, txid, events, visibility, signer)
+func ConstructSignedTxEnvWithDefaultSigner(chainID string, ccid *pb.ChaincodeID, response *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte) (*common.Envelope, string, error) {
+	return ConstructSignedTxEnv(chainID, ccid, response, simulationResults, txid, events, visibility, signer)
 }
 
 
-func ConstructSingedTxEnv(chainID string, ccid *pb.ChaincodeID, pResponse *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte, signer msp.SigningIdentity) (*common.Envelope, string, error) {
+func ConstructSignedTxEnv(chainID string, ccid *pb.ChaincodeID, pResponse *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte, signer msp.SigningIdentity) (*common.Envelope, string, error) {
 	ss, err := signer.Serialize()
 	if err != nil {
 		return nil, "", err
@@ -123,5 +123,5 @@ func ConstructUnsignedTxEnv(chainID string, ccid *pb.ChaincodeID, response *pb.R
 		sigId, _ = mspLcl.GetDefaultSigningIdentity()
 	}
 
-	return ConstructSingedTxEnv(chainID, ccid, response, simulationResults, txid, events, visibility, sigId)
+	return ConstructSignedTxEnv(chainID, ccid, response, simulationResults, txid, events, visibility, sigId)
 }

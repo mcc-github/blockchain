@@ -9,6 +9,7 @@ package kvledger
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
@@ -140,7 +141,7 @@ func (l *kvLedger) recoverDBs() error {
 
 
 func (l *kvLedger) recommitLostBlocks(firstBlockNum uint64, lastBlockNum uint64, recoverables ...recoverable) error {
-	logger.Debugf("recommitLostBlocks() - firstBlockNum=%d, lastBlockNum=%d, recoverables=%#v", firstBlockNum, lastBlockNum, recoverables)
+	logger.Infof("Recommitting lost blocks - firstBlockNum=%d, lastBlockNum=%d, recoverables=%#v", firstBlockNum, lastBlockNum, recoverables)
 	var err error
 	var blockAndPvtdata *ledger.BlockAndPvtData
 	for blockNumber := firstBlockNum; blockNumber <= lastBlockNum; blockNumber++ {
@@ -153,6 +154,7 @@ func (l *kvLedger) recommitLostBlocks(firstBlockNum uint64, lastBlockNum uint64,
 			}
 		}
 	}
+	logger.Infof("Recommitted lost blocks - firstBlockNum=%d, lastBlockNum=%d, recoverables=%#v", firstBlockNum, lastBlockNum, recoverables)
 	return nil
 }
 
@@ -254,33 +256,45 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	block := pvtdataAndBlock.Block
 	blockNo := pvtdataAndBlock.Block.Header.Number
 
-	logger.Debugf("Channel [%s]: Validating state for block [%d]", l.ledgerID, blockNo)
+	startStateValidation := time.Now()
+	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, blockNo)
 	err = l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
 	if err != nil {
 		return err
 	}
+	elapsedStateValidation := time.Since(startStateValidation) / time.Millisecond 
 
-	logger.Debugf("Channel [%s]: Committing block [%d] to storage", l.ledgerID, blockNo)
-
+	startCommitBlockStorage := time.Now()
+	logger.Debugf("[%s] Committing block [%d] to storage", l.ledgerID, blockNo)
 	l.blockAPIsRWLock.Lock()
 	defer l.blockAPIsRWLock.Unlock()
 	if err = l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
 		return err
 	}
-	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", l.ledgerID, block.Header.Number, len(block.Data.Data))
+	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond 
 
-	logger.Debugf("Channel [%s]: Committing block [%d] transactions to state database", l.ledgerID, blockNo)
+	startCommitState := time.Now()
+	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
 	if err = l.txtmgmt.Commit(); err != nil {
 		panic(errors.WithMessage(err, "error during commit to txmgr"))
 	}
+	elapsedCommitState := time.Since(startCommitState) / time.Millisecond 
 
 	
+	
 	if ledgerconfig.IsHistoryDBEnabled() {
-		logger.Debugf("Channel [%s]: Committing block [%d] transactions to history database", l.ledgerID, blockNo)
+		logger.Debugf("[%s] Committing block [%d] transactions to history database", l.ledgerID, blockNo)
 		if err := l.historyDB.Commit(block); err != nil {
 			panic(errors.WithMessage(err, "Error during commit to history db"))
 		}
 	}
+
+	elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond 
+
+	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
+		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
+		elapsedStateValidation, elapsedCommitBlockStorage, elapsedCommitState)
+
 	return nil
 }
 

@@ -22,8 +22,8 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -35,12 +35,12 @@ const (
 
 func TestRWSetV1BackwardCompatible(t *testing.T) {
 	protoBytes, err := ioutil.ReadFile(binaryTestFileName)
-	testutil.AssertNoError(t, err, "")
+	assert.NoError(t, err)
 	rwset1 := &rwset.TxReadWriteSet{}
-	testutil.AssertNoError(t, proto.Unmarshal(protoBytes, rwset1), "")
+	assert.NoError(t, proto.Unmarshal(protoBytes, rwset1))
 	rwset2 := constructSampleRWSet()
 	t.Logf("rwset1=%s, rwset2=%s", spew.Sdump(rwset1), spew.Sdump(rwset2))
-	testutil.AssertEquals(t, rwset1, rwset2)
+	assert.Equal(t, rwset2, rwset1)
 }
 
 
@@ -49,8 +49,8 @@ func TestRWSetV1BackwardCompatible(t *testing.T) {
 
 func testPrepareBinaryFileSampleRWSetV1(t *testing.T) {
 	b, err := proto.Marshal(constructSampleRWSet())
-	testutil.AssertNoError(t, err, "")
-	testutil.AssertNoError(t, ioutil.WriteFile(binaryTestFileName, b, 0775), "")
+	assert.NoError(t, err)
+	assert.NoError(t, ioutil.WriteFile(binaryTestFileName, b, 0775))
 }
 
 func constructSampleRWSet() *rwset.TxReadWriteSet {
