@@ -8,6 +8,11 @@ package etcdraft_test
 import (
 	"time"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+
+	"code.cloudfoundry.org/clock/fakeclock"
+	"github.com/coreos/etcd/raft"
 	"github.com/mcc-github/blockchain/common/flogging"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
@@ -15,11 +20,6 @@ import (
 	mockblockcutter "github.com/mcc-github/blockchain/orderer/mocks/common/blockcutter"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"code.cloudfoundry.org/clock/fakeclock"
-	"github.com/coreos/etcd/raft"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -56,33 +56,20 @@ var _ = Describe("Chain", func() {
 			logger   *flogging.FabricLogger
 		)
 
-		campaign := func() {
-			clock.Increment(interval)
-			Consistently(observeC).ShouldNot(Receive())
-
-			clock.Increment(interval)
-			
-			
-			
-			
-			clock.Increment(interval)
-			Eventually(observeC).Should(Receive())
-		}
-
 		BeforeEach(func() {
 			clock = fakeclock.NewFakeClock(time.Now())
 			storage = raft.NewMemoryStorage()
 			logger = flogging.NewFabricLogger(zap.NewNop())
 			observeC = make(chan uint64, 1)
 			opts = etcdraft.Options{
-				RaftID:          uint64(1),
+				RaftID:          1,
 				Clock:           clock,
 				TickInterval:    interval,
 				ElectionTick:    2,
 				HeartbeatTick:   1,
 				MaxSizePerMsg:   1024 * 1024,
 				MaxInflightMsgs: 256,
-				Peers:           []raft.Peer{{ID: uint64(1)}},
+				Peers:           []raft.Peer{{ID: 1}},
 				Logger:          logger,
 				Storage:         storage,
 			}
@@ -124,19 +111,27 @@ var _ = Describe("Chain", func() {
 
 		Context("when no raft leader is elected", func() {
 			It("fails to order envelope", func() {
-				err := chain.Order(m, uint64(0))
+				err := chain.Order(m, 0)
 				Expect(err).To(MatchError("no raft leader"))
 			})
 		})
 
 		Context("when raft leader is elected", func() {
 			JustBeforeEach(func() {
-				campaign()
+				Eventually(func() bool {
+					clock.Increment(interval)
+					select {
+					case <-observeC:
+						return true
+					default:
+						return false
+					}
+				}).Should(BeTrue())
 			})
 
 			It("fails to order envelope if chain is halted", func() {
 				chain.Halt()
-				err := chain.Order(m, uint64(0))
+				err := chain.Order(m, 0)
 				Expect(err).To(MatchError("chain is stopped"))
 			})
 
@@ -146,7 +141,7 @@ var _ = Describe("Chain", func() {
 
 				By("cutting next batch directly")
 				cutter.CutNext = true
-				err := chain.Order(m, uint64(0))
+				err := chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(support.WriteBlockCallCount).Should(Equal(1))
 
@@ -154,7 +149,7 @@ var _ = Describe("Chain", func() {
 				cutter.CutNext = false
 				timeout := time.Second
 				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
-				err = chain.Order(m, uint64(0))
+				err = chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
 
 				clock.WaitForNWatchersAndIncrement(timeout, 2)
@@ -168,19 +163,15 @@ var _ = Describe("Chain", func() {
 				timeout := time.Second
 				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
 
-				err := chain.Order(m, uint64(0))
+				err := chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() int {
-					return len(cutter.CurBatch)
-				}).Should(Equal(1))
+				Eventually(cutter.CurBatch).Should(HaveLen(1))
 
 				clock.WaitForNWatchersAndIncrement(timeout/2, 2)
 
-				err = chain.Order(m, uint64(0))
+				err = chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() int {
-					return len(cutter.CurBatch)
-				}).Should(Equal(2))
+				Eventually(cutter.CurBatch).Should(HaveLen(2))
 
 				
 				
@@ -193,11 +184,9 @@ var _ = Describe("Chain", func() {
 				timeout := time.Second
 				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
 
-				err := chain.Order(m, uint64(0))
+				err := chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() int {
-					return len(cutter.CurBatch)
-				}).Should(Equal(1))
+				Eventually(cutter.CurBatch).Should(HaveLen(1))
 
 				
 				Eventually(clock.WatcherCount).Should(Equal(2))
@@ -213,29 +202,25 @@ var _ = Describe("Chain", func() {
 				timeout := time.Second
 				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
 
-				err := chain.Order(m, uint64(0))
+				err := chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() int {
-					return len(cutter.CurBatch)
-				}).Should(Equal(1))
+				Eventually(cutter.CurBatch).Should(HaveLen(1))
 
 				clock.WaitForNWatchersAndIncrement(timeout/2, 2)
 
 				By("force a batch to be cut before timer expires")
 				cutter.CutNext = true
-				err = chain.Order(m, uint64(0))
+				err = chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(support.WriteBlockCallCount).Should(Equal(1))
 				Expect(support.CreateNextBlockArgsForCall(0)).To(HaveLen(2))
-				Expect(cutter.CurBatch).To(HaveLen(0))
+				Expect(cutter.CurBatch()).To(HaveLen(0))
 
 				
 				cutter.CutNext = false
-				err = chain.Order(m, uint64(0))
+				err = chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() int {
-					return len(cutter.CurBatch)
-				}).Should(Equal(1))
+				Eventually(cutter.CurBatch).Should(HaveLen(1))
 
 				clock.WaitForNWatchersAndIncrement(timeout/2, 2)
 				Consistently(support.WriteBlockCallCount).Should(Equal(1))
@@ -252,14 +237,12 @@ var _ = Describe("Chain", func() {
 				timeout := time.Second
 				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
 
-				err := chain.Order(m, uint64(0))
+				err := chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() int {
-					return len(cutter.CurBatch)
-				}).Should(Equal(1))
+				Eventually(cutter.CurBatch).Should(HaveLen(1))
 
 				cutter.IsolatedTx = true
-				err = chain.Order(m, uint64(0))
+				err = chain.Order(m, 0)
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(support.CreateNextBlockCallCount).Should(Equal(2))
@@ -279,21 +262,17 @@ var _ = Describe("Chain", func() {
 				It("enqueue if an envelope is still valid", func() {
 					support.ProcessNormalMsgReturns(1, nil)
 
-					err := chain.Order(m, uint64(0))
+					err := chain.Order(m, 0)
 					Expect(err).NotTo(HaveOccurred())
-					Eventually(func() int {
-						return len(cutter.CurBatch)
-					}).Should(Equal(1))
+					Eventually(cutter.CurBatch).Should(HaveLen(1))
 				})
 
 				It("does not enqueue if an envelope is not valid", func() {
 					support.ProcessNormalMsgReturns(1, errors.Errorf("Envelope is invalid"))
 
-					err := chain.Order(m, uint64(0))
+					err := chain.Order(m, 0)
 					Expect(err).NotTo(HaveOccurred())
-					Consistently(func() int {
-						return len(cutter.CurBatch)
-					}).Should(Equal(0))
+					Consistently(cutter.CurBatch).Should(HaveLen(0))
 				})
 			})
 
@@ -312,7 +291,7 @@ var _ = Describe("Chain", func() {
 				}
 
 				Expect(func() {
-					chain.Configure(c, uint64(0))
+					chain.Configure(c, 0)
 				}).To(Panic())
 			})
 		})

@@ -329,8 +329,9 @@ func serve(args []string) error {
 		registerDiscoveryService(peerServer, policyMgr, lifecycle)
 	}
 
-	logger.Infof("Starting peer with ID=[%s], network ID=[%s], address=[%s]",
-		peerEndpoint.Id, viper.GetString("peer.networkId"), peerEndpoint.Address)
+	networkID := viper.GetString("peer.networkId")
+
+	logger.Infof("Starting peer with ID=[%s], network ID=[%s], address=[%s]", peerEndpoint.Id, networkID, peerEndpoint.Address)
 
 	
 	
@@ -365,8 +366,7 @@ func serve(args []string) error {
 		}()
 	}
 
-	logger.Infof("Started peer with ID=[%s], network ID=[%s], address=[%s]",
-		peerEndpoint.Id, viper.GetString("peer.networkId"), peerEndpoint.Address)
+	logger.Infof("Started peer with ID=[%s], network ID=[%s], address=[%s]", peerEndpoint.Id, networkID, peerEndpoint.Address)
 
 	
 	return <-serve

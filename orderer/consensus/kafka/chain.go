@@ -117,7 +117,12 @@ type chainImpl struct {
 
 
 func (chain *chainImpl) Errored() <-chan struct{} {
-	return chain.errorChan
+	select {
+	case <-chain.startChan:
+		return chain.errorChan
+	default:
+		return nil
+	}
 }
 
 
@@ -291,8 +296,8 @@ func startThread(chain *chainImpl) {
 
 	chain.doneProcessingMessagesToBlocks = make(chan struct{})
 
-	close(chain.startChan)                
 	chain.errorChan = make(chan struct{}) 
+	close(chain.startChan)                
 
 	logger.Infof("[channel: %s] Start phase completed successfully", chain.channel.topic())
 

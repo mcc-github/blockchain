@@ -142,6 +142,11 @@ func (c *Chain) Halt() {
 }
 
 
+func (c *Chain) Step(req *orderer.StepRequest, sender uint64) error {
+	panic("not implemented")
+}
+
+
 
 
 

@@ -59,8 +59,16 @@ func TestLoadSCCPluginInvalid(t *testing.T) {
 	assert.Panics(t, func() { loadPlugin("missing.so") }, "expected panic with invalid path")
 }
 
+
+
+var raceEnabled bool
+
 func buildExamplePlugin(t *testing.T, path, pluginPackage string) {
-	cmd := exec.Command("go", "build", "-tags", goBuildTags, "-o", path, "-buildmode=plugin", pluginPackage)
+	cmd := exec.Command("go", "build", "-tags", goBuildTags, "-o", path, "-buildmode=plugin")
+	if raceEnabled {
+		cmd.Args = append(cmd.Args, "-race")
+	}
+	cmd.Args = append(cmd.Args, pluginPackage)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Error: %s, Could not build plugin: %s", err, output)

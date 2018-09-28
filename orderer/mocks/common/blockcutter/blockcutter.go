@@ -17,6 +17,8 @@ limitations under the License.
 package blockcutter
 
 import (
+	"sync"
+
 	"github.com/mcc-github/blockchain/common/flogging"
 	cb "github.com/mcc-github/blockchain/protos/common"
 )
@@ -40,7 +42,10 @@ type Receiver struct {
 	SkipAppendCurBatch bool
 
 	
-	CurBatch []*cb.Envelope
+	mutex sync.Mutex
+
+	
+	curBatch []*cb.Envelope
 
 	
 	
@@ -63,28 +68,31 @@ func (mbc *Receiver) Ordered(env *cb.Envelope) ([][]*cb.Envelope, bool) {
 		<-mbc.Block
 	}()
 
+	mbc.mutex.Lock()
+	defer mbc.mutex.Unlock()
+
 	if mbc.IsolatedTx {
 		logger.Debugf("Receiver: Returning dual batch")
-		res := [][]*cb.Envelope{mbc.CurBatch, {env}}
-		mbc.CurBatch = nil
+		res := [][]*cb.Envelope{mbc.curBatch, {env}}
+		mbc.curBatch = nil
 		return res, false
 	}
 
 	if mbc.CutAncestors {
 		logger.Debugf("Receiver: Returning current batch and appending newest env")
-		res := [][]*cb.Envelope{mbc.CurBatch}
-		mbc.CurBatch = []*cb.Envelope{env}
+		res := [][]*cb.Envelope{mbc.curBatch}
+		mbc.curBatch = []*cb.Envelope{env}
 		return res, true
 	}
 
 	if !mbc.SkipAppendCurBatch {
-		mbc.CurBatch = append(mbc.CurBatch, env)
+		mbc.curBatch = append(mbc.curBatch, env)
 	}
 
 	if mbc.CutNext {
 		logger.Debugf("Receiver: Returning regular batch")
-		res := [][]*cb.Envelope{mbc.CurBatch}
-		mbc.CurBatch = nil
+		res := [][]*cb.Envelope{mbc.curBatch}
+		mbc.curBatch = nil
 		return res, false
 	}
 
@@ -94,8 +102,16 @@ func (mbc *Receiver) Ordered(env *cb.Envelope) ([][]*cb.Envelope, bool) {
 
 
 func (mbc *Receiver) Cut() []*cb.Envelope {
+	mbc.mutex.Lock()
+	defer mbc.mutex.Unlock()
 	logger.Debugf("Cutting batch")
-	res := mbc.CurBatch
-	mbc.CurBatch = nil
+	res := mbc.curBatch
+	mbc.curBatch = nil
 	return res
+}
+
+func (mbc *Receiver) CurBatch() []*cb.Envelope {
+	mbc.mutex.Lock()
+	defer mbc.mutex.Unlock()
+	return mbc.curBatch
 }

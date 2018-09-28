@@ -109,7 +109,9 @@ func TestNoSystemChain(t *testing.T) {
 	consenters := make(map[string]consensus.Consenter)
 	consenters[conf.Orderer.OrdererType] = &mockConsenter{}
 
-	assert.Panics(t, func() { NewRegistrar(lf, consenters, mockCrypto()) }, "Should have panicked when starting without a system chain")
+	assert.Panics(t, func() {
+		NewRegistrar(lf, mockCrypto()).Initialize(consenters)
+	}, "Should have panicked when starting without a system chain")
 }
 
 
@@ -127,7 +129,9 @@ func TestMultiSystemChannel(t *testing.T) {
 	consenters := make(map[string]consensus.Consenter)
 	consenters[conf.Orderer.OrdererType] = &mockConsenter{}
 
-	assert.Panics(t, func() { NewRegistrar(lf, consenters, mockCrypto()) }, "Two system channels should have caused panic")
+	assert.Panics(t, func() {
+		NewRegistrar(lf, mockCrypto()).Initialize(consenters)
+	}, "Two system channels should have caused panic")
 }
 
 
@@ -137,7 +141,8 @@ func TestManagerImpl(t *testing.T) {
 	consenters := make(map[string]consensus.Consenter)
 	consenters[conf.Orderer.OrdererType] = &mockConsenter{}
 
-	manager := NewRegistrar(lf, consenters, mockCrypto())
+	manager := NewRegistrar(lf, mockCrypto())
+	manager.Initialize(consenters)
 
 	_, ok := manager.GetChain("Fake")
 	assert.False(t, ok, "Should not have found a chain that was not created")
@@ -174,7 +179,8 @@ func TestNewChain(t *testing.T) {
 	consenters := make(map[string]consensus.Consenter)
 	consenters[conf.Orderer.OrdererType] = &mockConsenter{}
 
-	manager := NewRegistrar(lf, consenters, mockCrypto())
+	manager := NewRegistrar(lf, mockCrypto())
+	manager.Initialize(consenters)
 	orglessChannelConf := configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile)
 	orglessChannelConf.Application.Organizations = nil
 	envConfigUpdate, err := encoder.MakeChannelCreationTransaction(newChainID, mockCrypto(), orglessChannelConf)
@@ -331,7 +337,8 @@ func TestResourcesCheck(t *testing.T) {
 func TestBroadcastChannelSupportRejection(t *testing.T) {
 	ledgerFactory, _ := NewRAMLedgerAndFactory(10)
 	mockConsenters := map[string]consensus.Consenter{conf.Orderer.OrdererType: &mockConsenter{}}
-	registrar := NewRegistrar(ledgerFactory, mockConsenters, mockCrypto())
+	registrar := NewRegistrar(ledgerFactory, mockCrypto())
+	registrar.Initialize(mockConsenters)
 	randomValue := 1
 	configTx := makeConfigTx(genesisconfig.TestChainID, randomValue)
 	_, _, _, err := registrar.BroadcastChannelSupport(configTx)
