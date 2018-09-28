@@ -35,6 +35,7 @@ type DB struct {
 	
 	cWriteDelay            int64 
 	cWriteDelayN           int32 
+	inWritePaused          int32 
 	aliveSnaps, aliveIters int32
 
 	
@@ -967,7 +968,8 @@ func (db *DB) GetProperty(name string) (value string, err error) {
 			float64(db.s.stor.writes())/1048576.0)
 	case p == "writedelay":
 		writeDelayN, writeDelay := atomic.LoadInt32(&db.cWriteDelayN), time.Duration(atomic.LoadInt64(&db.cWriteDelay))
-		value = fmt.Sprintf("DelayN:%d Delay:%s", writeDelayN, writeDelay)
+		paused := atomic.LoadInt32(&db.inWritePaused) == 1
+		value = fmt.Sprintf("DelayN:%d Delay:%s Paused:%t", writeDelayN, writeDelay, paused)
 	case p == "sstables":
 		for level, tables := range v.levels {
 			value += fmt.Sprintf("--- level %d ---\n", level)
@@ -994,6 +996,75 @@ func (db *DB) GetProperty(name string) (value string, err error) {
 	}
 
 	return
+}
+
+
+type DBStats struct {
+	WriteDelayCount    int32
+	WriteDelayDuration time.Duration
+	WritePaused        bool
+
+	AliveSnapshots int32
+	AliveIterators int32
+
+	IOWrite uint64
+	IORead  uint64
+
+	BlockCacheSize    int
+	OpenedTablesCount int
+
+	LevelSizes        []int64
+	LevelTablesCounts []int
+	LevelRead         []int64
+	LevelWrite        []int64
+	LevelDurations    []time.Duration
+}
+
+
+func (db *DB) Stats(s *DBStats) error {
+	err := db.ok()
+	if err != nil {
+		return err
+	}
+
+	s.IORead = db.s.stor.reads()
+	s.IOWrite = db.s.stor.writes()
+	s.WriteDelayCount = atomic.LoadInt32(&db.cWriteDelayN)
+	s.WriteDelayDuration = time.Duration(atomic.LoadInt64(&db.cWriteDelay))
+	s.WritePaused = atomic.LoadInt32(&db.inWritePaused) == 1
+
+	s.OpenedTablesCount = db.s.tops.cache.Size()
+	if db.s.tops.bcache != nil {
+		s.BlockCacheSize = db.s.tops.bcache.Size()
+	} else {
+		s.BlockCacheSize = 0
+	}
+
+	s.AliveIterators = atomic.LoadInt32(&db.aliveIters)
+	s.AliveSnapshots = atomic.LoadInt32(&db.aliveSnaps)
+
+	s.LevelDurations = s.LevelDurations[:0]
+	s.LevelRead = s.LevelRead[:0]
+	s.LevelWrite = s.LevelWrite[:0]
+	s.LevelSizes = s.LevelSizes[:0]
+	s.LevelTablesCounts = s.LevelTablesCounts[:0]
+
+	v := db.s.version()
+	defer v.release()
+
+	for level, tables := range v.levels {
+		duration, read, write := db.compStats.getStat(level)
+		if len(tables) == 0 && duration == 0 {
+			continue
+		}
+		s.LevelDurations = append(s.LevelDurations, duration)
+		s.LevelRead = append(s.LevelRead, read)
+		s.LevelWrite = append(s.LevelWrite, write)
+		s.LevelSizes = append(s.LevelSizes, tables.size())
+		s.LevelTablesCounts = append(s.LevelTablesCounts, len(tables))
+	}
+
+	return nil
 }
 
 

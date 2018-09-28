@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -121,21 +120,8 @@ func (sc *SimpleCollection) Setup(collectionConfig *common.StaticCollectionConfi
 
 
 func (sc *SimpleCollection) setupAccessPolicy(collectionPolicyConfig *common.CollectionPolicyConfig, deserializer msp.IdentityDeserializer) error {
-	if collectionPolicyConfig == nil {
-		return errors.New("Collection config policy is nil")
-	}
-	accessPolicyEnvelope := collectionPolicyConfig.GetSignaturePolicy()
-	if accessPolicyEnvelope == nil {
-		return errors.New("Collection config access policy is nil")
-	}
-
-	
-	npp := cauthdsl.NewPolicyProvider(deserializer)
-	polBytes, err := proto.Marshal(accessPolicyEnvelope)
-	if err != nil {
-		return err
-	}
-	sc.accessPolicy, _, err = npp.NewPolicy(polBytes)
+	var err error
+	sc.accessPolicy, err = getPolicy(collectionPolicyConfig, deserializer)
 	return err
 }
 

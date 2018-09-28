@@ -7,25 +7,30 @@ SPDX-License-Identifier: Apache-2.0
 package privdata
 
 import (
+	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 )
 
 
 type MembershipProvider struct {
-	selfSignedData common.SignedData
-	cf             CollectionFilter
+	selfSignedData              common.SignedData
+	IdentityDeserializerFactory func(chainID string) msp.IdentityDeserializer
 }
 
 
-func NewMembershipInfoProvider(selfSignedData common.SignedData, filter CollectionFilter) *MembershipProvider {
-	return &MembershipProvider{selfSignedData: selfSignedData, cf: filter}
+func NewMembershipInfoProvider(selfSignedData common.SignedData, identityDeserializerFunc func(chainID string) msp.IdentityDeserializer) *MembershipProvider {
+	return &MembershipProvider{selfSignedData: selfSignedData, IdentityDeserializerFactory: identityDeserializerFunc}
 }
 
 
 func (m *MembershipProvider) AmMemberOf(channelName string, collectionPolicyConfig *common.CollectionPolicyConfig) (bool, error) {
-	filt, err := m.cf.AccessFilter(channelName, collectionPolicyConfig)
+	deserializer := m.IdentityDeserializerFactory(channelName)
+	accessPolicy, err := getPolicy(collectionPolicyConfig, deserializer)
 	if err != nil {
 		return false, err
 	}
-	return filt(m.selfSignedData), nil
+	if err := accessPolicy.Evaluate([]*common.SignedData{&m.selfSignedData}); err != nil {
+		return false, nil
+	}
+	return true, nil
 }

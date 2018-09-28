@@ -10,22 +10,24 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/cauthdsl"
+	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMembershipInfoProvider(t *testing.T) {
-	
 	peerSelfSignedData := common.SignedData{
 		Identity:  []byte("peer0"),
 		Signature: []byte{1, 2, 3},
 		Data:      []byte{4, 5, 6},
 	}
 
-	collectionStore := NewSimpleCollectionStore(&mockStoreSupport{})
+	identityDeserializer := func(chainID string) msp.IdentityDeserializer {
+		return &mockDeserializer{}
+	}
 
 	
-	membershipProvider := NewMembershipInfoProvider(peerSelfSignedData, collectionStore)
+	membershipProvider := NewMembershipInfoProvider(peerSelfSignedData, identityDeserializer)
 	res, err := membershipProvider.AmMemberOf("test1", getAccessPolicy([]string{"peer0", "peer1"}))
 	assert.True(t, res)
 	assert.Nil(t, err)
@@ -39,7 +41,7 @@ func TestMembershipInfoProvider(t *testing.T) {
 	res, err = membershipProvider.AmMemberOf("test1", nil)
 	assert.False(t, res)
 	assert.Error(t, err)
-	assert.Equal(t, "Collection config policy is nil", err.Error())
+	assert.Equal(t, "Collection policy config is nil", err.Error())
 }
 
 func getAccessPolicy(signers []string) *common.CollectionPolicyConfig {

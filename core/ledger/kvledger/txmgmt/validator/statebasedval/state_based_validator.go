@@ -10,7 +10,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/valinternal"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/internal"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/protos/peer"
@@ -31,7 +31,7 @@ func NewValidator(db privacyenabledstate.DB) *Validator {
 
 
 
-func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block) error {
+func (v *Validator) preLoadCommittedVersionOfRSet(block *internal.Block) error {
 
 	
 	var pubKeys []*statedb.CompositeKey
@@ -86,7 +86,7 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block) erro
 }
 
 
-func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCValidation bool) (*valinternal.PubAndHashUpdates, error) {
+func (v *Validator) ValidateAndPrepareBatch(block *internal.Block, doMVCCValidation bool) (*internal.PubAndHashUpdates, error) {
 	
 	
 	
@@ -97,7 +97,7 @@ func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCVali
 		}
 	}
 
-	updates := valinternal.NewPubAndHashUpdates()
+	updates := internal.NewPubAndHashUpdates()
 	for _, tx := range block.Txs {
 		var validationCode peer.TxValidationCode
 		var err error
@@ -122,7 +122,7 @@ func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCVali
 func (v *Validator) validateEndorserTX(
 	txRWSet *rwsetutil.TxRwSet,
 	doMVCCValidation bool,
-	updates *valinternal.PubAndHashUpdates) (peer.TxValidationCode, error) {
+	updates *internal.PubAndHashUpdates) (peer.TxValidationCode, error) {
 
 	var validationCode = peer.TxValidationCode_VALID
 	var err error
@@ -133,7 +133,7 @@ func (v *Validator) validateEndorserTX(
 	return validationCode, err
 }
 
-func (v *Validator) validateTx(txRWSet *rwsetutil.TxRwSet, updates *valinternal.PubAndHashUpdates) (peer.TxValidationCode, error) {
+func (v *Validator) validateTx(txRWSet *rwsetutil.TxRwSet, updates *internal.PubAndHashUpdates) (peer.TxValidationCode, error) {
 	
 	
 	for _, nsRWSet := range txRWSet.NsRwSets {

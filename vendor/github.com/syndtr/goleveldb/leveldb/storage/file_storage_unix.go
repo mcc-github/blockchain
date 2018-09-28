@@ -67,13 +67,25 @@ func isErrInvalid(err error) bool {
 	if err == os.ErrInvalid {
 		return true
 	}
+	
 	if syserr, ok := err.(*os.SyscallError); ok && syserr.Err == syscall.EINVAL {
+		return true
+	}
+	
+	if patherr, ok := err.(*os.PathError); ok && patherr.Err == syscall.EINVAL {
 		return true
 	}
 	return false
 }
 
 func syncDir(name string) error {
+	
+	
+	
+	
+	
+	
+	
 	f, err := os.Open(name)
 	if err != nil {
 		return err
