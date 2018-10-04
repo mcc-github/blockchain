@@ -47,31 +47,12 @@ func Invoke(ctx context.Context, method string, args, reply interface{}, cc *Cli
 var unaryStreamDesc = &StreamDesc{ServerStreams: false, ClientStreams: false}
 
 func invoke(ctx context.Context, method string, req, reply interface{}, cc *ClientConn, opts ...CallOption) error {
-	
-	
-	firstAttempt := true
-	for {
-		csInt, err := newClientStream(ctx, unaryStreamDesc, cc, method, opts...)
-		if err != nil {
-			return err
-		}
-		cs := csInt.(*clientStream)
-		if err := cs.SendMsg(req); err != nil {
-			if !cs.c.failFast && cs.attempt.s.Unprocessed() && firstAttempt {
-				
-				firstAttempt = false
-				continue
-			}
-			return err
-		}
-		if err := cs.RecvMsg(reply); err != nil {
-			if !cs.c.failFast && cs.attempt.s.Unprocessed() && firstAttempt {
-				
-				firstAttempt = false
-				continue
-			}
-			return err
-		}
-		return nil
+	cs, err := newClientStream(ctx, unaryStreamDesc, cc, method, opts...)
+	if err != nil {
+		return err
 	}
+	if err := cs.SendMsg(req); err != nil {
+		return err
+	}
+	return cs.RecvMsg(reply)
 }

@@ -25,6 +25,8 @@ package unix
 
 
 
+
+
 func Select(nfd int, r *FdSet, w *FdSet, e *FdSet, timeout *Timeval) (n int, err error) {
 	var ts *Timespec
 	if timeout != nil {
@@ -32,6 +34,8 @@ func Select(nfd int, r *FdSet, w *FdSet, e *FdSet, timeout *Timeval) (n int, err
 	}
 	return Pselect(nfd, r, w, e, ts, nil)
 }
+
+
 
 
 
@@ -77,6 +81,7 @@ func Time(t *Time_t) (tt Time_t, err error) {
 	}
 	return Time_t(tv.Sec), nil
 }
+
 
 
 

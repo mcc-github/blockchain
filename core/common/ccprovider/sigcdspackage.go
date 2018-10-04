@@ -229,6 +229,16 @@ func (ccpack *SignedCDSPackage) ValidateCC(ccdata *ChaincodeData) error {
 		return fmt.Errorf("chaincode deployment spec cannot be nil in a package")
 	}
 
+	
+	
+	
+	
+	
+	
+	if !isPrintable(ccdata.Name) {
+		return fmt.Errorf("invalid chaincode name: %q", ccdata.Name)
+	}
+
 	if ccdata.Name != ccpack.depSpec.ChaincodeSpec.ChaincodeId.Name || ccdata.Version != ccpack.depSpec.ChaincodeSpec.ChaincodeId.Version {
 		return fmt.Errorf("invalid chaincode data %v (%v)", ccdata, ccpack.depSpec.ChaincodeSpec.ChaincodeId)
 	}

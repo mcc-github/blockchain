@@ -59,11 +59,11 @@ func IoctlSetInt(fd int, req uint, value int) error {
 	return ioctl(fd, req, uintptr(value))
 }
 
-func IoctlSetWinsize(fd int, req uint, value *Winsize) error {
+func ioctlSetWinsize(fd int, req uint, value *Winsize) error {
 	return ioctl(fd, req, uintptr(unsafe.Pointer(value)))
 }
 
-func IoctlSetTermios(fd int, req uint, value *Termios) error {
+func ioctlSetTermios(fd int, req uint, value *Termios) error {
 	return ioctl(fd, req, uintptr(unsafe.Pointer(value)))
 }
 
@@ -146,8 +146,6 @@ func Unlink(path string) error {
 
 
 
-
-
 func Utimes(path string, tv []Timeval) error {
 	if tv == nil {
 		err := utimensat(AT_FDCWD, path, nil, 0)
@@ -205,20 +203,14 @@ func UtimesNanoAt(dirfd int, path string, ts []Timespec, flags int) error {
 	return utimensat(dirfd, path, (*[2]Timespec)(unsafe.Pointer(&ts[0])), flags)
 }
 
-
-
 func Futimesat(dirfd int, path string, tv []Timeval) error {
-	pathp, err := BytePtrFromString(path)
-	if err != nil {
-		return err
-	}
 	if tv == nil {
-		return futimesat(dirfd, pathp, nil)
+		return futimesat(dirfd, path, nil)
 	}
 	if len(tv) != 2 {
 		return EINVAL
 	}
-	return futimesat(dirfd, pathp, (*[2]Timeval)(unsafe.Pointer(&tv[0])))
+	return futimesat(dirfd, path, (*[2]Timeval)(unsafe.Pointer(&tv[0])))
 }
 
 func Futimes(fd int, tv []Timeval) (err error) {
@@ -512,6 +504,47 @@ func (sa *SockaddrL2) sockaddr() (unsafe.Pointer, _Socklen, error) {
 
 
 
+
+
+
+
+
+
+type SockaddrRFCOMM struct {
+	
+	Addr [6]uint8
+
+	
+	
+	Channel uint8
+
+	raw RawSockaddrRFCOMM
+}
+
+func (sa *SockaddrRFCOMM) sockaddr() (unsafe.Pointer, _Socklen, error) {
+	sa.raw.Family = AF_BLUETOOTH
+	sa.raw.Channel = sa.Channel
+	sa.raw.Bdaddr = sa.Addr
+	return unsafe.Pointer(&sa.raw), SizeofSockaddrRFCOMM, nil
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 type SockaddrCAN struct {
 	Ifindex int
 	RxID    uint32
@@ -657,7 +690,25 @@ func (sa *SockaddrVM) sockaddr() (unsafe.Pointer, _Socklen, error) {
 	return unsafe.Pointer(&sa.raw), SizeofSockaddrVM, nil
 }
 
-func anyToSockaddr(rsa *RawSockaddrAny) (Sockaddr, error) {
+type SockaddrXDP struct {
+	Flags        uint16
+	Ifindex      uint32
+	QueueID      uint32
+	SharedUmemFD uint32
+	raw          RawSockaddrXDP
+}
+
+func (sa *SockaddrXDP) sockaddr() (unsafe.Pointer, _Socklen, error) {
+	sa.raw.Family = AF_XDP
+	sa.raw.Flags = sa.Flags
+	sa.raw.Ifindex = sa.Ifindex
+	sa.raw.Queue_id = sa.QueueID
+	sa.raw.Shared_umem_fd = sa.SharedUmemFD
+
+	return unsafe.Pointer(&sa.raw), SizeofSockaddrXDP, nil
+}
+
+func anyToSockaddr(fd int, rsa *RawSockaddrAny) (Sockaddr, error) {
 	switch rsa.Addr.Family {
 	case AF_NETLINK:
 		pp := (*RawSockaddrNetlink)(unsafe.Pointer(rsa))
@@ -734,6 +785,39 @@ func anyToSockaddr(rsa *RawSockaddrAny) (Sockaddr, error) {
 			Port: pp.Port,
 		}
 		return sa, nil
+	case AF_BLUETOOTH:
+		proto, err := GetsockoptInt(fd, SOL_SOCKET, SO_PROTOCOL)
+		if err != nil {
+			return nil, err
+		}
+		
+		switch proto {
+		case BTPROTO_L2CAP:
+			pp := (*RawSockaddrL2)(unsafe.Pointer(rsa))
+			sa := &SockaddrL2{
+				PSM:      pp.Psm,
+				CID:      pp.Cid,
+				Addr:     pp.Bdaddr,
+				AddrType: pp.Bdaddr_type,
+			}
+			return sa, nil
+		case BTPROTO_RFCOMM:
+			pp := (*RawSockaddrRFCOMM)(unsafe.Pointer(rsa))
+			sa := &SockaddrRFCOMM{
+				Channel: pp.Channel,
+				Addr:    pp.Bdaddr,
+			}
+			return sa, nil
+		}
+	case AF_XDP:
+		pp := (*RawSockaddrXDP)(unsafe.Pointer(rsa))
+		sa := &SockaddrXDP{
+			Flags:        pp.Flags,
+			Ifindex:      pp.Ifindex,
+			QueueID:      pp.Queue_id,
+			SharedUmemFD: pp.Shared_umem_fd,
+		}
+		return sa, nil
 	}
 	return nil, EAFNOSUPPORT
 }
@@ -745,7 +829,7 @@ func Accept(fd int) (nfd int, sa Sockaddr, err error) {
 	if err != nil {
 		return
 	}
-	sa, err = anyToSockaddr(&rsa)
+	sa, err = anyToSockaddr(fd, &rsa)
 	if err != nil {
 		Close(nfd)
 		nfd = 0
@@ -763,7 +847,7 @@ func Accept4(fd int, flags int) (nfd int, sa Sockaddr, err error) {
 	if len > SizeofSockaddrAny {
 		panic("RawSockaddrAny too small")
 	}
-	sa, err = anyToSockaddr(&rsa)
+	sa, err = anyToSockaddr(fd, &rsa)
 	if err != nil {
 		Close(nfd)
 		nfd = 0
@@ -777,46 +861,12 @@ func Getsockname(fd int) (sa Sockaddr, err error) {
 	if err = getsockname(fd, &rsa, &len); err != nil {
 		return
 	}
-	return anyToSockaddr(&rsa)
-}
-
-func GetsockoptInet4Addr(fd, level, opt int) (value [4]byte, err error) {
-	vallen := _Socklen(4)
-	err = getsockopt(fd, level, opt, unsafe.Pointer(&value[0]), &vallen)
-	return value, err
-}
-
-func GetsockoptIPMreq(fd, level, opt int) (*IPMreq, error) {
-	var value IPMreq
-	vallen := _Socklen(SizeofIPMreq)
-	err := getsockopt(fd, level, opt, unsafe.Pointer(&value), &vallen)
-	return &value, err
+	return anyToSockaddr(fd, &rsa)
 }
 
 func GetsockoptIPMreqn(fd, level, opt int) (*IPMreqn, error) {
 	var value IPMreqn
 	vallen := _Socklen(SizeofIPMreqn)
-	err := getsockopt(fd, level, opt, unsafe.Pointer(&value), &vallen)
-	return &value, err
-}
-
-func GetsockoptIPv6Mreq(fd, level, opt int) (*IPv6Mreq, error) {
-	var value IPv6Mreq
-	vallen := _Socklen(SizeofIPv6Mreq)
-	err := getsockopt(fd, level, opt, unsafe.Pointer(&value), &vallen)
-	return &value, err
-}
-
-func GetsockoptIPv6MTUInfo(fd, level, opt int) (*IPv6MTUInfo, error) {
-	var value IPv6MTUInfo
-	vallen := _Socklen(SizeofIPv6MTUInfo)
-	err := getsockopt(fd, level, opt, unsafe.Pointer(&value), &vallen)
-	return &value, err
-}
-
-func GetsockoptICMPv6Filter(fd, level, opt int) (*ICMPv6Filter, error) {
-	var value ICMPv6Filter
-	vallen := _Socklen(SizeofICMPv6Filter)
 	err := getsockopt(fd, level, opt, unsafe.Pointer(&value), &vallen)
 	return &value, err
 }
@@ -976,15 +1026,17 @@ func Recvmsg(fd int, p, oob []byte, flags int) (n, oobn int, recvflags int, from
 	}
 	var dummy byte
 	if len(oob) > 0 {
-		var sockType int
-		sockType, err = GetsockoptInt(fd, SOL_SOCKET, SO_TYPE)
-		if err != nil {
-			return
-		}
-		
-		if sockType != SOCK_DGRAM && len(p) == 0 {
-			iov.Base = &dummy
-			iov.SetLen(1)
+		if len(p) == 0 {
+			var sockType int
+			sockType, err = GetsockoptInt(fd, SOL_SOCKET, SO_TYPE)
+			if err != nil {
+				return
+			}
+			
+			if sockType != SOCK_DGRAM {
+				iov.Base = &dummy
+				iov.SetLen(1)
+			}
 		}
 		msg.Control = &oob[0]
 		msg.SetControllen(len(oob))
@@ -998,7 +1050,7 @@ func Recvmsg(fd int, p, oob []byte, flags int) (n, oobn int, recvflags int, from
 	recvflags = int(msg.Flags)
 	
 	if rsa.Addr.Family != AF_UNSPEC {
-		from, err = anyToSockaddr(&rsa)
+		from, err = anyToSockaddr(fd, &rsa)
 	}
 	return
 }
@@ -1028,15 +1080,17 @@ func SendmsgN(fd int, p, oob []byte, to Sockaddr, flags int) (n int, err error) 
 	}
 	var dummy byte
 	if len(oob) > 0 {
-		var sockType int
-		sockType, err = GetsockoptInt(fd, SOL_SOCKET, SO_TYPE)
-		if err != nil {
-			return 0, err
-		}
-		
-		if sockType != SOCK_DGRAM && len(p) == 0 {
-			iov.Base = &dummy
-			iov.SetLen(1)
+		if len(p) == 0 {
+			var sockType int
+			sockType, err = GetsockoptInt(fd, SOL_SOCKET, SO_TYPE)
+			if err != nil {
+				return 0, err
+			}
+			
+			if sockType != SOCK_DGRAM {
+				iov.Base = &dummy
+				iov.SetLen(1)
+			}
 		}
 		msg.Control = &oob[0]
 		msg.SetControllen(len(oob))
@@ -1264,10 +1318,16 @@ func Mount(source string, target string, fstype string, flags uintptr, data stri
 
 
 
+
+
+
 func Getpgrp() (pid int) {
 	pid, _ = Getpgid(0)
 	return
 }
+
+
+
 
 
 
@@ -1339,7 +1399,6 @@ func Setgid(uid int) (err error) {
 
 
 
-
 var mapper = &mmapper{
 	active: make(map[*byte][]byte),
 	mmap:   mmap,
@@ -1383,8 +1442,74 @@ func Vmsplice(fd int, iovs []Iovec, flags int) (int, error) {
 
 
 
+func Faccessat(dirfd int, path string, mode uint32, flags int) (err error) {
+	if flags & ^(AT_SYMLINK_NOFOLLOW|AT_EACCESS) != 0 {
+		return EINVAL
+	}
 
+	
+	
+	
+	
+	
 
+	if flags == 0 {
+		return faccessat(dirfd, path, mode)
+	}
+
+	var st Stat_t
+	if err := Fstatat(dirfd, path, &st, flags&AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+
+	mode &= 7
+	if mode == 0 {
+		return nil
+	}
+
+	var uid int
+	if flags&AT_EACCESS != 0 {
+		uid = Geteuid()
+	} else {
+		uid = Getuid()
+	}
+
+	if uid == 0 {
+		if mode&1 == 0 {
+			
+			return nil
+		}
+		if st.Mode&0111 != 0 {
+			
+			return nil
+		}
+		return EACCES
+	}
+
+	var fmode uint32
+	if uint32(uid) == st.Uid {
+		fmode = (st.Mode >> 6) & 7
+	} else {
+		var gid int
+		if flags&AT_EACCESS != 0 {
+			gid = Getegid()
+		} else {
+			gid = Getgid()
+		}
+
+		if uint32(gid) == st.Gid {
+			fmode = (st.Mode >> 3) & 7
+		} else {
+			fmode = st.Mode & 7
+		}
+	}
+
+	if fmode&mode == mode {
+		return nil
+	}
+
+	return EACCES
+}
 
 
 

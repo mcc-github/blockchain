@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
 )
 
@@ -40,6 +41,8 @@ type MethodConfig struct {
 	
 	
 	MaxRespSize *int
+	
+	retryPolicy *retryPolicy
 }
 
 
@@ -52,13 +55,84 @@ type ServiceConfig struct {
 	
 	
 	LB *string
+
+	
+	
 	
 	
 	
 	
 	Methods map[string]MethodConfig
 
-	stickinessMetadataKey *string
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	retryThrottling *retryThrottlingPolicy
+}
+
+
+
+
+type retryPolicy struct {
+	
+	
+	
+	maxAttempts int
+
+	
+	
+	
+	
+	
+	
+	initialBackoff    time.Duration
+	maxBackoff        time.Duration
+	backoffMultiplier float64
+
+	
+	
+	
+	
+	
+	
+	retryableStatusCodes map[codes.Code]bool
+}
+
+type jsonRetryPolicy struct {
+	MaxAttempts          int
+	InitialBackoff       string
+	MaxBackoff           string
+	BackoffMultiplier    float64
+	RetryableStatusCodes []codes.Code
+}
+
+
+
+
+type retryThrottlingPolicy struct {
+	
+	
+	
+	
+	MaxTokens float64
+	
+	
+	
+	
+	
+	TokenRatio float64
 }
 
 func parseDuration(s *string) (*time.Duration, error) {
@@ -128,13 +202,14 @@ type jsonMC struct {
 	Timeout                 *string
 	MaxRequestMessageBytes  *int64
 	MaxResponseMessageBytes *int64
+	RetryPolicy             *jsonRetryPolicy
 }
 
 
 type jsonSC struct {
-	LoadBalancingPolicy   *string
-	StickinessMetadataKey *string
-	MethodConfig          *[]jsonMC
+	LoadBalancingPolicy *string
+	MethodConfig        *[]jsonMC
+	RetryThrottling     *retryThrottlingPolicy
 }
 
 func parseServiceConfig(js string) (ServiceConfig, error) {
@@ -145,10 +220,9 @@ func parseServiceConfig(js string) (ServiceConfig, error) {
 		return ServiceConfig{}, err
 	}
 	sc := ServiceConfig{
-		LB:      rsc.LoadBalancingPolicy,
-		Methods: make(map[string]MethodConfig),
-
-		stickinessMetadataKey: rsc.StickinessMetadataKey,
+		LB:              rsc.LoadBalancingPolicy,
+		Methods:         make(map[string]MethodConfig),
+		retryThrottling: rsc.RetryThrottling,
 	}
 	if rsc.MethodConfig == nil {
 		return sc, nil
@@ -167,6 +241,10 @@ func parseServiceConfig(js string) (ServiceConfig, error) {
 		mc := MethodConfig{
 			WaitForReady: m.WaitForReady,
 			Timeout:      d,
+		}
+		if mc.retryPolicy, err = convertRetryPolicy(m.RetryPolicy); err != nil {
+			grpclog.Warningf("grpc: parseServiceConfig error unmarshaling %s due to %v", js, err)
+			return ServiceConfig{}, err
 		}
 		if m.MaxRequestMessageBytes != nil {
 			if *m.MaxRequestMessageBytes > int64(maxInt) {
@@ -189,7 +267,54 @@ func parseServiceConfig(js string) (ServiceConfig, error) {
 		}
 	}
 
+	if sc.retryThrottling != nil {
+		if sc.retryThrottling.MaxTokens <= 0 ||
+			sc.retryThrottling.MaxTokens >= 1000 ||
+			sc.retryThrottling.TokenRatio <= 0 {
+			
+			sc.retryThrottling = nil
+		}
+	}
 	return sc, nil
+}
+
+func convertRetryPolicy(jrp *jsonRetryPolicy) (p *retryPolicy, err error) {
+	if jrp == nil {
+		return nil, nil
+	}
+	ib, err := parseDuration(&jrp.InitialBackoff)
+	if err != nil {
+		return nil, err
+	}
+	mb, err := parseDuration(&jrp.MaxBackoff)
+	if err != nil {
+		return nil, err
+	}
+
+	if jrp.MaxAttempts <= 1 ||
+		*ib <= 0 ||
+		*mb <= 0 ||
+		jrp.BackoffMultiplier <= 0 ||
+		len(jrp.RetryableStatusCodes) == 0 {
+		grpclog.Warningf("grpc: ignoring retry policy %v due to illegal configuration", jrp)
+		return nil, nil
+	}
+
+	rp := &retryPolicy{
+		maxAttempts:          jrp.MaxAttempts,
+		initialBackoff:       *ib,
+		maxBackoff:           *mb,
+		backoffMultiplier:    jrp.BackoffMultiplier,
+		retryableStatusCodes: make(map[codes.Code]bool),
+	}
+	if rp.maxAttempts > 5 {
+		
+		rp.maxAttempts = 5
+	}
+	for _, code := range jrp.RetryableStatusCodes {
+		rp.retryableStatusCodes[code] = true
+	}
+	return rp, nil
 }
 
 func min(a, b *int) *int {

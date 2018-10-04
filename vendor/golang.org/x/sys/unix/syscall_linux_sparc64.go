@@ -59,6 +59,7 @@ package unix
 
 
 
+
 func Ioperm(from int, num int, on int) (err error) {
 	return ENOSYS
 }
@@ -66,6 +67,7 @@ func Ioperm(from int, num int, on int) (err error) {
 func Iopl(level int) (err error) {
 	return ENOSYS
 }
+
 
 
 
@@ -80,6 +82,7 @@ func Time(t *Time_t) (tt Time_t, err error) {
 	}
 	return Time_t(tv.Sec), nil
 }
+
 
 
 

@@ -93,6 +93,23 @@ func nametomib(name string) (mib []_C_int, err error) {
 	return mib, nil
 }
 
+func SysctlClockinfo(name string) (*Clockinfo, error) {
+	mib, err := sysctlmib(name)
+	if err != nil {
+		return nil, err
+	}
+
+	n := uintptr(SizeofClockinfo)
+	buf := make([]byte, SizeofClockinfo)
+	if err := sysctl(mib, &buf[0], &n, nil, 0); err != nil {
+		return nil, err
+	}
+	if n != SizeofClockinfo {
+		return nil, EIO
+	}
+	return (*Clockinfo)(unsafe.Pointer(&buf[0])), nil
+}
+
 
 func Pipe(p []int) (err error) {
 	if len(p) != 2 {
@@ -145,11 +162,11 @@ func IoctlSetInt(fd int, req uint, value int) error {
 	return ioctl(fd, req, uintptr(value))
 }
 
-func IoctlSetWinsize(fd int, req uint, value *Winsize) error {
+func ioctlSetWinsize(fd int, req uint, value *Winsize) error {
 	return ioctl(fd, req, uintptr(unsafe.Pointer(value)))
 }
 
-func IoctlSetTermios(fd int, req uint, value *Termios) error {
+func ioctlSetTermios(fd int, req uint, value *Termios) error {
 	return ioctl(fd, req, uintptr(unsafe.Pointer(value)))
 }
 
@@ -218,6 +235,20 @@ func Uname(uname *Utsname) error {
 
 	return nil
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

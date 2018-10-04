@@ -61,6 +61,11 @@ type Store interface {
 	
 	Rollback() error
 	
+	
+	
+	
+	ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error
+	
 	IsEmpty() (bool, error)
 	
 	LastCommittedBlockHeight() (uint64, error)

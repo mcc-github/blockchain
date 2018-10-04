@@ -13,12 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
+	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
+	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -449,6 +450,104 @@ func TestInitLastCommittedBlock(t *testing.T) {
 	assert.True(ok)
 }
 
+func TestCollElgEnabled(t *testing.T) {
+	testCollElgEnabled(t)
+	defaultValBatchSize := ledgerconfig.GetPvtdataStoreCollElgProcMaxDbBatchSize()
+	defaultValInterval := ledgerconfig.GetPvtdataStoreCollElgProcDbBatchesInterval()
+	defer func() {
+		viper.Set("ledger.pvtdataStore.collElgProcMaxDbBatchSize", defaultValBatchSize)
+		viper.Set("ledger.pvtdataStore.collElgProcMaxDbBatchSize", defaultValInterval)
+	}()
+	viper.Set("ledger.pvtdataStore.collElgProcMaxDbBatchSize", 1)
+	viper.Set("ledger.pvtdataStore.collElgProcDbBatchesInterval", 1)
+	testCollElgEnabled(t)
+}
+
+func testCollElgEnabled(t *testing.T) {
+	ledgerid := "TestCollElgEnabled"
+	cs := btltestutil.NewMockCollectionStore()
+	cs.SetBTL("ns-1", "coll-1", 0)
+	cs.SetBTL("ns-1", "coll-2", 0)
+	cs.SetBTL("ns-2", "coll-1", 0)
+	cs.SetBTL("ns-2", "coll-2", 0)
+	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+
+	env := NewTestStoreEnv(t, ledgerid, btlPolicy)
+	defer env.Cleanup()
+	assert := assert.New(t)
+	store := env.TestStore
+
+	
+
+	
+	assert.NoError(store.Prepare(0, nil, nil))
+	assert.NoError(store.Commit())
+
+	
+	blk1MissingData := &ledger.MissingPrivateDataList{}
+	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
+	blk1MissingData.Add("tx1", 1, "ns-2", "coll-1", true)
+	blk1MissingData.Add("tx4", 4, "ns-1", "coll-2", false)
+	blk1MissingData.Add("tx4", 4, "ns-2", "coll-2", false)
+	testDataForBlk1 := []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1"}),
+	}
+	assert.NoError(store.Prepare(1, testDataForBlk1, blk1MissingData))
+	assert.NoError(store.Commit())
+
+	
+	blk2MissingData := &ledger.MissingPrivateDataList{}
+	
+	blk2MissingData.Add("tx1", 1, "ns-1", "coll-2", false)
+	blk2MissingData.Add("tx1", 1, "ns-2", "coll-2", false)
+	testDataForBlk2 := []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 3, []string{"ns-1:coll-1"}),
+	}
+	assert.NoError(store.Prepare(2, testDataForBlk2, blk2MissingData))
+	assert.NoError(store.Commit())
+
+	
+	
+	expectedMissingPvtDataInfo := make(ledger.MissingPvtDataInfo)
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-1", "coll-1")
+	expectedMissingPvtDataInfo.Add(1, 1, "ns-2", "coll-1")
+	missingPvtDataInfo, err := store.GetMissingPvtDataInfoForMostRecentBlocks(10)
+	assert.NoError(err)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
+
+	
+	store.ProcessCollsEligibilityEnabled(
+		5,
+		map[string][]string{
+			"ns-1": {"coll-2"},
+		},
+	)
+	testutilWaitForCollElgProcToFinish(store)
+
+	
+	
+	expectedMissingPvtDataInfo.Add(1, 4, "ns-1", "coll-2")
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-1", "coll-2")
+	missingPvtDataInfo, err = store.GetMissingPvtDataInfoForMostRecentBlocks(10)
+	assert.NoError(err)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
+
+	
+	store.ProcessCollsEligibilityEnabled(6,
+		map[string][]string{
+			"ns-2": {"coll-2"},
+		},
+	)
+	testutilWaitForCollElgProcToFinish(store)
+
+	
+	
+	expectedMissingPvtDataInfo.Add(1, 4, "ns-2", "coll-2")
+	expectedMissingPvtDataInfo.Add(2, 1, "ns-2", "coll-2")
+	missingPvtDataInfo, err = store.GetMissingPvtDataInfoForMostRecentBlocks(10)
+	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
+}
+
 
 
 func testEmpty(expectedEmpty bool, assert *assert.Assertions, store Store) {
@@ -487,6 +586,10 @@ func testWaitForPurgerRoutineToFinish(s Store) {
 	time.Sleep(1 * time.Second)
 	s.(*store).purgerLock.Lock()
 	s.(*store).purgerLock.Unlock()
+}
+
+func testutilWaitForCollElgProcToFinish(s Store) {
+	s.(*store).collElgProcSync.waitForDone()
 }
 
 func produceSamplePvtdata(t *testing.T, txNum uint64, nsColls []string) *ledger.TxPvtData {

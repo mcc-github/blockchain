@@ -52,10 +52,9 @@ func newKVLedger(
 	configHistoryMgr confighistory.Mgr,
 	stateListeners []ledger.StateListener,
 	bookkeeperProvider bookkeeping.Provider,
-	ccInfoProvider ledger.DeployedChaincodeInfoProvider) (*kvLedger, error) {
-
+	ccInfoProvider ledger.DeployedChaincodeInfoProvider,
+) (*kvLedger, error) {
 	logger.Debugf("Creating KVLedger ledgerID=%s: ", ledgerID)
-	stateListeners = append(stateListeners, configHistoryMgr)
 	
 	
 	l := &kvLedger{ledgerID: ledgerID, blockStore: blockStore, historyDB: historyDB, blockAPIsRWLock: &sync.RWMutex{}}

@@ -31,3 +31,7 @@ func (msghdr *Msghdr) SetControllen(length int) {
 func (cmsg *Cmsghdr) SetLen(length int) {
 	cmsg.Len = uint32(length)
 }
+
+
+
+const SYS___SYSCTL = SYS_SYSCTL

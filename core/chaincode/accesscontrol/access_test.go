@@ -91,6 +91,7 @@ func newCCServer(t *testing.T, port int, expectedCCname string, withTLS bool, ca
 	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", "", port))
 	assert.NoError(t, err, "%v", err)
 	return &ccSrv{
+		t:              t,
 		expectedCCname: expectedCCname,
 		l:              l,
 		grpcSrv:        s,
@@ -292,7 +293,7 @@ func TestAccessControl(t *testing.T) {
 	assert.NoError(t, err)
 	lateCC, err := newClient(t, 7052, &cert, ca.CertBytes())
 	assert.NoError(t, err)
-	defer realCC.close()
+	defer lateCC.close()
 	time.Sleep(ttl + time.Second*2)
 	lateCC.sendMsg(registerMsg)
 	lateCC.sendMsg(putStateMsg)

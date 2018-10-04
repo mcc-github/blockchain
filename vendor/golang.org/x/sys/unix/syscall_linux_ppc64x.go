@@ -67,6 +67,9 @@ package unix
 
 
 
+
+
+
 func setTimespec(sec, nsec int64) Timespec {
 	return Timespec{Sec: sec, Nsec: nsec}
 }
@@ -124,4 +127,12 @@ func Poll(fds []PollFd, timeout int) (n int, err error) {
 		return poll(nil, 0, timeout)
 	}
 	return poll(&fds[0], len(fds), timeout)
+}
+
+
+
+func SyncFileRange(fd int, off int64, n int64, flags int) error {
+	
+	
+	return syncFileRange2(fd, flags, off, n)
 }

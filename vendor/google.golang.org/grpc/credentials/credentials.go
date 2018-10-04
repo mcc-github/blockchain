@@ -15,6 +15,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/golang/protobuf/proto"
 	"golang.org/x/net/context"
 )
 
@@ -103,6 +104,18 @@ func (t TLSInfo) AuthType() string {
 }
 
 
+func (t TLSInfo) GetChannelzSecurityValue() ChannelzSecurityValue {
+	v := &TLSChannelzSecurityValue{
+		StandardName: cipherSuiteLookup[t.State.CipherSuite],
+	}
+	
+	if len(t.State.PeerCertificates) > 0 {
+		v.RemoteCertificate = t.State.PeerCertificates[0].Raw
+	}
+	return v
+}
+
+
 type tlsCreds struct {
 	
 	config *tls.Config
@@ -139,7 +152,7 @@ func (c *tlsCreds) ClientHandshake(ctx context.Context, authority string, rawCon
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
 	}
-	return conn, TLSInfo{conn.ConnectionState()}, nil
+	return tlsConn{Conn: conn, rawConn: rawConn}, TLSInfo{conn.ConnectionState()}, nil
 }
 
 func (c *tlsCreds) ServerHandshake(rawConn net.Conn) (net.Conn, AuthInfo, error) {
@@ -147,7 +160,7 @@ func (c *tlsCreds) ServerHandshake(rawConn net.Conn) (net.Conn, AuthInfo, error)
 	if err := conn.Handshake(); err != nil {
 		return nil, nil, err
 	}
-	return conn, TLSInfo{conn.ConnectionState()}, nil
+	return tlsConn{Conn: conn, rawConn: rawConn}, TLSInfo{conn.ConnectionState()}, nil
 }
 
 func (c *tlsCreds) Clone() TransportCredentials {
@@ -201,4 +214,64 @@ func NewServerTLSFromFile(certFile, keyFile string) (TransportCredentials, error
 		return nil, err
 	}
 	return NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}}), nil
+}
+
+
+
+type ChannelzSecurityInfo interface {
+	GetSecurityValue() ChannelzSecurityValue
+}
+
+
+
+
+type ChannelzSecurityValue interface {
+	isChannelzSecurityValue()
+}
+
+
+
+type TLSChannelzSecurityValue struct {
+	StandardName      string
+	LocalCertificate  []byte
+	RemoteCertificate []byte
+}
+
+func (*TLSChannelzSecurityValue) isChannelzSecurityValue() {}
+
+
+
+
+
+type OtherChannelzSecurityValue struct {
+	Name  string
+	Value proto.Message
+}
+
+func (*OtherChannelzSecurityValue) isChannelzSecurityValue() {}
+
+type tlsConn struct {
+	*tls.Conn
+	rawConn net.Conn
+}
+
+var cipherSuiteLookup = map[uint16]string{
+	tls.TLS_RSA_WITH_RC4_128_SHA:                "TLS_RSA_WITH_RC4_128_SHA",
+	tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA:           "TLS_RSA_WITH_3DES_EDE_CBC_SHA",
+	tls.TLS_RSA_WITH_AES_128_CBC_SHA:            "TLS_RSA_WITH_AES_128_CBC_SHA",
+	tls.TLS_RSA_WITH_AES_256_CBC_SHA:            "TLS_RSA_WITH_AES_256_CBC_SHA",
+	tls.TLS_RSA_WITH_AES_128_GCM_SHA256:         "TLS_RSA_WITH_AES_128_GCM_SHA256",
+	tls.TLS_RSA_WITH_AES_256_GCM_SHA384:         "TLS_RSA_WITH_AES_256_GCM_SHA384",
+	tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA:        "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA",
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA:    "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA:    "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+	tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA:          "TLS_ECDHE_RSA_WITH_RC4_128_SHA",
+	tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA:     "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA",
+	tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:      "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+	tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:      "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:   "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:   "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+	tls.TLS_FALLBACK_SCSV:                       "TLS_FALLBACK_SCSV",
 }

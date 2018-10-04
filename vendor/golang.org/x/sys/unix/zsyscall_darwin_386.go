@@ -399,6 +399,140 @@ func pipe() (r int, w int, err error) {
 
 
 
+func getxattr(path string, attr string, dest *byte, size int, position uint32, options int) (sz int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(path)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attr)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_GETXATTR, uintptr(unsafe.Pointer(_p0)), uintptr(unsafe.Pointer(_p1)), uintptr(unsafe.Pointer(dest)), uintptr(size), uintptr(position), uintptr(options))
+	sz = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func fgetxattr(fd int, attr string, dest *byte, size int, position uint32, options int) (sz int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(attr)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_FGETXATTR, uintptr(fd), uintptr(unsafe.Pointer(_p0)), uintptr(unsafe.Pointer(dest)), uintptr(size), uintptr(position), uintptr(options))
+	sz = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func setxattr(path string, attr string, data *byte, size int, position uint32, options int) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(path)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attr)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall6(SYS_SETXATTR, uintptr(unsafe.Pointer(_p0)), uintptr(unsafe.Pointer(_p1)), uintptr(unsafe.Pointer(data)), uintptr(size), uintptr(position), uintptr(options))
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func fsetxattr(fd int, attr string, data *byte, size int, position uint32, options int) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(attr)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall6(SYS_FSETXATTR, uintptr(fd), uintptr(unsafe.Pointer(_p0)), uintptr(unsafe.Pointer(data)), uintptr(size), uintptr(position), uintptr(options))
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func removexattr(path string, attr string, options int) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(path)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attr)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall(SYS_REMOVEXATTR, uintptr(unsafe.Pointer(_p0)), uintptr(unsafe.Pointer(_p1)), uintptr(options))
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func fremovexattr(fd int, attr string, options int) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(attr)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall(SYS_FREMOVEXATTR, uintptr(fd), uintptr(unsafe.Pointer(_p0)), uintptr(options))
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func listxattr(path string, dest *byte, size int, options int) (sz int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(path)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_LISTXATTR, uintptr(unsafe.Pointer(_p0)), uintptr(unsafe.Pointer(dest)), uintptr(size), uintptr(options), 0, 0)
+	sz = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func flistxattr(fd int, dest *byte, size int, options int) (sz int, err error) {
+	r0, _, e1 := Syscall6(SYS_FLISTXATTR, uintptr(fd), uintptr(unsafe.Pointer(dest)), uintptr(size), uintptr(options), 0, 0)
+	sz = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
 func kill(pid int, signum int, posix int) (err error) {
 	_, _, e1 := Syscall(SYS_KILL, uintptr(pid), uintptr(signum), uintptr(posix))
 	if e1 != 0 {

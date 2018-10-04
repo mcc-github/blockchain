@@ -171,12 +171,18 @@ func (s *Store) getPvtDataByNumWithoutLock(blockNum uint64, filter ledger.PvtNsC
 	return pvtdata, nil
 }
 
+
 func (s *Store) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
 	
 	
 	
 	
 	return s.pvtdataStore.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
+}
+
+
+func (s *Store) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
+	return s.pvtdataStore.ProcessCollsEligibilityEnabled(committingBlk, nsCollMap)
 }
 
 

@@ -5,6 +5,8 @@ package grpc
 import (
 	"errors"
 	"io"
+	"math"
+	"strconv"
 	"sync"
 	"time"
 
@@ -13,11 +15,13 @@ import (
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/encoding"
+	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/internal/channelz"
+	"google.golang.org/grpc/internal/grpcrand"
+	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/transport"
 )
 
 
@@ -44,24 +48,13 @@ type Stream interface {
 	
 	Context() context.Context
 	
-	
-	
-	
-	
-	
-	
-	
-	
 	SendMsg(m interface{}) error
-	
-	
-	
-	
-	
-	
 	
 	RecvMsg(m interface{}) error
 }
+
+
+
 
 
 type ClientStream interface {
@@ -79,9 +72,34 @@ type ClientStream interface {
 	
 	
 	
+	Context() context.Context
 	
 	
-	Stream
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	SendMsg(m interface{}) error
+	
+	
+	
+	
+	
+	
+	
+	
+	RecvMsg(m interface{}) error
 }
 
 
@@ -110,8 +128,6 @@ func (cc *ClientConn) NewStream(ctx context.Context, desc *StreamDesc, method st
 	}
 	return newClientStream(ctx, desc, cc, method, opts...)
 }
-
-
 
 
 func NewClientStream(ctx context.Context, desc *StreamDesc, cc *ClientConn, method string, opts ...CallOption) (ClientStream, error) {
@@ -162,13 +178,8 @@ func newClientStream(ctx context.Context, desc *StreamDesc, cc *ClientConn, meth
 	}
 
 	callHdr := &transport.CallHdr{
-		Host:   cc.authority,
-		Method: method,
-		
-		
-		
-		
-		Flush:          desc.ClientStreams,
+		Host:           cc.authority,
+		Method:         method,
 		ContentSubtype: c.contentSubtype,
 	}
 
@@ -202,15 +213,6 @@ func newClientStream(ctx context.Context, desc *StreamDesc, cc *ClientConn, meth
 		}
 		trInfo.tr.LazyLog(&trInfo.firstLine, false)
 		ctx = trace.NewContext(ctx, trInfo.tr)
-		defer func() {
-			if err != nil {
-				
-				
-				trInfo.tr.LazyPrintf("RPC: [%v]", err)
-				trInfo.tr.SetError()
-				trInfo.tr.Finish()
-			}
-		}()
 	}
 	ctx = newContextWithRPCInfo(ctx, c.failFast)
 	sh := cc.dopts.copts.StatsHandler
@@ -224,80 +226,41 @@ func newClientStream(ctx context.Context, desc *StreamDesc, cc *ClientConn, meth
 			FailFast:  c.failFast,
 		}
 		sh.HandleRPC(ctx, begin)
-		defer func() {
-			if err != nil {
-				
-				end := &stats.End{
-					Client:    true,
-					Error:     err,
-					BeginTime: beginTime,
-					EndTime:   time.Now(),
-				}
-				sh.HandleRPC(ctx, end)
-			}
-		}()
-	}
-
-	var (
-		t    transport.ClientTransport
-		s    *transport.Stream
-		done func(balancer.DoneInfo)
-	)
-	for {
-		
-		
-		
-		select {
-		case <-ctx.Done():
-			return nil, toRPCErr(ctx.Err())
-		default:
-		}
-
-		t, done, err = cc.getTransport(ctx, c.failFast)
-		if err != nil {
-			return nil, err
-		}
-
-		s, err = t.NewStream(ctx, callHdr)
-		if err != nil {
-			if done != nil {
-				done(balancer.DoneInfo{Err: err})
-				done = nil
-			}
-			
-			
-			
-			if !c.failFast {
-				continue
-			}
-			return nil, toRPCErr(err)
-		}
-		break
 	}
 
 	cs := &clientStream{
-		opts:   opts,
-		c:      c,
-		cc:     cc,
-		desc:   desc,
-		codec:  c.codec,
-		cp:     cp,
-		comp:   comp,
-		cancel: cancel,
-		attempt: &csAttempt{
-			t:            t,
-			s:            s,
-			p:            &parser{r: s},
-			done:         done,
-			dc:           cc.dopts.dc,
-			ctx:          ctx,
-			trInfo:       trInfo,
-			statsHandler: sh,
-			beginTime:    beginTime,
-		},
+		callHdr:      callHdr,
+		ctx:          ctx,
+		methodConfig: &mc,
+		opts:         opts,
+		callInfo:     c,
+		cc:           cc,
+		desc:         desc,
+		codec:        c.codec,
+		cp:           cp,
+		comp:         comp,
+		cancel:       cancel,
+		beginTime:    beginTime,
+		firstAttempt: true,
 	}
-	cs.c.stream = cs
-	cs.attempt.cs = cs
+	if !cc.dopts.disableRetry {
+		cs.retryThrottler = cc.retryThrottler.Load().(*retryThrottler)
+	}
+
+	cs.callInfo.stream = cs
+	
+	
+	if err := cs.newAttemptLocked(sh, trInfo); err != nil {
+		cs.finish(err)
+		return nil, err
+	}
+
+	op := func(a *csAttempt) error { return a.newStream() }
+	if err := cs.withRetry(op, func() { cs.bufferForRetryLocked(0, op) }); err != nil {
+		cs.finish(err)
+		return nil, err
+	}
+
 	if desc != unaryStreamDesc {
 		
 		
@@ -316,12 +279,45 @@ func newClientStream(ctx context.Context, desc *StreamDesc, cc *ClientConn, meth
 	return cs, nil
 }
 
+func (cs *clientStream) newAttemptLocked(sh stats.Handler, trInfo traceInfo) error {
+	cs.attempt = &csAttempt{
+		cs:           cs,
+		dc:           cs.cc.dopts.dc,
+		statsHandler: sh,
+		trInfo:       trInfo,
+	}
+
+	if err := cs.ctx.Err(); err != nil {
+		return toRPCErr(err)
+	}
+	t, done, err := cs.cc.getTransport(cs.ctx, cs.callInfo.failFast, cs.callHdr.Method)
+	if err != nil {
+		return err
+	}
+	cs.attempt.t = t
+	cs.attempt.done = done
+	return nil
+}
+
+func (a *csAttempt) newStream() error {
+	cs := a.cs
+	cs.callHdr.PreviousAttempts = cs.numRetries
+	s, err := a.t.NewStream(cs.ctx, cs.callHdr)
+	if err != nil {
+		return toRPCErr(err)
+	}
+	cs.attempt.s = s
+	cs.attempt.p = &parser{r: s}
+	return nil
+}
+
 
 type clientStream struct {
-	opts []CallOption
-	c    *callInfo
-	cc   *ClientConn
-	desc *StreamDesc
+	callHdr  *transport.CallHdr
+	opts     []CallOption
+	callInfo *callInfo
+	cc       *ClientConn
+	desc     *StreamDesc
 
 	codec baseCodec
 	cp    Compressor
@@ -329,13 +325,25 @@ type clientStream struct {
 
 	cancel context.CancelFunc 
 
-	sentLast bool 
+	sentLast  bool 
+	beginTime time.Time
 
-	mu       sync.Mutex 
-	finished bool       
+	methodConfig *MethodConfig
 
-	attempt *csAttempt 
+	ctx context.Context 
+
+	retryThrottler *retryThrottler 
+
+	mu                      sync.Mutex
+	firstAttempt            bool       
+	numRetries              int        
+	numRetriesSincePushback int        
+	finished                bool       
+	attempt                 *csAttempt 
 	
+	committed  bool                       
+	buffer     []func(a *csAttempt) error 
+	bufferSize int                        
 }
 
 
@@ -347,11 +355,10 @@ type csAttempt struct {
 	p    *parser
 	done func(balancer.DoneInfo)
 
+	finished  bool
 	dc        Decompressor
 	decomp    encoding.Compressor
 	decompSet bool
-
-	ctx context.Context 
 
 	mu sync.Mutex 
 	
@@ -359,19 +366,184 @@ type csAttempt struct {
 	trInfo traceInfo
 
 	statsHandler stats.Handler
-	beginTime    time.Time
+}
+
+func (cs *clientStream) commitAttemptLocked() {
+	cs.committed = true
+	cs.buffer = nil
+}
+
+func (cs *clientStream) commitAttempt() {
+	cs.mu.Lock()
+	cs.commitAttemptLocked()
+	cs.mu.Unlock()
+}
+
+
+
+func (cs *clientStream) shouldRetry(err error) error {
+	if cs.attempt.s == nil && !cs.callInfo.failFast {
+		
+		
+		
+		return nil
+	}
+	if cs.finished || cs.committed {
+		
+		return err
+	}
+	
+	if cs.attempt.s != nil {
+		<-cs.attempt.s.Done()
+	}
+	if cs.firstAttempt && !cs.callInfo.failFast && (cs.attempt.s == nil || cs.attempt.s.Unprocessed()) {
+		
+		cs.firstAttempt = false
+		return nil
+	}
+	cs.firstAttempt = false
+	if cs.cc.dopts.disableRetry {
+		return err
+	}
+
+	pushback := 0
+	hasPushback := false
+	if cs.attempt.s != nil {
+		if to, toErr := cs.attempt.s.TrailersOnly(); toErr != nil {
+			
+			return toErr
+		} else if !to {
+			return err
+		}
+
+		
+		
+		sps := cs.attempt.s.Trailer()["grpc-retry-pushback-ms"]
+		if len(sps) == 1 {
+			var e error
+			if pushback, e = strconv.Atoi(sps[0]); e != nil || pushback < 0 {
+				grpclog.Infof("Server retry pushback specified to abort (%q).", sps[0])
+				cs.retryThrottler.throttle() 
+				return err
+			}
+			hasPushback = true
+		} else if len(sps) > 1 {
+			grpclog.Warningf("Server retry pushback specified multiple values (%q); not retrying.", sps)
+			cs.retryThrottler.throttle() 
+			return err
+		}
+	}
+
+	var code codes.Code
+	if cs.attempt.s != nil {
+		code = cs.attempt.s.Status().Code()
+	} else {
+		code = status.Convert(err).Code()
+	}
+
+	rp := cs.methodConfig.retryPolicy
+	if rp == nil || !rp.retryableStatusCodes[code] {
+		return err
+	}
+
+	
+	
+	if cs.retryThrottler.throttle() {
+		return err
+	}
+	if cs.numRetries+1 >= rp.maxAttempts {
+		return err
+	}
+
+	var dur time.Duration
+	if hasPushback {
+		dur = time.Millisecond * time.Duration(pushback)
+		cs.numRetriesSincePushback = 0
+	} else {
+		fact := math.Pow(rp.backoffMultiplier, float64(cs.numRetriesSincePushback))
+		cur := float64(rp.initialBackoff) * fact
+		if max := float64(rp.maxBackoff); cur > max {
+			cur = max
+		}
+		dur = time.Duration(grpcrand.Int63n(int64(cur)))
+		cs.numRetriesSincePushback++
+	}
+
+	
+	
+	t := time.NewTimer(dur)
+	select {
+	case <-t.C:
+		cs.numRetries++
+		return nil
+	case <-cs.ctx.Done():
+		t.Stop()
+		return status.FromContextError(cs.ctx.Err()).Err()
+	}
+}
+
+
+func (cs *clientStream) retryLocked(lastErr error) error {
+	for {
+		cs.attempt.finish(lastErr)
+		if err := cs.shouldRetry(lastErr); err != nil {
+			cs.commitAttemptLocked()
+			return err
+		}
+		if err := cs.newAttemptLocked(nil, traceInfo{}); err != nil {
+			return err
+		}
+		if lastErr = cs.replayBufferLocked(); lastErr == nil {
+			return nil
+		}
+	}
 }
 
 func (cs *clientStream) Context() context.Context {
+	cs.commitAttempt()
 	
-	return cs.attempt.context()
+	
+	return cs.attempt.s.Context()
+}
+
+func (cs *clientStream) withRetry(op func(a *csAttempt) error, onSuccess func()) error {
+	cs.mu.Lock()
+	for {
+		if cs.committed {
+			cs.mu.Unlock()
+			return op(cs.attempt)
+		}
+		a := cs.attempt
+		cs.mu.Unlock()
+		err := op(a)
+		cs.mu.Lock()
+		if a != cs.attempt {
+			
+			continue
+		}
+		if err == io.EOF {
+			<-a.s.Done()
+		}
+		if err == nil || (err == io.EOF && a.s.Status().Code() == codes.OK) {
+			onSuccess()
+			cs.mu.Unlock()
+			return err
+		}
+		if err := cs.retryLocked(err); err != nil {
+			cs.mu.Unlock()
+			return err
+		}
+	}
 }
 
 func (cs *clientStream) Header() (metadata.MD, error) {
-	m, err := cs.attempt.header()
+	var m metadata.MD
+	err := cs.withRetry(func(a *csAttempt) error {
+		var err error
+		m, err = a.s.Header()
+		return toRPCErr(err)
+	}, cs.commitAttemptLocked)
 	if err != nil {
-		
-		err = toRPCErr(err)
 		cs.finish(err)
 	}
 	return m, err
@@ -379,21 +551,102 @@ func (cs *clientStream) Header() (metadata.MD, error) {
 
 func (cs *clientStream) Trailer() metadata.MD {
 	
-	return cs.attempt.trailer()
+	
+	
+	
+	
+	
+	
+	cs.commitAttempt()
+	if cs.attempt.s == nil {
+		return nil
+	}
+	return cs.attempt.s.Trailer()
+}
+
+func (cs *clientStream) replayBufferLocked() error {
+	a := cs.attempt
+	for _, f := range cs.buffer {
+		if err := f(a); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (cs *clientStream) bufferForRetryLocked(sz int, op func(a *csAttempt) error) {
+	
+	if cs.committed {
+		return
+	}
+	cs.bufferSize += sz
+	if cs.bufferSize > cs.callInfo.maxRetryRPCBufferSize {
+		cs.commitAttemptLocked()
+		return
+	}
+	cs.buffer = append(cs.buffer, op)
 }
 
 func (cs *clientStream) SendMsg(m interface{}) (err error) {
+	defer func() {
+		if err != nil && err != io.EOF {
+			
+			
+			
+			
+			
+			cs.finish(err)
+		}
+	}()
+	if cs.sentLast {
+		return status.Errorf(codes.Internal, "SendMsg called after CloseSend")
+	}
+	if !cs.desc.ClientStreams {
+		cs.sentLast = true
+	}
+	data, err := encode(cs.codec, m)
+	if err != nil {
+		return err
+	}
+	compData, err := compress(data, cs.cp, cs.comp)
+	if err != nil {
+		return err
+	}
+	hdr, payload := msgHeader(data, compData)
 	
-	return cs.attempt.sendMsg(m)
+	if len(payload) > *cs.callInfo.maxSendMessageSize {
+		return status.Errorf(codes.ResourceExhausted, "trying to send message larger than max (%d vs. %d)", len(payload), *cs.callInfo.maxSendMessageSize)
+	}
+	op := func(a *csAttempt) error {
+		err := a.sendMsg(m, hdr, payload, data)
+		
+		
+		m, data = nil, nil
+		return err
+	}
+	return cs.withRetry(op, func() { cs.bufferForRetryLocked(len(hdr)+len(payload), op) })
 }
 
-func (cs *clientStream) RecvMsg(m interface{}) (err error) {
-	
-	return cs.attempt.recvMsg(m)
+func (cs *clientStream) RecvMsg(m interface{}) error {
+	err := cs.withRetry(func(a *csAttempt) error {
+		return a.recvMsg(m)
+	}, cs.commitAttemptLocked)
+	if err != nil || !cs.desc.ServerStreams {
+		
+		cs.finish(err)
+	}
+	return err
 }
 
 func (cs *clientStream) CloseSend() error {
-	cs.attempt.closeSend()
+	if cs.sentLast {
+		
+		return nil
+	}
+	cs.sentLast = true
+	op := func(a *csAttempt) error { return a.t.Write(a.s, nil, nil, &transport.Options{Last: true}) }
+	cs.withRetry(op, func() { cs.bufferForRetryLocked(0, op) })
+	
 	return nil
 }
 
@@ -408,7 +661,11 @@ func (cs *clientStream) finish(err error) {
 		return
 	}
 	cs.finished = true
+	cs.commitAttemptLocked()
 	cs.mu.Unlock()
+	if err == nil {
+		cs.retryThrottler.successfulRPC()
+	}
 	if channelz.IsOn() {
 		if err != nil {
 			cs.cc.incrCallsFailed()
@@ -416,46 +673,20 @@ func (cs *clientStream) finish(err error) {
 			cs.cc.incrCallsSucceeded()
 		}
 	}
+	if cs.attempt != nil {
+		cs.attempt.finish(err)
+	}
 	
-	cs.attempt.finish(err)
-	for _, o := range cs.opts {
-		o.after(cs.c)
+	if cs.attempt.s != nil {
+		for _, o := range cs.opts {
+			o.after(cs.callInfo)
+		}
 	}
 	cs.cancel()
 }
 
-func (a *csAttempt) context() context.Context {
-	return a.s.Context()
-}
-
-func (a *csAttempt) header() (metadata.MD, error) {
-	return a.s.Header()
-}
-
-func (a *csAttempt) trailer() metadata.MD {
-	return a.s.Trailer()
-}
-
-func (a *csAttempt) sendMsg(m interface{}) (err error) {
-	
-	
+func (a *csAttempt) sendMsg(m interface{}, hdr, payld, data []byte) error {
 	cs := a.cs
-	defer func() {
-		
-		
-		
-		if err == io.EOF && !cs.desc.ClientStreams {
-			err = nil
-		}
-		if err != nil && err != io.EOF {
-			
-			
-			
-			
-			cs.finish(err)
-		}
-	}()
-	
 	if EnableTracing {
 		a.mu.Lock()
 		if a.trInfo.tr != nil {
@@ -463,44 +694,26 @@ func (a *csAttempt) sendMsg(m interface{}) (err error) {
 		}
 		a.mu.Unlock()
 	}
-	data, err := encode(cs.codec, m)
-	if err != nil {
-		return err
-	}
-	compData, err := compress(data, cs.cp, cs.comp)
-	if err != nil {
-		return err
-	}
-	hdr, payload := msgHeader(data, compData)
-	
-	if len(payload) > *cs.c.maxSendMessageSize {
-		return status.Errorf(codes.ResourceExhausted, "trying to send message larger than max (%d vs. %d)", len(payload), *cs.c.maxSendMessageSize)
-	}
-
-	if !cs.desc.ClientStreams {
-		cs.sentLast = true
-	}
-	err = a.t.Write(a.s, hdr, payload, &transport.Options{Last: !cs.desc.ClientStreams})
-	if err == nil {
-		if a.statsHandler != nil {
-			a.statsHandler.HandleRPC(a.ctx, outPayload(true, m, data, payload, time.Now()))
+	if err := a.t.Write(a.s, hdr, payld, &transport.Options{Last: !cs.desc.ClientStreams}); err != nil {
+		if !cs.desc.ClientStreams {
+			
+			
+			
+			return nil
 		}
-		if channelz.IsOn() {
-			a.t.IncrMsgSent()
-		}
-		return nil
+		return io.EOF
 	}
-	return io.EOF
+	if a.statsHandler != nil {
+		a.statsHandler.HandleRPC(cs.ctx, outPayload(true, m, data, payld, time.Now()))
+	}
+	if channelz.IsOn() {
+		a.t.IncrMsgSent()
+	}
+	return nil
 }
 
 func (a *csAttempt) recvMsg(m interface{}) (err error) {
 	cs := a.cs
-	defer func() {
-		if err != nil || !cs.desc.ServerStreams {
-			
-			cs.finish(err)
-		}
-	}()
 	var inPayload *stats.InPayload
 	if a.statsHandler != nil {
 		inPayload = &stats.InPayload{
@@ -523,7 +736,7 @@ func (a *csAttempt) recvMsg(m interface{}) (err error) {
 		
 		a.decompSet = true
 	}
-	err = recv(a.p, cs.codec, a.s, a.dc, m, *cs.c.maxReceiveMessageSize, inPayload, a.decomp)
+	err = recv(a.p, cs.codec, a.s, a.dc, m, *cs.callInfo.maxReceiveMessageSize, inPayload, a.decomp)
 	if err != nil {
 		if err == io.EOF {
 			if statusErr := a.s.Status().Err(); statusErr != nil {
@@ -541,7 +754,7 @@ func (a *csAttempt) recvMsg(m interface{}) (err error) {
 		a.mu.Unlock()
 	}
 	if inPayload != nil {
-		a.statsHandler.HandleRPC(a.ctx, inPayload)
+		a.statsHandler.HandleRPC(cs.ctx, inPayload)
 	}
 	if channelz.IsOn() {
 		a.t.IncrMsgRecv()
@@ -553,7 +766,7 @@ func (a *csAttempt) recvMsg(m interface{}) (err error) {
 
 	
 	
-	err = recv(a.p, cs.codec, a.s, a.dc, m, *cs.c.maxReceiveMessageSize, nil, a.decomp)
+	err = recv(a.p, cs.codec, a.s, a.dc, m, *cs.callInfo.maxReceiveMessageSize, nil, a.decomp)
 	if err == nil {
 		return toRPCErr(errors.New("grpc: client streaming protocol violation: get <nil>, want <EOF>"))
 	}
@@ -563,37 +776,40 @@ func (a *csAttempt) recvMsg(m interface{}) (err error) {
 	return toRPCErr(err)
 }
 
-func (a *csAttempt) closeSend() {
-	cs := a.cs
-	if cs.sentLast {
-		return
-	}
-	cs.sentLast = true
-	cs.attempt.t.Write(cs.attempt.s, nil, nil, &transport.Options{Last: true})
-	
-	
-	
-}
-
 func (a *csAttempt) finish(err error) {
 	a.mu.Lock()
-	a.t.CloseStream(a.s, err)
+	if a.finished {
+		a.mu.Unlock()
+		return
+	}
+	a.finished = true
+	if err == io.EOF {
+		
+		err = nil
+	}
+	if a.s != nil {
+		a.t.CloseStream(a.s, err)
+	}
 
 	if a.done != nil {
+		br := false
+		if a.s != nil {
+			br = a.s.BytesReceived()
+		}
 		a.done(balancer.DoneInfo{
 			Err:           err,
-			BytesSent:     true,
-			BytesReceived: a.s.BytesReceived(),
+			BytesSent:     a.s != nil,
+			BytesReceived: br,
 		})
 	}
 	if a.statsHandler != nil {
 		end := &stats.End{
 			Client:    true,
-			BeginTime: a.beginTime,
+			BeginTime: a.cs.beginTime,
 			EndTime:   time.Now(),
 			Error:     err,
 		}
-		a.statsHandler.HandleRPC(a.ctx, end)
+		a.statsHandler.HandleRPC(a.cs.ctx, end)
 	}
 	if a.trInfo.tr != nil {
 		if err == nil {
@@ -607,6 +823,9 @@ func (a *csAttempt) finish(err error) {
 	}
 	a.mu.Unlock()
 }
+
+
+
 
 
 type ServerStream interface {
@@ -624,7 +843,32 @@ type ServerStream interface {
 	
 	
 	SetTrailer(metadata.MD)
-	Stream
+	
+	Context() context.Context
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	SendMsg(m interface{}) error
+	
+	
+	
+	
+	
+	
+	
+	
+	RecvMsg(m interface{}) error
 }
 
 

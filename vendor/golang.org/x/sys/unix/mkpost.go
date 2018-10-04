@@ -43,6 +43,10 @@ func main() {
 	}
 
 	
+	valRegex := regexp.MustCompile(`type (Fsid|Sigset_t) struct {(\s+)X__val(\s+\S+\s+)}`)
+	b = valRegex.ReplaceAll(b, []byte("type $1 struct {${2}Val$3}"))
+
+	
 	
 	ptraceRexexp := regexp.MustCompile(`type Ptrace((Psw|Fpregs|Per) struct {\s*})`)
 	b = ptraceRexexp.ReplaceAll(b, nil)
@@ -70,11 +74,8 @@ func main() {
 	b = removePaddingFieldsRegex.ReplaceAll(b, []byte("_"))
 
 	
-	if goarch == "s390x" && goos == "linux" {
-		
-		removeFieldsRegex = regexp.MustCompile(`\bX_\S+`)
-		b = removeFieldsRegex.ReplaceAll(b, []byte("_"))
-	}
+	removeFieldsRegex = regexp.MustCompile(`\b(X_\S+|Padding)`)
+	b = removeFieldsRegex.ReplaceAll(b, []byte("_"))
 
 	
 	b = b[bytes.IndexByte(b, '\n')+1:]

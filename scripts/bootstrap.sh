@@ -29,7 +29,7 @@ printHelp() {
 
 dockerFabricPull() {
   local FABRIC_TAG=$1
-  for IMAGES in peer orderer ccenv tools; do
+  for IMAGES in peer orderer ccenv javaenv tools; do
       echo "==> FABRIC IMAGE: $IMAGES"
       echo
       docker pull mcc-github/blockchain-$IMAGES:$FABRIC_TAG
@@ -60,12 +60,12 @@ samplesInstall() {
   # version to the binaries and docker images to be downloaded
   if [ -d first-network ]; then
     # if we are in the blockchain-samples repo, checkout corresponding version
-    echo "===> Checking out v${VERSION} branch of mcc-github/blockchain-samples"
+    echo "===> Checking out v${VERSION} of mcc-github/blockchain-samples"
     git checkout v${VERSION}
   elif [ -d blockchain-samples ]; then
     # if blockchain-samples repo already cloned and in current directory,
     # cd blockchain-samples and checkout corresponding version
-    echo "===> Checking out v${VERSION} branch of mcc-github/blockchain-samples"
+    echo "===> Checking out v${VERSION} of mcc-github/blockchain-samples"
     cd blockchain-samples && git checkout v${VERSION}
   else
     echo "===> Cloning mcc-github/blockchain-samples repo and checkout v${VERSION}"

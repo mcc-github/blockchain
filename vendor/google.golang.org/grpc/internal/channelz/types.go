@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
 )
 
@@ -265,9 +266,9 @@ type SocketInternalMetric struct {
 	RemoteAddr net.Addr
 	
 	
-	RemoteName string
-	
-	
+	RemoteName    string
+	SocketOptions *SocketOptionData
+	Security      credentials.ChannelzSecurityValue
 }
 
 

@@ -103,6 +103,8 @@ func Seek(fd int, offset int64, whence int) (newoffset int64, err error) {
 
 
 
+
+
 func Time(t *Time_t) (Time_t, error) {
 	var tv Timeval
 	err := Gettimeofday(&tv)
@@ -122,6 +124,8 @@ func Utime(path string, buf *Utimbuf) error {
 	}
 	return Utimes(path, tv)
 }
+
+
 
 
 

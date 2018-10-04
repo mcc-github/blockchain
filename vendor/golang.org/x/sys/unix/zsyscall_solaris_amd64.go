@@ -264,6 +264,10 @@ import (
 
 
 
+
+
+
+
 var (
 	procpipe,
 	procgetsockname,
@@ -296,6 +300,7 @@ var (
 	procDup,
 	procDup2,
 	procExit,
+	procFaccessat,
 	procFchdir,
 	procFchmod,
 	procFchmodat,
@@ -383,6 +388,7 @@ var (
 	proc__xnet_connect,
 	procmmap,
 	procmunmap,
+	procsendfile,
 	proc__xnet_sendto,
 	proc__xnet_socket,
 	proc__xnet_socketpair,
@@ -689,6 +695,19 @@ func Dup2(oldfd int, newfd int) (err error) {
 
 func Exit(code int) {
 	sysvicall6(uintptr(unsafe.Pointer(&procExit)), 1, uintptr(code), 0, 0, 0, 0, 0)
+	return
+}
+
+func Faccessat(dirfd int, path string, mode uint32, flags int) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(path)
+	if err != nil {
+		return
+	}
+	_, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&procFaccessat)), 4, uintptr(dirfd), uintptr(unsafe.Pointer(_p0)), uintptr(mode), uintptr(flags), 0, 0)
+	if e1 != 0 {
+		err = e1
+	}
 	return
 }
 
@@ -1583,6 +1602,15 @@ func mmap(addr uintptr, length uintptr, prot int, flag int, fd int, pos int64) (
 
 func munmap(addr uintptr, length uintptr) (err error) {
 	_, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&procmunmap)), 2, uintptr(addr), uintptr(length), 0, 0, 0, 0)
+	if e1 != 0 {
+		err = e1
+	}
+	return
+}
+
+func sendfile(outfd int, infd int, offset *int64, count int) (written int, err error) {
+	r0, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&procsendfile)), 4, uintptr(outfd), uintptr(infd), uintptr(unsafe.Pointer(offset)), uintptr(count), 0, 0)
+	written = int(r0)
 	if e1 != 0 {
 		err = e1
 	}

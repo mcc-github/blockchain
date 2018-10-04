@@ -75,10 +75,10 @@ func TestChain(t *testing.T) {
 
 		assert.NoError(t, err, "Expected newChain to return without errors")
 		select {
-		case <-chain.errorChan:
-			logger.Debug("errorChan is closed as it should be")
+		case <-chain.Errored():
+			logger.Debug("Errored() returned a closed channel as expected")
 		default:
-			t.Fatal("errorChan should have been closed")
+			t.Fatal("Errored() should have returned a closed channel")
 		}
 
 		select {
@@ -938,6 +938,80 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 	assert.NoError(t, err, "Expected no error when setting up the mock partition consumer")
 
 	t.Run("TimeToCut", func(t *testing.T) {
+		t.Run("PendingMsgToCutProper", func(t *testing.T) {
+			errorChan := make(chan struct{})
+			close(errorChan)
+			haltChan := make(chan struct{})
+
+			lastCutBlockNumber := uint64(3)
+
+			mockSupport := &mockmultichannel.ConsenterSupport{
+				Blocks:          make(chan *cb.Block), 
+				BlockCutterVal:  mockblockcutter.NewReceiver(),
+				ChainIDVal:      mockChannel.topic(),
+				HeightVal:       lastCutBlockNumber, 
+				SharedConfigVal: &mockconfig.Orderer{BatchTimeoutVal: shortTimeout / 2},
+			}
+			defer close(mockSupport.BlockCutterVal.Block)
+
+			bareMinimumChain := &chainImpl{
+				producer:        producer,
+				parentConsumer:  mockParentConsumer,
+				channelConsumer: mockChannelConsumer,
+
+				channel:            mockChannel,
+				ConsenterSupport:   mockSupport,
+				lastCutBlockNumber: lastCutBlockNumber,
+
+				errorChan:                      errorChan,
+				haltChan:                       haltChan,
+				doneProcessingMessagesToBlocks: make(chan struct{}),
+			}
+
+			
+			go func() {
+				mockSupport.BlockCutterVal.Block <- struct{}{} 
+				logger.Debugf("Mock blockcutter's Ordered call has returned")
+			}()
+			
+			mockSupport.BlockCutterVal.Ordered(newMockEnvelope("fooMessage"))
+
+			done := make(chan struct{})
+
+			go func() {
+				bareMinimumChain.processMessagesToBlocks()
+				done <- struct{}{}
+			}()
+
+			
+			mockSupport.BlockCutterVal.CutAncestors = true
+
+			
+			mpc.YieldMessage(newMockConsumerMessage(newRegularMessage(utils.MarshalOrPanic(newMockEnvelope("fooMessage")))))
+
+			go func() {
+				mockSupport.BlockCutterVal.Block <- struct{}{}
+				logger.Debugf("Mock blockcutter's Ordered call has returned")
+			}()
+
+			<-mockSupport.Blocks 
+
+			logger.Debug("Closing haltChan to exit the infinite for-loop")
+			close(haltChan) 
+			logger.Debug("haltChan closed")
+			<-done
+
+			if bareMinimumChain.timer != nil {
+				go func() {
+					<-bareMinimumChain.timer 
+				}()
+			}
+
+			assert.NotEmpty(t, mockSupport.BlockCutterVal.CurBatch, "Expected the blockCutter to be non-empty")
+			assert.NotNil(t, bareMinimumChain.timer, "Expected the cutTimer to be non-nil when there are pending envelopes")
+
+		})
+
 		t.Run("ReceiveTimeToCutProper", func(t *testing.T) {
 			errorChan := make(chan struct{})
 			close(errorChan)

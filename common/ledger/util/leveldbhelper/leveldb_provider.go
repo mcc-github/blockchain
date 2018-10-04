@@ -137,6 +137,11 @@ func (batch *UpdateBatch) Delete(key []byte) {
 }
 
 
+func (batch *UpdateBatch) Len() int {
+	return len(batch.KVs)
+}
+
+
 type Iterator struct {
 	iterator.Iterator
 }

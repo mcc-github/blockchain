@@ -127,7 +127,11 @@ type Builder interface {
 }
 
 
-type PickOptions struct{}
+type PickOptions struct {
+	
+	
+	FullMethodName string
+}
 
 
 type DoneInfo struct {

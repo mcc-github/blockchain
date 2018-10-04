@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/internal/backoff"
 	"google.golang.org/grpc/internal/grpcrand"
 	"google.golang.org/grpc/resolver"
 )
@@ -35,23 +36,29 @@ const (
 )
 
 var (
-	errMissingAddr = errors.New("missing address")
+	errMissingAddr = errors.New("dns resolver: missing address")
+
+	
+	
+	
+	
+	errEndsWithColon = errors.New("dns resolver: missing port after port-separator colon")
 )
 
 
 func NewBuilder() resolver.Builder {
-	return &dnsBuilder{freq: defaultFreq}
+	return &dnsBuilder{minFreq: defaultFreq}
 }
 
 type dnsBuilder struct {
 	
-	freq time.Duration
+	minFreq time.Duration
 }
 
 
 func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOption) (resolver.Resolver, error) {
 	if target.Authority != "" {
-		return nil, fmt.Errorf("Default DNS resolver does not support custom DNS server")
+		return nil, fmt.Errorf("default DNS resolver does not support custom DNS server")
 	}
 	host, port, err := parseTarget(target.Endpoint)
 	if err != nil {
@@ -76,7 +83,8 @@ func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts 
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &dnsResolver{
-		freq:                 b.freq,
+		freq:                 b.minFreq,
+		backoff:              backoff.Exponential{MaxDelay: b.minFreq},
 		host:                 host,
 		port:                 port,
 		ctx:                  ctx,
@@ -132,12 +140,14 @@ func (i *ipResolver) watcher() {
 
 
 type dnsResolver struct {
-	freq   time.Duration
-	host   string
-	port   string
-	ctx    context.Context
-	cancel context.CancelFunc
-	cc     resolver.ClientConn
+	freq       time.Duration
+	backoff    backoff.Exponential
+	retryCount int
+	host       string
+	port       string
+	ctx        context.Context
+	cancel     context.CancelFunc
+	cc         resolver.ClientConn
 	
 	rn chan struct{}
 	t  *time.Timer
@@ -177,7 +187,14 @@ func (d *dnsResolver) watcher() {
 		}
 		result, sc := d.lookup()
 		
-		d.t.Reset(d.freq)
+		
+		if len(result) == 0 {
+			d.retryCount++
+			d.t.Reset(d.backoff.Backoff(d.retryCount))
+		} else {
+			d.retryCount = 0
+			d.t.Reset(d.freq)
+		}
 		d.cc.NewServiceConfig(sc)
 		d.cc.NewAddress(result)
 	}
@@ -281,7 +298,6 @@ func formatIP(addr string) (addrIP string, ok bool) {
 
 
 
-
 func parseTarget(target string) (host, port string, err error) {
 	if target == "" {
 		return "", "", errMissingAddr
@@ -291,14 +307,14 @@ func parseTarget(target string) (host, port string, err error) {
 		return target, defaultPort, nil
 	}
 	if host, port, err = net.SplitHostPort(target); err == nil {
+		if port == "" {
+			
+			return "", "", errEndsWithColon
+		}
 		
 		if host == "" {
 			
 			host = "localhost"
-		}
-		if port == "" {
-			
-			port = defaultPort
 		}
 		return host, port, nil
 	}

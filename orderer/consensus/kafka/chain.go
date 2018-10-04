@@ -48,9 +48,6 @@ func newChain(
 	logger.Infof("[channel: %s] Starting chain with last persisted offset %d and last recorded block %d",
 		support.ChainID(), lastOffsetPersisted, lastCutBlockNumber)
 
-	errorChan := make(chan struct{})
-	close(errorChan) 
-
 	doneReprocessingMsgInFlight := make(chan struct{})
 	
 	
@@ -73,7 +70,6 @@ func newChain(
 		lastResubmittedConfigOffset: lastResubmittedConfigOffset,
 		lastCutBlockNumber:          lastCutBlockNumber,
 
-		errorChan:                   errorChan,
 		haltChan:                    make(chan struct{}),
 		startChan:                   make(chan struct{}),
 		doneReprocessingMsgInFlight: doneReprocessingMsgInFlight,
@@ -121,7 +117,10 @@ func (chain *chainImpl) Errored() <-chan struct{} {
 	case <-chain.startChan:
 		return chain.errorChan
 	default:
-		return nil
+		
+		dummyError := make(chan struct{})
+		close(dummyError)
+		return dummyError
 	}
 }
 
@@ -582,17 +581,26 @@ func (chain *chainImpl) processRegular(regularMessage *ab.KafkaMessageRegular, r
 	commitNormalMsg := func(message *cb.Envelope, newOffset int64) {
 		batches, pending := chain.BlockCutter().Ordered(message)
 		logger.Debugf("[channel: %s] Ordering results: items in batch = %d, pending = %v", chain.ChainID(), len(batches), pending)
+
+		switch {
+		case chain.timer != nil && !pending:
+			
+			chain.timer = nil
+		case chain.timer == nil && pending:
+			
+			chain.timer = time.After(chain.SharedConfig().BatchTimeout())
+			logger.Debugf("[channel: %s] Just began %s batch timer", chain.ChainID(), chain.SharedConfig().BatchTimeout().String())
+		default:
+			
+			
+			
+		}
+
 		if len(batches) == 0 {
 			
 			chain.lastOriginalOffsetProcessed = newOffset
-			if chain.timer == nil {
-				chain.timer = time.After(chain.SharedConfig().BatchTimeout())
-				logger.Debugf("[channel: %s] Just began %s batch timer", chain.ChainID(), chain.SharedConfig().BatchTimeout().String())
-			}
 			return
 		}
-
-		chain.timer = nil
 
 		offset := receivedOffset
 		if pending || len(batches) == 2 {

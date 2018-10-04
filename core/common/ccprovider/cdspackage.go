@@ -184,6 +184,16 @@ func (ccpack *CDSPackage) ValidateCC(ccdata *ChaincodeData) error {
 		return fmt.Errorf("nil data")
 	}
 
+	
+	
+	
+	
+	
+	
+	if !isPrintable(ccdata.Name) {
+		return fmt.Errorf("invalid chaincode name: %q", ccdata.Name)
+	}
+
 	if ccdata.Name != ccpack.depSpec.ChaincodeSpec.ChaincodeId.Name || ccdata.Version != ccpack.depSpec.ChaincodeSpec.ChaincodeId.Version {
 		return fmt.Errorf("invalid chaincode data %v (%v)", ccdata, ccpack.depSpec.ChaincodeSpec.ChaincodeId)
 	}
@@ -236,7 +246,12 @@ func (ccpack *CDSPackage) InitFromPath(ccname string, ccversion string, path str
 		return nil, nil, err
 	}
 
-	if _, err = ccpack.InitFromBuffer(buf); err != nil {
+	ccdata, err := ccpack.InitFromBuffer(buf)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := ccpack.ValidateCC(ccdata); err != nil {
 		return nil, nil, err
 	}
 

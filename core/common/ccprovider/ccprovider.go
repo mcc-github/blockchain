@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/chaincode"
@@ -81,6 +82,16 @@ func SetChaincodesPath(path string) {
 
 func GetChaincodePackage(ccname string, ccversion string) ([]byte, error) {
 	return GetChaincodePackageFromPath(ccname, ccversion, chaincodeInstallPath)
+}
+
+
+
+
+func isPrintable(name string) bool {
+	notASCII := func(r rune) bool {
+		return !unicode.IsPrint(r)
+	}
+	return strings.IndexFunc(name, notASCII) == -1
 }
 
 
@@ -306,7 +317,7 @@ func GetCCPackage(buf []byte) (CCPackage, error) {
 		return scds, nil
 	}
 
-	return nil, errors.New("could not unmarshaled chaincode package to CDS or SignedCDS")
+	return nil, errors.New("could not unmarshal chaincode package to CDS or SignedCDS")
 }
 
 

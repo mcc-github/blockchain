@@ -10,7 +10,6 @@
 package unix
 
 import (
-	"syscall"
 	"unsafe"
 )
 
@@ -47,6 +46,8 @@ func Pipe2(p []int, flags int) (err error) {
 	p[1] = int(pp[1])
 	return
 }
+
+
 
 
 
@@ -157,10 +158,6 @@ func Setrlimit(resource int, rlim *Rlimit) (err error) {
 	return setrlimit(resource, &rl)
 }
 
-
-
-func seek(fd int, offset int64, whence int) (newoffset int64, err syscall.Errno)
-
 func Seek(fd int, offset int64, whence int) (newoffset int64, err error) {
 	newoffset, errno := seek(fd, offset, whence)
 	if errno != 0 {
@@ -205,9 +202,6 @@ const (
 	_RECVMMSG    = 19
 	_SENDMMSG    = 20
 )
-
-func socketcall(call int, a0, a1, a2, a3, a4, a5 uintptr) (n int, err syscall.Errno)
-func rawsocketcall(call int, a0, a1, a2, a3, a4, a5 uintptr) (n int, err syscall.Errno)
 
 func accept(s int, rsa *RawSockaddrAny, addrlen *_Socklen) (fd int, err error) {
 	fd, e := socketcall(_ACCEPT, uintptr(s), uintptr(unsafe.Pointer(rsa)), uintptr(unsafe.Pointer(addrlen)), 0, 0, 0)

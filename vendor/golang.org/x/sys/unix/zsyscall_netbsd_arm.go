@@ -571,6 +571,245 @@ func Exit(code int) {
 
 
 
+func ExtattrGetFd(fd int, attrnamespace int, attrname string, data uintptr, nbytes int) (ret int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_EXTATTR_GET_FD, uintptr(fd), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p0)), uintptr(data), uintptr(nbytes), 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrSetFd(fd int, attrnamespace int, attrname string, data uintptr, nbytes int) (ret int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_EXTATTR_SET_FD, uintptr(fd), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p0)), uintptr(data), uintptr(nbytes), 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrDeleteFd(fd int, attrnamespace int, attrname string) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall(SYS_EXTATTR_DELETE_FD, uintptr(fd), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p0)))
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrListFd(fd int, attrnamespace int, data uintptr, nbytes int) (ret int, err error) {
+	r0, _, e1 := Syscall6(SYS_EXTATTR_LIST_FD, uintptr(fd), uintptr(attrnamespace), uintptr(data), uintptr(nbytes), 0, 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrGetFile(file string, attrnamespace int, attrname string, data uintptr, nbytes int) (ret int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(file)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_EXTATTR_GET_FILE, uintptr(unsafe.Pointer(_p0)), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p1)), uintptr(data), uintptr(nbytes), 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrSetFile(file string, attrnamespace int, attrname string, data uintptr, nbytes int) (ret int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(file)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_EXTATTR_SET_FILE, uintptr(unsafe.Pointer(_p0)), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p1)), uintptr(data), uintptr(nbytes), 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrDeleteFile(file string, attrnamespace int, attrname string) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(file)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall(SYS_EXTATTR_DELETE_FILE, uintptr(unsafe.Pointer(_p0)), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p1)))
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrListFile(file string, attrnamespace int, data uintptr, nbytes int) (ret int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(file)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_EXTATTR_LIST_FILE, uintptr(unsafe.Pointer(_p0)), uintptr(attrnamespace), uintptr(data), uintptr(nbytes), 0, 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrGetLink(link string, attrnamespace int, attrname string, data uintptr, nbytes int) (ret int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(link)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_EXTATTR_GET_LINK, uintptr(unsafe.Pointer(_p0)), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p1)), uintptr(data), uintptr(nbytes), 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrSetLink(link string, attrnamespace int, attrname string, data uintptr, nbytes int) (ret int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(link)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_EXTATTR_SET_LINK, uintptr(unsafe.Pointer(_p0)), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p1)), uintptr(data), uintptr(nbytes), 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrDeleteLink(link string, attrnamespace int, attrname string) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(link)
+	if err != nil {
+		return
+	}
+	var _p1 *byte
+	_p1, err = BytePtrFromString(attrname)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall(SYS_EXTATTR_DELETE_LINK, uintptr(unsafe.Pointer(_p0)), uintptr(attrnamespace), uintptr(unsafe.Pointer(_p1)))
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func ExtattrListLink(link string, attrnamespace int, data uintptr, nbytes int) (ret int, err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(link)
+	if err != nil {
+		return
+	}
+	r0, _, e1 := Syscall6(SYS_EXTATTR_LIST_LINK, uintptr(unsafe.Pointer(_p0)), uintptr(attrnamespace), uintptr(data), uintptr(nbytes), 0, 0)
+	ret = int(r0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func Faccessat(dirfd int, path string, mode uint32, flags int) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(path)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall6(SYS_FACCESSAT, uintptr(dirfd), uintptr(unsafe.Pointer(_p0)), uintptr(mode), uintptr(flags), 0, 0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func Fadvise(fd int, offset int64, length int64, advice int) (err error) {
+	_, _, e1 := Syscall9(SYS_POSIX_FADVISE, uintptr(fd), 0, uintptr(offset), uintptr(offset>>32), 0, uintptr(length), uintptr(length>>32), uintptr(advice), 0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
 func Fchdir(fd int) (err error) {
 	_, _, e1 := Syscall(SYS_FCHDIR, uintptr(fd), 0, 0)
 	if e1 != 0 {
@@ -593,6 +832,21 @@ func Fchflags(fd int, flags int) (err error) {
 
 func Fchmod(fd int, mode uint32) (err error) {
 	_, _, e1 := Syscall(SYS_FCHMOD, uintptr(fd), uintptr(mode), 0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+
+
+func Fchmodat(dirfd int, path string, mode uint32, flags int) (err error) {
+	var _p0 *byte
+	_p0, err = BytePtrFromString(path)
+	if err != nil {
+		return
+	}
+	_, _, e1 := Syscall6(SYS_FCHMODAT, uintptr(dirfd), uintptr(unsafe.Pointer(_p0)), uintptr(mode), uintptr(flags), 0, 0)
 	if e1 != 0 {
 		err = errnoErr(e1)
 	}

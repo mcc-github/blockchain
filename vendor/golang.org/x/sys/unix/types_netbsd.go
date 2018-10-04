@@ -67,6 +67,17 @@ const (
 
 
 
+const (
+	FADV_NORMAL     = C.POSIX_FADV_NORMAL
+	FADV_RANDOM     = C.POSIX_FADV_RANDOM
+	FADV_SEQUENTIAL = C.POSIX_FADV_SEQUENTIAL
+	FADV_WILLNEED   = C.POSIX_FADV_WILLNEED
+	FADV_DONTNEED   = C.POSIX_FADV_DONTNEED
+	FADV_NOREUSE    = C.POSIX_FADV_NOREUSE
+)
+
+
+
 type RawSockaddrInet4 C.struct_sockaddr_in
 
 type RawSockaddrInet6 C.struct_sockaddr_in6
@@ -215,3 +226,9 @@ type Sysctlnode C.struct_sysctlnode
 
 
 type Utsname C.struct_utsname
+
+
+
+const SizeofClockinfo = C.sizeof_struct_clockinfo
+
+type Clockinfo C.struct_clockinfo

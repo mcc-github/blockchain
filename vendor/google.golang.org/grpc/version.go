@@ -3,4 +3,4 @@
 package grpc
 
 
-const Version = "1.13.0"
+const Version = "1.15.0"

@@ -10,9 +10,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
-
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
+	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/stretchr/testify/assert"
 )
 

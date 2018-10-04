@@ -49,6 +49,9 @@ import (
 
 
 
+
+
+
 func Time(t *Time_t) (tt Time_t, err error) {
 	var tv Timeval
 	err = Gettimeofday(&tv)
@@ -60,6 +63,7 @@ func Time(t *Time_t) (tt Time_t, err error) {
 	}
 	return Time_t(tv.Sec), nil
 }
+
 
 
 

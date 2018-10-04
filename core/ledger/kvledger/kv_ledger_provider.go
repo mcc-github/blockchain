@@ -48,6 +48,7 @@ type Provider struct {
 	stateListeners      []ledger.StateListener
 	bookkeepingProvider bookkeeping.Provider
 	initializer         *ledger.Initializer
+	collElgNotifier     *collElgNotifier
 }
 
 
@@ -67,15 +68,29 @@ func NewProvider() (ledger.PeerLedgerProvider, error) {
 	historydbProvider := historyleveldb.NewHistoryDBProvider()
 	logger.Info("ledger provider Initialized")
 	provider := &Provider{idStore, ledgerStoreProvider,
-		vdbProvider, historydbProvider, nil, nil, bookkeepingProvider, nil}
+		vdbProvider, historydbProvider, nil, nil, bookkeepingProvider, nil, nil}
 	return provider, nil
 }
 
 
 func (provider *Provider) Initialize(initializer *ledger.Initializer) {
+	configHistoryMgr := confighistory.NewMgr()
+	collElgNotifier := &collElgNotifier{
+		initializer.DeployedChaincodeInfoProvider,
+		initializer.MembershipInfoProvider,
+		make(map[string]collElgListener),
+	}
+	stateListeners := initializer.StateListeners
+	
+	
+	
+	
+	stateListeners = append(stateListeners, configHistoryMgr)
+
 	provider.initializer = initializer
-	provider.configHistoryMgr = confighistory.NewMgr()
-	provider.stateListeners = initializer.StateListeners
+	provider.configHistoryMgr = configHistoryMgr
+	provider.stateListeners = stateListeners
+	provider.collElgNotifier = collElgNotifier
 	provider.recoverUnderConstructionLedger()
 }
 
@@ -136,6 +151,7 @@ func (provider *Provider) openInternal(ledgerID string) (ledger.PeerLedger, erro
 	if err != nil {
 		return nil, err
 	}
+	provider.collElgNotifier.registerListener(ledgerID, blockStore)
 
 	
 	vDB, err := provider.vdbProvider.GetDBHandle(ledgerID)

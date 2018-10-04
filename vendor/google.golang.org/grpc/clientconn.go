@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -20,16 +21,14 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
-	"google.golang.org/grpc/internal"
 	"google.golang.org/grpc/internal/backoff"
 	"google.golang.org/grpc/internal/channelz"
+	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
 	_ "google.golang.org/grpc/resolver/dns"         
 	_ "google.golang.org/grpc/resolver/passthrough" 
-	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/transport"
 )
 
 const (
@@ -50,8 +49,6 @@ var (
 	errConnDrain = errors.New("grpc: the connection is drained")
 	
 	errConnClosing = errors.New("grpc: the connection is closing")
-	
-	errConnUnavailable = errors.New("grpc: the connection is unavailable")
 	
 	errBalancerClosed = errors.New("grpc: balancer is closed")
 	
@@ -74,350 +71,15 @@ var (
 	
 	
 	errCredentialsConflict = errors.New("grpc: transport credentials are set for an insecure connection (grpc.WithTransportCredentials() and grpc.WithInsecure() are both called)")
-	
-	errNetworkIO = errors.New("grpc: failed with network I/O error")
 )
-
-
-
-type dialOptions struct {
-	unaryInt    UnaryClientInterceptor
-	streamInt   StreamClientInterceptor
-	cp          Compressor
-	dc          Decompressor
-	bs          backoff.Strategy
-	block       bool
-	insecure    bool
-	timeout     time.Duration
-	scChan      <-chan ServiceConfig
-	copts       transport.ConnectOptions
-	callOptions []CallOption
-	
-	
-	balancerBuilder balancer.Builder
-	
-	resolverBuilder      resolver.Builder
-	waitForHandshake     bool
-	channelzParentID     int64
-	disableServiceConfig bool
-}
 
 const (
 	defaultClientMaxReceiveMessageSize = 1024 * 1024 * 4
 	defaultClientMaxSendMessageSize    = math.MaxInt32
+	
+	defaultWriteBufSize = 32 * 1024
+	defaultReadBufSize  = 32 * 1024
 )
-
-
-
-func RegisterChannelz() {
-	channelz.TurnOn()
-}
-
-
-type DialOption func(*dialOptions)
-
-
-
-
-func WithWaitForHandshake() DialOption {
-	return func(o *dialOptions) {
-		o.waitForHandshake = true
-	}
-}
-
-
-
-func WithWriteBufferSize(s int) DialOption {
-	return func(o *dialOptions) {
-		o.copts.WriteBufferSize = s
-	}
-}
-
-
-
-func WithReadBufferSize(s int) DialOption {
-	return func(o *dialOptions) {
-		o.copts.ReadBufferSize = s
-	}
-}
-
-
-
-func WithInitialWindowSize(s int32) DialOption {
-	return func(o *dialOptions) {
-		o.copts.InitialWindowSize = s
-	}
-}
-
-
-
-func WithInitialConnWindowSize(s int32) DialOption {
-	return func(o *dialOptions) {
-		o.copts.InitialConnWindowSize = s
-	}
-}
-
-
-
-
-func WithMaxMsgSize(s int) DialOption {
-	return WithDefaultCallOptions(MaxCallRecvMsgSize(s))
-}
-
-
-func WithDefaultCallOptions(cos ...CallOption) DialOption {
-	return func(o *dialOptions) {
-		o.callOptions = append(o.callOptions, cos...)
-	}
-}
-
-
-
-
-func WithCodec(c Codec) DialOption {
-	return WithDefaultCallOptions(CallCustomCodec(c))
-}
-
-
-
-
-
-
-func WithCompressor(cp Compressor) DialOption {
-	return func(o *dialOptions) {
-		o.cp = cp
-	}
-}
-
-
-
-
-
-
-
-
-
-
-func WithDecompressor(dc Decompressor) DialOption {
-	return func(o *dialOptions) {
-		o.dc = dc
-	}
-}
-
-
-
-
-
-func WithBalancer(b Balancer) DialOption {
-	return func(o *dialOptions) {
-		o.balancerBuilder = &balancerWrapperBuilder{
-			b: b,
-		}
-	}
-}
-
-
-
-
-
-
-
-
-
-func WithBalancerName(balancerName string) DialOption {
-	builder := balancer.Get(balancerName)
-	if builder == nil {
-		panic(fmt.Sprintf("grpc.WithBalancerName: no balancer is registered for name %v", balancerName))
-	}
-	return func(o *dialOptions) {
-		o.balancerBuilder = builder
-	}
-}
-
-
-func withResolverBuilder(b resolver.Builder) DialOption {
-	return func(o *dialOptions) {
-		o.resolverBuilder = b
-	}
-}
-
-
-
-
-
-func WithServiceConfig(c <-chan ServiceConfig) DialOption {
-	return func(o *dialOptions) {
-		o.scChan = c
-	}
-}
-
-
-
-func WithBackoffMaxDelay(md time.Duration) DialOption {
-	return WithBackoffConfig(BackoffConfig{MaxDelay: md})
-}
-
-
-
-
-
-
-func WithBackoffConfig(b BackoffConfig) DialOption {
-
-	return withBackoff(backoff.Exponential{
-		MaxDelay: b.MaxDelay,
-	})
-}
-
-
-
-
-
-func withBackoff(bs backoff.Strategy) DialOption {
-	return func(o *dialOptions) {
-		o.bs = bs
-	}
-}
-
-
-
-
-func WithBlock() DialOption {
-	return func(o *dialOptions) {
-		o.block = true
-	}
-}
-
-
-
-func WithInsecure() DialOption {
-	return func(o *dialOptions) {
-		o.insecure = true
-	}
-}
-
-
-
-func WithTransportCredentials(creds credentials.TransportCredentials) DialOption {
-	return func(o *dialOptions) {
-		o.copts.TransportCredentials = creds
-	}
-}
-
-
-
-func WithPerRPCCredentials(creds credentials.PerRPCCredentials) DialOption {
-	return func(o *dialOptions) {
-		o.copts.PerRPCCredentials = append(o.copts.PerRPCCredentials, creds)
-	}
-}
-
-
-
-
-
-func WithTimeout(d time.Duration) DialOption {
-	return func(o *dialOptions) {
-		o.timeout = d
-	}
-}
-
-func withContextDialer(f func(context.Context, string) (net.Conn, error)) DialOption {
-	return func(o *dialOptions) {
-		o.copts.Dialer = f
-	}
-}
-
-func init() {
-	internal.WithContextDialer = withContextDialer
-	internal.WithResolverBuilder = withResolverBuilder
-}
-
-
-
-
-func WithDialer(f func(string, time.Duration) (net.Conn, error)) DialOption {
-	return withContextDialer(
-		func(ctx context.Context, addr string) (net.Conn, error) {
-			if deadline, ok := ctx.Deadline(); ok {
-				return f(addr, deadline.Sub(time.Now()))
-			}
-			return f(addr, 0)
-		})
-}
-
-
-
-func WithStatsHandler(h stats.Handler) DialOption {
-	return func(o *dialOptions) {
-		o.copts.StatsHandler = h
-	}
-}
-
-
-
-
-
-
-func FailOnNonTempDialError(f bool) DialOption {
-	return func(o *dialOptions) {
-		o.copts.FailOnNonTempDialError = f
-	}
-}
-
-
-func WithUserAgent(s string) DialOption {
-	return func(o *dialOptions) {
-		o.copts.UserAgent = s
-	}
-}
-
-
-func WithKeepaliveParams(kp keepalive.ClientParameters) DialOption {
-	return func(o *dialOptions) {
-		o.copts.KeepaliveParams = kp
-	}
-}
-
-
-func WithUnaryInterceptor(f UnaryClientInterceptor) DialOption {
-	return func(o *dialOptions) {
-		o.unaryInt = f
-	}
-}
-
-
-func WithStreamInterceptor(f StreamClientInterceptor) DialOption {
-	return func(o *dialOptions) {
-		o.streamInt = f
-	}
-}
-
-
-
-
-func WithAuthority(a string) DialOption {
-	return func(o *dialOptions) {
-		o.copts.Authority = a
-	}
-}
-
-
-
-func WithChannelzParentID(id int64) DialOption {
-	return func(o *dialOptions) {
-		o.channelzParentID = id
-	}
-}
-
-
-
-
-func WithDisableServiceConfig() DialOption {
-	return func(o *dialOptions) {
-		o.disableServiceConfig = true
-	}
-}
 
 
 func Dial(target string, opts ...DialOption) (*ClientConn, error) {
@@ -442,23 +104,25 @@ func Dial(target string, opts ...DialOption) (*ClientConn, error) {
 
 func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *ClientConn, err error) {
 	cc := &ClientConn{
-		target: target,
-		csMgr:  &connectivityStateManager{},
-		conns:  make(map[*addrConn]struct{}),
-
+		target:         target,
+		csMgr:          &connectivityStateManager{},
+		conns:          make(map[*addrConn]struct{}),
+		dopts:          defaultDialOptions(),
 		blockingpicker: newPickerWrapper(),
+		czData:         new(channelzData),
 	}
+	cc.retryThrottler.Store((*retryThrottler)(nil))
 	cc.ctx, cc.cancel = context.WithCancel(context.Background())
 
 	for _, opt := range opts {
-		opt(&cc.dopts)
+		opt.apply(&cc.dopts)
 	}
 
 	if channelz.IsOn() {
 		if cc.dopts.channelzParentID != 0 {
-			cc.channelzID = channelz.RegisterChannel(cc, cc.dopts.channelzParentID, target)
+			cc.channelzID = channelz.RegisterChannel(&channelzChannel{cc}, cc.dopts.channelzParentID, target)
 		} else {
-			cc.channelzID = channelz.RegisterChannel(cc, 0, target)
+			cc.channelzID = channelz.RegisterChannel(&channelzChannel{cc}, 0, target)
 		}
 	}
 
@@ -551,8 +215,8 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 	creds := cc.dopts.copts.TransportCredentials
 	if creds != nil && creds.Info().ServerName != "" {
 		cc.authority = creds.Info().ServerName
-	} else if cc.dopts.insecure && cc.dopts.copts.Authority != "" {
-		cc.authority = cc.dopts.copts.Authority
+	} else if cc.dopts.insecure && cc.dopts.authority != "" {
+		cc.authority = cc.dopts.authority
 	} else {
 		
 		
@@ -604,6 +268,13 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 			s := cc.GetState()
 			if s == connectivity.Ready {
 				break
+			} else if cc.dopts.copts.FailOnNonTempDialError && s == connectivity.TransientFailure {
+				if err = cc.blockingpicker.connectionError(); err != nil {
+					terr, ok := err.(interface{ Temporary() bool })
+					if ok && !terr.Temporary() {
+						return nil, err
+					}
+				}
 			}
 			if !cc.WaitForStateChange(ctx, s) {
 				
@@ -683,13 +354,10 @@ type ClientConn struct {
 	preBalancerName string 
 	curAddresses    []resolver.Address
 	balancerWrapper *ccBalancerWrapper
+	retryThrottler  atomic.Value
 
-	channelzID          int64 
-	czmu                sync.RWMutex
-	callsStarted        int64
-	callsSucceeded      int64
-	callsFailed         int64
-	lastCallStartedTime time.Time
+	channelzID int64 
+	czData     *channelzData
 }
 
 
@@ -814,8 +482,6 @@ func (cc *ClientConn) switchBalancer(name string) {
 	if cc.balancerWrapper != nil {
 		cc.balancerWrapper.close()
 	}
-	
-	cc.blockingpicker.clearStickinessState()
 
 	builder := balancer.Get(name)
 	if builder == nil {
@@ -844,9 +510,11 @@ func (cc *ClientConn) handleSubConnStateChange(sc balancer.SubConn, s connectivi
 
 func (cc *ClientConn) newAddrConn(addrs []resolver.Address) (*addrConn, error) {
 	ac := &addrConn{
-		cc:    cc,
-		addrs: addrs,
-		dopts: cc.dopts,
+		cc:           cc,
+		addrs:        addrs,
+		dopts:        cc.dopts,
+		czData:       new(channelzData),
+		resetBackoff: make(chan struct{}),
 	}
 	ac.ctx, ac.cancel = context.WithCancel(cc.ctx)
 	
@@ -876,40 +544,34 @@ func (cc *ClientConn) removeAddrConn(ac *addrConn, err error) {
 	ac.tearDown(err)
 }
 
-
-
-func (cc *ClientConn) ChannelzMetric() *channelz.ChannelInternalMetric {
-	state := cc.GetState()
-	cc.czmu.RLock()
-	defer cc.czmu.RUnlock()
+func (cc *ClientConn) channelzMetric() *channelz.ChannelInternalMetric {
 	return &channelz.ChannelInternalMetric{
-		State:                    state,
+		State:                    cc.GetState(),
 		Target:                   cc.target,
-		CallsStarted:             cc.callsStarted,
-		CallsSucceeded:           cc.callsSucceeded,
-		CallsFailed:              cc.callsFailed,
-		LastCallStartedTimestamp: cc.lastCallStartedTime,
+		CallsStarted:             atomic.LoadInt64(&cc.czData.callsStarted),
+		CallsSucceeded:           atomic.LoadInt64(&cc.czData.callsSucceeded),
+		CallsFailed:              atomic.LoadInt64(&cc.czData.callsFailed),
+		LastCallStartedTimestamp: time.Unix(0, atomic.LoadInt64(&cc.czData.lastCallStartedTime)),
 	}
 }
 
+
+
+func (cc *ClientConn) Target() string {
+	return cc.target
+}
+
 func (cc *ClientConn) incrCallsStarted() {
-	cc.czmu.Lock()
-	cc.callsStarted++
-	
-	cc.lastCallStartedTime = time.Now()
-	cc.czmu.Unlock()
+	atomic.AddInt64(&cc.czData.callsStarted, 1)
+	atomic.StoreInt64(&cc.czData.lastCallStartedTime, time.Now().UnixNano())
 }
 
 func (cc *ClientConn) incrCallsSucceeded() {
-	cc.czmu.Lock()
-	cc.callsSucceeded++
-	cc.czmu.Unlock()
+	atomic.AddInt64(&cc.czData.callsSucceeded, 1)
 }
 
 func (cc *ClientConn) incrCallsFailed() {
-	cc.czmu.Lock()
-	cc.callsFailed++
-	cc.czmu.Unlock()
+	atomic.AddInt64(&cc.czData.callsFailed, 1)
 }
 
 
@@ -996,8 +658,10 @@ func (cc *ClientConn) GetMethodConfig(method string) MethodConfig {
 	return m
 }
 
-func (cc *ClientConn) getTransport(ctx context.Context, failfast bool) (transport.ClientTransport, func(balancer.DoneInfo), error) {
-	t, done, err := cc.blockingpicker.pick(ctx, failfast, balancer.PickOptions{})
+func (cc *ClientConn) getTransport(ctx context.Context, failfast bool, method string) (transport.ClientTransport, func(balancer.DoneInfo), error) {
+	t, done, err := cc.blockingpicker.pick(ctx, failfast, balancer.PickOptions{
+		FullMethodName: method,
+	})
 	if err != nil {
 		return nil, nil, toRPCErr(err)
 	}
@@ -1017,6 +681,19 @@ func (cc *ClientConn) handleServiceConfig(js string) error {
 	cc.mu.Lock()
 	cc.scRaw = js
 	cc.sc = sc
+
+	if sc.retryThrottling != nil {
+		newThrottler := &retryThrottler{
+			tokens: sc.retryThrottling.MaxTokens,
+			max:    sc.retryThrottling.MaxTokens,
+			thresh: sc.retryThrottling.MaxTokens / 2,
+			ratio:  sc.retryThrottling.TokenRatio,
+		}
+		cc.retryThrottler.Store(newThrottler)
+	} else {
+		cc.retryThrottler.Store((*retryThrottler)(nil))
+	}
+
 	if sc.LB != nil && *sc.LB != grpclbName { 
 		if cc.curBalancerName == grpclbName {
 			
@@ -1031,17 +708,6 @@ func (cc *ClientConn) handleServiceConfig(js string) error {
 		}
 	}
 
-	if envConfigStickinessOn {
-		var newStickinessMDKey string
-		if sc.stickinessMetadataKey != nil && *sc.stickinessMetadataKey != "" {
-			newStickinessMDKey = *sc.stickinessMetadataKey
-		}
-		
-		
-		
-		cc.blockingpicker.updateStickinessMDKey(strings.ToLower(newStickinessMDKey))
-	}
-
 	cc.mu.Unlock()
 	return nil
 }
@@ -1054,6 +720,24 @@ func (cc *ClientConn) resolveNow(o resolver.ResolveNowOption) {
 		return
 	}
 	go r.resolveNow(o)
+}
+
+
+
+
+
+
+
+
+
+
+
+func (cc *ClientConn) ResetConnectBackoff() {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	for ac := range cc.conns {
+		ac.resetConnectBackoff()
+	}
 }
 
 
@@ -1124,12 +808,10 @@ type addrConn struct {
 	
 	connectDeadline time.Time
 
-	channelzID          int64 
-	czmu                sync.RWMutex
-	callsStarted        int64
-	callsSucceeded      int64
-	callsFailed         int64
-	lastCallStartedTime time.Time
+	resetBackoff chan struct{}
+
+	channelzID int64 
+	czData     *channelzData
 }
 
 
@@ -1151,14 +833,6 @@ func (ac *addrConn) adjustParams(r transport.GoAwayReason) {
 func (ac *addrConn) printf(format string, a ...interface{}) {
 	if ac.events != nil {
 		ac.events.Printf(format, a...)
-	}
-}
-
-
-
-func (ac *addrConn) errorf(format string, a ...interface{}) {
-	if ac.events != nil {
-		ac.events.Errorf(format, a...)
 	}
 }
 
@@ -1192,6 +866,7 @@ func (ac *addrConn) resetTransport() error {
 	ac.dopts.copts.KeepaliveParams = ac.cc.mkp
 	ac.cc.mu.RUnlock()
 	var backoffDeadline, connectDeadline time.Time
+	var resetBackoff chan struct{}
 	for connectRetryNum := 0; ; connectRetryNum++ {
 		ac.mu.Lock()
 		if ac.backoffDeadline.IsZero() {
@@ -1199,6 +874,7 @@ func (ac *addrConn) resetTransport() error {
 			
 			
 			backoffFor := ac.dopts.bs.Backoff(connectRetryNum) 
+			resetBackoff = ac.resetBackoff
 			
 			dialDuration := getMinConnectTimeout()
 			if backoffFor > dialDuration {
@@ -1232,7 +908,7 @@ func (ac *addrConn) resetTransport() error {
 		copy(addrsIter, ac.addrs)
 		copts := ac.dopts.copts
 		ac.mu.Unlock()
-		connected, err := ac.createTransport(connectRetryNum, ridx, backoffDeadline, connectDeadline, addrsIter, copts)
+		connected, err := ac.createTransport(connectRetryNum, ridx, backoffDeadline, connectDeadline, addrsIter, copts, resetBackoff)
 		if err != nil {
 			return err
 		}
@@ -1244,7 +920,7 @@ func (ac *addrConn) resetTransport() error {
 
 
 
-func (ac *addrConn) createTransport(connectRetryNum, ridx int, backoffDeadline, connectDeadline time.Time, addrs []resolver.Address, copts transport.ConnectOptions) (bool, error) {
+func (ac *addrConn) createTransport(connectRetryNum, ridx int, backoffDeadline, connectDeadline time.Time, addrs []resolver.Address, copts transport.ConnectOptions, resetBackoff chan struct{}) (bool, error) {
 	for i := ridx; i < len(addrs); i++ {
 		addr := addrs[i]
 		target := transport.TargetInfo{
@@ -1295,7 +971,7 @@ func (ac *addrConn) createTransport(connectRetryNum, ridx int, backoffDeadline, 
 				
 				grpclog.Warningf("grpc: addrConn.createTransport failed to receive server preface before deadline.")
 				newTr.Close()
-				break
+				continue
 			case <-ac.ctx.Done():
 			}
 		}
@@ -1344,11 +1020,21 @@ func (ac *addrConn) createTransport(connectRetryNum, ridx int, backoffDeadline, 
 	timer := time.NewTimer(backoffDeadline.Sub(time.Now()))
 	select {
 	case <-timer.C:
+	case <-resetBackoff:
+		timer.Stop()
 	case <-ac.ctx.Done():
 		timer.Stop()
 		return false, ac.ctx.Err()
 	}
 	return false, nil
+}
+
+func (ac *addrConn) resetConnectBackoff() {
+	ac.mu.Lock()
+	close(ac.resetBackoff)
+	ac.resetBackoff = make(chan struct{})
+	ac.connectRetryNum = 0
+	ac.mu.Unlock()
 }
 
 
@@ -1433,46 +1119,6 @@ func (ac *addrConn) transportMonitor() {
 
 
 
-func (ac *addrConn) wait(ctx context.Context, hasBalancer, failfast bool) (transport.ClientTransport, error) {
-	for {
-		ac.mu.Lock()
-		switch {
-		case ac.state == connectivity.Shutdown:
-			if failfast || !hasBalancer {
-				
-				err := ac.tearDownErr
-				ac.mu.Unlock()
-				return nil, err
-			}
-			ac.mu.Unlock()
-			return nil, errConnClosing
-		case ac.state == connectivity.Ready:
-			ct := ac.transport
-			ac.mu.Unlock()
-			return ct, nil
-		case ac.state == connectivity.TransientFailure:
-			if failfast || hasBalancer {
-				ac.mu.Unlock()
-				return nil, errConnUnavailable
-			}
-		}
-		ready := ac.ready
-		if ready == nil {
-			ready = make(chan struct{})
-			ac.ready = ready
-		}
-		ac.mu.Unlock()
-		select {
-		case <-ctx.Done():
-			return nil, toRPCErr(ctx.Err())
-		
-		case <-ready:
-		}
-	}
-}
-
-
-
 
 func (ac *addrConn) getReadyTransport() (transport.ClientTransport, bool) {
 	ac.mu.Lock()
@@ -1535,47 +1181,76 @@ func (ac *addrConn) getState() connectivity.State {
 	return ac.state
 }
 
-func (ac *addrConn) getCurAddr() (ret resolver.Address) {
-	ac.mu.Lock()
-	ret = ac.curAddr
-	ac.mu.Unlock()
-	return
-}
-
 func (ac *addrConn) ChannelzMetric() *channelz.ChannelInternalMetric {
 	ac.mu.Lock()
 	addr := ac.curAddr.Addr
 	ac.mu.Unlock()
-	state := ac.getState()
-	ac.czmu.RLock()
-	defer ac.czmu.RUnlock()
 	return &channelz.ChannelInternalMetric{
-		State:                    state,
+		State:                    ac.getState(),
 		Target:                   addr,
-		CallsStarted:             ac.callsStarted,
-		CallsSucceeded:           ac.callsSucceeded,
-		CallsFailed:              ac.callsFailed,
-		LastCallStartedTimestamp: ac.lastCallStartedTime,
+		CallsStarted:             atomic.LoadInt64(&ac.czData.callsStarted),
+		CallsSucceeded:           atomic.LoadInt64(&ac.czData.callsSucceeded),
+		CallsFailed:              atomic.LoadInt64(&ac.czData.callsFailed),
+		LastCallStartedTimestamp: time.Unix(0, atomic.LoadInt64(&ac.czData.lastCallStartedTime)),
 	}
 }
 
 func (ac *addrConn) incrCallsStarted() {
-	ac.czmu.Lock()
-	ac.callsStarted++
-	ac.lastCallStartedTime = time.Now()
-	ac.czmu.Unlock()
+	atomic.AddInt64(&ac.czData.callsStarted, 1)
+	atomic.StoreInt64(&ac.czData.lastCallStartedTime, time.Now().UnixNano())
 }
 
 func (ac *addrConn) incrCallsSucceeded() {
-	ac.czmu.Lock()
-	ac.callsSucceeded++
-	ac.czmu.Unlock()
+	atomic.AddInt64(&ac.czData.callsSucceeded, 1)
 }
 
 func (ac *addrConn) incrCallsFailed() {
-	ac.czmu.Lock()
-	ac.callsFailed++
-	ac.czmu.Unlock()
+	atomic.AddInt64(&ac.czData.callsFailed, 1)
+}
+
+type retryThrottler struct {
+	max    float64
+	thresh float64
+	ratio  float64
+
+	mu     sync.Mutex
+	tokens float64 
+}
+
+
+
+
+func (rt *retryThrottler) throttle() bool {
+	if rt == nil {
+		return false
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.tokens--
+	if rt.tokens < 0 {
+		rt.tokens = 0
+	}
+	return rt.tokens <= rt.thresh
+}
+
+func (rt *retryThrottler) successfulRPC() {
+	if rt == nil {
+		return
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.tokens += rt.ratio
+	if rt.tokens > rt.max {
+		rt.tokens = rt.max
+	}
+}
+
+type channelzChannel struct {
+	cc *ClientConn
+}
+
+func (c *channelzChannel) ChannelzMetric() *channelz.ChannelInternalMetric {
+	return c.cc.channelzMetric()
 }
 
 

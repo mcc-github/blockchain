@@ -129,18 +129,27 @@ func (ch *chain) main() {
 						continue
 					}
 				}
-				batches, _ := ch.support.BlockCutter().Ordered(msg.normalMsg)
-				if len(batches) == 0 && timer == nil {
-					timer = time.After(ch.support.SharedConfig().BatchTimeout())
-					continue
-				}
+				batches, pending := ch.support.BlockCutter().Ordered(msg.normalMsg)
+
 				for _, batch := range batches {
 					block := ch.support.CreateNextBlock(batch)
 					ch.support.WriteBlock(block, nil)
 				}
-				if len(batches) > 0 {
+
+				switch {
+				case timer != nil && !pending:
+					
 					timer = nil
+				case timer == nil && pending:
+					
+					timer = time.After(ch.support.SharedConfig().BatchTimeout())
+					logger.Debugf("Just began %s batch timer", ch.support.SharedConfig().BatchTimeout().String())
+				default:
+					
+					
+					
 				}
+
 			} else {
 				
 				if msg.configSeq < seq {

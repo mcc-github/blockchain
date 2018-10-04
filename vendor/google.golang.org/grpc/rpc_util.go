@@ -20,11 +20,11 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/encoding/proto"
+	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/transport"
 )
 
 
@@ -140,16 +140,19 @@ type callInfo struct {
 	compressorType        string
 	failFast              bool
 	stream                *clientStream
-	traceInfo             traceInfo 
 	maxReceiveMessageSize *int
 	maxSendMessageSize    *int
 	creds                 credentials.PerRPCCredentials
 	contentSubtype        string
 	codec                 baseCodec
+	maxRetryRPCBufferSize int
 }
 
 func defaultCallInfo() *callInfo {
-	return &callInfo{failFast: true}
+	return &callInfo{
+		failFast:              true,
+		maxRetryRPCBufferSize: 256 * 1024, 
+	}
 }
 
 
@@ -398,6 +401,27 @@ func (o CustomCodecCallOption) before(c *callInfo) error {
 	return nil
 }
 func (o CustomCodecCallOption) after(c *callInfo) {}
+
+
+
+
+
+func MaxRetryRPCBufferSize(bytes int) CallOption {
+	return MaxRetryRPCBufferSizeCallOption{bytes}
+}
+
+
+
+
+type MaxRetryRPCBufferSizeCallOption struct {
+	MaxRetryRPCBufferSize int
+}
+
+func (o MaxRetryRPCBufferSizeCallOption) before(c *callInfo) error {
+	c.maxRetryRPCBufferSize = o.MaxRetryRPCBufferSize
+	return nil
+}
+func (o MaxRetryRPCBufferSizeCallOption) after(c *callInfo) {}
 
 
 type payloadFormat uint8
@@ -706,6 +730,19 @@ func parseDialTarget(target string) (net string, addr string) {
 	}
 
 	return net, target
+}
+
+
+
+
+
+type channelzData struct {
+	callsStarted   int64
+	callsFailed    int64
+	callsSucceeded int64
+	
+	
+	lastCallStartedTime int64
 }
 
 

@@ -5,17 +5,14 @@ package grpc
 import (
 	"io"
 	"sync"
-	"sync/atomic"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/internal/channelz"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/transport"
 )
 
 
@@ -29,16 +26,10 @@ type pickerWrapper struct {
 	
 	connErrMu sync.Mutex
 	connErr   error
-
-	stickinessMDKey atomic.Value
-	stickiness      *stickyStore
 }
 
 func newPickerWrapper() *pickerWrapper {
-	bp := &pickerWrapper{
-		blockingCh: make(chan struct{}),
-		stickiness: newStickyStore(),
-	}
+	bp := &pickerWrapper{blockingCh: make(chan struct{})}
 	return bp
 }
 
@@ -53,27 +44,6 @@ func (bp *pickerWrapper) connectionError() error {
 	err := bp.connErr
 	bp.connErrMu.Unlock()
 	return err
-}
-
-func (bp *pickerWrapper) updateStickinessMDKey(newKey string) {
-	
-	if oldKey, _ := bp.stickinessMDKey.Load().(string); oldKey != newKey {
-		bp.stickinessMDKey.Store(newKey)
-		bp.stickiness.reset(newKey)
-	}
-}
-
-func (bp *pickerWrapper) getStickinessMDKey() string {
-	
-	mdKey, _ := bp.stickinessMDKey.Load().(string)
-	return mdKey
-}
-
-func (bp *pickerWrapper) clearStickinessState() {
-	if oldKey := bp.getStickinessMDKey(); oldKey != "" {
-		
-		bp.stickiness.reset(oldKey)
-	}
 }
 
 
@@ -115,27 +85,6 @@ func doneChannelzWrapper(acw *acBalancerWrapper, done func(balancer.DoneInfo)) f
 
 
 func (bp *pickerWrapper) pick(ctx context.Context, failfast bool, opts balancer.PickOptions) (transport.ClientTransport, func(balancer.DoneInfo), error) {
-
-	mdKey := bp.getStickinessMDKey()
-	stickyKey, isSticky := stickyKeyFromContext(ctx, mdKey)
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-
-	if isSticky {
-		if t, ok := bp.stickiness.get(mdKey, stickyKey); ok {
-			
-			return t, nil, nil
-		}
-	}
-
 	var (
 		p  balancer.Picker
 		ch chan struct{}
@@ -191,9 +140,6 @@ func (bp *pickerWrapper) pick(ctx context.Context, failfast bool, opts balancer.
 			continue
 		}
 		if t, ok := acw.getAddrConn().getReadyTransport(); ok {
-			if isSticky {
-				bp.stickiness.put(mdKey, stickyKey, acw)
-			}
 			if channelz.IsOn() {
 				return t, doneChannelzWrapper(acw, done), nil
 			}
@@ -215,106 +161,4 @@ func (bp *pickerWrapper) close() {
 	}
 	bp.done = true
 	close(bp.blockingCh)
-}
-
-const stickinessKeyCountLimit = 1000
-
-type stickyStoreEntry struct {
-	acw  *acBalancerWrapper
-	addr resolver.Address
-}
-
-type stickyStore struct {
-	mu sync.Mutex
-	
-	
-	curMDKey string
-	store    *linkedMap
-}
-
-func newStickyStore() *stickyStore {
-	return &stickyStore{
-		store: newLinkedMap(),
-	}
-}
-
-
-func (ss *stickyStore) reset(newMDKey string) {
-	ss.mu.Lock()
-	ss.curMDKey = newMDKey
-	ss.store.clear()
-	ss.mu.Unlock()
-}
-
-
-
-func (ss *stickyStore) put(mdKey, stickyKey string, acw *acBalancerWrapper) {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	if mdKey != ss.curMDKey {
-		return
-	}
-	
-	ss.store.put(stickyKey, &stickyStoreEntry{
-		acw:  acw,
-		addr: acw.getAddrConn().getCurAddr(),
-	})
-	if ss.store.len() > stickinessKeyCountLimit {
-		ss.store.removeOldest()
-	}
-}
-
-
-
-func (ss *stickyStore) get(mdKey, stickyKey string) (transport.ClientTransport, bool) {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	if mdKey != ss.curMDKey {
-		return nil, false
-	}
-	entry, ok := ss.store.get(stickyKey)
-	if !ok {
-		return nil, false
-	}
-	ac := entry.acw.getAddrConn()
-	if ac.getCurAddr() != entry.addr {
-		ss.store.remove(stickyKey)
-		return nil, false
-	}
-	t, ok := ac.getReadyTransport()
-	if !ok {
-		ss.store.remove(stickyKey)
-		return nil, false
-	}
-	return t, true
-}
-
-
-
-
-func stickyKeyFromContext(ctx context.Context, stickinessMDKey string) (string, bool) {
-	if stickinessMDKey == "" {
-		return "", false
-	}
-
-	md, added, ok := metadata.FromOutgoingContextRaw(ctx)
-	if !ok {
-		return "", false
-	}
-
-	if vv, ok := md[stickinessMDKey]; ok {
-		if len(vv) > 0 {
-			return vv[0], true
-		}
-	}
-
-	for _, ss := range added {
-		for i := 0; i < len(ss)-1; i += 2 {
-			if ss[i] == stickinessMDKey {
-				return ss[i+1], true
-			}
-		}
-	}
-
-	return "", false
 }

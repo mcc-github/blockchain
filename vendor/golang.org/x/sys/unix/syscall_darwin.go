@@ -13,7 +13,7 @@
 package unix
 
 import (
-	errorspkg "errors"
+	"errors"
 	"syscall"
 	"unsafe"
 )
@@ -98,7 +98,7 @@ type attrList struct {
 
 func getAttrList(path string, attrList attrList, attrBuf []byte, options uint) (attrs [][]byte, err error) {
 	if len(attrBuf) < 4 {
-		return nil, errorspkg.New("attrBuf too small")
+		return nil, errors.New("attrBuf too small")
 	}
 	attrList.bitmapCount = attrBitMapCount
 
@@ -134,12 +134,12 @@ func getAttrList(path string, attrList attrList, attrBuf []byte, options uint) (
 	for i := uint32(0); int(i) < len(dat); {
 		header := dat[i:]
 		if len(header) < 8 {
-			return attrs, errorspkg.New("truncated attribute header")
+			return attrs, errors.New("truncated attribute header")
 		}
 		datOff := *(*int32)(unsafe.Pointer(&header[0]))
 		attrLen := *(*uint32)(unsafe.Pointer(&header[4]))
 		if datOff < 0 || uint32(datOff)+attrLen > uint32(len(dat)) {
-			return attrs, errorspkg.New("truncated results; attrBuf too small")
+			return attrs, errors.New("truncated results; attrBuf too small")
 		}
 		end := uint32(datOff) + attrLen
 		attrs = append(attrs, dat[datOff:end])
@@ -174,6 +174,112 @@ func Getfsstat(buf []Statfs_t, flags int) (n int, err error) {
 		err = e1
 	}
 	return
+}
+
+func xattrPointer(dest []byte) *byte {
+	
+	
+	
+	
+	
+	var destp *byte
+	if len(dest) > 0 {
+		destp = &dest[0]
+	}
+	return destp
+}
+
+
+
+func Getxattr(path string, attr string, dest []byte) (sz int, err error) {
+	return getxattr(path, attr, xattrPointer(dest), len(dest), 0, 0)
+}
+
+func Lgetxattr(link string, attr string, dest []byte) (sz int, err error) {
+	return getxattr(link, attr, xattrPointer(dest), len(dest), 0, XATTR_NOFOLLOW)
+}
+
+
+
+func Fgetxattr(fd int, attr string, dest []byte) (sz int, err error) {
+	return fgetxattr(fd, attr, xattrPointer(dest), len(dest), 0, 0)
+}
+
+
+
+func Setxattr(path string, attr string, data []byte, flags int) (err error) {
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	return setxattr(path, attr, xattrPointer(data), len(data), 0, flags)
+}
+
+func Lsetxattr(link string, attr string, data []byte, flags int) (err error) {
+	return setxattr(link, attr, xattrPointer(data), len(data), 0, flags|XATTR_NOFOLLOW)
+}
+
+
+
+func Fsetxattr(fd int, attr string, data []byte, flags int) (err error) {
+	return fsetxattr(fd, attr, xattrPointer(data), len(data), 0, 0)
+}
+
+
+
+func Removexattr(path string, attr string) (err error) {
+	
+	
+	
+	return removexattr(path, attr, 0)
+}
+
+func Lremovexattr(link string, attr string) (err error) {
+	return removexattr(link, attr, XATTR_NOFOLLOW)
+}
+
+
+
+func Fremovexattr(fd int, attr string) (err error) {
+	return fremovexattr(fd, attr, 0)
+}
+
+
+
+func Listxattr(path string, dest []byte) (sz int, err error) {
+	return listxattr(path, xattrPointer(dest), len(dest), 0)
+}
+
+func Llistxattr(link string, dest []byte) (sz int, err error) {
+	return listxattr(link, xattrPointer(dest), len(dest), XATTR_NOFOLLOW)
+}
+
+
+
+func Flistxattr(fd int, dest []byte) (sz int, err error) {
+	return flistxattr(fd, xattrPointer(dest), len(dest), 0)
 }
 
 func setattrlistTimes(path string, times []Timespec, flags int) error {
@@ -229,11 +335,11 @@ func IoctlSetInt(fd int, req uint, value int) error {
 	return ioctl(fd, req, uintptr(value))
 }
 
-func IoctlSetWinsize(fd int, req uint, value *Winsize) error {
+func ioctlSetWinsize(fd int, req uint, value *Winsize) error {
 	return ioctl(fd, req, uintptr(unsafe.Pointer(value)))
 }
 
-func IoctlSetTermios(fd int, req uint, value *Termios) error {
+func ioctlSetTermios(fd int, req uint, value *Termios) error {
 	return ioctl(fd, req, uintptr(unsafe.Pointer(value)))
 }
 
@@ -302,14 +408,6 @@ func Uname(uname *Utsname) error {
 
 	return nil
 }
-
-
-
-
-
-
-
-
 
 
 

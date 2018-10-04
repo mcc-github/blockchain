@@ -19,16 +19,19 @@
 
 
 
+
+
+
 package unix 
+
+import "strings"
 
 
 
 
 func ByteSliceFromString(s string) ([]byte, error) {
-	for i := 0; i < len(s); i++ {
-		if s[i] == 0 {
-			return nil, EINVAL
-		}
+	if strings.IndexByte(s, 0) != -1 {
+		return nil, EINVAL
 	}
 	a := make([]byte, len(s)+1)
 	copy(a, s)

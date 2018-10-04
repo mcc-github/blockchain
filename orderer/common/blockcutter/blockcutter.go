@@ -26,7 +26,6 @@ type Receiver interface {
 	
 	
 	
-	
 	Ordered(msg *cb.Envelope) (messageBatches [][]*cb.Envelope, pending bool)
 
 	

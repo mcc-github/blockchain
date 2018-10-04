@@ -3,7 +3,6 @@
 package grpc
 
 import (
-	"fmt"
 	"net"
 	"sync"
 
@@ -100,26 +99,6 @@ type Balancer interface {
 	Notify() <-chan []Address
 	
 	Close() error
-}
-
-
-
-type downErr struct {
-	timeout   bool
-	temporary bool
-	desc      string
-}
-
-func (e downErr) Error() string   { return e.desc }
-func (e downErr) Timeout() bool   { return e.timeout }
-func (e downErr) Temporary() bool { return e.temporary }
-
-func downErrorf(timeout, temporary bool, format string, a ...interface{}) downErr {
-	return downErr{
-		timeout:   timeout,
-		temporary: temporary,
-		desc:      fmt.Sprintf(format, a...),
-	}
 }
 
 
@@ -393,8 +372,4 @@ func (rr *roundRobin) Close() error {
 
 type pickFirst struct {
 	*roundRobin
-}
-
-func pickFirstBalancerV1(r naming.Resolver) Balancer {
-	return &pickFirst{&roundRobin{r: r}}
 }

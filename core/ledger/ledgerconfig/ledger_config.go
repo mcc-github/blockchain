@@ -38,6 +38,9 @@ const confMaxBatchSize = "ledger.state.couchDBConfig.maxBatchUpdateSize"
 const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
 
+var confCollElgProcMaxDbBatchSize = &conf{"ledger.pvtdataStore.collElgProcMaxDbBatchSize", 5000}
+var confCollElgProcDbBatchesInterval = &conf{"ledger.pvtdataStore.collElgProcDbBatchesInterval", 1000}
+
 
 
 func GetRootPath() string {
@@ -126,6 +129,26 @@ func GetPvtdataStorePurgeInterval() uint64 {
 }
 
 
+
+func GetPvtdataStoreCollElgProcMaxDbBatchSize() int {
+	collElgProcMaxDbBatchSize := viper.GetInt(confCollElgProcMaxDbBatchSize.Name)
+	if collElgProcMaxDbBatchSize <= 0 {
+		collElgProcMaxDbBatchSize = confCollElgProcMaxDbBatchSize.DefaultVal
+	}
+	return collElgProcMaxDbBatchSize
+}
+
+
+
+func GetPvtdataStoreCollElgProcDbBatchesInterval() int {
+	collElgProcDbBatchesInterval := viper.GetInt(confCollElgProcDbBatchesInterval.Name)
+	if collElgProcDbBatchesInterval <= 0 {
+		collElgProcDbBatchesInterval = confCollElgProcDbBatchesInterval.DefaultVal
+	}
+	return collElgProcDbBatchesInterval
+}
+
+
 func IsHistoryDBEnabled() bool {
 	return viper.GetBool(confEnableHistoryDatabase)
 }
@@ -161,4 +184,9 @@ func GetWarmIndexesAfterNBlocks() int {
 		warmAfterNBlocks = 1
 	}
 	return warmAfterNBlocks
+}
+
+type conf struct {
+	Name       string
+	DefaultVal int
 }
