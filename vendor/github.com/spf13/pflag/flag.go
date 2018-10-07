@@ -8,6 +8,7 @@ package pflag
 import (
 	"bytes"
 	"errors"
+	goflag "flag"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,12 @@ const (
 )
 
 
+type ParseErrorsWhitelist struct {
+	
+	UnknownFlags bool
+}
+
+
 
 type NormalizedName string
 
@@ -44,6 +51,9 @@ type FlagSet struct {
 	
 	
 	SortFlags bool
+
+	
+	ParseErrorsWhitelist ParseErrorsWhitelist
 
 	name              string
 	parsed            bool
@@ -60,6 +70,8 @@ type FlagSet struct {
 	output            io.Writer 
 	interspersed      bool      
 	normalizeNameFunc func(f *FlagSet, name string) NormalizedName
+
+	addedGoFlagSets []*goflag.FlagSet
 }
 
 
@@ -109,12 +121,18 @@ func sortFlags(flags map[NormalizedName]*Flag) []*Flag {
 func (f *FlagSet) SetNormalizeFunc(n func(f *FlagSet, name string) NormalizedName) {
 	f.normalizeNameFunc = n
 	f.sortedFormal = f.sortedFormal[:0]
-	for k, v := range f.orderedFormal {
-		delete(f.formal, NormalizedName(v.Name))
-		nname := f.normalizeFlagName(v.Name)
-		v.Name = string(nname)
-		f.formal[nname] = v
-		f.orderedFormal[k] = v
+	for fname, flag := range f.formal {
+		nname := f.normalizeFlagName(flag.Name)
+		if fname == nname {
+			continue
+		}
+		flag.Name = string(nname)
+		delete(f.formal, fname)
+		f.formal[nname] = flag
+		if _, set := f.actual[fname]; set {
+			delete(f.actual, fname)
+			f.actual[nname] = flag
+		}
 	}
 }
 
@@ -177,7 +195,7 @@ func (f *FlagSet) HasFlags() bool {
 
 func (f *FlagSet) HasAvailableFlags() bool {
 	for _, flag := range f.formal {
-		if !flag.Hidden && len(flag.Deprecated) == 0 {
+		if !flag.Hidden {
 			return true
 		}
 	}
@@ -287,6 +305,7 @@ func (f *FlagSet) MarkDeprecated(name string, usageMessage string) error {
 		return fmt.Errorf("deprecated message for flag %q must be set", name)
 	}
 	flag.Deprecated = usageMessage
+	flag.Hidden = true
 	return nil
 }
 
@@ -347,13 +366,15 @@ func (f *FlagSet) Set(name, value string) error {
 		return fmt.Errorf("invalid argument %q for %q flag: %v", value, flagName, err)
 	}
 
-	if f.actual == nil {
-		f.actual = make(map[NormalizedName]*Flag)
-	}
-	f.actual[normalName] = flag
-	f.orderedActual = append(f.orderedActual, flag)
+	if !flag.Changed {
+		if f.actual == nil {
+			f.actual = make(map[NormalizedName]*Flag)
+		}
+		f.actual[normalName] = flag
+		f.orderedActual = append(f.orderedActual, flag)
 
-	flag.Changed = true
+		flag.Changed = true
+	}
 
 	if flag.Deprecated != "" {
 		fmt.Fprintf(f.out(), "Flag --%s has been deprecated, %s\n", flag.Name, flag.Deprecated)
@@ -463,6 +484,14 @@ func UnquoteUsage(flag *Flag) (name string, usage string) {
 		name = "int"
 	case "uint64":
 		name = "uint"
+	case "stringSlice":
+		name = "strings"
+	case "intSlice":
+		name = "ints"
+	case "uintSlice":
+		name = "uints"
+	case "boolSlice":
+		name = "bools"
 	}
 
 	return
@@ -477,11 +506,14 @@ func wrapN(i, slop int, s string) (string, string) {
 		return s, ""
 	}
 
-	w := strings.LastIndexAny(s[:i], " \t")
+	w := strings.LastIndexAny(s[:i], " \t\n")
 	if w <= 0 {
 		return s, ""
 	}
-
+	nlPos := strings.LastIndex(s[:i], "\n")
+	if nlPos > 0 && nlPos < w {
+		return s[:nlPos], s[nlPos+1:]
+	}
 	return s[:w], s[w+1:]
 }
 
@@ -490,7 +522,7 @@ func wrapN(i, slop int, s string) (string, string) {
 
 func wrap(i, w int, s string) string {
 	if w == 0 {
-		return s
+		return strings.Replace(s, "\n", "\n"+strings.Repeat(" ", i), -1)
 	}
 
 	
@@ -508,7 +540,7 @@ func wrap(i, w int, s string) string {
 	}
 	
 	if wrap < 24 {
-		return s
+		return strings.Replace(s, "\n", r, -1)
 	}
 
 	
@@ -520,14 +552,14 @@ func wrap(i, w int, s string) string {
 	
 	
 	l, s = wrapN(wrap, slop, s)
-	r = r + l
+	r = r + strings.Replace(l, "\n", "\n"+strings.Repeat(" ", i), -1)
 
 	
 	for s != "" {
 		var t string
 
 		t, s = wrapN(wrap, slop, s)
-		r = r + "\n" + strings.Repeat(" ", i) + t
+		r = r + "\n" + strings.Repeat(" ", i) + strings.Replace(t, "\n", "\n"+strings.Repeat(" ", i), -1)
 	}
 
 	return r
@@ -544,7 +576,7 @@ func (f *FlagSet) FlagUsagesWrapped(cols int) string {
 
 	maxlen := 0
 	f.VisitAll(func(flag *Flag) {
-		if flag.Deprecated != "" || flag.Hidden {
+		if flag.Hidden {
 			return
 		}
 
@@ -567,6 +599,10 @@ func (f *FlagSet) FlagUsagesWrapped(cols int) string {
 				if flag.NoOptDefVal != "true" {
 					line += fmt.Sprintf("[=%s]", flag.NoOptDefVal)
 				}
+			case "count":
+				if flag.NoOptDefVal != "+1" {
+					line += fmt.Sprintf("[=%s]", flag.NoOptDefVal)
+				}
 			default:
 				line += fmt.Sprintf("[=%s]", flag.NoOptDefVal)
 			}
@@ -586,6 +622,9 @@ func (f *FlagSet) FlagUsagesWrapped(cols int) string {
 			} else {
 				line += fmt.Sprintf(" (default %s)", flag.DefValue)
 			}
+		}
+		if len(flag.Deprecated) != 0 {
+			line += fmt.Sprintf(" (DEPRECATED: %s)", flag.Deprecated)
 		}
 
 		lines = append(lines, line)
@@ -764,8 +803,10 @@ func VarP(value Value, name, shorthand, usage string) {
 
 func (f *FlagSet) failf(format string, a ...interface{}) error {
 	err := fmt.Errorf(format, a...)
-	fmt.Fprintln(f.out(), err)
-	f.usage()
+	if f.errorHandling != ContinueOnError {
+		fmt.Fprintln(f.out(), err)
+		f.usage()
+	}
 	return err
 }
 
@@ -781,6 +822,28 @@ func (f *FlagSet) usage() {
 	}
 }
 
+
+
+
+func stripUnknownFlagValue(args []string) []string {
+	if len(args) == 0 {
+		
+		return args
+	}
+
+	first := args[0]
+	if len(first) > 0 && first[0] == '-' {
+		
+		return args
+	}
+
+	
+	if len(args) > 1 {
+		return args[1:]
+	}
+	return nil
+}
+
 func (f *FlagSet) parseLongArg(s string, args []string, fn parseFunc) (a []string, err error) {
 	a = args
 	name := s[2:]
@@ -792,13 +855,24 @@ func (f *FlagSet) parseLongArg(s string, args []string, fn parseFunc) (a []strin
 	split := strings.SplitN(name, "=", 2)
 	name = split[0]
 	flag, exists := f.formal[f.normalizeFlagName(name)]
+
 	if !exists {
-		if name == "help" { 
+		switch {
+		case name == "help":
 			f.usage()
 			return a, ErrHelp
+		case f.ParseErrorsWhitelist.UnknownFlags:
+			
+			
+			if len(split) >= 2 {
+				return a, nil
+			}
+
+			return stripUnknownFlagValue(a), nil
+		default:
+			err = f.failf("unknown flag: --%s", name)
+			return
 		}
-		err = f.failf("unknown flag: --%s", name)
-		return
 	}
 
 	var value string
@@ -819,27 +893,43 @@ func (f *FlagSet) parseLongArg(s string, args []string, fn parseFunc) (a []strin
 	}
 
 	err = fn(flag, value)
+	if err != nil {
+		f.failf(err.Error())
+	}
 	return
 }
 
 func (f *FlagSet) parseSingleShortArg(shorthands string, args []string, fn parseFunc) (outShorts string, outArgs []string, err error) {
+	outArgs = args
+
 	if strings.HasPrefix(shorthands, "test.") {
 		return
 	}
 
-	outArgs = args
 	outShorts = shorthands[1:]
 	c := shorthands[0]
 
 	flag, exists := f.shorthands[c]
 	if !exists {
-		if c == 'h' { 
+		switch {
+		case c == 'h':
 			f.usage()
 			err = ErrHelp
 			return
+		case f.ParseErrorsWhitelist.UnknownFlags:
+			
+			
+			if len(shorthands) > 2 && shorthands[1] == '=' {
+				outShorts = ""
+				return
+			}
+
+			outArgs = stripUnknownFlagValue(outArgs)
+			return
+		default:
+			err = f.failf("unknown shorthand flag: %q in -%s", c, shorthands)
+			return
 		}
-		err = f.failf("unknown shorthand flag: %q in -%s", c, shorthands)
-		return
 	}
 
 	var value string
@@ -869,6 +959,9 @@ func (f *FlagSet) parseSingleShortArg(shorthands string, args []string, fn parse
 	}
 
 	err = fn(flag, value)
+	if err != nil {
+		f.failf(err.Error())
+	}
 	return
 }
 
@@ -923,6 +1016,11 @@ func (f *FlagSet) parseArgs(args []string, fn parseFunc) (err error) {
 
 
 func (f *FlagSet) Parse(arguments []string) error {
+	if f.addedGoFlagSets != nil {
+		for _, goFlagSet := range f.addedGoFlagSets {
+			goFlagSet.Parse(nil)
+		}
+	}
 	f.parsed = true
 
 	if len(arguments) < 0 {
@@ -941,6 +1039,7 @@ func (f *FlagSet) Parse(arguments []string) error {
 		case ContinueOnError:
 			return err
 		case ExitOnError:
+			fmt.Println(err)
 			os.Exit(2)
 		case PanicOnError:
 			panic(err)

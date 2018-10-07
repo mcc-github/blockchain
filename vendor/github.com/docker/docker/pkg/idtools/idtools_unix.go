@@ -21,11 +21,12 @@ var (
 	getentCmd string
 )
 
-func mkdirAs(path string, mode os.FileMode, ownerUID, ownerGID int, mkAll, chownExisting bool) error {
+func mkdirAs(path string, mode os.FileMode, owner Identity, mkAll, chownExisting bool) error {
 	
 	
 	
 	
+
 	var paths []string
 
 	stat, err := system.Stat(path)
@@ -38,7 +39,7 @@ func mkdirAs(path string, mode os.FileMode, ownerUID, ownerGID int, mkAll, chown
 		}
 
 		
-		return lazyChown(path, ownerUID, ownerGID, stat)
+		return lazyChown(path, owner.UID, owner.GID, stat)
 	}
 
 	if os.IsNotExist(err) {
@@ -69,7 +70,7 @@ func mkdirAs(path string, mode os.FileMode, ownerUID, ownerGID int, mkAll, chown
 	
 	
 	for _, pathComponent := range paths {
-		if err := lazyChown(pathComponent, ownerUID, ownerGID, nil); err != nil {
+		if err := lazyChown(pathComponent, owner.UID, owner.GID, nil); err != nil {
 			return err
 		}
 	}
@@ -78,7 +79,7 @@ func mkdirAs(path string, mode os.FileMode, ownerUID, ownerGID int, mkAll, chown
 
 
 
-func CanAccess(path string, pair IDPair) bool {
+func CanAccess(path string, pair Identity) bool {
 	statInfo, err := system.Stat(path)
 	if err != nil {
 		return false

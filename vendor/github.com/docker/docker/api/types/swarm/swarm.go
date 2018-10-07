@@ -1,6 +1,8 @@
 package swarm 
 
-import "time"
+import (
+	"time"
+)
 
 
 
@@ -10,6 +12,8 @@ type ClusterInfo struct {
 	Spec                   Spec
 	TLSInfo                TLSInfo
 	RootRotationInProgress bool
+	DefaultAddrPool        []string
+	SubnetSize             uint32
 }
 
 
@@ -153,6 +157,8 @@ type InitRequest struct {
 	Spec             Spec
 	AutoLockManagers bool
 	Availability     NodeAvailability
+	DefaultAddrPool  []string
+	SubnetSize       uint32
 }
 
 

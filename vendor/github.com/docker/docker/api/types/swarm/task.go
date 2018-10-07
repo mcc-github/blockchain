@@ -62,8 +62,11 @@ type Task struct {
 type TaskSpec struct {
 	
 	
-	ContainerSpec *ContainerSpec      `json:",omitempty"`
-	PluginSpec    *runtime.PluginSpec `json:",omitempty"`
+	
+	
+	ContainerSpec         *ContainerSpec         `json:",omitempty"`
+	PluginSpec            *runtime.PluginSpec    `json:",omitempty"`
+	NetworkAttachmentSpec *NetworkAttachmentSpec `json:",omitempty"`
 
 	Resources     *ResourceRequirements     `json:",omitempty"`
 	RestartPolicy *RestartPolicy            `json:",omitempty"`

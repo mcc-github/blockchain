@@ -14,12 +14,11 @@ type BufferProvider interface {
 
 
 func Say(expected string, args ...interface{}) *sayMatcher {
-	formattedRegexp := expected
 	if len(args) > 0 {
-		formattedRegexp = fmt.Sprintf(expected, args...)
+		expected = fmt.Sprintf(expected, args...)
 	}
 	return &sayMatcher{
-		re: regexp.MustCompile(formattedRegexp),
+		re: regexp.MustCompile(expected),
 	}
 }
 

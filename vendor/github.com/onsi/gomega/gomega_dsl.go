@@ -12,7 +12,7 @@ import (
 	"github.com/onsi/gomega/types"
 )
 
-const GOMEGA_VERSION = "1.3.0"
+const GOMEGA_VERSION = "1.4.2"
 
 const nilFailHandlerPanic = `You are trying to make an assertion, but Gomega's fail handler is nil.
 If you're using Ginkgo then you probably forgot to put your assertion in an It().
@@ -20,7 +20,7 @@ Alternatively, you may have forgotten to register a fail handler with RegisterFa
 Depending on your vendoring solution you may be inadvertently importing gomega and subpackages (e.g. ghhtp, gexec,...) from different locations.
 `
 
-var globalFailHandler types.GomegaFailHandler
+var globalFailWrapper *types.GomegaFailWrapper
 
 var defaultEventuallyTimeout = time.Second
 var defaultEventuallyPollingInterval = 10 * time.Millisecond
@@ -30,7 +30,14 @@ var defaultConsistentlyPollingInterval = 10 * time.Millisecond
 
 
 func RegisterFailHandler(handler types.GomegaFailHandler) {
-	globalFailHandler = handler
+	if handler == nil {
+		globalFailWrapper = nil
+		return
+	}
+	globalFailWrapper = &types.GomegaFailWrapper{
+		Fail:        handler,
+		TWithHelper: testingtsupport.EmptyTWithHelper{},
+	}
 }
 
 
@@ -55,7 +62,7 @@ func RegisterFailHandler(handler types.GomegaFailHandler) {
 
 
 func RegisterTestingT(t types.GomegaTestingT) {
-	RegisterFailHandler(testingtsupport.BuildTestingTGomegaFailHandler(t))
+	RegisterFailHandler(testingtsupport.BuildTestingTGomegaFailWrapper(t).Fail)
 }
 
 
@@ -68,7 +75,7 @@ func RegisterTestingT(t types.GomegaTestingT) {
 
 
 func InterceptGomegaFailures(f func()) []string {
-	originalHandler := globalFailHandler
+	originalHandler := globalFailWrapper.Fail
 	failures := []string{}
 	RegisterFailHandler(func(message string, callerSkip ...int) {
 		failures = append(failures, message)
@@ -130,10 +137,10 @@ func Expect(actual interface{}, extra ...interface{}) GomegaAssertion {
 
 
 func ExpectWithOffset(offset int, actual interface{}, extra ...interface{}) GomegaAssertion {
-	if globalFailHandler == nil {
+	if globalFailWrapper == nil {
 		panic(nilFailHandlerPanic)
 	}
-	return assertion.New(actual, globalFailHandler, offset, extra...)
+	return assertion.New(actual, globalFailWrapper, offset, extra...)
 }
 
 
@@ -180,7 +187,7 @@ func Eventually(actual interface{}, intervals ...interface{}) GomegaAsyncAsserti
 
 
 func EventuallyWithOffset(offset int, actual interface{}, intervals ...interface{}) GomegaAsyncAssertion {
-	if globalFailHandler == nil {
+	if globalFailWrapper == nil {
 		panic(nilFailHandlerPanic)
 	}
 	timeoutInterval := defaultEventuallyTimeout
@@ -191,7 +198,7 @@ func EventuallyWithOffset(offset int, actual interface{}, intervals ...interface
 	if len(intervals) > 1 {
 		pollingInterval = toDuration(intervals[1])
 	}
-	return asyncassertion.New(asyncassertion.AsyncAssertionTypeEventually, actual, globalFailHandler, timeoutInterval, pollingInterval, offset)
+	return asyncassertion.New(asyncassertion.AsyncAssertionTypeEventually, actual, globalFailWrapper, timeoutInterval, pollingInterval, offset)
 }
 
 
@@ -225,7 +232,7 @@ func Consistently(actual interface{}, intervals ...interface{}) GomegaAsyncAsser
 
 
 func ConsistentlyWithOffset(offset int, actual interface{}, intervals ...interface{}) GomegaAsyncAssertion {
-	if globalFailHandler == nil {
+	if globalFailWrapper == nil {
 		panic(nilFailHandlerPanic)
 	}
 	timeoutInterval := defaultConsistentlyDuration
@@ -236,7 +243,7 @@ func ConsistentlyWithOffset(offset int, actual interface{}, intervals ...interfa
 	if len(intervals) > 1 {
 		pollingInterval = toDuration(intervals[1])
 	}
-	return asyncassertion.New(asyncassertion.AsyncAssertionTypeConsistently, actual, globalFailHandler, timeoutInterval, pollingInterval, offset)
+	return asyncassertion.New(asyncassertion.AsyncAssertionTypeConsistently, actual, globalFailWrapper, timeoutInterval, pollingInterval, offset)
 }
 
 
@@ -328,7 +335,7 @@ func NewGomegaWithT(t types.GomegaTestingT) *GomegaWithT {
 
 
 func (g *GomegaWithT) Expect(actual interface{}, extra ...interface{}) GomegaAssertion {
-	return assertion.New(actual, testingtsupport.BuildTestingTGomegaFailHandler(g.t), 0, extra...)
+	return assertion.New(actual, testingtsupport.BuildTestingTGomegaFailWrapper(g.t), 0, extra...)
 }
 
 
@@ -341,7 +348,7 @@ func (g *GomegaWithT) Eventually(actual interface{}, intervals ...interface{}) G
 	if len(intervals) > 1 {
 		pollingInterval = toDuration(intervals[1])
 	}
-	return asyncassertion.New(asyncassertion.AsyncAssertionTypeEventually, actual, testingtsupport.BuildTestingTGomegaFailHandler(g.t), timeoutInterval, pollingInterval, 0)
+	return asyncassertion.New(asyncassertion.AsyncAssertionTypeEventually, actual, testingtsupport.BuildTestingTGomegaFailWrapper(g.t), timeoutInterval, pollingInterval, 0)
 }
 
 
@@ -354,7 +361,7 @@ func (g *GomegaWithT) Consistently(actual interface{}, intervals ...interface{})
 	if len(intervals) > 1 {
 		pollingInterval = toDuration(intervals[1])
 	}
-	return asyncassertion.New(asyncassertion.AsyncAssertionTypeConsistently, actual, testingtsupport.BuildTestingTGomegaFailHandler(g.t), timeoutInterval, pollingInterval, 0)
+	return asyncassertion.New(asyncassertion.AsyncAssertionTypeConsistently, actual, testingtsupport.BuildTestingTGomegaFailWrapper(g.t), timeoutInterval, pollingInterval, 0)
 }
 
 func toDuration(input interface{}) time.Duration {

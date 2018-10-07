@@ -55,3 +55,10 @@ type PluginEnableConfig struct {
 type PluginDisableConfig struct {
 	ForceDisable bool
 }
+
+
+type NetworkListConfig struct {
+	
+	Detailed bool
+	Verbose  bool
+}

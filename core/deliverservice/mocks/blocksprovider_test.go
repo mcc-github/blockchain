@@ -19,7 +19,6 @@ package mocks
 import (
 	"context"
 	"math"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -100,7 +99,7 @@ func TestMockGossipServiceAdapter(t *testing.T) {
 
 	
 	gsa.AddPayload("TEST", msg.GetDataMsg().Payload)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&(gsa.(*MockGossipServiceAdapter).AddPayloadsCnt)))
+	assert.Equal(t, int32(1), gsa.(*MockGossipServiceAdapter).AddPayloadCount())
 
 	
 	assert.Len(t, gsa.PeersOfChannel(nil), 0)

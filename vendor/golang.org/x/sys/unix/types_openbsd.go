@@ -211,3 +211,9 @@ const (
 
 
 type Utsname C.struct_utsname
+
+
+
+const SizeofUvmexp = C.sizeof_struct_uvmexp
+
+type Uvmexp C.struct_uvmexp

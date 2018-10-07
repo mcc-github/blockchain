@@ -2,6 +2,7 @@ package version
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -113,6 +114,26 @@ func parseSingle(v string) (*Constraint, error) {
 	}, nil
 }
 
+func prereleaseCheck(v, c *Version) bool {
+	switch vPre, cPre := v.Prerelease() != "", c.Prerelease() != ""; {
+	case cPre && vPre:
+		
+		
+		return reflect.DeepEqual(c.Segments64(), v.Segments64())
+
+	case !cPre && vPre:
+		
+		
+		return false
+
+	case cPre && !vPre:
+		
+	case !cPre && !vPre:
+		
+	}
+	return true
+}
+
 
 
 
@@ -126,22 +147,27 @@ func constraintNotEqual(v, c *Version) bool {
 }
 
 func constraintGreaterThan(v, c *Version) bool {
-	return v.Compare(c) == 1
+	return prereleaseCheck(v, c) && v.Compare(c) == 1
 }
 
 func constraintLessThan(v, c *Version) bool {
-	return v.Compare(c) == -1
+	return prereleaseCheck(v, c) && v.Compare(c) == -1
 }
 
 func constraintGreaterThanEqual(v, c *Version) bool {
-	return v.Compare(c) >= 0
+	return prereleaseCheck(v, c) && v.Compare(c) >= 0
 }
 
 func constraintLessThanEqual(v, c *Version) bool {
-	return v.Compare(c) <= 0
+	return prereleaseCheck(v, c) && v.Compare(c) <= 0
 }
 
 func constraintPessimistic(v, c *Version) bool {
+	
+	if !prereleaseCheck(v, c) || (c.Prerelease() != "" && v.Prerelease() == "") {
+		return false
+	}
+
 	
 	
 	if v.LessThan(c) {

@@ -17,12 +17,26 @@ import (
 
 
 
+
+
+
+
 func MatchAllElements(identifier Identifier, elements Elements) types.GomegaMatcher {
 	return &ElementsMatcher{
 		Identifier: identifier,
 		Elements:   elements,
 	}
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

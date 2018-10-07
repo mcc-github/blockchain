@@ -13,8 +13,11 @@ import (
 )
 
 var (
+	
+	
 	ErrMethodMismatch = errors.New("method is not allowed")
-	ErrNotFound       = errors.New("no matching route was found")
+	
+	ErrNotFound = errors.New("no matching route was found")
 )
 
 
@@ -95,9 +98,9 @@ func (r *Router) Match(req *http.Request, match *RouteMatch) bool {
 		if r.MethodNotAllowedHandler != nil {
 			match.Handler = r.MethodNotAllowedHandler
 			return true
-		} else {
-			return false
 		}
+
+		return false
 	}
 
 	

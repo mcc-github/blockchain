@@ -146,9 +146,9 @@ type Properties struct {
 	stype reflect.Type      
 	sprop *StructProperties 
 
-	mtype    reflect.Type 
-	mkeyprop *Properties  
-	mvalprop *Properties  
+	mtype      reflect.Type 
+	MapKeyProp *Properties  
+	MapValProp *Properties  
 }
 
 
@@ -273,16 +273,16 @@ func (p *Properties) setFieldProps(typ reflect.Type, f *reflect.StructField, loc
 
 	case reflect.Map:
 		p.mtype = t1
-		p.mkeyprop = &Properties{}
-		p.mkeyprop.init(reflect.PtrTo(p.mtype.Key()), "Key", f.Tag.Get("protobuf_key"), nil, lockGetProp)
-		p.mvalprop = &Properties{}
+		p.MapKeyProp = &Properties{}
+		p.MapKeyProp.init(reflect.PtrTo(p.mtype.Key()), "Key", f.Tag.Get("protobuf_key"), nil, lockGetProp)
+		p.MapValProp = &Properties{}
 		vtype := p.mtype.Elem()
 		if vtype.Kind() != reflect.Ptr && vtype.Kind() != reflect.Slice {
 			
 			
 			vtype = reflect.PtrTo(vtype)
 		}
-		p.mvalprop.init(vtype, "Value", f.Tag.Get("protobuf_val"), nil, lockGetProp)
+		p.MapValProp.init(vtype, "Value", f.Tag.Get("protobuf_val"), nil, lockGetProp)
 	}
 
 	if p.stype != nil {

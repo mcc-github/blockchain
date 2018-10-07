@@ -5,11 +5,11 @@
 package docker
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
-
-	"golang.org/x/net/context"
+	"time"
 )
 
 var (
@@ -28,6 +28,8 @@ type Volume struct {
 	Driver     string            `json:"Driver,omitempty" yaml:"Driver,omitempty" toml:"Driver,omitempty"`
 	Mountpoint string            `json:"Mountpoint,omitempty" yaml:"Mountpoint,omitempty" toml:"Mountpoint,omitempty"`
 	Labels     map[string]string `json:"Labels,omitempty" yaml:"Labels,omitempty" toml:"Labels,omitempty"`
+	Options    map[string]string `json:"Options,omitempty" yaml:"Options,omitempty" toml:"Options,omitempty"`
+	CreatedAt  time.Time         `json:"CreatedAt,omitempty" yaml:"CreatedAt,omitempty" toml:"CreatedAt,omitempty"`
 }
 
 
@@ -121,7 +123,26 @@ func (c *Client) InspectVolume(name string) (*Volume, error) {
 
 
 func (c *Client) RemoveVolume(name string) error {
-	resp, err := c.do("DELETE", "/volumes/"+name, doOptions{})
+	return c.RemoveVolumeWithOptions(RemoveVolumeOptions{Name: name})
+}
+
+
+
+
+
+type RemoveVolumeOptions struct {
+	Context context.Context
+	Name    string `qs:"-"`
+	Force   bool
+}
+
+
+
+
+
+func (c *Client) RemoveVolumeWithOptions(opts RemoveVolumeOptions) error {
+	path := "/volumes/" + opts.Name
+	resp, err := c.do("DELETE", path+"?"+queryString(opts), doOptions{context: opts.Context})
 	if err != nil {
 		if e, ok := err.(*Error); ok {
 			if e.Status == http.StatusNotFound {

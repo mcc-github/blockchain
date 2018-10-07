@@ -402,5 +402,11 @@ type HostConfig struct {
 	Mounts []mount.Mount `json:",omitempty"`
 
 	
+	MaskedPaths []string
+
+	
+	ReadonlyPaths []string
+
+	
 	Init *bool `json:",omitempty"`
 }

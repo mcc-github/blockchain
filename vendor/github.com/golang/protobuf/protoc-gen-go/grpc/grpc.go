@@ -160,11 +160,13 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 	deprecated := service.GetOptions().GetDeprecated()
 
 	g.P()
-	g.P("
-	g.P()
+	g.P(fmt.Sprintf(`
+
+
 
 	
 	if deprecated {
+		g.P("
 		g.P(deprecationComment)
 	}
 	g.P("type ", servName, "Client interface {")
@@ -207,14 +209,13 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 		g.generateClientMethod(servName, fullServName, serviceDescVar, method, descExpr)
 	}
 
-	g.P("
-	g.P()
-
 	
+	serverType := servName + "Server"
+	g.P("
 	if deprecated {
+		g.P("
 		g.P(deprecationComment)
 	}
-	serverType := servName + "Server"
 	g.P("type ", serverType, " interface {")
 	for i, method := range service.Method {
 		g.gen.PrintComments(fmt.Sprintf("%s,2,%d", path, i)) 
@@ -307,7 +308,7 @@ func (g *grpc) generateClientMethod(servName, fullServName, serviceDescVar strin
 	if !method.GetServerStreaming() && !method.GetClientStreaming() {
 		g.P("out := new(", outType, ")")
 		
-		g.P("err := ", grpcPkg, `.Invoke(ctx, "`, sname, `", in, out, c.cc, opts...)`)
+		g.P(`err := c.cc.Invoke(ctx, "`, sname, `", in, out, opts...)`)
 		g.P("if err != nil { return nil, err }")
 		g.P("return out, nil")
 		g.P("}")
@@ -315,7 +316,7 @@ func (g *grpc) generateClientMethod(servName, fullServName, serviceDescVar strin
 		return
 	}
 	streamType := unexport(servName) + methName + "Client"
-	g.P("stream, err := ", grpcPkg, ".NewClientStream(ctx, ", descExpr, `, c.cc, "`, sname, `", opts...)`)
+	g.P("stream, err := c.cc.NewStream(ctx, ", descExpr, `, "`, sname, `", opts...)`)
 	g.P("if err != nil { return nil, err }")
 	g.P("x := &", streamType, "{stream}")
 	if !method.GetClientStreaming() {

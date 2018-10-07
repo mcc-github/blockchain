@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"regexp"
 	"time"
 
@@ -17,6 +18,13 @@ var validID = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
 
 
 type Config struct {
+	
+	Admin struct {
+		
+		
+		Timeout time.Duration
+	}
+
 	
 	
 	Net struct {
@@ -58,6 +66,12 @@ type Config struct {
 		
 		
 		KeepAlive time.Duration
+
+		
+		
+		
+		
+		LocalAddr net.Addr
 	}
 
 	
@@ -159,14 +173,55 @@ type Config struct {
 
 	
 	
-	
-	
-	
-	
-	
-	
-	
 	Consumer struct {
+
+		
+		Group struct {
+			Session struct {
+				
+				
+				
+				
+				
+				
+				Timeout time.Duration
+			}
+			Heartbeat struct {
+				
+				
+				
+				
+				
+				
+				Interval time.Duration
+			}
+			Rebalance struct {
+				
+				Strategy BalanceStrategy
+				
+				
+				
+				
+				Timeout time.Duration
+
+				Retry struct {
+					
+					
+					
+					
+					Max int
+					
+					Backoff time.Duration
+				}
+			}
+			Member struct {
+				
+				
+				
+				UserData []byte
+			}
+		}
+
 		Retry struct {
 			
 			
@@ -248,6 +303,12 @@ type Config struct {
 			
 			
 			Retention time.Duration
+
+			Retry struct {
+				
+				
+				Max int
+			}
 		}
 	}
 
@@ -279,6 +340,8 @@ type Config struct {
 func NewConfig() *Config {
 	c := &Config{}
 
+	c.Admin.Timeout = 3 * time.Second
+
 	c.Net.MaxOpenRequests = 5
 	c.Net.DialTimeout = 30 * time.Second
 	c.Net.ReadTimeout = 30 * time.Second
@@ -307,6 +370,14 @@ func NewConfig() *Config {
 	c.Consumer.Return.Errors = false
 	c.Consumer.Offsets.CommitInterval = 1 * time.Second
 	c.Consumer.Offsets.Initial = OffsetNewest
+	c.Consumer.Offsets.Retry.Max = 3
+
+	c.Consumer.Group.Session.Timeout = 10 * time.Second
+	c.Consumer.Group.Heartbeat.Interval = 3 * time.Second
+	c.Consumer.Group.Rebalance.Strategy = BalanceStrategyRange
+	c.Consumer.Group.Rebalance.Timeout = 60 * time.Second
+	c.Consumer.Group.Rebalance.Retry.Max = 4
+	c.Consumer.Group.Rebalance.Retry.Backoff = 2 * time.Second
 
 	c.ClientID = defaultClientID
 	c.ChannelBufferSize = 256
@@ -355,6 +426,15 @@ func (c *Config) Validate() error {
 	if c.Consumer.Offsets.Retention%time.Millisecond != 0 {
 		Logger.Println("Consumer.Offsets.Retention only supports millisecond precision; nanoseconds will be truncated.")
 	}
+	if c.Consumer.Group.Session.Timeout%time.Millisecond != 0 {
+		Logger.Println("Consumer.Group.Session.Timeout only supports millisecond precision; nanoseconds will be truncated.")
+	}
+	if c.Consumer.Group.Heartbeat.Interval%time.Millisecond != 0 {
+		Logger.Println("Consumer.Group.Heartbeat.Interval only supports millisecond precision; nanoseconds will be truncated.")
+	}
+	if c.Consumer.Group.Rebalance.Timeout%time.Millisecond != 0 {
+		Logger.Println("Consumer.Group.Rebalance.Timeout only supports millisecond precision; nanoseconds will be truncated.")
+	}
 	if c.ClientID == defaultClientID {
 		Logger.Println("ClientID is the default of 'sarama', you should consider setting it to something application-specific.")
 	}
@@ -375,6 +455,12 @@ func (c *Config) Validate() error {
 		return ConfigurationError("Net.SASL.User must not be empty when SASL is enabled")
 	case c.Net.SASL.Enable == true && c.Net.SASL.Password == "":
 		return ConfigurationError("Net.SASL.Password must not be empty when SASL is enabled")
+	}
+
+	
+	switch {
+	case c.Admin.Timeout <= 0:
+		return ConfigurationError("Admin.Timeout must be > 0")
 	}
 
 	
@@ -443,7 +529,26 @@ func (c *Config) Validate() error {
 		return ConfigurationError("Consumer.Offsets.CommitInterval must be > 0")
 	case c.Consumer.Offsets.Initial != OffsetOldest && c.Consumer.Offsets.Initial != OffsetNewest:
 		return ConfigurationError("Consumer.Offsets.Initial must be OffsetOldest or OffsetNewest")
+	case c.Consumer.Offsets.Retry.Max < 0:
+		return ConfigurationError("Consumer.Offsets.Retry.Max must be >= 0")
+	}
 
+	
+	switch {
+	case c.Consumer.Group.Session.Timeout <= 2*time.Millisecond:
+		return ConfigurationError("Consumer.Group.Session.Timeout must be >= 2ms")
+	case c.Consumer.Group.Heartbeat.Interval < 1*time.Millisecond:
+		return ConfigurationError("Consumer.Group.Heartbeat.Interval must be >= 1ms")
+	case c.Consumer.Group.Heartbeat.Interval >= c.Consumer.Group.Session.Timeout:
+		return ConfigurationError("Consumer.Group.Heartbeat.Interval must be < Consumer.Group.Session.Timeout")
+	case c.Consumer.Group.Rebalance.Strategy == nil:
+		return ConfigurationError("Consumer.Group.Rebalance.Strategy must not be empty")
+	case c.Consumer.Group.Rebalance.Timeout <= time.Millisecond:
+		return ConfigurationError("Consumer.Group.Rebalance.Timeout must be >= 1ms")
+	case c.Consumer.Group.Rebalance.Retry.Max < 0:
+		return ConfigurationError("Consumer.Group.Rebalance.Retry.Max must be >= 0")
+	case c.Consumer.Group.Rebalance.Retry.Backoff < 0:
+		return ConfigurationError("Consumer.Group.Rebalance.Retry.Backoff must be >= 0")
 	}
 
 	

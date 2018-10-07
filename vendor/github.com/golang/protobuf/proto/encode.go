@@ -35,26 +35,8 @@ package proto
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 )
-
-
-
-
-
-
-
-
-
-
-type RequiredNotSetError struct {
-	field string
-}
-
-func (e *RequiredNotSetError) Error() string {
-	return fmt.Sprintf("proto: required field %q not set", e.field)
-}
 
 var (
 	

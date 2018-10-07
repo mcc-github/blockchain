@@ -320,21 +320,22 @@ func (c *Ctx) GetObjectSize(sh SessionHandle, oh ObjectHandle) (uint, error) {
 func (c *Ctx) GetAttributeValue(sh SessionHandle, o ObjectHandle, a []*Attribute) ([]*Attribute, error) {
 	
 	
-	pa := make([]C.ckAttr, len(a))
+	pa := make([]C.CK_ATTRIBUTE, len(a))
 	for i := 0; i < len(a); i++ {
 		pa[i]._type = C.CK_ATTRIBUTE_TYPE(a[i].Type)
 	}
-	e := C.GetAttributeValue(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_OBJECT_HANDLE(o), C.ckAttrPtr(&pa[0]), C.CK_ULONG(len(a)))
-	if toError(e) != nil {
-		return nil, toError(e)
+	e := C.GetAttributeValue(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_OBJECT_HANDLE(o), &pa[0], C.CK_ULONG(len(a)))
+	if err := toError(e); err != nil {
+		return nil, err
 	}
 	a1 := make([]*Attribute, len(a))
 	for i, c := range pa {
 		x := new(Attribute)
 		x.Type = uint(c._type)
 		if int(c.ulValueLen) != -1 {
-			x.Value = C.GoBytes(unsafe.Pointer(c.pValue), C.int(c.ulValueLen))
-			C.free(unsafe.Pointer(c.pValue))
+			buf := unsafe.Pointer(C.getAttributePval(&c))
+			x.Value = C.GoBytes(buf, C.int(c.ulValueLen))
+			C.free(buf)
 		}
 		a1[i] = x
 	}
@@ -357,6 +358,8 @@ func (c *Ctx) FindObjectsInit(sh SessionHandle, temp []*Attribute) error {
 	e := C.FindObjectsInit(c.ctx, C.CK_SESSION_HANDLE(sh), t, tcount)
 	return toError(e)
 }
+
+
 
 
 
@@ -389,7 +392,7 @@ func (c *Ctx) FindObjectsFinal(sh SessionHandle) error {
 
 
 func (c *Ctx) EncryptInit(sh SessionHandle, m []*Mechanism, o ObjectHandle) error {
-	arena, mech, _ := cMechanismList(m)
+	arena, mech := cMechanism(m)
 	defer arena.Free()
 	e := C.EncryptInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(o))
 	return toError(e)
@@ -401,7 +404,7 @@ func (c *Ctx) Encrypt(sh SessionHandle, message []byte) ([]byte, error) {
 		enc    C.CK_BYTE_PTR
 		enclen C.CK_ULONG
 	)
-	e := C.Encrypt(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&message[0])), C.CK_ULONG(len(message)), &enc, &enclen)
+	e := C.Encrypt(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(message), C.CK_ULONG(len(message)), &enc, &enclen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -416,7 +419,7 @@ func (c *Ctx) EncryptUpdate(sh SessionHandle, plain []byte) ([]byte, error) {
 		part    C.CK_BYTE_PTR
 		partlen C.CK_ULONG
 	)
-	e := C.EncryptUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&plain[0])), C.CK_ULONG(len(plain)), &part, &partlen)
+	e := C.EncryptUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(plain), C.CK_ULONG(len(plain)), &part, &partlen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -442,19 +445,19 @@ func (c *Ctx) EncryptFinal(sh SessionHandle) ([]byte, error) {
 
 
 func (c *Ctx) DecryptInit(sh SessionHandle, m []*Mechanism, o ObjectHandle) error {
-	arena, mech, _ := cMechanismList(m)
+	arena, mech := cMechanism(m)
 	defer arena.Free()
 	e := C.DecryptInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(o))
 	return toError(e)
 }
 
 
-func (c *Ctx) Decrypt(sh SessionHandle, cypher []byte) ([]byte, error) {
+func (c *Ctx) Decrypt(sh SessionHandle, cipher []byte) ([]byte, error) {
 	var (
 		plain    C.CK_BYTE_PTR
 		plainlen C.CK_ULONG
 	)
-	e := C.Decrypt(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&cypher[0])), C.CK_ULONG(len(cypher)), &plain, &plainlen)
+	e := C.Decrypt(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(cipher), C.CK_ULONG(len(cipher)), &plain, &plainlen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -469,7 +472,7 @@ func (c *Ctx) DecryptUpdate(sh SessionHandle, cipher []byte) ([]byte, error) {
 		part    C.CK_BYTE_PTR
 		partlen C.CK_ULONG
 	)
-	e := C.DecryptUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&cipher[0])), C.CK_ULONG(len(cipher)), &part, &partlen)
+	e := C.DecryptUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(cipher), C.CK_ULONG(len(cipher)), &part, &partlen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -495,7 +498,7 @@ func (c *Ctx) DecryptFinal(sh SessionHandle) ([]byte, error) {
 
 
 func (c *Ctx) DigestInit(sh SessionHandle, m []*Mechanism) error {
-	arena, mech, _ := cMechanismList(m)
+	arena, mech := cMechanism(m)
 	defer arena.Free()
 	e := C.DigestInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech)
 	return toError(e)
@@ -507,7 +510,7 @@ func (c *Ctx) Digest(sh SessionHandle, message []byte) ([]byte, error) {
 		hash    C.CK_BYTE_PTR
 		hashlen C.CK_ULONG
 	)
-	e := C.Digest(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&message[0])), C.CK_ULONG(len(message)), &hash, &hashlen)
+	e := C.Digest(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(message), C.CK_ULONG(len(message)), &hash, &hashlen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -518,7 +521,7 @@ func (c *Ctx) Digest(sh SessionHandle, message []byte) ([]byte, error) {
 
 
 func (c *Ctx) DigestUpdate(sh SessionHandle, message []byte) error {
-	e := C.DigestUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&message[0])), C.CK_ULONG(len(message)))
+	e := C.DigestUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(message), C.CK_ULONG(len(message)))
 	if toError(e) != nil {
 		return toError(e)
 	}
@@ -555,7 +558,7 @@ func (c *Ctx) DigestFinal(sh SessionHandle) ([]byte, error) {
 
 
 func (c *Ctx) SignInit(sh SessionHandle, m []*Mechanism, o ObjectHandle) error {
-	arena, mech, _ := cMechanismList(m) 
+	arena, mech := cMechanism(m)
 	defer arena.Free()
 	e := C.SignInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(o))
 	return toError(e)
@@ -568,7 +571,7 @@ func (c *Ctx) Sign(sh SessionHandle, message []byte) ([]byte, error) {
 		sig    C.CK_BYTE_PTR
 		siglen C.CK_ULONG
 	)
-	e := C.Sign(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&message[0])), C.CK_ULONG(len(message)), &sig, &siglen)
+	e := C.Sign(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(message), C.CK_ULONG(len(message)), &sig, &siglen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -581,7 +584,7 @@ func (c *Ctx) Sign(sh SessionHandle, message []byte) ([]byte, error) {
 
 
 func (c *Ctx) SignUpdate(sh SessionHandle, message []byte) error {
-	e := C.SignUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&message[0])), C.CK_ULONG(len(message)))
+	e := C.SignUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(message), C.CK_ULONG(len(message)))
 	return toError(e)
 }
 
@@ -602,7 +605,7 @@ func (c *Ctx) SignFinal(sh SessionHandle) ([]byte, error) {
 
 
 func (c *Ctx) SignRecoverInit(sh SessionHandle, m []*Mechanism, key ObjectHandle) error {
-	arena, mech, _ := cMechanismList(m)
+	arena, mech := cMechanism(m)
 	defer arena.Free()
 	e := C.SignRecoverInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(key))
 	return toError(e)
@@ -614,7 +617,7 @@ func (c *Ctx) SignRecover(sh SessionHandle, data []byte) ([]byte, error) {
 		sig    C.CK_BYTE_PTR
 		siglen C.CK_ULONG
 	)
-	e := C.SignRecover(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&data[0])), C.CK_ULONG(len(data)), &sig, &siglen)
+	e := C.SignRecover(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(data), C.CK_ULONG(len(data)), &sig, &siglen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -627,7 +630,7 @@ func (c *Ctx) SignRecover(sh SessionHandle, data []byte) ([]byte, error) {
 
 
 func (c *Ctx) VerifyInit(sh SessionHandle, m []*Mechanism, key ObjectHandle) error {
-	arena, mech, _ := cMechanismList(m) 
+	arena, mech := cMechanism(m)
 	defer arena.Free()
 	e := C.VerifyInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(key))
 	return toError(e)
@@ -637,7 +640,7 @@ func (c *Ctx) VerifyInit(sh SessionHandle, m []*Mechanism, key ObjectHandle) err
 
 
 func (c *Ctx) Verify(sh SessionHandle, data []byte, signature []byte) error {
-	e := C.Verify(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&data[0])), C.CK_ULONG(len(data)), C.CK_BYTE_PTR(unsafe.Pointer(&signature[0])), C.CK_ULONG(len(signature)))
+	e := C.Verify(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(data), C.CK_ULONG(len(data)), cMessage(signature), C.CK_ULONG(len(signature)))
 	return toError(e)
 }
 
@@ -645,21 +648,21 @@ func (c *Ctx) Verify(sh SessionHandle, data []byte, signature []byte) error {
 
 
 func (c *Ctx) VerifyUpdate(sh SessionHandle, part []byte) error {
-	e := C.VerifyUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&part[0])), C.CK_ULONG(len(part)))
+	e := C.VerifyUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(part), C.CK_ULONG(len(part)))
 	return toError(e)
 }
 
 
 
 func (c *Ctx) VerifyFinal(sh SessionHandle, signature []byte) error {
-	e := C.VerifyFinal(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&signature[0])), C.CK_ULONG(len(signature)))
+	e := C.VerifyFinal(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(signature), C.CK_ULONG(len(signature)))
 	return toError(e)
 }
 
 
 
 func (c *Ctx) VerifyRecoverInit(sh SessionHandle, m []*Mechanism, key ObjectHandle) error {
-	arena, mech, _ := cMechanismList(m)
+	arena, mech := cMechanism(m)
 	defer arena.Free()
 	e := C.VerifyRecoverInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(key))
 	return toError(e)
@@ -672,7 +675,7 @@ func (c *Ctx) VerifyRecover(sh SessionHandle, signature []byte) ([]byte, error) 
 		data    C.CK_BYTE_PTR
 		datalen C.CK_ULONG
 	)
-	e := C.DecryptVerifyUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&signature[0])), C.CK_ULONG(len(signature)), &data, &datalen)
+	e := C.DecryptVerifyUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(signature), C.CK_ULONG(len(signature)), &data, &datalen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -687,7 +690,7 @@ func (c *Ctx) DigestEncryptUpdate(sh SessionHandle, part []byte) ([]byte, error)
 		enc    C.CK_BYTE_PTR
 		enclen C.CK_ULONG
 	)
-	e := C.DigestEncryptUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&part[0])), C.CK_ULONG(len(part)), &enc, &enclen)
+	e := C.DigestEncryptUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(part), C.CK_ULONG(len(part)), &enc, &enclen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -702,7 +705,7 @@ func (c *Ctx) DecryptDigestUpdate(sh SessionHandle, cipher []byte) ([]byte, erro
 		part    C.CK_BYTE_PTR
 		partlen C.CK_ULONG
 	)
-	e := C.DecryptDigestUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&cipher[0])), C.CK_ULONG(len(cipher)), &part, &partlen)
+	e := C.DecryptDigestUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(cipher), C.CK_ULONG(len(cipher)), &part, &partlen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -717,7 +720,7 @@ func (c *Ctx) SignEncryptUpdate(sh SessionHandle, part []byte) ([]byte, error) {
 		enc    C.CK_BYTE_PTR
 		enclen C.CK_ULONG
 	)
-	e := C.SignEncryptUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&part[0])), C.CK_ULONG(len(part)), &enc, &enclen)
+	e := C.SignEncryptUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(part), C.CK_ULONG(len(part)), &enc, &enclen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -732,7 +735,7 @@ func (c *Ctx) DecryptVerifyUpdate(sh SessionHandle, cipher []byte) ([]byte, erro
 		part    C.CK_BYTE_PTR
 		partlen C.CK_ULONG
 	)
-	e := C.DecryptVerifyUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_BYTE_PTR(unsafe.Pointer(&cipher[0])), C.CK_ULONG(len(cipher)), &part, &partlen)
+	e := C.DecryptVerifyUpdate(c.ctx, C.CK_SESSION_HANDLE(sh), cMessage(cipher), C.CK_ULONG(len(cipher)), &part, &partlen)
 	if toError(e) != nil {
 		return nil, toError(e)
 	}
@@ -746,7 +749,7 @@ func (c *Ctx) GenerateKey(sh SessionHandle, m []*Mechanism, temp []*Attribute) (
 	var key C.CK_OBJECT_HANDLE
 	attrarena, t, tcount := cAttributeList(temp)
 	defer attrarena.Free()
-	mecharena, mech, _ := cMechanismList(m)
+	mecharena, mech := cMechanism(m)
 	defer mecharena.Free()
 	e := C.GenerateKey(c.ctx, C.CK_SESSION_HANDLE(sh), mech, t, tcount, C.CK_OBJECT_HANDLE_PTR(&key))
 	e1 := toError(e)
@@ -766,7 +769,7 @@ func (c *Ctx) GenerateKeyPair(sh SessionHandle, m []*Mechanism, public, private 
 	defer pubarena.Free()
 	privarena, priv, privcount := cAttributeList(private)
 	defer privarena.Free()
-	mecharena, mech, _ := cMechanismList(m)
+	mecharena, mech := cMechanism(m)
 	defer mecharena.Free()
 	e := C.GenerateKeyPair(c.ctx, C.CK_SESSION_HANDLE(sh), mech, pub, pubcount, priv, privcount, C.CK_OBJECT_HANDLE_PTR(&pubkey), C.CK_OBJECT_HANDLE_PTR(&privkey))
 	e1 := toError(e)
@@ -782,7 +785,7 @@ func (c *Ctx) WrapKey(sh SessionHandle, m []*Mechanism, wrappingkey, key ObjectH
 		wrappedkey    C.CK_BYTE_PTR
 		wrappedkeylen C.CK_ULONG
 	)
-	arena, mech, _ := cMechanismList(m)
+	arena, mech := cMechanism(m)
 	defer arena.Free()
 	e := C.WrapKey(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(wrappingkey), C.CK_OBJECT_HANDLE(key), &wrappedkey, &wrappedkeylen)
 	if toError(e) != nil {
@@ -798,7 +801,7 @@ func (c *Ctx) UnwrapKey(sh SessionHandle, m []*Mechanism, unwrappingkey ObjectHa
 	var key C.CK_OBJECT_HANDLE
 	attrarena, ac, aclen := cAttributeList(a)
 	defer attrarena.Free()
-	mecharena, mech, _ := cMechanismList(m)
+	mecharena, mech := cMechanism(m)
 	defer mecharena.Free()
 	e := C.UnwrapKey(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(unwrappingkey), C.CK_BYTE_PTR(unsafe.Pointer(&wrappedkey[0])), C.CK_ULONG(len(wrappedkey)), ac, aclen, &key)
 	return ObjectHandle(key), toError(e)
@@ -809,7 +812,7 @@ func (c *Ctx) DeriveKey(sh SessionHandle, m []*Mechanism, basekey ObjectHandle, 
 	var key C.CK_OBJECT_HANDLE
 	attrarena, ac, aclen := cAttributeList(a)
 	defer attrarena.Free()
-	mecharena, mech, _ := cMechanismList(m)
+	mecharena, mech := cMechanism(m)
 	defer mecharena.Free()
 	e := C.DeriveKey(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(basekey), ac, aclen, &key)
 	return ObjectHandle(key), toError(e)

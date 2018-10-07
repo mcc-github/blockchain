@@ -181,7 +181,23 @@ type ImageBuildOptions struct {
 	Target      string
 	SessionID   string
 	Platform    string
+	
+	Version BuilderVersion
+	
+	
+	
+	BuildID string
 }
+
+
+type BuilderVersion string
+
+const (
+	
+	BuilderV1 BuilderVersion = "1"
+	
+	BuilderBuildKit = "2"
+)
 
 
 

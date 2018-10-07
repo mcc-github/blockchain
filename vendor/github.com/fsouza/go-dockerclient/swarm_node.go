@@ -5,13 +5,13 @@
 package docker
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
 
 	"github.com/docker/docker/api/types/swarm"
-	"golang.org/x/net/context"
 )
 
 

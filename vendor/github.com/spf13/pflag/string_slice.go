@@ -82,6 +82,11 @@ func (f *FlagSet) GetStringSlice(name string) ([]string, error) {
 
 
 
+
+
+
+
+
 func (f *FlagSet) StringSliceVar(p *[]string, name string, value []string, usage string) {
 	f.VarP(newStringSliceValue(value, p), name, "", usage)
 }
@@ -93,6 +98,11 @@ func (f *FlagSet) StringSliceVarP(p *[]string, name, shorthand string, value []s
 
 
 
+
+
+
+
+
 func StringSliceVar(p *[]string, name string, value []string, usage string) {
 	CommandLine.VarP(newStringSliceValue(value, p), name, "", usage)
 }
@@ -101,6 +111,11 @@ func StringSliceVar(p *[]string, name string, value []string, usage string) {
 func StringSliceVarP(p *[]string, name, shorthand string, value []string, usage string) {
 	CommandLine.VarP(newStringSliceValue(value, p), name, shorthand, usage)
 }
+
+
+
+
+
 
 
 
@@ -116,6 +131,11 @@ func (f *FlagSet) StringSliceP(name, shorthand string, value []string, usage str
 	f.StringSliceVarP(&p, name, shorthand, value, usage)
 	return &p
 }
+
+
+
+
+
 
 
 

@@ -39,8 +39,11 @@ const (
 	statVersion10 = "1.0"
 	statVersion11 = "1.1"
 
-	fieldTransport10Len = 10
-	fieldTransport11Len = 13
+	fieldTransport10TCPLen = 10
+	fieldTransport10UDPLen = 7
+
+	fieldTransport11TCPLen = 13
+	fieldTransport11UDPLen = 10
 )
 
 
@@ -186,6 +189,8 @@ type NFSOperationStats struct {
 
 
 type NFSTransportStats struct {
+	
+	Protocol string
 	
 	Port uint64
 	
@@ -360,7 +365,7 @@ func parseMountStatsNFS(s *bufio.Scanner, statVersion string) (*MountStatsNFS, e
 				return nil, fmt.Errorf("not enough information for NFS transport stats: %v", ss)
 			}
 
-			tstats, err := parseNFSTransportStats(ss[2:], statVersion)
+			tstats, err := parseNFSTransportStats(ss[1:], statVersion)
 			if err != nil {
 				return nil, err
 			}
@@ -522,13 +527,33 @@ func parseNFSOperationStats(s *bufio.Scanner) ([]NFSOperationStats, error) {
 
 
 func parseNFSTransportStats(ss []string, statVersion string) (*NFSTransportStats, error) {
+	
+	protocol := ss[0]
+	ss = ss[1:]
+
 	switch statVersion {
 	case statVersion10:
-		if len(ss) != fieldTransport10Len {
+		var expectedLength int
+		if protocol == "tcp" {
+			expectedLength = fieldTransport10TCPLen
+		} else if protocol == "udp" {
+			expectedLength = fieldTransport10UDPLen
+		} else {
+			return nil, fmt.Errorf("invalid NFS protocol \"%s\" in stats 1.0 statement: %v", protocol, ss)
+		}
+		if len(ss) != expectedLength {
 			return nil, fmt.Errorf("invalid NFS transport stats 1.0 statement: %v", ss)
 		}
 	case statVersion11:
-		if len(ss) != fieldTransport11Len {
+		var expectedLength int
+		if protocol == "tcp" {
+			expectedLength = fieldTransport11TCPLen
+		} else if protocol == "udp" {
+			expectedLength = fieldTransport11UDPLen
+		} else {
+			return nil, fmt.Errorf("invalid NFS protocol \"%s\" in stats 1.1 statement: %v", protocol, ss)
+		}
+		if len(ss) != expectedLength {
 			return nil, fmt.Errorf("invalid NFS transport stats 1.1 statement: %v", ss)
 		}
 	default:
@@ -541,7 +566,8 @@ func parseNFSTransportStats(ss []string, statVersion string) (*NFSTransportStats
 	
 	
 	
-	ns := make([]uint64, fieldTransport11Len)
+	
+	ns := make([]uint64, fieldTransport11TCPLen)
 	for i, s := range ss {
 		n, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
@@ -551,7 +577,18 @@ func parseNFSTransportStats(ss []string, statVersion string) (*NFSTransportStats
 		ns[i] = n
 	}
 
+	
+	
+	
+	
+	
+	
+	if protocol == "udp" {
+		ns = append(ns[:2], append(make([]uint64, 3), ns[2:]...)...)
+	}
+
 	return &NFSTransportStats{
+		Protocol:                 protocol,
 		Port:                     ns[0],
 		Bind:                     ns[1],
 		Connect:                  ns[2],

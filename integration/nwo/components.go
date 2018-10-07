@@ -23,7 +23,6 @@ type Components struct {
 
 var RequiredImages = []string{
 	fmt.Sprintf("mcc-github/blockchain-ccenv:%s-latest", runtime.GOARCH),
-	fmt.Sprintf("mcc-github/blockchain-javaenv:%s-latest", runtime.GOARCH),
 	runner.CouchDBDefaultImage,
 	runner.KafkaDefaultImage,
 	runner.ZooKeeperDefaultImage,

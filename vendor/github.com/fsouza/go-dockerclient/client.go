@@ -10,6 +10,7 @@ package docker
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -32,10 +33,8 @@ import (
 
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/homedir"
-	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/stdcopy"
-	"golang.org/x/net/context"
-	"golang.org/x/net/context/ctxhttp"
+	"github.com/fsouza/go-dockerclient/internal/jsonmessage"
 )
 
 const (
@@ -59,6 +58,7 @@ var (
 	apiVersion119, _ = NewAPIVersion("1.19")
 	apiVersion124, _ = NewAPIVersion("1.24")
 	apiVersion125, _ = NewAPIVersion("1.25")
+	apiVersion135, _ = NewAPIVersion("1.35")
 )
 
 
@@ -224,9 +224,11 @@ func NewVersionedClient(endpoint string, apiVersionString string) (*Client, erro
 
 
 
-func (c *Client) WithTransport(trFunc func () *http.Transport) {
+func (c *Client) WithTransport(trFunc func() *http.Transport) {
 	c.initializeNativeClient(trFunc)
 }
+
+
 
 
 func NewVersionnedTLSClient(endpoint string, cert, key, ca, apiVersionString string) (*Client, error) {
@@ -475,7 +477,7 @@ func (c *Client) do(method, path string, doOptions doOptions) (*http.Response, e
 		ctx = context.Background()
 	}
 
-	resp, err := ctxhttp.Do(ctx, c.HTTPClient, req)
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
 			return nil, ErrConnectionRefused
@@ -591,7 +593,7 @@ func (c *Client) stream(method, path string, streamOptions streamOptions) error 
 			return chooseError(subCtx, err)
 		}
 	} else {
-		if resp, err = ctxhttp.Do(subCtx, c.HTTPClient, req); err != nil {
+		if resp, err = c.HTTPClient.Do(req.WithContext(subCtx)); err != nil {
 			if strings.Contains(err.Error(), "connection refused") {
 				return ErrConnectionRefused
 			}
@@ -914,6 +916,10 @@ func addQueryStringValue(items url.Values, key string, v reflect.Value) {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if v.Int() > 0 {
 			items.Add(key, strconv.FormatInt(v.Int(), 10))
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if v.Uint() > 0 {
+			items.Add(key, strconv.FormatUint(v.Uint(), 10))
 		}
 	case reflect.Float32, reflect.Float64:
 		if v.Float() > 0 {

@@ -157,6 +157,26 @@ func (p Proc) Executable() (string, error) {
 }
 
 
+func (p Proc) Cwd() (string, error) {
+	wd, err := os.Readlink(p.path("cwd"))
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+
+	return wd, err
+}
+
+
+func (p Proc) RootDir() (string, error) {
+	rdir, err := os.Readlink(p.path("root"))
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+
+	return rdir, err
+}
+
+
 func (p Proc) FileDescriptors() ([]uintptr, error) {
 	names, err := p.fileDescriptors()
 	if err != nil {

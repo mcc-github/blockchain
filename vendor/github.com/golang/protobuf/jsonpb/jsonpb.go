@@ -100,9 +100,15 @@ func defaultResolveAny(typeUrl string) (proto.Message, error) {
 
 
 
+
+
+
 type JSONPBMarshaler interface {
 	MarshalJSONPB(*Marshaler) ([]byte, error)
 }
+
+
+
 
 
 
@@ -559,6 +565,7 @@ func (m *Marshaler) marshalValue(out *errWriter, prop *proto.Properties, v refle
 				out.write(m.Indent)
 			}
 
+			
 			b, err := json.Marshal(k.Interface())
 			if err != nil {
 				return err
@@ -580,7 +587,11 @@ func (m *Marshaler) marshalValue(out *errWriter, prop *proto.Properties, v refle
 				out.write(` `)
 			}
 
-			if err := m.marshalValue(out, prop, v.MapIndex(k), indent+m.Indent); err != nil {
+			vprop := prop
+			if prop != nil && prop.MapValProp != nil {
+				vprop = prop.MapValProp
+			}
+			if err := m.marshalValue(out, vprop, v.MapIndex(k), indent+m.Indent); err != nil {
 				return err
 			}
 		}
@@ -772,7 +783,7 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 
 			return nil
 		case "Duration":
-			unq, err := strconv.Unquote(string(inputValue))
+			unq, err := unquote(string(inputValue))
 			if err != nil {
 				return err
 			}
@@ -789,7 +800,7 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 			target.Field(1).SetInt(ns)
 			return nil
 		case "Timestamp":
-			unq, err := strconv.Unquote(string(inputValue))
+			unq, err := unquote(string(inputValue))
 			if err != nil {
 				return err
 			}
@@ -836,7 +847,7 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 				target.Field(0).Set(reflect.ValueOf(&stpb.Value_NullValue{}))
 			} else if v, err := strconv.ParseFloat(ivStr, 0); err == nil {
 				target.Field(0).Set(reflect.ValueOf(&stpb.Value_NumberValue{v}))
-			} else if v, err := strconv.Unquote(ivStr); err == nil {
+			} else if v, err := unquote(ivStr); err == nil {
 				target.Field(0).Set(reflect.ValueOf(&stpb.Value_StringValue{v}))
 			} else if v, err := strconv.ParseBool(ivStr); err == nil {
 				target.Field(0).Set(reflect.ValueOf(&stpb.Value_BoolValue{v}))
@@ -871,6 +882,9 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 		if target.Kind() == reflect.Ptr { 
 			target.Set(reflect.New(targetType.Elem()))
 			target = target.Elem()
+		}
+		if targetType.Kind() != reflect.Int32 {
+			return fmt.Errorf("invalid target %q for enum %s", targetType.Kind(), prop.Enum)
 		}
 		target.SetInt(int64(n))
 		return nil
@@ -1001,29 +1015,28 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 					k = reflect.ValueOf(ks)
 				} else {
 					k = reflect.New(targetType.Key()).Elem()
-					
-					if err := u.unmarshalValue(k, json.RawMessage(ks), nil); err != nil {
+					var kprop *proto.Properties
+					if prop != nil && prop.MapKeyProp != nil {
+						kprop = prop.MapKeyProp
+					}
+					if err := u.unmarshalValue(k, json.RawMessage(ks), kprop); err != nil {
 						return err
 					}
 				}
 
 				
 				v := reflect.New(targetType.Elem()).Elem()
-				
-				if err := u.unmarshalValue(v, raw, nil); err != nil {
+				var vprop *proto.Properties
+				if prop != nil && prop.MapValProp != nil {
+					vprop = prop.MapValProp
+				}
+				if err := u.unmarshalValue(v, raw, vprop); err != nil {
 					return err
 				}
 				target.SetMapIndex(k, v)
 			}
 		}
 		return nil
-	}
-
-	
-	
-	isNum := targetType.Kind() == reflect.Int64 || targetType.Kind() == reflect.Uint64
-	if isNum && strings.HasPrefix(string(inputValue), `"`) {
-		inputValue = inputValue[1 : len(inputValue)-1]
 	}
 
 	
@@ -1036,7 +1049,22 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 	}
 
 	
+	
+	isNum := targetType.Kind() == reflect.Int64 || targetType.Kind() == reflect.Uint64 ||
+		targetType.Kind() == reflect.Int32 || targetType.Kind() == reflect.Uint32 ||
+		targetType.Kind() == reflect.Float32 || targetType.Kind() == reflect.Float64
+	if isNum && strings.HasPrefix(string(inputValue), `"`) {
+		inputValue = inputValue[1 : len(inputValue)-1]
+	}
+
+	
 	return json.Unmarshal(inputValue, target.Addr().Interface())
+}
+
+func unquote(s string) (string, error) {
+	var ret string
+	err := json.Unmarshal([]byte(s), &ret)
+	return ret, err
 }
 
 
@@ -1088,6 +1116,8 @@ func (s mapKeys) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s mapKeys) Less(i, j int) bool {
 	if k := s[i].Kind(); k == s[j].Kind() {
 		switch k {
+		case reflect.String:
+			return s[i].String() < s[j].String()
 		case reflect.Int32, reflect.Int64:
 			return s[i].Int() < s[j].Int()
 		case reflect.Uint32, reflect.Uint64:

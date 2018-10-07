@@ -1,4 +1,8 @@
 package network 
+import (
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/errdefs"
+)
 
 
 type Address struct {
@@ -105,4 +109,18 @@ type NetworkingConfig struct {
 
 type ConfigReference struct {
 	Network string
+}
+
+var acceptedFilters = map[string]bool{
+	"driver": true,
+	"type":   true,
+	"name":   true,
+	"id":     true,
+	"label":  true,
+	"scope":  true,
+}
+
+
+func ValidateFilters(filter filters.Args) error {
+	return errdefs.InvalidParameter(filter.Validate(acceptedFilters))
 }

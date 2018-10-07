@@ -19,7 +19,6 @@ import (
 
 
 
-
 const (
 	cERROR_PIPE_BUSY      = syscall.Errno(231)
 	cERROR_NO_DATA        = syscall.Errno(232)
@@ -121,6 +120,11 @@ func (f *win32MessageBytePipe) Read(b []byte) (int, error) {
 		
 		
 		f.readEOF = true
+	} else if err == syscall.ERROR_MORE_DATA {
+		
+		
+		
+		err = nil
 	}
 	return n, err
 }
@@ -140,6 +144,8 @@ func DialPipe(path string, timeout *time.Duration) (net.Conn, error) {
 	var absTimeout time.Time
 	if timeout != nil {
 		absTimeout = time.Now().Add(*timeout)
+	} else {
+		absTimeout = time.Now().Add(time.Second * 2)
 	}
 	var err error
 	var h syscall.Handle
@@ -148,22 +154,13 @@ func DialPipe(path string, timeout *time.Duration) (net.Conn, error) {
 		if err != cERROR_PIPE_BUSY {
 			break
 		}
-		now := time.Now()
-		var ms uint32
-		if absTimeout.IsZero() {
-			ms = cNMPWAIT_USE_DEFAULT_WAIT
-		} else if now.After(absTimeout) {
-			ms = cNMPWAIT_NOWAIT
-		} else {
-			ms = uint32(absTimeout.Sub(now).Nanoseconds() / 1000 / 1000)
+		if time.Now().After(absTimeout) {
+			return nil, ErrTimeout
 		}
-		err = waitNamedPipe(path, ms)
-		if err != nil {
-			if err == cERROR_SEM_TIMEOUT {
-				return nil, ErrTimeout
-			}
-			break
-		}
+
+		
+		
+		time.Sleep(time.Millisecond * 10)
 	}
 	if err != nil {
 		return nil, &os.PathError{Op: "open", Path: path, Err: err}
@@ -173,16 +170,6 @@ func DialPipe(path string, timeout *time.Duration) (net.Conn, error) {
 	err = getNamedPipeInfo(h, &flags, nil, nil, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	var state uint32
-	err = getNamedPipeHandleState(h, &state, nil, nil, nil, nil, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	if state&cPIPE_READMODE_MESSAGE != 0 {
-		return nil, &os.PathError{Op: "open", Path: path, Err: errors.New("message readmode pipes not supported")}
 	}
 
 	f, err := makeWin32File(h)
@@ -356,11 +343,21 @@ func ListenPipe(path string, c *PipeConfig) (net.Listener, error) {
 	}
 	
 	
+	
+	
+	
+	
+	
+	
 	h2, err := createFile(path, 0, 0, nil, syscall.OPEN_EXISTING, cSECURITY_SQOS_PRESENT|cSECURITY_ANONYMOUS, 0)
 	if err != nil {
 		syscall.Close(h)
 		return nil, err
 	}
+	
+	
+	
+	
 	syscall.Close(h2)
 	l := &win32PipeListener{
 		firstHandle:        h,

@@ -34,7 +34,6 @@ package proto
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -43,7 +42,66 @@ import (
 	"sync"
 )
 
-var errInvalidUTF8 = errors.New("proto: invalid UTF-8 string")
+
+
+
+type RequiredNotSetError struct{ field string }
+
+func (e *RequiredNotSetError) Error() string {
+	if e.field == "" {
+		return fmt.Sprintf("proto: required field not set")
+	}
+	return fmt.Sprintf("proto: required field %q not set", e.field)
+}
+func (e *RequiredNotSetError) RequiredNotSet() bool {
+	return true
+}
+
+type invalidUTF8Error struct{ field string }
+
+func (e *invalidUTF8Error) Error() string {
+	if e.field == "" {
+		return "proto: invalid UTF-8 detected"
+	}
+	return fmt.Sprintf("proto: field %q contains invalid UTF-8", e.field)
+}
+func (e *invalidUTF8Error) InvalidUTF8() bool {
+	return true
+}
+
+
+
+
+var errInvalidUTF8 = &invalidUTF8Error{}
+
+
+
+func isNonFatal(err error) bool {
+	if re, ok := err.(interface{ RequiredNotSet() bool }); ok && re.RequiredNotSet() {
+		return true
+	}
+	if re, ok := err.(interface{ InvalidUTF8() bool }); ok && re.InvalidUTF8() {
+		return true
+	}
+	return false
+}
+
+type nonFatal struct{ E error }
+
+
+
+func (nf *nonFatal) Merge(err error) (ok bool) {
+	if err == nil {
+		return true 
+	}
+	if !isNonFatal(err) {
+		return false 
+	}
+	if nf.E == nil {
+		nf.E = err 
+	}
+	return true
+}
 
 
 type Message interface {

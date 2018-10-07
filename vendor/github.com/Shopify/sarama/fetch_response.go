@@ -104,15 +104,26 @@ func (b *FetchResponseBlock) decode(pd packetDecoder, version int16) (err error)
 			return err
 		}
 
-		
-		if partial && len(b.RecordsSet) > 0 {
-			break
+		n, err := records.numRecords()
+		if err != nil {
+			return err
 		}
 
-		b.RecordsSet = append(b.RecordsSet, records)
+		if n > 0 || (partial && len(b.RecordsSet) == 0) {
+			b.RecordsSet = append(b.RecordsSet, records)
 
-		if b.Records == nil {
-			b.Records = records
+			if b.Records == nil {
+				b.Records = records
+			}
+		}
+
+		overflow, err := records.isOverflow()
+		if err != nil {
+			return err
+		}
+
+		if partial || overflow {
+			break
 		}
 	}
 

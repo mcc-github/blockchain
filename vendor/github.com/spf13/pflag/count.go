@@ -11,13 +11,13 @@ func newCountValue(val int, p *int) *countValue {
 }
 
 func (i *countValue) Set(s string) error {
-	v, err := strconv.ParseInt(s, 0, 64)
 	
-	if v == -1 {
+	if s == "+1" {
 		*i = countValue(*i + 1)
-	} else {
-		*i = countValue(v)
+		return nil
 	}
+	v, err := strconv.ParseInt(s, 0, 0)
+	*i = countValue(v)
 	return err
 }
 
@@ -54,7 +54,7 @@ func (f *FlagSet) CountVar(p *int, name string, usage string) {
 
 func (f *FlagSet) CountVarP(p *int, name, shorthand string, usage string) {
 	flag := f.VarPF(newCountValue(0, p), name, shorthand, usage)
-	flag.NoOptDefVal = "-1"
+	flag.NoOptDefVal = "+1"
 }
 
 

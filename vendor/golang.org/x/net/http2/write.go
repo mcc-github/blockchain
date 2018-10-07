@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"golang.org/x/net/http/httpguts"
 	"golang.org/x/net/http2/hpack"
-	"golang.org/x/net/lex/httplex"
 )
 
 
@@ -350,7 +350,7 @@ func encodeHeaders(enc *hpack.Encoder, h http.Header, keys []string) {
 		}
 		isTE := k == "transfer-encoding"
 		for _, v := range vv {
-			if !httplex.ValidHeaderFieldValue(v) {
+			if !httpguts.ValidHeaderFieldValue(v) {
 				
 				
 				continue

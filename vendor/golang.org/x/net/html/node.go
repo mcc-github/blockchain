@@ -175,6 +175,16 @@ func (s *nodeStack) index(n *Node) int {
 }
 
 
+func (s *nodeStack) contains(a atom.Atom) bool {
+	for _, n := range *s {
+		if n.DataAtom == a {
+			return true
+		}
+	}
+	return false
+}
+
+
 func (s *nodeStack) insert(i int, n *Node) {
 	(*s) = append(*s, nil)
 	copy((*s)[i+1:], (*s)[i:])
@@ -191,4 +201,20 @@ func (s *nodeStack) remove(n *Node) {
 	j := len(*s) - 1
 	(*s)[j] = nil
 	*s = (*s)[:j]
+}
+
+type insertionModeStack []insertionMode
+
+func (s *insertionModeStack) pop() (im insertionMode) {
+	i := len(*s)
+	im = (*s)[i-1]
+	*s = (*s)[:i-1]
+	return im
+}
+
+func (s *insertionModeStack) top() insertionMode {
+	if i := len(*s); i > 0 {
+		return (*s)[i-1]
+	}
+	return nil
 }

@@ -46,6 +46,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/http/httpguts"
 	"golang.org/x/net/http2/hpack"
 )
 
@@ -662,6 +663,7 @@ func (sc *serverConn) condlogf(err error, format string, args ...interface{}) {
 
 func (sc *serverConn) canonicalHeader(v string) string {
 	sc.serveG.check()
+	buildCommonHeaderMapsOnce()
 	cv, ok := commonCanonHeader[v]
 	if ok {
 		return cv
@@ -1486,6 +1488,12 @@ func (sc *serverConn) processSettings(f *SettingsFrame) error {
 		}
 		return nil
 	}
+	if f.NumSettings() > 100 || f.HasDuplicates() {
+		
+		
+		
+		return ConnectionError(ErrCodeProtocol)
+	}
 	if err := f.ForeachSetting(sc.processSetting); err != nil {
 		return err
 	}
@@ -1574,6 +1582,12 @@ func (sc *serverConn) processData(f *DataFrame) error {
 		
 		return ConnectionError(ErrCodeProtocol)
 	}
+	
+	
+	
+	if state == stateClosed {
+		return streamError(id, ErrCodeStreamClosed)
+	}
 	if st == nil || state != stateOpen || st.gotTrailerHeader || st.resetQueued {
 		
 		
@@ -1607,7 +1621,10 @@ func (sc *serverConn) processData(f *DataFrame) error {
 	
 	if st.declBodyBytes != -1 && st.bodyBytes+int64(len(data)) > st.declBodyBytes {
 		st.body.CloseWithError(fmt.Errorf("sender tried to send more than declared Content-Length of %d bytes", st.declBodyBytes))
-		return streamError(id, ErrCodeStreamClosed)
+		
+		
+		
+		return streamError(id, ErrCodeProtocol)
 	}
 	if f.Length > 0 {
 		
@@ -1717,6 +1734,13 @@ func (sc *serverConn) processHeaders(f *MetaHeadersFrame) error {
 			
 			return nil
 		}
+		
+		
+		
+		
+		if st.state == stateHalfClosedRemote {
+			return streamError(id, ErrCodeStreamClosed)
+		}
 		return st.processTrailerHeaders(f)
 	}
 
@@ -1817,7 +1841,7 @@ func (st *stream) processTrailerHeaders(f *MetaHeadersFrame) error {
 	if st.trailer != nil {
 		for _, hf := range f.RegularFields() {
 			key := sc.canonicalHeader(hf.Name)
-			if !ValidTrailerHeader(key) {
+			if !httpguts.ValidTrailerHeader(key) {
 				
 				
 				
@@ -2284,7 +2308,7 @@ func (rws *responseWriterState) hasTrailers() bool { return len(rws.trailers) !=
 
 func (rws *responseWriterState) declareTrailer(k string) {
 	k = http.CanonicalHeaderKey(k)
-	if !ValidTrailerHeader(k) {
+	if !httpguts.ValidTrailerHeader(k) {
 		
 		rws.conn.logf("ignoring invalid trailer %q", k)
 		return
@@ -2333,6 +2357,19 @@ func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
 
 		for _, v := range rws.snapHeader["Trailer"] {
 			foreachHeaderElement(v, rws.declareTrailer)
+		}
+
+		
+		
+		
+		
+		
+		if _, ok := rws.snapHeader["Connection"]; ok {
+			v := rws.snapHeader.Get("Connection")
+			delete(rws.snapHeader, "Connection")
+			if v == "close" {
+				rws.conn.startGracefulShutdown()
+			}
 		}
 
 		endStream := (rws.handlerDone && !rws.hasTrailers() && len(p) == 0) || isHeadResp
@@ -2836,41 +2873,6 @@ func new400Handler(err error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
-}
-
-
-
-
-func ValidTrailerHeader(name string) bool {
-	name = http.CanonicalHeaderKey(name)
-	if strings.HasPrefix(name, "If-") || badTrailer[name] {
-		return false
-	}
-	return true
-}
-
-var badTrailer = map[string]bool{
-	"Authorization":       true,
-	"Cache-Control":       true,
-	"Connection":          true,
-	"Content-Encoding":    true,
-	"Content-Length":      true,
-	"Content-Range":       true,
-	"Content-Type":        true,
-	"Expect":              true,
-	"Host":                true,
-	"Keep-Alive":          true,
-	"Max-Forwards":        true,
-	"Pragma":              true,
-	"Proxy-Authenticate":  true,
-	"Proxy-Authorization": true,
-	"Proxy-Connection":    true,
-	"Range":               true,
-	"Realm":               true,
-	"Te":                  true,
-	"Trailer":             true,
-	"Transfer-Encoding":   true,
-	"Www-Authenticate":    true,
 }
 
 

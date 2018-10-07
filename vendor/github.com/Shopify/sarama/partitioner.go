@@ -23,9 +23,49 @@ type Partitioner interface {
 }
 
 
+
+
+
+
+
+type DynamicConsistencyPartitioner interface {
+	Partitioner
+
+	
+	
+	
+	MessageRequiresConsistency(message *ProducerMessage) bool
+}
+
+
 type PartitionerConstructor func(topic string) Partitioner
 
 type manualPartitioner struct{}
+
+
+type HashPartitionerOption func(*hashPartitioner)
+
+
+
+func WithAbsFirst() HashPartitionerOption {
+	return func(hp *hashPartitioner) {
+		hp.referenceAbs = true
+	}
+}
+
+
+func WithCustomHashFunction(hasher func() hash.Hash32) HashPartitionerOption {
+	return func(hp *hashPartitioner) {
+		hp.hasher = hasher()
+	}
+}
+
+
+func WithCustomFallbackPartitioner(randomHP *hashPartitioner) HashPartitionerOption {
+	return func(hp *hashPartitioner) {
+		hp.random = hp
+	}
+}
 
 
 
@@ -83,8 +123,9 @@ func (p *roundRobinPartitioner) RequiresConsistency() bool {
 }
 
 type hashPartitioner struct {
-	random Partitioner
-	hasher hash.Hash32
+	random       Partitioner
+	hasher       hash.Hash32
+	referenceAbs bool
 }
 
 
@@ -95,6 +136,21 @@ func NewCustomHashPartitioner(hasher func() hash.Hash32) PartitionerConstructor 
 		p := new(hashPartitioner)
 		p.random = NewRandomPartitioner(topic)
 		p.hasher = hasher()
+		p.referenceAbs = false
+		return p
+	}
+}
+
+
+func NewCustomPartitioner(options ...HashPartitionerOption) PartitionerConstructor {
+	return func(topic string) Partitioner {
+		p := new(hashPartitioner)
+		p.random = NewRandomPartitioner(topic)
+		p.hasher = fnv.New32a()
+		p.referenceAbs = false
+		for _, option := range options {
+			option(p)
+		}
 		return p
 	}
 }
@@ -107,6 +163,19 @@ func NewHashPartitioner(topic string) Partitioner {
 	p := new(hashPartitioner)
 	p.random = NewRandomPartitioner(topic)
 	p.hasher = fnv.New32a()
+	p.referenceAbs = false
+	return p
+}
+
+
+
+
+
+func NewReferenceHashPartitioner(topic string) Partitioner {
+	p := new(hashPartitioner)
+	p.random = NewRandomPartitioner(topic)
+	p.hasher = fnv.New32a()
+	p.referenceAbs = true
 	return p
 }
 
@@ -123,13 +192,26 @@ func (p *hashPartitioner) Partition(message *ProducerMessage, numPartitions int3
 	if err != nil {
 		return -1, err
 	}
-	partition := int32(p.hasher.Sum32()) % numPartitions
-	if partition < 0 {
-		partition = -partition
+	var partition int32
+	
+	
+	
+	
+	if p.referenceAbs {
+		partition = (int32(p.hasher.Sum32()) & 0x7fffffff) % numPartitions
+	} else {
+		partition = int32(p.hasher.Sum32()) % numPartitions
+		if partition < 0 {
+			partition = -partition
+		}
 	}
 	return partition, nil
 }
 
 func (p *hashPartitioner) RequiresConsistency() bool {
 	return true
+}
+
+func (p *hashPartitioner) MessageRequiresConsistency(message *ProducerMessage) bool {
+	return message.Key != nil
 }

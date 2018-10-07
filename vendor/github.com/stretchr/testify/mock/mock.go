@@ -41,6 +41,9 @@ type Call struct {
 	ReturnArguments Arguments
 
 	
+	callerInfo []string
+
+	
 	
 	Repeatability int
 
@@ -62,12 +65,13 @@ type Call struct {
 	RunFn func(Arguments)
 }
 
-func newCall(parent *Mock, methodName string, methodArguments ...interface{}) *Call {
+func newCall(parent *Mock, methodName string, callerInfo []string, methodArguments ...interface{}) *Call {
 	return &Call{
 		Parent:          parent,
 		Method:          methodName,
 		Arguments:       methodArguments,
 		ReturnArguments: make([]interface{}, 0),
+		callerInfo:      callerInfo,
 		Repeatability:   0,
 		WaitFor:         nil,
 		RunFn:           nil,
@@ -187,6 +191,10 @@ type Mock struct {
 
 	
 	
+	test TestingT
+
+	
+	
 	testData objx.Map
 
 	mutex sync.Mutex
@@ -206,6 +214,27 @@ func (m *Mock) TestData() objx.Map {
 
 
 
+func (m *Mock) Test(t TestingT) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.test = t
+}
+
+
+
+
+func (m *Mock) fail(format string, args ...interface{}) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.test == nil {
+		panic(fmt.Sprintf(format, args...))
+	}
+	m.test.Errorf(format, args...)
+	m.test.FailNow()
+}
+
+
 
 
 
@@ -218,7 +247,7 @@ func (m *Mock) On(methodName string, arguments ...interface{}) *Call {
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	c := newCall(m, methodName, arguments...)
+	c := newCall(m, methodName, assert.CallerInfo(), arguments...)
 	m.ExpectedCalls = append(m.ExpectedCalls, c)
 	return c
 }
@@ -241,27 +270,25 @@ func (m *Mock) findExpectedCall(method string, arguments ...interface{}) (int, *
 	return -1, nil
 }
 
-func (m *Mock) findClosestCall(method string, arguments ...interface{}) (bool, *Call) {
-	diffCount := 0
+func (m *Mock) findClosestCall(method string, arguments ...interface{}) (*Call, string) {
+	var diffCount int
 	var closestCall *Call
+	var err string
 
 	for _, call := range m.expectedCalls() {
 		if call.Method == method {
 
-			_, tempDiffCount := call.Arguments.Diff(arguments)
+			errInfo, tempDiffCount := call.Arguments.Diff(arguments)
 			if tempDiffCount < diffCount || diffCount == 0 {
 				diffCount = tempDiffCount
 				closestCall = call
+				err = errInfo
 			}
 
 		}
 	}
 
-	if closestCall == nil {
-		return false, nil
-	}
-
-	return true, closestCall
+	return closestCall, err
 }
 
 func callString(method string, arguments Arguments, includeArgumentValues bool) string {
@@ -308,6 +335,7 @@ func (m *Mock) Called(arguments ...interface{}) Arguments {
 
 func (m *Mock) MethodCalled(methodName string, arguments ...interface{}) Arguments {
 	m.mutex.Lock()
+	
 	found, call := m.findExpectedCall(methodName, arguments...)
 
 	if found < 0 {
@@ -318,13 +346,18 @@ func (m *Mock) MethodCalled(methodName string, arguments ...interface{}) Argumen
 		
 		
 
-		closestFound, closestCall := m.findClosestCall(methodName, arguments...)
+		closestCall, mismatch := m.findClosestCall(methodName, arguments...)
 		m.mutex.Unlock()
 
-		if closestFound {
-			panic(fmt.Sprintf("\n\nmock: Unexpected Method Call\n-----------------------------\n\n%s\n\nThe closest call I have is: \n\n%s\n\n%s\n", callString(methodName, arguments, true), callString(methodName, closestCall.Arguments, true), diffArguments(closestCall.Arguments, arguments)))
+		if closestCall != nil {
+			m.fail("\n\nmock: Unexpected Method Call\n-----------------------------\n\n%s\n\nThe closest call I have is: \n\n%s\n\n%s\nDiff: %s",
+				callString(methodName, arguments, true),
+				callString(methodName, closestCall.Arguments, true),
+				diffArguments(closestCall.Arguments, arguments),
+				strings.TrimSpace(mismatch),
+			)
 		} else {
-			panic(fmt.Sprintf("\nassert: mock: I don't know what to return because the method call was unexpected.\n\tEither do Mock.On(\"%s\").Return(...) first, or remove the %s() call.\n\tThis method was unexpected:\n\t\t%s\n\tat: %s", methodName, methodName, callString(methodName, arguments, true), assert.CallerInfo()))
+			m.fail("\nassert: mock: I don't know what to return because the method call was unexpected.\n\tEither do Mock.On(\"%s\").Return(...) first, or remove the %s() call.\n\tThis method was unexpected:\n\t\t%s\n\tat: %s", methodName, methodName, callString(methodName, arguments, true), assert.CallerInfo())
 		}
 	}
 
@@ -336,7 +369,7 @@ func (m *Mock) MethodCalled(methodName string, arguments ...interface{}) Argumen
 	call.totalCalls++
 
 	
-	m.Calls = append(m.Calls, *newCall(m, methodName, arguments...))
+	m.Calls = append(m.Calls, *newCall(m, methodName, assert.CallerInfo(), arguments...))
 	m.mutex.Unlock()
 
 	
@@ -372,6 +405,9 @@ type assertExpectationser interface {
 
 
 func AssertExpectationsForObjects(t TestingT, testObjects ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
 	for _, obj := range testObjects {
 		if m, ok := obj.(Mock); ok {
 			t.Logf("Deprecated mock.AssertExpectationsForObjects(myMock.Mock) use mock.AssertExpectationsForObjects(myMock)")
@@ -379,6 +415,7 @@ func AssertExpectationsForObjects(t TestingT, testObjects ...interface{}) bool {
 		}
 		m := obj.(assertExpectationser)
 		if !m.AssertExpectations(t) {
+			t.Logf("Expectations didn't match for Mock: %+v", reflect.TypeOf(m))
 			return false
 		}
 	}
@@ -388,6 +425,9 @@ func AssertExpectationsForObjects(t TestingT, testObjects ...interface{}) bool {
 
 
 func (m *Mock) AssertExpectations(t TestingT) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	var somethingMissing bool
@@ -399,12 +439,12 @@ func (m *Mock) AssertExpectations(t TestingT) bool {
 		if !expectedCall.optional && !m.methodWasCalled(expectedCall.Method, expectedCall.Arguments) && expectedCall.totalCalls == 0 {
 			somethingMissing = true
 			failedExpectations++
-			t.Logf("FAIL:\t%s(%s)", expectedCall.Method, expectedCall.Arguments.String())
+			t.Logf("FAIL:\t%s(%s)\n\t\tat: %s", expectedCall.Method, expectedCall.Arguments.String(), expectedCall.callerInfo)
 		} else {
 			if expectedCall.Repeatability > 0 {
 				somethingMissing = true
 				failedExpectations++
-				t.Logf("FAIL:\t%s(%s)", expectedCall.Method, expectedCall.Arguments.String())
+				t.Logf("FAIL:\t%s(%s)\n\t\tat: %s", expectedCall.Method, expectedCall.Arguments.String(), expectedCall.callerInfo)
 			} else {
 				t.Logf("PASS:\t%s(%s)", expectedCall.Method, expectedCall.Arguments.String())
 			}
@@ -420,6 +460,9 @@ func (m *Mock) AssertExpectations(t TestingT) bool {
 
 
 func (m *Mock) AssertNumberOfCalls(t TestingT, methodName string, expectedCalls int) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	var actualCalls int
@@ -434,11 +477,22 @@ func (m *Mock) AssertNumberOfCalls(t TestingT, methodName string, expectedCalls 
 
 
 func (m *Mock) AssertCalled(t TestingT, methodName string, arguments ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	if !assert.True(t, m.methodWasCalled(methodName, arguments), fmt.Sprintf("The \"%s\" method should have been called with %d argument(s), but was not.", methodName, len(arguments))) {
-		t.Logf("%v", m.expectedCalls())
-		return false
+	if !m.methodWasCalled(methodName, arguments) {
+		var calledWithArgs []string
+		for _, call := range m.calls() {
+			calledWithArgs = append(calledWithArgs, fmt.Sprintf("%v", call.Arguments))
+		}
+		if len(calledWithArgs) == 0 {
+			return assert.Fail(t, "Should have called with given arguments",
+				fmt.Sprintf("Expected %q to have been called with:\n%v\nbut no actual calls happened", methodName, arguments))
+		}
+		return assert.Fail(t, "Should have called with given arguments",
+			fmt.Sprintf("Expected %q to have been called with:\n%v\nbut actual calls were:\n        %v", methodName, arguments, strings.Join(calledWithArgs, "\n")))
 	}
 	return true
 }
@@ -446,11 +500,14 @@ func (m *Mock) AssertCalled(t TestingT, methodName string, arguments ...interfac
 
 
 func (m *Mock) AssertNotCalled(t TestingT, methodName string, arguments ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	if !assert.False(t, m.methodWasCalled(methodName, arguments), fmt.Sprintf("The \"%s\" method was called with %d argument(s), but should NOT have been.", methodName, len(arguments))) {
-		t.Logf("%v", m.expectedCalls())
-		return false
+	if m.methodWasCalled(methodName, arguments) {
+		return assert.Fail(t, "Should not have called with given arguments",
+			fmt.Sprintf("Expected %q to not have been called with:\n%v\nbut actually it was.", methodName, arguments))
 	}
 	return true
 }
@@ -488,7 +545,7 @@ type Arguments []interface{}
 const (
 	
 	
-	Anything string = "mock.Anything"
+	Anything = "mock.Anything"
 )
 
 
@@ -591,6 +648,7 @@ func (args Arguments) Is(objects ...interface{}) bool {
 
 
 func (args Arguments) Diff(objects []interface{}) (string, int) {
+	
 
 	var output = "\n"
 	var differences int
@@ -602,25 +660,30 @@ func (args Arguments) Diff(objects []interface{}) (string, int) {
 
 	for i := 0; i < maxArgCount; i++ {
 		var actual, expected interface{}
+		var actualFmt, expectedFmt string
 
 		if len(objects) <= i {
 			actual = "(Missing)"
+			actualFmt = "(Missing)"
 		} else {
 			actual = objects[i]
+			actualFmt = fmt.Sprintf("(%[1]T=%[1]v)", actual)
 		}
 
 		if len(args) <= i {
 			expected = "(Missing)"
+			expectedFmt = "(Missing)"
 		} else {
 			expected = args[i]
+			expectedFmt = fmt.Sprintf("(%[1]T=%[1]v)", expected)
 		}
 
 		if matcher, ok := expected.(argumentMatcher); ok {
 			if matcher.Matches(actual) {
-				output = fmt.Sprintf("%s\t%d: PASS:  %s matched by %s\n", output, i, actual, matcher)
+				output = fmt.Sprintf("%s\t%d: PASS:  %s matched by %s\n", output, i, actualFmt, matcher)
 			} else {
 				differences++
-				output = fmt.Sprintf("%s\t%d: PASS:  %s not matched by %s\n", output, i, actual, matcher)
+				output = fmt.Sprintf("%s\t%d: PASS:  %s not matched by %s\n", output, i, actualFmt, matcher)
 			}
 		} else if reflect.TypeOf(expected) == reflect.TypeOf((*AnythingOfTypeArgument)(nil)).Elem() {
 
@@ -628,7 +691,7 @@ func (args Arguments) Diff(objects []interface{}) (string, int) {
 			if reflect.TypeOf(actual).Name() != string(expected.(AnythingOfTypeArgument)) && reflect.TypeOf(actual).String() != string(expected.(AnythingOfTypeArgument)) {
 				
 				differences++
-				output = fmt.Sprintf("%s\t%d: FAIL:  type %s != type %s - %s\n", output, i, expected, reflect.TypeOf(actual).Name(), actual)
+				output = fmt.Sprintf("%s\t%d: FAIL:  type %s != type %s - %s\n", output, i, expected, reflect.TypeOf(actual).Name(), actualFmt)
 			}
 
 		} else {
@@ -637,11 +700,11 @@ func (args Arguments) Diff(objects []interface{}) (string, int) {
 
 			if assert.ObjectsAreEqual(expected, Anything) || assert.ObjectsAreEqual(actual, Anything) || assert.ObjectsAreEqual(actual, expected) {
 				
-				output = fmt.Sprintf("%s\t%d: PASS:  %s == %s\n", output, i, actual, expected)
+				output = fmt.Sprintf("%s\t%d: PASS:  %s == %s\n", output, i, actualFmt, expectedFmt)
 			} else {
 				
 				differences++
-				output = fmt.Sprintf("%s\t%d: FAIL:  %s != %s\n", output, i, actual, expected)
+				output = fmt.Sprintf("%s\t%d: FAIL:  %s != %s\n", output, i, actualFmt, expectedFmt)
 			}
 		}
 
@@ -658,6 +721,9 @@ func (args Arguments) Diff(objects []interface{}) (string, int) {
 
 
 func (args Arguments) Assert(t TestingT, objects ...interface{}) bool {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
 
 	
 	diff, diffCount := args.Diff(objects)
@@ -804,4 +870,8 @@ var spewConfig = spew.ConfigState{
 	DisablePointerAddresses: true,
 	DisableCapacities:       true,
 	SortKeys:                true,
+}
+
+type tHelper interface {
+	Helper()
 }

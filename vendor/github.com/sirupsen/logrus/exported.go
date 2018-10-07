@@ -2,6 +2,7 @@ package logrus
 
 import (
 	"io"
+	"time"
 )
 
 var (
@@ -15,37 +16,32 @@ func StandardLogger() *Logger {
 
 
 func SetOutput(out io.Writer) {
-	std.mu.Lock()
-	defer std.mu.Unlock()
-	std.Out = out
+	std.SetOutput(out)
 }
 
 
 func SetFormatter(formatter Formatter) {
-	std.mu.Lock()
-	defer std.mu.Unlock()
-	std.Formatter = formatter
+	std.SetFormatter(formatter)
 }
 
 
 func SetLevel(level Level) {
-	std.mu.Lock()
-	defer std.mu.Unlock()
 	std.SetLevel(level)
 }
 
 
 func GetLevel() Level {
-	std.mu.Lock()
-	defer std.mu.Unlock()
-	return std.level()
+	return std.GetLevel()
+}
+
+
+func IsLevelEnabled(level Level) bool {
+	return std.IsLevelEnabled(level)
 }
 
 
 func AddHook(hook Hook) {
-	std.mu.Lock()
-	defer std.mu.Unlock()
-	std.Hooks.Add(hook)
+	std.AddHook(hook)
 }
 
 
@@ -70,6 +66,15 @@ func WithField(key string, value interface{}) *Entry {
 
 func WithFields(fields Fields) *Entry {
 	return std.WithFields(fields)
+}
+
+
+
+
+
+
+func WithTime(t time.Time) *Entry {
+	return std.WithTime(t)
 }
 
 

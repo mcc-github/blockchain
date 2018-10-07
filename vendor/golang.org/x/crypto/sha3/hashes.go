@@ -15,22 +15,48 @@ import (
 
 
 
-func New224() hash.Hash { return &state{rate: 144, outputLen: 28, dsbyte: 0x06} }
+func New224() hash.Hash {
+	if h := new224Asm(); h != nil {
+		return h
+	}
+	return &state{rate: 144, outputLen: 28, dsbyte: 0x06}
+}
 
 
 
 
-func New256() hash.Hash { return &state{rate: 136, outputLen: 32, dsbyte: 0x06} }
+func New256() hash.Hash {
+	if h := new256Asm(); h != nil {
+		return h
+	}
+	return &state{rate: 136, outputLen: 32, dsbyte: 0x06}
+}
 
 
 
 
-func New384() hash.Hash { return &state{rate: 104, outputLen: 48, dsbyte: 0x06} }
+func New384() hash.Hash {
+	if h := new384Asm(); h != nil {
+		return h
+	}
+	return &state{rate: 104, outputLen: 48, dsbyte: 0x06}
+}
 
 
 
 
-func New512() hash.Hash { return &state{rate: 72, outputLen: 64, dsbyte: 0x06} }
+func New512() hash.Hash {
+	if h := new512Asm(); h != nil {
+		return h
+	}
+	return &state{rate: 72, outputLen: 64, dsbyte: 0x06}
+}
+
+
+
+
+
+func NewLegacyKeccak256() hash.Hash { return &state{rate: 136, outputLen: 32, dsbyte: 0x01} }
 
 
 func Sum224(data []byte) (digest [28]byte) {

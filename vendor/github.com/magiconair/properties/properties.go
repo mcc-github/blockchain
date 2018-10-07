@@ -84,6 +84,17 @@ func NewProperties() *Properties {
 }
 
 
+func (p *Properties) Load(buf []byte, enc Encoding) error {
+	l := &Loader{Encoding: enc, DisableExpansion: p.DisableExpansion}
+	newProperties, err := l.LoadBytes(buf)
+	if err != nil {
+		return err
+	}
+	p.Merge(newProperties)
+	return nil
+}
+
+
 
 func (p *Properties) Get(key string) (value string, ok bool) {
 	v, ok := p.m[key]

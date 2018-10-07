@@ -10,6 +10,7 @@ import (
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	gossip2 "github.com/mcc-github/blockchain/gossip/gossip"
+	"github.com/mcc-github/blockchain/protos/gossip"
 )
 
 
@@ -49,5 +50,18 @@ func (s *DiscoverySupport) Peers() discovery.Members {
 	peers := s.Gossip.Peers()
 	peers = append(peers, s.Gossip.SelfMembershipInfo())
 	
-	return discovery.Members(peers).Filter(discovery.HasExternalEndpoint)
+	return discovery.Members(peers).Filter(discovery.HasExternalEndpoint).Map(sanitizeEnvelope)
+}
+
+func sanitizeEnvelope(member discovery.NetworkMember) discovery.NetworkMember {
+	
+	returnedMember := member
+	if returnedMember.Envelope == nil {
+		return returnedMember
+	}
+	returnedMember.Envelope = &gossip.Envelope{
+		Payload:   member.Envelope.Payload,
+		Signature: member.Envelope.Signature,
+	}
+	return returnedMember
 }

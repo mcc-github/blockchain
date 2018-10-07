@@ -34,6 +34,7 @@ package proto
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -41,6 +42,8 @@ import (
 	"strconv"
 	"sync"
 )
+
+var errInvalidUTF8 = errors.New("proto: invalid UTF-8 string")
 
 
 type Message interface {
@@ -78,16 +81,7 @@ type Buffer struct {
 	buf   []byte 
 	index int    
 
-	
-	bools   []bool
-	uint32s []uint32
-	uint64s []uint64
-
-	
-	int32s   []int32
-	int64s   []int64
-	float32s []float32
-	float64s []float64
+	deterministic bool
 }
 
 
@@ -111,6 +105,30 @@ func (p *Buffer) SetBuf(s []byte) {
 
 
 func (p *Buffer) Bytes() []byte { return p.buf }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (p *Buffer) SetDeterministic(deterministic bool) {
+	p.deterministic = deterministic
+}
 
 
 
@@ -600,19 +618,9 @@ func fieldDefault(ft reflect.Type, prop *Properties) (sf *scalarField, nestedMes
 
 
 
-
-
-
 func mapKeys(vs []reflect.Value) sort.Interface {
-	s := mapKeySorter{
-		vs: vs,
-		
-		less: func(a, b reflect.Value) bool {
-			return fmt.Sprint(a.Interface()) < fmt.Sprint(b.Interface())
-		},
-	}
+	s := mapKeySorter{vs: vs}
 
-	
 	
 	if len(vs) == 0 {
 		return s
@@ -622,6 +630,12 @@ func mapKeys(vs []reflect.Value) sort.Interface {
 		s.less = func(a, b reflect.Value) bool { return a.Int() < b.Int() }
 	case reflect.Uint32, reflect.Uint64:
 		s.less = func(a, b reflect.Value) bool { return a.Uint() < b.Uint() }
+	case reflect.Bool:
+		s.less = func(a, b reflect.Value) bool { return !a.Bool() && b.Bool() } 
+	case reflect.String:
+		s.less = func(a, b reflect.Value) bool { return a.String() < b.String() }
+	default:
+		panic(fmt.Sprintf("unsupported map key type: %v", vs[0].Kind()))
 	}
 
 	return s
@@ -662,3 +676,13 @@ const GoGoProtoPackageIsVersion2 = true
 
 
 const GoGoProtoPackageIsVersion1 = true
+
+
+
+
+type InternalMessageInfo struct {
+	marshal   *marshalInfo
+	unmarshal *unmarshalInfo
+	merge     *mergeInfo
+	discard   *discardInfo
+}

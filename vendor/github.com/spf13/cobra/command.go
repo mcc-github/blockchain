@@ -28,6 +28,9 @@ import (
 )
 
 
+type FParseErrWhitelist flag.ParseErrorsWhitelist
+
+
 
 
 
@@ -78,6 +81,11 @@ type Command struct {
 	
 	
 	
+	Version string
+
+	
+	
+	
 	
 	
 	
@@ -120,6 +128,10 @@ type Command struct {
 
 	
 	
+	DisableFlagsInUseLine bool
+
+	
+	
 	DisableSuggestions bool
 	
 	
@@ -127,6 +139,9 @@ type Command struct {
 
 	
 	TraverseChildren bool
+
+	
+	FParseErrWhitelist FParseErrWhitelist
 
 	
 	commands []*Command
@@ -138,6 +153,11 @@ type Command struct {
 	commandsMaxNameLen        int
 	
 	commandsAreSorted bool
+	
+	commandCalledAs struct {
+		name   string
+		called bool
+	}
 
 	
 	args []string
@@ -173,6 +193,8 @@ type Command struct {
 	
 	
 	helpCommand *Command
+	
+	versionTemplate string
 }
 
 
@@ -216,6 +238,11 @@ func (c *Command) SetHelpCommand(cmd *Command) {
 
 func (c *Command) SetHelpTemplate(s string) {
 	c.helpTemplate = s
+}
+
+
+func (c *Command) SetVersionTemplate(s string) {
+	c.versionTemplate = s
 }
 
 
@@ -407,6 +434,19 @@ func (c *Command) HelpTemplate() string {
 {{end}}{{if or .Runnable .HasSubCommands}}{{.UsageString}}{{end}}`
 }
 
+
+func (c *Command) VersionTemplate() string {
+	if c.versionTemplate != "" {
+		return c.versionTemplate
+	}
+
+	if c.HasParent() {
+		return c.parent.VersionTemplate()
+	}
+	return `{{with .Name}}{{printf "%s " .}}{{end}}{{printf "version %s" .Version}}
+`
+}
+
 func hasNoOptDefVal(name string, fs *flag.FlagSet) bool {
 	flag := fs.Lookup(name)
 	if flag == nil {
@@ -441,6 +481,9 @@ Loop:
 		s := args[0]
 		args = args[1:]
 		switch {
+		case s == "--":
+			
+			break Loop
 		case strings.HasPrefix(s, "--") && !strings.Contains(s, "=") && !hasNoOptDefVal(s[2:], flags):
 			
 			
@@ -528,6 +571,7 @@ func (c *Command) findNext(next string) *Command {
 	matches := make([]*Command, 0)
 	for _, cmd := range c.commands {
 		if cmd.Name() == next || cmd.HasAlias(next) {
+			cmd.commandCalledAs.name = next
 			return cmd
 		}
 		if EnablePrefixMatching && cmd.hasNameOrAliasPrefix(next) {
@@ -538,6 +582,7 @@ func (c *Command) findNext(next string) *Command {
 	if len(matches) == 1 {
 		return matches[0]
 	}
+
 	return nil
 }
 
@@ -623,8 +668,6 @@ func (c *Command) Root() *Command {
 
 
 
-
-
 func (c *Command) ArgsLenAtDash() int {
 	return c.Flags().ArgsLenAtDash()
 }
@@ -641,6 +684,7 @@ func (c *Command) execute(a []string) (err error) {
 	
 	
 	c.InitDefaultHelpFlag()
+	c.InitDefaultVersionFlag()
 
 	err = c.ParseFlags(a)
 	if err != nil {
@@ -657,7 +701,27 @@ func (c *Command) execute(a []string) (err error) {
 		return err
 	}
 
-	if helpVal || !c.Runnable() {
+	if helpVal {
+		return flag.ErrHelp
+	}
+
+	
+	if c.Version != "" {
+		versionVal, err := c.Flags().GetBool("version")
+		if err != nil {
+			c.Println("\"version\" flag declared as non-bool. Please correct your code")
+			return err
+		}
+		if versionVal {
+			err := tmpl(c.OutOrStdout(), c.VersionTemplate(), c)
+			if err != nil {
+				c.Println(err)
+			}
+			return err
+		}
+	}
+
+	if !c.Runnable() {
 		return flag.ErrHelp
 	}
 
@@ -780,6 +844,11 @@ func (c *Command) ExecuteC() (cmd *Command, err error) {
 		return c, err
 	}
 
+	cmd.commandCalledAs.called = true
+	if cmd.commandCalledAs.name == "" {
+		cmd.commandCalledAs.name = cmd.Name()
+	}
+
 	err = cmd.execute(flags)
 	if err != nil {
 		
@@ -825,7 +894,7 @@ func (c *Command) validateRequiredFlags() error {
 	})
 
 	if len(missingFlagNames) > 0 {
-		return fmt.Errorf(`Required flag(s) "%s" have/has not been set`, strings.Join(missingFlagNames, `", "`))
+		return fmt.Errorf(`required flag(s) "%s" not set`, strings.Join(missingFlagNames, `", "`))
 	}
 	return nil
 }
@@ -843,6 +912,27 @@ func (c *Command) InitDefaultHelpFlag() {
 			usage += c.Name()
 		}
 		c.Flags().BoolP("help", "h", false, usage)
+	}
+}
+
+
+
+
+
+func (c *Command) InitDefaultVersionFlag() {
+	if c.Version == "" {
+		return
+	}
+
+	c.mergePersistentFlags()
+	if c.Flags().Lookup("version") == nil {
+		usage := "version for "
+		if c.Name() == "" {
+			usage += "this command"
+		} else {
+			usage += c.Name()
+		}
+		c.Flags().Bool("version", false, usage)
 	}
 }
 
@@ -996,6 +1086,9 @@ func (c *Command) UseLine() string {
 	} else {
 		useline = c.Use
 	}
+	if c.DisableFlagsInUseLine {
+		return useline
+	}
 	if c.HasAvailableFlags() && !strings.Contains(useline, "[flags]") {
 		useline += " [flags]"
 	}
@@ -1065,12 +1158,23 @@ func (c *Command) HasAlias(s string) bool {
 
 
 
+func (c *Command) CalledAs() string {
+	if c.commandCalledAs.called {
+		return c.commandCalledAs.name
+	}
+	return ""
+}
+
+
+
 func (c *Command) hasNameOrAliasPrefix(prefix string) bool {
 	if strings.HasPrefix(c.Name(), prefix) {
+		c.commandCalledAs.name = c.Name()
 		return true
 	}
 	for _, alias := range c.Aliases {
 		if strings.HasPrefix(alias, prefix) {
+			c.commandCalledAs.name = alias
 			return true
 		}
 	}
@@ -1365,6 +1469,10 @@ func (c *Command) ParseFlags(args []string) error {
 	}
 	beforeErrorBufLen := c.flagErrorBuf.Len()
 	c.mergePersistentFlags()
+
+	
+	c.Flags().ParseErrorsWhitelist = flag.ParseErrorsWhitelist(c.FParseErrWhitelist)
+
 	err := c.Flags().Parse(args)
 	
 	if c.flagErrorBuf.Len()-beforeErrorBufLen > 0 && err == nil {

@@ -82,14 +82,14 @@ type Duration struct {
 	
 	
 	
-	Seconds int64 `protobuf:"varint,1,opt,name=seconds" json:"seconds,omitempty"`
+	Seconds int64 `protobuf:"varint,1,opt,name=seconds,proto3" json:"seconds,omitempty"`
 	
 	
 	
 	
 	
 	
-	Nanos                int32    `protobuf:"varint,2,opt,name=nanos" json:"nanos,omitempty"`
+	Nanos                int32    `protobuf:"varint,2,opt,name=nanos,proto3" json:"nanos,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`

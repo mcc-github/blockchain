@@ -47,6 +47,7 @@ func (msb *MessageBlock) decode(pd packetDecoder) (err error) {
 
 type MessageSet struct {
 	PartialTrailingMessage bool 
+	OverflowMessage        bool 
 	Messages               []*MessageBlock
 }
 
@@ -85,7 +86,12 @@ func (ms *MessageSet) decode(pd packetDecoder) (err error) {
 		case ErrInsufficientData:
 			
 			
-			ms.PartialTrailingMessage = true
+			if msb.Offset == -1 {
+				
+				ms.OverflowMessage = true
+			} else {
+				ms.PartialTrailingMessage = true
+			}
 			return nil
 		default:
 			return err

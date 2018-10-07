@@ -122,6 +122,9 @@ type PluginConfigArgs struct {
 type PluginConfigInterface struct {
 
 	
+	ProtocolScheme string `json:"ProtocolScheme,omitempty"`
+
+	
 	
 	Socket string `json:"Socket"`
 

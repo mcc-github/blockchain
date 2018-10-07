@@ -21,15 +21,16 @@ import (
 	mathrand "math/rand"
 	"net"
 	"net/http"
+	"net/textproto"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"golang.org/x/net/http/httpguts"
 	"golang.org/x/net/http2/hpack"
 	"golang.org/x/net/idna"
-	"golang.org/x/net/lex/httplex"
 )
 
 const (
@@ -159,6 +160,7 @@ type ClientConn struct {
 	cond            *sync.Cond 
 	flow            flow       
 	inflow          flow       
+	closing         bool
 	closed          bool
 	wantSettingsAck bool                     
 	goAway          *GoAwayFrame             
@@ -211,9 +213,10 @@ type clientStream struct {
 	done chan struct{} 
 
 	
-	firstByte    bool 
-	pastHeaders  bool 
-	pastTrailers bool 
+	firstByte    bool  
+	pastHeaders  bool  
+	pastTrailers bool  
+	num1xx       uint8 
 
 	trailer    http.Header  
 	resTrailer *http.Header 
@@ -235,6 +238,17 @@ func awaitRequestCancel(req *http.Request, done <-chan struct{}) error {
 	case <-done:
 		return nil
 	}
+}
+
+var got1xxFuncForTests func(int, textproto.MIMEHeader) error
+
+
+
+func (cs *clientStream) get1xxTraceFunc() func(int, textproto.MIMEHeader) error {
+	if fn := got1xxFuncForTests; fn != nil {
+		return fn
+	}
+	return traceGot1xxResponseFunc(cs.trace)
 }
 
 
@@ -423,27 +437,36 @@ func shouldRetryRequest(req *http.Request, err error, afterBodyWrite bool) (*htt
 	if !canRetryError(err) {
 		return nil, err
 	}
-	if !afterBodyWrite {
-		return req, nil
-	}
 	
 	
 	if req.Body == nil || reqBodyIsNoBody(req.Body) {
 		return req, nil
 	}
+
 	
 	
 	getBody := reqGetBody(req) 
-	if getBody == nil {
-		return nil, fmt.Errorf("http2: Transport: cannot retry err [%v] after Request.Body was written; define Request.GetBody to avoid this error", err)
+	if getBody != nil {
+		
+		body, err := getBody()
+		if err != nil {
+			return nil, err
+		}
+		newReq := *req
+		newReq.Body = body
+		return &newReq, nil
 	}
-	body, err := getBody()
-	if err != nil {
-		return nil, err
+
+	
+	
+	
+	
+	
+	if !afterBodyWrite {
+		return req, nil
 	}
-	newReq := *req
-	newReq.Body = body
-	return &newReq, nil
+
+	return nil, fmt.Errorf("http2: Transport: cannot retry err [%v] after Request.Body was written; define Request.GetBody to avoid this error", err)
 }
 
 func canRetryError(err error) bool {
@@ -567,6 +590,10 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 	
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
 
+	if t.AllowHTTP {
+		cc.nextStreamID = 3
+	}
+
 	if cs, ok := c.(connectionStater); ok {
 		state := cs.ConnectionState()
 		cc.tlsState = &state
@@ -626,12 +653,32 @@ func (cc *ClientConn) CanTakeNewRequest() bool {
 	return cc.canTakeNewRequestLocked()
 }
 
-func (cc *ClientConn) canTakeNewRequestLocked() bool {
+
+
+type clientConnIdleState struct {
+	canTakeNewRequest bool
+	freshConn         bool 
+}
+
+func (cc *ClientConn) idleState() clientConnIdleState {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	return cc.idleStateLocked()
+}
+
+func (cc *ClientConn) idleStateLocked() (st clientConnIdleState) {
 	if cc.singleUse && cc.nextStreamID > 1 {
-		return false
+		return
 	}
-	return cc.goAway == nil && !cc.closed &&
+	st.canTakeNewRequest = cc.goAway == nil && !cc.closed && !cc.closing &&
 		int64(cc.nextStreamID)+int64(cc.pendingRequests) < math.MaxInt32
+	st.freshConn = cc.nextStreamID == 1 && st.canTakeNewRequest
+	return
+}
+
+func (cc *ClientConn) canTakeNewRequestLocked() bool {
+	st := cc.idleStateLocked()
+	return st.canTakeNewRequest
 }
 
 
@@ -659,6 +706,88 @@ func (cc *ClientConn) closeIfIdle() {
 		cc.vlogf("http2: Transport closing idle conn %p (forSingleUse=%v, maxStream=%v)", cc, cc.singleUse, nextID-2)
 	}
 	cc.tconn.Close()
+}
+
+var shutdownEnterWaitStateHook = func() {}
+
+
+
+func (cc *ClientConn) shutdown(ctx contextContext) error {
+	if err := cc.sendGoAway(); err != nil {
+		return err
+	}
+	
+	done := make(chan error, 1)
+	cancelled := false 
+	go func() {
+		cc.mu.Lock()
+		defer cc.mu.Unlock()
+		for {
+			if len(cc.streams) == 0 || cc.closed {
+				cc.closed = true
+				done <- cc.tconn.Close()
+				break
+			}
+			if cancelled {
+				break
+			}
+			cc.cond.Wait()
+		}
+	}()
+	shutdownEnterWaitStateHook()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		cc.mu.Lock()
+		
+		cancelled = true
+		cc.cond.Broadcast()
+		cc.mu.Unlock()
+		return ctx.Err()
+	}
+}
+
+func (cc *ClientConn) sendGoAway() error {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	cc.wmu.Lock()
+	defer cc.wmu.Unlock()
+	if cc.closing {
+		
+		return nil
+	}
+	
+	maxStreamID := cc.nextStreamID
+	if err := cc.fr.WriteGoAway(maxStreamID, ErrCodeNo, nil); err != nil {
+		return err
+	}
+	if err := cc.bw.Flush(); err != nil {
+		return err
+	}
+	
+	cc.closing = true
+	return nil
+}
+
+
+
+
+func (cc *ClientConn) Close() error {
+	cc.mu.Lock()
+	defer cc.cond.Broadcast()
+	defer cc.mu.Unlock()
+	err := errors.New("http2: client connection force closed via ClientConn.Close")
+	for id, cs := range cc.streams {
+		select {
+		case cs.resc <- resAndError{err: err}:
+		default:
+		}
+		cs.bufPipe.CloseWithError(err)
+		delete(cc.streams, id)
+	}
+	cc.closed = true
+	return cc.tconn.Close()
 }
 
 const maxAllocFrameSize = 512 << 10
@@ -743,7 +872,7 @@ func checkConnHeaders(req *http.Request) error {
 	if vv := req.Header["Transfer-Encoding"]; len(vv) > 0 && (len(vv) > 1 || vv[0] != "" && vv[0] != "chunked") {
 		return fmt.Errorf("http2: invalid Transfer-Encoding request header: %q", vv)
 	}
-	if vv := req.Header["Connection"]; len(vv) > 0 && (len(vv) > 1 || vv[0] != "" && vv[0] != "close" && vv[0] != "keep-alive") {
+	if vv := req.Header["Connection"]; len(vv) > 0 && (len(vv) > 1 || vv[0] != "" && !strings.EqualFold(vv[0], "close") && !strings.EqualFold(vv[0], "keep-alive")) {
 		return fmt.Errorf("http2: invalid Connection request header: %q", vv)
 	}
 	return nil
@@ -951,6 +1080,9 @@ func (cc *ClientConn) awaitOpenSlotForRequest(req *http.Request) error {
 	for {
 		cc.lastActive = time.Now()
 		if cc.closed || !cc.canTakeNewRequestLocked() {
+			if waitingForConn != nil {
+				close(waitingForConn)
+			}
 			return errClientConnUnusable
 		}
 		if int64(len(cc.streams))+1 <= int64(cc.maxConcurrentStreams) {
@@ -1174,7 +1306,7 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 	if host == "" {
 		host = req.URL.Host
 	}
-	host, err := httplex.PunycodeHostPort(host)
+	host, err := httpguts.PunycodeHostPort(host)
 	if err != nil {
 		return nil, err
 	}
@@ -1199,11 +1331,11 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 	
 	
 	for k, vv := range req.Header {
-		if !httplex.ValidHeaderFieldName(k) {
+		if !httpguts.ValidHeaderFieldName(k) {
 			return nil, fmt.Errorf("invalid HTTP header name %q", k)
 		}
 		for _, v := range vv {
-			if !httplex.ValidHeaderFieldValue(v) {
+			if !httpguts.ValidHeaderFieldValue(v) {
 				return nil, fmt.Errorf("invalid HTTP header value %q for header %q", v, k)
 			}
 		}
@@ -1284,9 +1416,16 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 		return nil, errRequestHeaderListSize
 	}
 
+	trace := requestTrace(req)
+	traceHeaders := traceHasWroteHeaderField(trace)
+
 	
 	enumerateHeaders(func(name, value string) {
-		cc.writeHeader(strings.ToLower(name), value)
+		name = strings.ToLower(name)
+		cc.writeHeader(name, value)
+		if traceHeaders {
+			traceWroteHeaderField(trace, name, value)
+		}
 	})
 
 	return cc.hbuf.Bytes(), nil
@@ -1609,7 +1748,6 @@ func (rl *clientConnReadLoop) processHeaders(f *MetaHeadersFrame) error {
 
 
 
-
 func (rl *clientConnReadLoop) handleResponse(cs *clientStream, f *MetaHeadersFrame) (*http.Response, error) {
 	if f.Truncated {
 		return nil, errResponseHeaderListSize
@@ -1622,15 +1760,6 @@ func (rl *clientConnReadLoop) handleResponse(cs *clientStream, f *MetaHeadersFra
 	statusCode, err := strconv.Atoi(status)
 	if err != nil {
 		return nil, errors.New("malformed response from server: malformed non-numeric status pseudo header")
-	}
-
-	if statusCode == 100 {
-		traceGot100Continue(cs.trace)
-		if cs.on100 != nil {
-			cs.on100() 
-		}
-		cs.pastHeaders = false 
-		return nil, nil
 	}
 
 	header := make(http.Header)
@@ -1655,6 +1784,27 @@ func (rl *clientConnReadLoop) handleResponse(cs *clientStream, f *MetaHeadersFra
 		} else {
 			header[key] = append(header[key], hf.Value)
 		}
+	}
+
+	if statusCode >= 100 && statusCode <= 199 {
+		cs.num1xx++
+		const max1xxResponses = 5 
+		if cs.num1xx > max1xxResponses {
+			return nil, errors.New("http2: too many 1xx informational responses")
+		}
+		if fn := cs.get1xxTraceFunc(); fn != nil {
+			if err := fn(statusCode, textproto.MIMEHeader(header)); err != nil {
+				return nil, err
+			}
+		}
+		if statusCode == 100 {
+			traceGot100Continue(cs.trace)
+			if cs.on100 != nil {
+				cs.on100() 
+			}
+		}
+		cs.pastHeaders = false 
+		return nil, nil
 	}
 
 	streamEnded := f.StreamEnded()
@@ -2244,7 +2394,7 @@ func (t *Transport) getBodyWriterState(cs *clientStream, body io.Reader) (s body
 	}
 	s.delay = t.expectContinueTimeout()
 	if s.delay == 0 ||
-		!httplex.HeaderValuesContainsToken(
+		!httpguts.HeaderValuesContainsToken(
 			cs.req.Header["Expect"],
 			"100-continue") {
 		return
@@ -2299,5 +2449,5 @@ func (s bodyWriterState) scheduleBodyWrite() {
 
 
 func isConnectionCloseRequest(req *http.Request) bool {
-	return req.Close || httplex.HeaderValuesContainsToken(req.Header["Connection"], "close")
+	return req.Close || httpguts.HeaderValuesContainsToken(req.Header["Connection"], "close")
 }

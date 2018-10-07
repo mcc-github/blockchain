@@ -2,44 +2,33 @@ package lz4
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"io/ioutil"
-	"runtime"
-	"sync"
-	"sync/atomic"
+
+	"github.com/pierrec/lz4/internal/xxh32"
 )
-
-
-
-var ErrInvalid = errors.New("invalid lz4 data")
-
-
-
-var errEndOfBlock = errors.New("end of block")
 
 
 
 
 type Reader struct {
-	Pos int64 
 	Header
-	src      io.Reader
-	checksum hash.Hash32    
-	wg       sync.WaitGroup 
-	data     []byte         
-	window   []byte         
+
+	buf      [8]byte       
+	pos      int64         
+	src      io.Reader     
+	zdata    []byte        
+	data     []byte        
+	idx      int           
+	checksum xxh32.XXHZero 
 }
 
 
 
 func NewReader(src io.Reader) *Reader {
-	return &Reader{
-		src:      src,
-		checksum: hashPool.Get(),
-	}
+	r := &Reader{src: src}
+	return r
 }
 
 
@@ -48,88 +37,95 @@ func NewReader(src io.Reader) *Reader {
 func (z *Reader) readHeader(first bool) error {
 	defer z.checksum.Reset()
 
+	buf := z.buf[:]
 	for {
-		var magic uint32
-		if err := binary.Read(z.src, binary.LittleEndian, &magic); err != nil {
+		magic, err := z.readUint32()
+		if err != nil {
+			z.pos += 4
 			if !first && err == io.ErrUnexpectedEOF {
 				return io.EOF
 			}
 			return err
 		}
-		z.Pos += 4
-		if magic>>8 == frameSkipMagic>>8 {
-			var skipSize uint32
-			if err := binary.Read(z.src, binary.LittleEndian, &skipSize); err != nil {
-				return err
-			}
-			z.Pos += 4
-			m, err := io.CopyN(ioutil.Discard, z.src, int64(skipSize))
-			z.Pos += m
-			if err != nil {
-				return err
-			}
-			continue
+		if magic == frameMagic {
+			break
 		}
-		if magic != frameMagic {
+		if magic>>8 != frameSkipMagic>>8 {
 			return ErrInvalid
 		}
-		break
+		skipSize, err := z.readUint32()
+		if err != nil {
+			return err
+		}
+		z.pos += 4
+		m, err := io.CopyN(ioutil.Discard, z.src, int64(skipSize))
+		if err != nil {
+			return err
+		}
+		z.pos += m
 	}
 
 	
-	var buf [8]byte
 	if _, err := io.ReadFull(z.src, buf[:2]); err != nil {
 		return err
 	}
-	z.Pos += 2
+	z.pos += 8
 
 	b := buf[0]
-	if b>>6 != Version {
-		return fmt.Errorf("lz4.Read: invalid version: got %d expected %d", b>>6, Version)
+	if v := b >> 6; v != Version {
+		return fmt.Errorf("lz4: invalid version: got %d; expected %d", v, Version)
 	}
-	z.BlockDependency = b>>5&1 == 0
+	if b>>5&1 == 0 {
+		return fmt.Errorf("lz4: block dependency not supported")
+	}
 	z.BlockChecksum = b>>4&1 > 0
 	frameSize := b>>3&1 > 0
 	z.NoChecksum = b>>2&1 == 0
-	
 
 	bmsID := buf[1] >> 4 & 0x7
 	bSize, ok := bsMapID[bmsID]
 	if !ok {
-		return fmt.Errorf("lz4.Read: invalid block max size: %d", bmsID)
+		return fmt.Errorf("lz4: invalid block max size ID: %d", bmsID)
 	}
 	z.BlockMaxSize = bSize
+
+	
+	
+	if n := 2 * bSize; cap(z.zdata) < n {
+		z.zdata = make([]byte, n, n)
+	}
+	if debugFlag {
+		debug("header block max size id=%d size=%d", bmsID, bSize)
+	}
+	z.zdata = z.zdata[:bSize]
+	z.data = z.zdata[:cap(z.zdata)][bSize:]
+	z.idx = len(z.data)
 
 	z.checksum.Write(buf[0:2])
 
 	if frameSize {
-		if err := binary.Read(z.src, binary.LittleEndian, &z.Size); err != nil {
+		buf := buf[:8]
+		if _, err := io.ReadFull(z.src, buf); err != nil {
 			return err
 		}
-		z.Pos += 8
-		binary.LittleEndian.PutUint64(buf[:], z.Size)
-		z.checksum.Write(buf[0:8])
+		z.Size = binary.LittleEndian.Uint64(buf)
+		z.pos += 8
+		z.checksum.Write(buf)
 	}
-
-	
-	
-	
-	
-	
-	
-	
-	
 
 	
 	if _, err := io.ReadFull(z.src, buf[:1]); err != nil {
 		return err
 	}
-	z.Pos++
+	z.pos++
 	if h := byte(z.checksum.Sum32() >> 8 & 0xFF); h != buf[0] {
-		return fmt.Errorf("lz4.Read: invalid header checksum: got %v expected %v", buf[0], h)
+		return fmt.Errorf("lz4: invalid header checksum: got %x; expected %x", buf[0], h)
 	}
 
 	z.Header.done = true
+	if debugFlag {
+		debug("header read: %v", z.Header)
+	}
 
 	return nil
 }
@@ -139,177 +135,141 @@ func (z *Reader) readHeader(first bool) error {
 
 
 
-
-
-
-
-
-func (z *Reader) Read(buf []byte) (n int, err error) {
+func (z *Reader) Read(buf []byte) (int, error) {
+	if debugFlag {
+		debug("Read buf len=%d", len(buf))
+	}
 	if !z.Header.done {
-		if err = z.readHeader(true); err != nil {
-			return
+		if err := z.readHeader(true); err != nil {
+			return 0, err
+		}
+		if debugFlag {
+			debug("header read OK compressed buffer %d / %d uncompressed buffer %d : %d index=%d",
+				len(z.zdata), cap(z.zdata), len(z.data), cap(z.data), z.idx)
 		}
 	}
 
 	if len(buf) == 0 {
-		return
+		return 0, nil
 	}
 
-	
-	if len(z.data) > 0 {
-		n = copy(buf, z.data)
-		z.data = z.data[n:]
-		if len(z.data) == 0 {
-			z.data = nil
-		}
-		return
-	}
-
-	
-	
-	
-	
-	wbuf := buf
-	zn := (len(wbuf) + z.BlockMaxSize - 1) / z.BlockMaxSize
-	zblocks := make([]block, zn)
-	for zi, abort := 0, uint32(0); zi < zn && atomic.LoadUint32(&abort) == 0; zi++ {
-		zb := &zblocks[zi]
+	if z.idx == len(z.data) {
 		
-		if len(wbuf) < z.BlockMaxSize+len(z.window) {
-			wbuf = make([]byte, z.BlockMaxSize+len(z.window))
-		}
-		copy(wbuf, z.window)
-		if zb.err = z.readBlock(wbuf, zb); zb.err != nil {
-			break
-		}
-		wbuf = wbuf[z.BlockMaxSize:]
-		if !z.BlockDependency {
-			z.wg.Add(1)
-			go z.decompressBlock(zb, &abort)
-			continue
+		if debugFlag {
+			debug("reading block from writer")
 		}
 		
-		z.decompressBlock(zb, nil)
-		
-		if len(z.window) == 0 {
-			z.window = make([]byte, winSize)
-		}
-		if len(zb.data) >= winSize {
-			copy(z.window, zb.data[len(zb.data)-winSize:])
-		} else {
-			copy(z.window, z.window[len(zb.data):])
-			copy(z.window[len(zb.data)+1:], zb.data)
-		}
-	}
-	z.wg.Wait()
-
-	
-	for _, zb := range zblocks {
-		if zb.err != nil {
-			if zb.err == errEndOfBlock {
-				return n, z.close()
-			}
-			return n, zb.err
-		}
-		bLen := len(zb.data)
-		if !z.NoChecksum {
-			z.checksum.Write(zb.data)
-		}
-		m := copy(buf[n:], zb.data)
-		
-		if m < bLen {
-			z.data = zb.data[m:]
-		}
-		n += m
-	}
-
-	return
-}
-
-
-
-
-func (z *Reader) readBlock(buf []byte, b *block) error {
-	var bLen uint32
-	if err := binary.Read(z.src, binary.LittleEndian, &bLen); err != nil {
-		return err
-	}
-	atomic.AddInt64(&z.Pos, 4)
-
-	switch {
-	case bLen == 0:
-		return errEndOfBlock
-	case bLen&(1<<31) == 0:
-		b.compressed = true
-		b.data = buf
-		b.zdata = make([]byte, bLen)
-	default:
-		bLen = bLen & (1<<31 - 1)
-		if int(bLen) > len(buf) {
-			return fmt.Errorf("lz4.Read: invalid block size: %d", bLen)
-		}
-		b.data = buf[:bLen]
-		b.zdata = buf[:bLen]
-	}
-	if _, err := io.ReadFull(z.src, b.zdata); err != nil {
-		return err
-	}
-
-	if z.BlockChecksum {
-		if err := binary.Read(z.src, binary.LittleEndian, &b.checksum); err != nil {
-			return err
-		}
-		xxh := hashPool.Get()
-		defer hashPool.Put(xxh)
-		xxh.Write(b.zdata)
-		if h := xxh.Sum32(); h != b.checksum {
-			return fmt.Errorf("lz4.Read: invalid block checksum: got %x expected %x", h, b.checksum)
-		}
-	}
-
-	return nil
-}
-
-
-
-func (z *Reader) decompressBlock(b *block, abort *uint32) {
-	if abort != nil {
-		defer z.wg.Done()
-	}
-	if b.compressed {
-		n := len(z.window)
-		m, err := UncompressBlock(b.zdata, b.data, n)
+		bLen, err := z.readUint32()
 		if err != nil {
-			if abort != nil {
-				atomic.StoreUint32(abort, 1)
+			return 0, err
+		}
+		z.pos += 4
+
+		if bLen == 0 {
+			
+			if !z.NoChecksum {
+				
+				checksum, err := z.readUint32()
+				if err != nil {
+					return 0, err
+				}
+				if debugFlag {
+					debug("frame checksum got=%x / want=%x", z.checksum.Sum32(), checksum)
+				}
+				z.pos += 4
+				if h := z.checksum.Sum32(); checksum != h {
+					return 0, fmt.Errorf("lz4: invalid frame checksum: got %x; expected %x", h, checksum)
+				}
 			}
-			b.err = err
-			return
+
+			
+			pos := z.pos
+			z.Reset(z.src)
+			z.pos = pos
+
+			
+			return 0, z.readHeader(false)
 		}
-		b.data = b.data[n : n+m]
+
+		if debugFlag {
+			debug("raw block size %d", bLen)
+		}
+		if bLen&compressedBlockFlag > 0 {
+			
+			bLen &= compressedBlockMask
+			if debugFlag {
+				debug("uncompressed block size %d", bLen)
+			}
+			if int(bLen) > cap(z.data) {
+				return 0, fmt.Errorf("lz4: invalid block size: %d", bLen)
+			}
+			z.data = z.data[:bLen]
+			if _, err := io.ReadFull(z.src, z.data); err != nil {
+				return 0, err
+			}
+			z.pos += int64(bLen)
+
+			if z.BlockChecksum {
+				checksum, err := z.readUint32()
+				if err != nil {
+					return 0, err
+				}
+				z.pos += 4
+
+				if h := xxh32.ChecksumZero(z.data); h != checksum {
+					return 0, fmt.Errorf("lz4: invalid block checksum: got %x; expected %x", h, checksum)
+				}
+			}
+
+		} else {
+			
+			if debugFlag {
+				debug("compressed block size %d", bLen)
+			}
+			if int(bLen) > cap(z.data) {
+				return 0, fmt.Errorf("lz4: invalid block size: %d", bLen)
+			}
+			zdata := z.zdata[:bLen]
+			if _, err := io.ReadFull(z.src, zdata); err != nil {
+				return 0, err
+			}
+			z.pos += int64(bLen)
+
+			if z.BlockChecksum {
+				checksum, err := z.readUint32()
+				if err != nil {
+					return 0, err
+				}
+				z.pos += 4
+
+				if h := xxh32.ChecksumZero(zdata); h != checksum {
+					return 0, fmt.Errorf("lz4: invalid block checksum: got %x; expected %x", h, checksum)
+				}
+			}
+
+			n, err := UncompressBlock(zdata, z.data)
+			if err != nil {
+				return 0, err
+			}
+			z.data = z.data[:n]
+		}
+
+		if !z.NoChecksum {
+			z.checksum.Write(z.data)
+			if debugFlag {
+				debug("current frame checksum %x", z.checksum.Sum32())
+			}
+		}
+		z.idx = 0
 	}
-	atomic.AddInt64(&z.Pos, int64(len(b.data)))
-}
 
-
-func (z *Reader) close() error {
-	if !z.NoChecksum {
-		var checksum uint32
-		if err := binary.Read(z.src, binary.LittleEndian, &checksum); err != nil {
-			return err
-		}
-		if checksum != z.checksum.Sum32() {
-			return fmt.Errorf("lz4.Read: invalid frame checksum: got %x expected %x", z.checksum.Sum32(), checksum)
-		}
+	n := copy(buf, z.data[z.idx:])
+	z.idx += n
+	if debugFlag {
+		debug("copied %d bytes to input", n)
 	}
 
-	
-	pos := z.Pos
-	z.Reset(z.src)
-	z.Pos = pos
-
-	
-	return z.readHeader(false)
+	return n, nil
 }
 
 
@@ -317,48 +277,19 @@ func (z *Reader) close() error {
 
 func (z *Reader) Reset(r io.Reader) {
 	z.Header = Header{}
-	z.Pos = 0
+	z.pos = 0
 	z.src = r
+	z.zdata = z.zdata[:0]
+	z.data = z.data[:0]
+	z.idx = 0
 	z.checksum.Reset()
-	z.data = nil
-	z.window = nil
 }
 
 
 
-func (z *Reader) WriteTo(w io.Writer) (n int64, err error) {
-	cpus := runtime.GOMAXPROCS(0)
-	var buf []byte
-
-	
-	
-	
-	
-	
-	for {
-		nsize := 0
-		
-		
-		if z.BlockDependency {
-			
-			
-			nsize = len(z.window) + z.BlockMaxSize
-		} else {
-			
-			nsize = cpus * z.BlockMaxSize
-		}
-		if nsize != len(buf) {
-			buf = make([]byte, nsize)
-		}
-
-		m, er := z.Read(buf)
-		if er != nil && er != io.EOF {
-			return n, er
-		}
-		m, err = w.Write(buf[:m])
-		n += int64(m)
-		if err != nil || er == io.EOF {
-			return
-		}
-	}
+func (z *Reader) readUint32() (uint32, error) {
+	buf := z.buf[:4]
+	_, err := io.ReadFull(z.src, buf)
+	x := binary.LittleEndian.Uint32(buf)
+	return x, err
 }

@@ -17,20 +17,156 @@ type Encoding uint
 
 const (
 	
-	UTF8 Encoding = 1 << iota
+	
+	
+	
+	utf8Default Encoding = iota
+
+	
+	UTF8
 
 	
 	ISO_8859_1
 )
 
+type Loader struct {
+	
+	
+	
+	Encoding Encoding
+
+	
+	
+	
+	
+	DisableExpansion bool
+
+	
+	
+	
+	IgnoreMissing bool
+}
+
+
+func (l *Loader) LoadBytes(buf []byte) (*Properties, error) {
+	return l.loadBytes(buf, l.Encoding)
+}
+
+
+
+
+
+
+func (l *Loader) LoadAll(names []string) (*Properties, error) {
+	all := NewProperties()
+	for _, name := range names {
+		n, err := expandName(name)
+		if err != nil {
+			return nil, err
+		}
+
+		var p *Properties
+		switch {
+		case strings.HasPrefix(n, "http://"):
+			p, err = l.LoadURL(n)
+		case strings.HasPrefix(n, "https://"):
+			p, err = l.LoadURL(n)
+		default:
+			p, err = l.LoadFile(n)
+		}
+		if err != nil {
+			return nil, err
+		}
+		all.Merge(p)
+	}
+
+	all.DisableExpansion = l.DisableExpansion
+	if all.DisableExpansion {
+		return all, nil
+	}
+	return all, all.check()
+}
+
+
+
+
+func (l *Loader) LoadFile(filename string) (*Properties, error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		if l.IgnoreMissing && os.IsNotExist(err) {
+			LogPrintf("properties: %s not found. skipping", filename)
+			return NewProperties(), nil
+		}
+		return nil, err
+	}
+	return l.loadBytes(data, l.Encoding)
+}
+
+
+
+
+
+
+
+
+
+func (l *Loader) LoadURL(url string) (*Properties, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("properties: error fetching %q. %s", url, err)
+	}
+
+	if resp.StatusCode == 404 && l.IgnoreMissing {
+		LogPrintf("properties: %s returned %d. skipping", url, resp.StatusCode)
+		return NewProperties(), nil
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("properties: %s returned %d", url, resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("properties: %s error reading response. %s", url, err)
+	}
+	defer resp.Body.Close()
+
+	ct := resp.Header.Get("Content-Type")
+	var enc Encoding
+	switch strings.ToLower(ct) {
+	case "text/plain", "text/plain; charset=iso-8859-1", "text/plain; charset=latin1":
+		enc = ISO_8859_1
+	case "", "text/plain; charset=utf-8":
+		enc = UTF8
+	default:
+		return nil, fmt.Errorf("properties: invalid content type %s", ct)
+	}
+
+	return l.loadBytes(body, enc)
+}
+
+func (l *Loader) loadBytes(buf []byte, enc Encoding) (*Properties, error) {
+	p, err := parse(convert(buf, enc))
+	if err != nil {
+		return nil, err
+	}
+	p.DisableExpansion = l.DisableExpansion
+	if p.DisableExpansion {
+		return p, nil
+	}
+	return p, p.check()
+}
+
 
 func Load(buf []byte, enc Encoding) (*Properties, error) {
-	return loadBuf(buf, enc)
+	l := &Loader{Encoding: enc}
+	return l.LoadBytes(buf)
 }
 
 
 func LoadString(s string) (*Properties, error) {
-	return loadBuf([]byte(s), UTF8)
+	l := &Loader{Encoding: UTF8}
+	return l.LoadBytes([]byte(s))
 }
 
 
@@ -44,26 +180,23 @@ func LoadMap(m map[string]string) *Properties {
 
 
 func LoadFile(filename string, enc Encoding) (*Properties, error) {
-	return loadAll([]string{filename}, enc, false)
+	l := &Loader{Encoding: enc}
+	return l.LoadAll([]string{filename})
 }
 
 
 
 
 func LoadFiles(filenames []string, enc Encoding, ignoreMissing bool) (*Properties, error) {
-	return loadAll(filenames, enc, ignoreMissing)
+	l := &Loader{Encoding: enc, IgnoreMissing: ignoreMissing}
+	return l.LoadAll(filenames)
 }
 
 
 
-
-
-
-
-
-
 func LoadURL(url string) (*Properties, error) {
-	return loadAll([]string{url}, UTF8, false)
+	l := &Loader{Encoding: UTF8}
+	return l.LoadAll([]string{url})
 }
 
 
@@ -71,7 +204,8 @@ func LoadURL(url string) (*Properties, error) {
 
 
 func LoadURLs(urls []string, ignoreMissing bool) (*Properties, error) {
-	return loadAll(urls, UTF8, ignoreMissing)
+	l := &Loader{Encoding: UTF8, IgnoreMissing: ignoreMissing}
+	return l.LoadAll(urls)
 }
 
 
@@ -79,7 +213,8 @@ func LoadURLs(urls []string, ignoreMissing bool) (*Properties, error) {
 
 
 func LoadAll(names []string, enc Encoding, ignoreMissing bool) (*Properties, error) {
-	return loadAll(names, enc, ignoreMissing)
+	l := &Loader{Encoding: enc, IgnoreMissing: ignoreMissing}
+	return l.LoadAll(names)
 }
 
 
@@ -122,90 +257,6 @@ func MustLoadAll(names []string, enc Encoding, ignoreMissing bool) *Properties {
 	return must(LoadAll(names, enc, ignoreMissing))
 }
 
-func loadBuf(buf []byte, enc Encoding) (*Properties, error) {
-	p, err := parse(convert(buf, enc))
-	if err != nil {
-		return nil, err
-	}
-	return p, p.check()
-}
-
-func loadAll(names []string, enc Encoding, ignoreMissing bool) (*Properties, error) {
-	result := NewProperties()
-	for _, name := range names {
-		n, err := expandName(name)
-		if err != nil {
-			return nil, err
-		}
-		var p *Properties
-		if strings.HasPrefix(n, "http://") || strings.HasPrefix(n, "https://") {
-			p, err = loadURL(n, ignoreMissing)
-		} else {
-			p, err = loadFile(n, enc, ignoreMissing)
-		}
-		if err != nil {
-			return nil, err
-		}
-		result.Merge(p)
-
-	}
-	return result, result.check()
-}
-
-func loadFile(filename string, enc Encoding, ignoreMissing bool) (*Properties, error) {
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		if ignoreMissing && os.IsNotExist(err) {
-			LogPrintf("properties: %s not found. skipping", filename)
-			return NewProperties(), nil
-		}
-		return nil, err
-	}
-	p, err := parse(convert(data, enc))
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
-}
-
-func loadURL(url string, ignoreMissing bool) (*Properties, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("properties: error fetching %q. %s", url, err)
-	}
-	if resp.StatusCode == 404 && ignoreMissing {
-		LogPrintf("properties: %s returned %d. skipping", url, resp.StatusCode)
-		return NewProperties(), nil
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("properties: %s returned %d", url, resp.StatusCode)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("properties: %s error reading response. %s", url, err)
-	}
-	if err = resp.Body.Close(); err != nil {
-		return nil, fmt.Errorf("properties: %s error reading response. %s", url, err)
-	}
-
-	ct := resp.Header.Get("Content-Type")
-	var enc Encoding
-	switch strings.ToLower(ct) {
-	case "text/plain", "text/plain; charset=iso-8859-1", "text/plain; charset=latin1":
-		enc = ISO_8859_1
-	case "", "text/plain; charset=utf-8":
-		enc = UTF8
-	default:
-		return nil, fmt.Errorf("properties: invalid content type %s", ct)
-	}
-
-	p, err := parse(convert(body, enc))
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
-}
-
 func must(p *Properties, err error) *Properties {
 	if err != nil {
 		ErrorHandler(err)
@@ -226,7 +277,7 @@ func expandName(name string) (string, error) {
 
 func convert(buf []byte, enc Encoding) string {
 	switch enc {
-	case UTF8:
+	case utf8Default, UTF8:
 		return string(buf)
 	case ISO_8859_1:
 		runes := make([]rune, len(buf))

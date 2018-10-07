@@ -1,69 +1,32 @@
 package system 
 
 import (
-	"fmt"
 	"runtime"
 	"strings"
 
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 )
 
 
-
-
-
-func ValidatePlatform(platform *specs.Platform) error {
-	platform.Architecture = strings.ToLower(platform.Architecture)
-	platform.OS = strings.ToLower(platform.OS)
-	
-	
-	if platform.Architecture != "" {
-		return fmt.Errorf("invalid platform architecture %q", platform.Architecture)
-	}
-	if platform.OS != "" {
-		if !(platform.OS == runtime.GOOS || (LCOWSupported() && platform.OS == "linux")) {
-			return fmt.Errorf("invalid platform os %q", platform.OS)
-		}
-	}
-	if len(platform.OSFeatures) != 0 {
-		return fmt.Errorf("invalid platform osfeatures %q", platform.OSFeatures)
-	}
-	if platform.OSVersion != "" {
-		return fmt.Errorf("invalid platform osversion %q", platform.OSVersion)
-	}
-	if platform.Variant != "" {
-		return fmt.Errorf("invalid platform variant %q", platform.Variant)
-	}
-	return nil
-}
-
-
-
-
-
-
-func ParsePlatform(in string) *specs.Platform {
-	p := &specs.Platform{}
-	elements := strings.SplitN(strings.ToLower(in), "/", 3)
-	if len(elements) == 3 {
-		p.Variant = elements[2]
-	}
-	if len(elements) >= 2 {
-		p.Architecture = elements[1]
-	}
-	if len(elements) >= 1 {
-		p.OS = elements[0]
-	}
-	return p
-}
-
-
 func IsOSSupported(os string) bool {
-	if runtime.GOOS == os {
+	if strings.EqualFold(runtime.GOOS, os) {
 		return true
 	}
-	if LCOWSupported() && os == "linux" {
+	if LCOWSupported() && strings.EqualFold(os, "linux") {
 		return true
 	}
 	return false
+}
+
+
+
+
+func ValidatePlatform(platform specs.Platform) error {
+	if runtime.GOOS == "windows" {
+		if !(platform.OS == runtime.GOOS || (LCOWSupported() && platform.OS == "linux")) {
+			return errors.Errorf("unsupported os %s", platform.OS)
+		}
+	}
+	return nil
 }

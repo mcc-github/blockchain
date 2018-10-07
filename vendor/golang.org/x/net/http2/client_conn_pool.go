@@ -52,9 +52,31 @@ const (
 	noDialOnMiss = false
 )
 
+
+
+
+
+
+
+
+func (p *clientConnPool) shouldTraceGetConn(st clientConnIdleState) bool {
+	
+	
+	
+	
+	if _, ok := p.t.ConnPool.(noDialClientConnPool); !ok {
+		return true
+	}
+	
+	
+	
+	return !st.freshConn
+}
+
 func (p *clientConnPool) getClientConn(req *http.Request, addr string, dialOnMiss bool) (*ClientConn, error) {
 	if isConnectionCloseRequest(req) && dialOnMiss {
 		
+		traceGetConn(req, addr)
 		const singleUse = true
 		cc, err := p.t.dialClientConn(addr, singleUse)
 		if err != nil {
@@ -64,7 +86,10 @@ func (p *clientConnPool) getClientConn(req *http.Request, addr string, dialOnMis
 	}
 	p.mu.Lock()
 	for _, cc := range p.conns[addr] {
-		if cc.CanTakeNewRequest() {
+		if st := cc.idleState(); st.canTakeNewRequest {
+			if p.shouldTraceGetConn(st) {
+				traceGetConn(req, addr)
+			}
 			p.mu.Unlock()
 			return cc, nil
 		}
@@ -73,6 +98,7 @@ func (p *clientConnPool) getClientConn(req *http.Request, addr string, dialOnMis
 		p.mu.Unlock()
 		return nil, ErrNoCachedConn
 	}
+	traceGetConn(req, addr)
 	call := p.getStartDialLocked(addr)
 	p.mu.Unlock()
 	<-call.done

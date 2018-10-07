@@ -389,6 +389,12 @@ func (d *Decoder) callEmit(hf HeaderField) error {
 
 
 func (d *Decoder) parseDynamicTableSizeUpdate() error {
+	
+	
+	if d.dynTab.size > 0 {
+		return DecodingError{errors.New("dynamic table size update MUST occur at the beginning of a header block")}
+	}
+
 	buf := d.buf
 	size, buf, err := readVarInt(5, buf)
 	if err != nil {

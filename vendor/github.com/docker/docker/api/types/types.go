@@ -102,9 +102,10 @@ type ContainerStats struct {
 
 
 type Ping struct {
-	APIVersion   string
-	OSType       string
-	Experimental bool
+	APIVersion     string
+	OSType         string
+	Experimental   bool
+	BuilderVersion BuilderVersion
 }
 
 
@@ -204,6 +205,8 @@ type Info struct {
 	RuncCommit         Commit
 	InitCommit         Commit
 	SecurityOptions    []string
+	ProductLicense     string `json:",omitempty"`
+	Warnings           []string
 }
 
 
@@ -512,7 +515,8 @@ type DiskUsage struct {
 	Images      []*ImageSummary
 	Containers  []*Container
 	Volumes     []*Volume
-	BuilderSize int64
+	BuildCache  []*BuildCache
+	BuilderSize int64 
 }
 
 
@@ -584,4 +588,18 @@ type PushResult struct {
 
 type BuildResult struct {
 	ID string
+}
+
+
+type BuildCache struct {
+	ID      string
+	Mutable bool
+	InUse   bool
+	Size    int64
+
+	CreatedAt   time.Time
+	LastUsedAt  *time.Time
+	UsageCount  int
+	Parent      string
+	Description string
 }

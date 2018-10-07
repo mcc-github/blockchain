@@ -178,22 +178,22 @@ func NewAttribute(typ uint, x interface{}) *Attribute {
 }
 
 
-func cAttributeList(a []*Attribute) (arena, C.ckAttrPtr, C.CK_ULONG) {
+func cAttributeList(a []*Attribute) (arena, C.CK_ATTRIBUTE_PTR, C.CK_ULONG) {
 	var arena arena
 	if len(a) == 0 {
 		return nil, nil, 0
 	}
-	pa := make([]C.ckAttr, len(a))
-	for i := 0; i < len(a); i++ {
-		pa[i]._type = C.CK_ATTRIBUTE_TYPE(a[i].Type)
-		
-		if a[i].Value == nil || len(a[i].Value) == 0 {
-			continue
+	pa := make([]C.CK_ATTRIBUTE, len(a))
+	for i, attr := range a {
+		pa[i]._type = C.CK_ATTRIBUTE_TYPE(attr.Type)
+		if len(attr.Value) != 0 {
+			buf, len := arena.Allocate(attr.Value)
+			
+			C.putAttributePval(&pa[i], buf)
+			pa[i].ulValueLen = len
 		}
-
-		pa[i].pValue, pa[i].ulValueLen = arena.Allocate(a[i].Value)
 	}
-	return arena, C.ckAttrPtr(&pa[0]), C.CK_ULONG(len(a))
+	return arena, &pa[0], C.CK_ULONG(len(a))
 }
 
 func cDate(t time.Time) []byte {
@@ -212,6 +212,7 @@ func cDate(t time.Time) []byte {
 type Mechanism struct {
 	Mechanism uint
 	Parameter []byte
+	generator interface{}
 }
 
 
@@ -222,28 +223,42 @@ func NewMechanism(mech uint, x interface{}) *Mechanism {
 		return m
 	}
 
-	
-	m.Parameter = x.([]byte)
+	switch p := x.(type) {
+	case *GCMParams, *OAEPParams:
+		
+		m.generator = p
+	case []byte:
+		m.Parameter = p
+	default:
+		panic("parameter must be one of type: []byte, *GCMParams, *OAEPParams")
+	}
 
 	return m
 }
 
-func cMechanismList(m []*Mechanism) (arena, C.ckMechPtr, C.CK_ULONG) {
+func cMechanism(mechList []*Mechanism) (arena, *C.CK_MECHANISM) {
+	if len(mechList) != 1 {
+		panic("expected exactly one mechanism")
+	}
+	mech := mechList[0]
+	cmech := &C.CK_MECHANISM{mechanism: C.CK_MECHANISM_TYPE(mech.Mechanism)}
+	
+	param := mech.Parameter
 	var arena arena
-	if len(m) == 0 {
-		return nil, nil, 0
-	}
-	pm := make([]C.ckMech, len(m))
-	for i := 0; i < len(m); i++ {
-		pm[i].mechanism = C.CK_MECHANISM_TYPE(m[i].Mechanism)
+	switch p := mech.generator.(type) {
+	case *GCMParams:
 		
-		if m[i].Parameter == nil || len(m[i].Parameter) == 0 {
-			continue
-		}
-
-		pm[i].pParameter, pm[i].ulParameterLen = arena.Allocate(m[i].Parameter)
+		param = cGCMParams(p)
+	case *OAEPParams:
+		param, arena = cOAEPParams(p, arena)
 	}
-	return arena, C.ckMechPtr(&pm[0]), C.CK_ULONG(len(m))
+	if len(param) != 0 {
+		buf, len := arena.Allocate(param)
+		
+		C.putMechanismParam(cmech, buf)
+		cmech.ulParameterLen = len
+	}
+	return arena, cmech
 }
 
 
@@ -251,4 +266,17 @@ type MechanismInfo struct {
 	MinKeySize uint
 	MaxKeySize uint
 	Flags      uint
+}
+
+
+var stubData = []byte{0}
+
+
+func cMessage(data []byte) (dataPtr C.CK_BYTE_PTR) {
+	l := len(data)
+	if l == 0 {
+		
+		data = stubData
+	}
+	return C.CK_BYTE_PTR(unsafe.Pointer(&data[0]))
 }

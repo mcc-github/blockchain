@@ -94,7 +94,7 @@ func assertDelivery(t *testing.T, ga *mocks.MockGossipServiceAdapter, deliverer 
 		if !shouldSucceed {
 			assert.Fail(t, "Should not have succeede")
 		}
-		assert.True(t, deliverer.RecvCnt == ga.AddPayloadsCnt)
+		assert.True(t, deliverer.RecvCount() == ga.AddPayloadCount())
 	case <-time.After(time.Second):
 		if shouldSucceed {
 			assert.Fail(t, "Didn't gossip a block within a timely manner")
@@ -167,9 +167,9 @@ func TestBlocksProvider_CheckTerminationDeliveryResponseStatus(t *testing.T) {
 	select {
 	case <-ready:
 		{
-			assert.Equal(t, int32(1), tmp.RecvCnt)
+			assert.Equal(t, int32(1), tmp.RecvCount())
 			
-			assert.Equal(t, int32(0), gossipServiceAdapter.AddPayloadsCnt)
+			assert.Equal(t, int32(0), gossipServiceAdapter.AddPayloadCount())
 			
 			select {
 			case <-gossipServiceAdapter.GossipBlockDisseminations:

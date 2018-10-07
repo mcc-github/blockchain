@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"sync"
 )
 
 
@@ -92,10 +93,7 @@ func (ms *messageSet) find(pb Message) *_MessageSet_Item {
 }
 
 func (ms *messageSet) Has(pb Message) bool {
-	if ms.find(pb) != nil {
-		return true
-	}
-	return false
+	return ms.find(pb) != nil
 }
 
 func (ms *messageSet) Unmarshal(pb Message) error {
@@ -148,42 +146,38 @@ func skipVarint(buf []byte) []byte {
 
 
 func MarshalMessageSet(exts interface{}) ([]byte, error) {
-	var m map[int32]Extension
+	return marshalMessageSet(exts, false)
+}
+
+
+func marshalMessageSet(exts interface{}, deterministic bool) ([]byte, error) {
 	switch exts := exts.(type) {
 	case *XXX_InternalExtensions:
-		if err := encodeExtensions(exts); err != nil {
-			return nil, err
-		}
-		m, _ = exts.extensionsRead()
+		var u marshalInfo
+		siz := u.sizeMessageSet(exts)
+		b := make([]byte, 0, siz)
+		return u.appendMessageSet(b, exts, deterministic)
+
 	case map[int32]Extension:
-		if err := encodeExtensionsMap(exts); err != nil {
-			return nil, err
+		
+		
+		ie := XXX_InternalExtensions{
+			p: &struct {
+				mu           sync.Mutex
+				extensionMap map[int32]Extension
+			}{
+				extensionMap: exts,
+			},
 		}
-		m = exts
+
+		var u marshalInfo
+		siz := u.sizeMessageSet(&ie)
+		b := make([]byte, 0, siz)
+		return u.appendMessageSet(b, &ie, deterministic)
+
 	default:
 		return nil, errors.New("proto: not an extension map")
 	}
-
-	
-	
-	ids := make([]int, 0, len(m))
-	for id := range m {
-		ids = append(ids, int(id))
-	}
-	sort.Ints(ids)
-
-	ms := &messageSet{Item: make([]*_MessageSet_Item, 0, len(m))}
-	for _, id := range ids {
-		e := m[int32(id)]
-		
-		msg := skipVarint(skipVarint(e.enc))
-
-		ms.Item = append(ms.Item, &_MessageSet_Item{
-			TypeId:  Int32(int32(id)),
-			Message: msg,
-		})
-	}
-	return Marshal(ms)
 }
 
 
@@ -233,7 +227,15 @@ func MarshalMessageSetJSON(exts interface{}) ([]byte, error) {
 	var m map[int32]Extension
 	switch exts := exts.(type) {
 	case *XXX_InternalExtensions:
-		m, _ = exts.extensionsRead()
+		var mu sync.Locker
+		m, mu = exts.extensionsRead()
+		if m != nil {
+			
+			
+			
+			mu.Lock()
+			defer mu.Unlock()
+		}
 	case map[int32]Extension:
 		m = exts
 	default:
@@ -251,15 +253,16 @@ func MarshalMessageSetJSON(exts interface{}) ([]byte, error) {
 
 	for i, id := range ids {
 		ext := m[id]
-		if i > 0 {
-			b.WriteByte(',')
-		}
-
 		msd, ok := messageSetMap[id]
 		if !ok {
 			
 			continue
 		}
+
+		if i > 0 && b.Len() > 1 {
+			b.WriteByte(',')
+		}
+
 		fmt.Fprintf(&b, `"[%s]":`, msd.name)
 
 		x := ext.value

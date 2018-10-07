@@ -195,10 +195,25 @@ func (eventState *eventMonitoringState) disableEventMonitoring() error {
 }
 
 func (eventState *eventMonitoringState) monitorEvents(c *Client) {
+	const (
+		noListenersTimeout  = 5 * time.Second
+		noListenersInterval = 10 * time.Millisecond
+		noListenersMaxTries = noListenersTimeout / noListenersInterval
+	)
+
 	var err error
-	for eventState.noListeners() {
+	for i := time.Duration(0); i < noListenersMaxTries && eventState.noListeners(); i++ {
 		time.Sleep(10 * time.Millisecond)
 	}
+
+	if eventState.noListeners() {
+		
+		
+		
+		eventState.disableEventMonitoring()
+		return
+	}
+
 	if err = eventState.connectWithRetry(c); err != nil {
 		
 		eventState.disableEventMonitoring()

@@ -24,7 +24,7 @@ import (
 
 
 type MockGossipServiceAdapter struct {
-	AddPayloadsCnt int32
+	addPayloadCnt int32
 
 	GossipBlockDisseminations chan uint64
 }
@@ -47,8 +47,13 @@ func (*MockGossipServiceAdapter) PeersOfChannel(gossip_common.ChainID) []discove
 
 
 func (mock *MockGossipServiceAdapter) AddPayload(chainID string, payload *gossip_proto.Payload) error {
-	atomic.AddInt32(&mock.AddPayloadsCnt, 1)
+	atomic.AddInt32(&mock.addPayloadCnt, 1)
 	return nil
+}
+
+
+func (mock *MockGossipServiceAdapter) AddPayloadCount() int32 {
+	return atomic.LoadInt32(&mock.addPayloadCnt)
 }
 
 
@@ -64,15 +69,20 @@ type MockBlocksDeliverer struct {
 	CloseCalled                chan struct{}
 	Pos                        uint64
 	grpc.ClientStream
-	RecvCnt  int32
+	recvCnt  int32
 	MockRecv func(mock *MockBlocksDeliverer) (*orderer.DeliverResponse, error)
 }
 
 
 
 func (mock *MockBlocksDeliverer) Recv() (*orderer.DeliverResponse, error) {
-	atomic.AddInt32(&mock.RecvCnt, 1)
+	atomic.AddInt32(&mock.recvCnt, 1)
 	return mock.MockRecv(mock)
+}
+
+
+func (mock *MockBlocksDeliverer) RecvCount() int32 {
+	return atomic.LoadInt32(&mock.recvCnt)
 }
 
 

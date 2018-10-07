@@ -5,6 +5,7 @@
 package docker
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"strings"
@@ -16,7 +17,12 @@ import (
 
 
 func (c *Client) Version() (*Env, error) {
-	resp, err := c.do("GET", "/version", doOptions{})
+	return c.VersionWithContext(nil)
+}
+
+
+func (c *Client) VersionWithContext(ctx context.Context) (*Env, error) {
+	resp, err := c.do("GET", "/version", doOptions{context: ctx})
 	if err != nil {
 		return nil, err
 	}

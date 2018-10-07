@@ -130,10 +130,12 @@ func UnmarshalAny(any *any.Any, pb proto.Message) error {
 
 
 func Is(any *any.Any, pb proto.Message) bool {
-	aname, err := AnyMessageName(any)
-	if err != nil {
+	
+	
+	if any == nil {
 		return false
 	}
-
-	return aname == proto.MessageName(pb)
+	name := proto.MessageName(pb)
+	prefix := len(any.TypeUrl) - len(name)
+	return prefix >= 1 && any.TypeUrl[prefix-1] == '/' && any.TypeUrl[prefix:] == name
 }

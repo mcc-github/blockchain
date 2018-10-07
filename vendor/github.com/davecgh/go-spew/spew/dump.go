@@ -21,16 +21,16 @@ var (
 
 	
 	
-	cCharRE = regexp.MustCompile("^.*\\._Ctype_char$")
+	cCharRE = regexp.MustCompile(`^.*\._Ctype_char$`)
 
 	
 	
 	
-	cUnsignedCharRE = regexp.MustCompile("^.*\\._Ctype_unsignedchar$")
+	cUnsignedCharRE = regexp.MustCompile(`^.*\._Ctype_unsignedchar$`)
 
 	
 	
-	cUint8tCharRE = regexp.MustCompile("^.*\\._Ctype_uint8_t$")
+	cUint8tCharRE = regexp.MustCompile(`^.*\._Ctype_uint8_t$`)
 )
 
 
@@ -129,10 +129,10 @@ func (d *dumpState) dumpPtr(v reflect.Value) {
 	
 	d.w.Write(openParenBytes)
 	switch {
-	case nilFound == true:
+	case nilFound:
 		d.w.Write(nilAngleBytes)
 
-	case cycleFound == true:
+	case cycleFound:
 		d.w.Write(circularBytes)
 
 	default:

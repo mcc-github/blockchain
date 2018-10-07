@@ -14,7 +14,7 @@ import (
 
 
 
-func (c *Client) initializeNativeClient(trFunc func () *http.Transport) {
+func (c *Client) initializeNativeClient(trFunc func() *http.Transport) {
 	if c.endpointURL.Scheme != unixProtocol {
 		return
 	}

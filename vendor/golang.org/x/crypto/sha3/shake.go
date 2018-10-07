@@ -38,12 +38,22 @@ func (d *state) Clone() ShakeHash {
 
 
 
-func NewShake128() ShakeHash { return &state{rate: 168, dsbyte: 0x1f} }
+func NewShake128() ShakeHash {
+	if h := newShake128Asm(); h != nil {
+		return h
+	}
+	return &state{rate: 168, dsbyte: 0x1f}
+}
 
 
 
 
-func NewShake256() ShakeHash { return &state{rate: 136, dsbyte: 0x1f} }
+func NewShake256() ShakeHash {
+	if h := newShake256Asm(); h != nil {
+		return h
+	}
+	return &state{rate: 136, dsbyte: 0x1f}
+}
 
 
 func ShakeSum128(hash, data []byte) {

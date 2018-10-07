@@ -15,7 +15,7 @@ var versionRegexp *regexp.Regexp
 
 
 const VersionRegexpRaw string = `v?([0-9]+(\.[0-9]+)*?)` +
-	`(-?([0-9A-Za-z\-~]+(\.[0-9A-Za-z\-~]+)*))?` +
+	`(-([0-9]+[0-9A-Za-z\-~]*(\.[0-9A-Za-z\-~]+)*)|(-?([A-Za-z\-~]+[0-9A-Za-z\-~]*(\.[0-9A-Za-z\-~]+)*)))?` +
 	`(\+([0-9A-Za-z\-~]+(\.[0-9A-Za-z\-~]+)*))?` +
 	`?`
 
@@ -25,6 +25,7 @@ type Version struct {
 	pre      string
 	segments []int64
 	si       int
+	original string
 }
 
 func init() {
@@ -59,11 +60,17 @@ func NewVersion(v string) (*Version, error) {
 		segments = append(segments, 0)
 	}
 
+	pre := matches[7]
+	if pre == "" {
+		pre = matches[4]
+	}
+
 	return &Version{
-		metadata: matches[7],
-		pre:      matches[4],
+		metadata: matches[10],
+		pre:      pre,
 		segments: segments,
 		si:       si,
+		original: v,
 	}, nil
 }
 
@@ -301,8 +308,16 @@ func (v *Version) Segments() []int {
 
 
 func (v *Version) Segments64() []int64 {
-	return v.segments
+	result := make([]int64, len(v.segments))
+	copy(result, v.segments)
+	return result
 }
+
+
+
+
+
+
 
 
 
@@ -323,4 +338,10 @@ func (v *Version) String() string {
 	}
 
 	return buf.String()
+}
+
+
+
+func (v *Version) Original() string {
+	return v.original
 }

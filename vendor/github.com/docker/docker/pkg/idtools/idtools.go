@@ -30,30 +30,30 @@ func (e ranges) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
 func (e ranges) Less(i, j int) bool { return e[i].Start < e[j].Start }
 
 const (
-	subuidFileName string = "/etc/subuid"
-	subgidFileName string = "/etc/subgid"
+	subuidFileName = "/etc/subuid"
+	subgidFileName = "/etc/subgid"
 )
 
 
 
 
-func MkdirAllAndChown(path string, mode os.FileMode, owner IDPair) error {
-	return mkdirAs(path, mode, owner.UID, owner.GID, true, true)
+func MkdirAllAndChown(path string, mode os.FileMode, owner Identity) error {
+	return mkdirAs(path, mode, owner, true, true)
 }
 
 
 
 
 
-func MkdirAndChown(path string, mode os.FileMode, owner IDPair) error {
-	return mkdirAs(path, mode, owner.UID, owner.GID, false, true)
+func MkdirAndChown(path string, mode os.FileMode, owner Identity) error {
+	return mkdirAs(path, mode, owner, false, true)
 }
 
 
 
 
-func MkdirAllAndChownNew(path string, mode os.FileMode, owner IDPair) error {
-	return mkdirAs(path, mode, owner.UID, owner.GID, true, false)
+func MkdirAllAndChownNew(path string, mode os.FileMode, owner Identity) error {
+	return mkdirAs(path, mode, owner, true, false)
 }
 
 
@@ -103,13 +103,14 @@ func toHost(contID int, idMap []IDMap) (int, error) {
 }
 
 
-type IDPair struct {
+type Identity struct {
 	UID int
 	GID int
+	SID string
 }
 
 
-type IDMappings struct {
+type IdentityMapping struct {
 	uids []IDMap
 	gids []IDMap
 }
@@ -117,7 +118,7 @@ type IDMappings struct {
 
 
 
-func NewIDMappings(username, groupname string) (*IDMappings, error) {
+func NewIdentityMapping(username, groupname string) (*IdentityMapping, error) {
 	subuidRanges, err := parseSubuid(username)
 	if err != nil {
 		return nil, err
@@ -133,7 +134,7 @@ func NewIDMappings(username, groupname string) (*IDMappings, error) {
 		return nil, fmt.Errorf("No subgid ranges found for group %q", groupname)
 	}
 
-	return &IDMappings{
+	return &IdentityMapping{
 		uids: createIDMap(subuidRanges),
 		gids: createIDMap(subgidRanges),
 	}, nil
@@ -141,21 +142,21 @@ func NewIDMappings(username, groupname string) (*IDMappings, error) {
 
 
 
-func NewIDMappingsFromMaps(uids []IDMap, gids []IDMap) *IDMappings {
-	return &IDMappings{uids: uids, gids: gids}
+func NewIDMappingsFromMaps(uids []IDMap, gids []IDMap) *IdentityMapping {
+	return &IdentityMapping{uids: uids, gids: gids}
 }
 
 
 
 
-func (i *IDMappings) RootPair() IDPair {
+func (i *IdentityMapping) RootPair() Identity {
 	uid, gid, _ := GetRootUIDGID(i.uids, i.gids)
-	return IDPair{UID: uid, GID: gid}
+	return Identity{UID: uid, GID: gid}
 }
 
 
 
-func (i *IDMappings) ToHost(pair IDPair) (IDPair, error) {
+func (i *IdentityMapping) ToHost(pair Identity) (Identity, error) {
 	var err error
 	target := i.RootPair()
 
@@ -173,7 +174,7 @@ func (i *IDMappings) ToHost(pair IDPair) (IDPair, error) {
 }
 
 
-func (i *IDMappings) ToContainer(pair IDPair) (int, int, error) {
+func (i *IdentityMapping) ToContainer(pair Identity) (int, int, error) {
 	uid, err := toContainer(pair.UID, i.uids)
 	if err != nil {
 		return -1, -1, err
@@ -183,19 +184,19 @@ func (i *IDMappings) ToContainer(pair IDPair) (int, int, error) {
 }
 
 
-func (i *IDMappings) Empty() bool {
+func (i *IdentityMapping) Empty() bool {
 	return len(i.uids) == 0 && len(i.gids) == 0
 }
 
 
 
-func (i *IDMappings) UIDs() []IDMap {
+func (i *IdentityMapping) UIDs() []IDMap {
 	return i.uids
 }
 
 
 
-func (i *IDMappings) GIDs() []IDMap {
+func (i *IdentityMapping) GIDs() []IDMap {
 	return i.gids
 }
 

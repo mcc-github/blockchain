@@ -172,6 +172,15 @@ func (members Members) Filter(filter func(member NetworkMember) bool) Members {
 }
 
 
+func (members Members) Map(f func(member NetworkMember) NetworkMember) Members {
+	var res Members
+	for _, m := range members {
+		res = append(res, f(m))
+	}
+	return res
+}
+
+
 func HasExternalEndpoint(member NetworkMember) bool {
 	return member.Endpoint != ""
 }

@@ -18,6 +18,8 @@
 
 
 
+
+
 package spew
 
 import (
@@ -34,80 +36,49 @@ const (
 	ptrSize = unsafe.Sizeof((*byte)(nil))
 )
 
+type flag uintptr
+
 var (
 	
 	
-	
-	
-	
-	
-	offsetPtr    = uintptr(ptrSize)
-	offsetScalar = uintptr(0)
-	offsetFlag   = uintptr(ptrSize * 2)
+	flagRO flag
 
 	
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	flagKindWidth = uintptr(5)
-	flagKindShift = uintptr(flagKindWidth - 1)
-	flagRO        = uintptr(1 << 0)
-	flagIndir     = uintptr(1 << 1)
+	flagAddr flag
 )
 
-func init() {
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	vv := reflect.ValueOf(0xf00)
-	if unsafe.Sizeof(vv) == (ptrSize * 4) {
-		offsetScalar = ptrSize * 2
-		offsetFlag = ptrSize * 3
-	}
 
-	
-	
-	
-	
-	
-	upf := unsafe.Pointer(uintptr(unsafe.Pointer(&vv)) + offsetFlag)
-	upfv := *(*uintptr)(upf)
-	flagKindMask := uintptr((1<<flagKindWidth - 1) << flagKindShift)
-	if (upfv&flagKindMask)>>flagKindShift != uintptr(reflect.Int) {
-		flagKindShift = 0
-		flagRO = 1 << 5
-		flagIndir = 1 << 6
 
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		if upfv&flagIndir == 0 {
-			flagRO = 3 << 5
-			flagIndir = 1 << 7
-		}
+
+const flagKindMask = flag(0x1f)
+
+
+
+
+var okFlags = []struct {
+	ro, addr flag
+}{{
+	
+	ro:   1 << 5,
+	addr: 1 << 7,
+}, {
+	
+	ro:   1<<5 | 1<<6,
+	addr: 1 << 8,
+}}
+
+var flagValOffset = func() uintptr {
+	field, ok := reflect.TypeOf(reflect.Value{}).FieldByName("flag")
+	if !ok {
+		panic("reflect.Value has no flag field")
 	}
+	return field.Offset
+}()
+
+
+func flagField(v *reflect.Value) *flag {
+	return (*flag)(unsafe.Pointer(uintptr(unsafe.Pointer(v)) + flagValOffset))
 }
 
 
@@ -119,34 +90,56 @@ func init() {
 
 
 
-func unsafeReflectValue(v reflect.Value) (rv reflect.Value) {
-	indirects := 1
-	vt := v.Type()
-	upv := unsafe.Pointer(uintptr(unsafe.Pointer(&v)) + offsetPtr)
-	rvf := *(*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(&v)) + offsetFlag))
-	if rvf&flagIndir != 0 {
-		vt = reflect.PtrTo(v.Type())
-		indirects++
-	} else if offsetScalar != 0 {
+func unsafeReflectValue(v reflect.Value) reflect.Value {
+	if !v.IsValid() || (v.CanInterface() && v.CanAddr()) {
+		return v
+	}
+	flagFieldPtr := flagField(&v)
+	*flagFieldPtr &^= flagRO
+	*flagFieldPtr |= flagAddr
+	return v
+}
+
+
+
+func init() {
+	field, ok := reflect.TypeOf(reflect.Value{}).FieldByName("flag")
+	if !ok {
+		panic("reflect.Value has no flag field")
+	}
+	if field.Type.Kind() != reflect.TypeOf(flag(0)).Kind() {
+		panic("reflect.Value flag field has changed kind")
+	}
+	type t0 int
+	var t struct {
+		A t0
 		
+		t0
 		
-		switch vt.Kind() {
-		case reflect.Uintptr:
-		case reflect.Chan:
-		case reflect.Func:
-		case reflect.Map:
-		case reflect.Ptr:
-		case reflect.UnsafePointer:
-		default:
-			upv = unsafe.Pointer(uintptr(unsafe.Pointer(&v)) +
-				offsetScalar)
+		a t0
+	}
+	vA := reflect.ValueOf(t).FieldByName("A")
+	va := reflect.ValueOf(t).FieldByName("a")
+	vt0 := reflect.ValueOf(t).FieldByName("t0")
+
+	
+	
+	flagPublic := *flagField(&vA)
+	flagWithRO := *flagField(&va) | *flagField(&vt0)
+	flagRO = flagPublic ^ flagWithRO
+
+	
+	
+	vPtrA := reflect.ValueOf(&t).Elem().FieldByName("A")
+	flagNoPtr := *flagField(&vA)
+	flagPtr := *flagField(&vPtrA)
+	flagAddr = flagNoPtr ^ flagPtr
+
+	
+	for _, f := range okFlags {
+		if flagRO == f.ro && flagAddr == f.addr {
+			return
 		}
 	}
-
-	pv := reflect.NewAt(vt, upv)
-	rv = pv
-	for i := 0; i < indirects; i++ {
-		rv = rv.Elem()
-	}
-	return rv
+	panic("reflect.Value read-only flag has changed semantics")
 }

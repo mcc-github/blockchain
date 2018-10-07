@@ -1,6 +1,15 @@
 package types
 
+type TWithHelper interface {
+	Helper()
+}
+
 type GomegaFailHandler func(message string, callerSkip ...int)
+
+type GomegaFailWrapper struct {
+	Fail        GomegaFailHandler
+	TWithHelper TWithHelper
+}
 
 
 type GomegaTestingT interface {

@@ -43,6 +43,8 @@ type Route struct {
 	buildVarsFunc BuildVarsFunc
 }
 
+
+
 func (r *Route) SkipClean() bool {
 	return r.skipClean
 }
@@ -669,7 +671,7 @@ func (r *Route) GetMethods() ([]string, error) {
 			return []string(methods), nil
 		}
 	}
-	return nil, nil
+	return nil, errors.New("mux: route doesn't have methods")
 }
 
 

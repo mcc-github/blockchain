@@ -90,11 +90,7 @@ func (s *Session) Wait(timeout ...interface{}) *Session {
 
 
 func (s *Session) Kill() *Session {
-	if s.ExitCode() != -1 {
-		return s
-	}
-	s.Command.Process.Kill()
-	return s
+	return s.Signal(syscall.SIGKILL)
 }
 
 
@@ -109,10 +105,9 @@ func (s *Session) Terminate() *Session {
 
 
 func (s *Session) Signal(signal os.Signal) *Session {
-	if s.ExitCode() != -1 {
-		return s
+	if s.processIsAlive() {
+		s.Command.Process.Signal(signal)
 	}
-	s.Command.Process.Signal(signal)
 	return s
 }
 
@@ -134,6 +129,10 @@ func (s *Session) monitorForExit(exited chan<- struct{}) {
 	s.lock.Unlock()
 
 	close(exited)
+}
+
+func (s *Session) processIsAlive() bool {
+	return s.ExitCode() == -1 && s.Command.Process != nil
 }
 
 var trackedSessions = []*Session{}

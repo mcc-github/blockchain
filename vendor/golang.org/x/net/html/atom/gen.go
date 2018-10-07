@@ -701,6 +701,8 @@ var extra = []string{
 	"plaintext",
 	"prompt",
 	"public",
+	"rb",
+	"rtc",
 	"spacer",
 	"strike",
 	"svg",

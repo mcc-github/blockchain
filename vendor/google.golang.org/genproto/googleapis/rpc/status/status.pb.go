@@ -1,13 +1,15 @@
 
 
 
-
 package status
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import google_protobuf "github.com/golang/protobuf/ptypes/any"
+import (
+	fmt "fmt"
+	math "math"
+
+	proto "github.com/golang/protobuf/proto"
+	any "github.com/golang/protobuf/ptypes/any"
+)
 
 
 var _ = proto.Marshal
@@ -74,20 +76,43 @@ const _ = proto.ProtoPackageIsVersion2
 
 type Status struct {
 	
-	Code int32 `protobuf:"varint,1,opt,name=code" json:"code,omitempty"`
+	Code int32 `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
 	
 	
 	
-	Message string `protobuf:"bytes,2,opt,name=message" json:"message,omitempty"`
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	
 	
-	Details []*google_protobuf.Any `protobuf:"bytes,3,rep,name=details" json:"details,omitempty"`
+	Details              []*any.Any `protobuf:"bytes,3,rep,name=details,proto3" json:"details,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
+	XXX_unrecognized     []byte     `json:"-"`
+	XXX_sizecache        int32      `json:"-"`
 }
 
-func (m *Status) Reset()                    { *m = Status{} }
-func (m *Status) String() string            { return proto.CompactTextString(m) }
-func (*Status) ProtoMessage()               {}
-func (*Status) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (m *Status) Reset()         { *m = Status{} }
+func (m *Status) String() string { return proto.CompactTextString(m) }
+func (*Status) ProtoMessage()    {}
+func (*Status) Descriptor() ([]byte, []int) {
+	return fileDescriptor_24d244abaf643bfe, []int{0}
+}
+
+func (m *Status) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Status.Unmarshal(m, b)
+}
+func (m *Status) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Status.Marshal(b, m, deterministic)
+}
+func (m *Status) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Status.Merge(m, src)
+}
+func (m *Status) XXX_Size() int {
+	return xxx_messageInfo_Status.Size(m)
+}
+func (m *Status) XXX_DiscardUnknown() {
+	xxx_messageInfo_Status.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Status proto.InternalMessageInfo
 
 func (m *Status) GetCode() int32 {
 	if m != nil {
@@ -103,7 +128,7 @@ func (m *Status) GetMessage() string {
 	return ""
 }
 
-func (m *Status) GetDetails() []*google_protobuf.Any {
+func (m *Status) GetDetails() []*any.Any {
 	if m != nil {
 		return m.Details
 	}
@@ -114,9 +139,9 @@ func init() {
 	proto.RegisterType((*Status)(nil), "google.rpc.Status")
 }
 
-func init() { proto.RegisterFile("google/rpc/status.proto", fileDescriptor0) }
+func init() { proto.RegisterFile("google/rpc/status.proto", fileDescriptor_24d244abaf643bfe) }
 
-var fileDescriptor0 = []byte{
+var fileDescriptor_24d244abaf643bfe = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x12, 0x4f, 0xcf, 0xcf, 0x4f,
 	0xcf, 0x49, 0xd5, 0x2f, 0x2a, 0x48, 0xd6, 0x2f, 0x2e, 0x49, 0x2c, 0x29, 0x2d, 0xd6, 0x2b, 0x28,

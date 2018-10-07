@@ -19,6 +19,9 @@ var UseStringerRepresentation = false
 var PrintContextObjects = false
 
 
+var TruncatedDiff = true
+
+
 
 type Ctx interface {
 	Deadline() (deadline time.Time, ok bool)
@@ -46,7 +49,7 @@ func Message(actual interface{}, message string, expected ...interface{}) string
 
 
 func MessageWithDiff(actual, message, expected string) string {
-	if len(actual) >= truncateThreshold && len(expected) >= truncateThreshold {
+	if TruncatedDiff && len(actual) >= truncateThreshold && len(expected) >= truncateThreshold {
 		diffPoint := findFirstMismatch(actual, expected)
 		formattedActual := truncateAndFormat(actual, diffPoint)
 		formattedExpected := truncateAndFormat(expected, diffPoint)

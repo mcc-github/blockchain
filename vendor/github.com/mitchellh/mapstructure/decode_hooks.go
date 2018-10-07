@@ -2,6 +2,8 @@ package mapstructure
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"reflect"
 	"strconv"
 	"strings"
@@ -112,6 +114,50 @@ func StringToTimeDurationHookFunc() DecodeHookFunc {
 
 		
 		return time.ParseDuration(data.(string))
+	}
+}
+
+
+
+func StringToIPHookFunc() DecodeHookFunc {
+	return func(
+		f reflect.Type,
+		t reflect.Type,
+		data interface{}) (interface{}, error) {
+		if f.Kind() != reflect.String {
+			return data, nil
+		}
+		if t != reflect.TypeOf(net.IP{}) {
+			return data, nil
+		}
+
+		
+		ip := net.ParseIP(data.(string))
+		if ip == nil {
+			return net.IP{}, fmt.Errorf("failed parsing ip %v", data)
+		}
+
+		return ip, nil
+	}
+}
+
+
+
+func StringToIPNetHookFunc() DecodeHookFunc {
+	return func(
+		f reflect.Type,
+		t reflect.Type,
+		data interface{}) (interface{}, error) {
+		if f.Kind() != reflect.String {
+			return data, nil
+		}
+		if t != reflect.TypeOf(net.IPNet{}) {
+			return data, nil
+		}
+
+		
+		_, net, err := net.ParseCIDR(data.(string))
+		return net, err
 	}
 }
 

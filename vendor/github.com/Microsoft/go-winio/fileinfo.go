@@ -20,7 +20,8 @@ const (
 
 type FileBasicInfo struct {
 	CreationTime, LastAccessTime, LastWriteTime, ChangeTime syscall.Filetime
-	FileAttributes                                          uintptr 
+	FileAttributes                                          uint32
+	pad                                                     uint32 
 }
 
 

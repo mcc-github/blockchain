@@ -5,6 +5,7 @@
 package docker
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,8 +16,7 @@ import (
 	"strings"
 	"time"
 
-	units "github.com/docker/go-units"
-	"golang.org/x/net/context"
+	"github.com/docker/go-units"
 )
 
 
@@ -303,6 +303,7 @@ type Config struct {
 	StopTimeout       int                 `json:"StopTimeout,omitempty" yaml:"StopTimeout,omitempty" toml:"StopTimeout,omitempty"`
 	Env               []string            `json:"Env,omitempty" yaml:"Env,omitempty" toml:"Env,omitempty"`
 	Cmd               []string            `json:"Cmd" yaml:"Cmd" toml:"Cmd"`
+	Shell             []string            `json:"Shell,omitempty" yaml:"Shell,omitempty" toml:"Shell,omitempty"`
 	Healthcheck       *HealthConfig       `json:"Healthcheck,omitempty" yaml:"Healthcheck,omitempty" toml:"Healthcheck,omitempty"`
 	DNS               []string            `json:"Dns,omitempty" yaml:"Dns,omitempty" toml:"Dns,omitempty"` 
 	Image             string              `json:"Image,omitempty" yaml:"Image,omitempty" toml:"Image,omitempty"`
@@ -787,6 +788,7 @@ type HostConfig struct {
 	IOMaximumIOps        int64                  `json:"IOMaximumIOps,omitempty" yaml:"IOMaximumIOps,omitempty"`
 	Mounts               []HostMount            `json:"Mounts,omitempty" yaml:"Mounts,omitempty" toml:"Mounts,omitempty"`
 	Init                 bool                   `json:",omitempty" yaml:",omitempty"`
+	Runtime              string                 `json:"Runtime,omitempty" yaml:"Runtime,omitempty" toml:"Runtime,omitempty"`
 }
 
 
@@ -1286,6 +1288,7 @@ func (c *Client) DownloadFromContainer(id string, opts DownloadFromContainerOpti
 		context:           opts.Context,
 	})
 }
+
 
 
 
