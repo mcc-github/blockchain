@@ -42,6 +42,7 @@ type General struct {
 	ListenAddress  string
 	ListenPort     uint16
 	TLS            TLS
+	Cluster        Cluster
 	Keepalive      Keepalive
 	GenesisMethod  string
 	GenesisProfile string
@@ -54,6 +55,13 @@ type General struct {
 	LocalMSPID     string
 	BCCSP          *bccsp.FactoryOpts
 	Authentication Authentication
+}
+
+type Cluster struct {
+	RootCAs           []string
+	ClientCertificate string
+	ClientPrivateKey  string
+	DialTimeout       time.Duration
 }
 
 
@@ -260,6 +268,10 @@ func Load() (*TopLevel, error) {
 
 func (c *TopLevel) completeInitialization(configDir string) {
 	defer func() {
+		
+		coreconfig.TranslatePathInPlace(configDir, &c.General.Cluster.ClientPrivateKey)
+		coreconfig.TranslatePathInPlace(configDir, &c.General.Cluster.ClientCertificate)
+		c.General.Cluster.RootCAs = translateCAs(configDir, c.General.Cluster.RootCAs)
 		
 		c.General.TLS.RootCAs = translateCAs(configDir, c.General.TLS.RootCAs)
 		c.General.TLS.ClientRootCAs = translateCAs(configDir, c.General.TLS.ClientRootCAs)

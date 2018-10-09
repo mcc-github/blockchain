@@ -10,9 +10,9 @@ import (
 	"context"
 	"io"
 
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/op/go-logging"
 	"google.golang.org/grpc"
 )
 
@@ -37,7 +37,7 @@ type SubmitStream interface {
 
 type Service struct {
 	Dispatcher Dispatcher
-	Logger     logging.Logger
+	Logger     *flogging.FabricLogger
 }
 
 

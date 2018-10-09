@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
 
@@ -80,7 +80,7 @@ type MembersByChannel map[string]MemberMapping
 type Comm struct {
 	shutdown     bool
 	Lock         sync.RWMutex
-	Logger       *logging.Logger
+	Logger       *flogging.FabricLogger
 	ChanExt      ChannelExtractor
 	H            Handler
 	Connections  *ConnectionStore
