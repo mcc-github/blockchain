@@ -17,16 +17,6 @@ import (
 
 
 
-type RemoteCommunicator interface {
-	
-	
-	
-	Remote(channel string, id uint64) (*RemoteContext, error)
-}
-
-
-
-
 type SubmitClient interface {
 	Send(request *orderer.SubmitRequest) error
 	Recv() (*orderer.SubmitResponse, error)
@@ -48,7 +38,7 @@ type Client interface {
 type RPC struct {
 	stream  orderer.Cluster_SubmitClient
 	Channel string
-	Comm    RemoteCommunicator
+	Comm    Communicator
 }
 
 

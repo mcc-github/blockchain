@@ -8,6 +8,8 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
+	"runtime"
 
 	"github.com/mcc-github/blockchain/integration/nwo"
 	. "github.com/onsi/ginkgo"
@@ -24,6 +26,9 @@ func TestEndToEnd(t *testing.T) {
 var components *nwo.Components
 
 var _ = SynchronizedBeforeSuite(func() []byte {
+	nwo.RequiredImages = []string{
+		fmt.Sprintf("mcc-github/blockchain-ccenv:%s-latest", runtime.GOARCH),
+	}
 	components = &nwo.Components{}
 	components.Build()
 

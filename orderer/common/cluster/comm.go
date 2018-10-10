@@ -59,6 +59,8 @@ func (rm RemoteNode) String() string {
 }
 
 
+
+
 type Communicator interface {
 	
 	
@@ -67,7 +69,7 @@ type Communicator interface {
 	
 	
 	
-	Configure(channel string, members []*RemoteNode)
+	Configure(channel string, members []RemoteNode)
 	
 	Shutdown()
 }

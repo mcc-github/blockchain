@@ -291,7 +291,7 @@ func IsConfigBlock(block *cb.Block) bool {
 		return false
 	}
 
-	return cb.HeaderType(hdr.Type) == cb.HeaderType_CONFIG
+	return cb.HeaderType(hdr.Type) == cb.HeaderType_CONFIG || cb.HeaderType(hdr.Type) == cb.HeaderType_ORDERER_TRANSACTION
 }
 
 
@@ -325,4 +325,15 @@ func ChannelID(env *cb.Envelope) (string, error) {
 	}
 
 	return chdr.ChannelId, nil
+}
+
+
+
+func EnvelopeToConfigUpdate(configtx *cb.Envelope) (*cb.ConfigUpdateEnvelope, error) {
+	configUpdateEnv := &cb.ConfigUpdateEnvelope{}
+	_, err := UnmarshalEnvelopeOfType(configtx, cb.HeaderType_CONFIG_UPDATE, configUpdateEnv)
+	if err != nil {
+		return nil, err
+	}
+	return configUpdateEnv, nil
 }

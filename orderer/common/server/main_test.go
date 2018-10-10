@@ -21,6 +21,7 @@ import (
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config/configtest"
+	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/stretchr/testify/assert"
 )
@@ -192,11 +193,13 @@ func TestInitializeBootstrapChannel(t *testing.T) {
 
 			if tc.panics {
 				assert.Panics(t, func() {
-					initializeBootstrapChannel(bootstrapConfig, ledgerFactory)
+					genesisBlock := extractGenesisBlock(bootstrapConfig)
+					initializeBootstrapChannel(genesisBlock, ledgerFactory)
 				})
 			} else {
 				assert.NotPanics(t, func() {
-					initializeBootstrapChannel(bootstrapConfig, ledgerFactory)
+					genesisBlock := extractGenesisBlock(bootstrapConfig)
+					initializeBootstrapChannel(genesisBlock, ledgerFactory)
 				})
 			}
 		})
@@ -247,7 +250,7 @@ func TestInitializeMultiChainManager(t *testing.T) {
 	conf := genesisConfig(t)
 	assert.NotPanics(t, func() {
 		initializeLocalMsp(conf)
-		initializeMultichannelRegistrar(conf, localmsp.NewSigner())
+		initializeMultichannelRegistrar(false, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, conf, localmsp.NewSigner())
 	})
 }
 
@@ -308,7 +311,7 @@ func TestUpdateTrustedRoots(t *testing.T) {
 			updateTrustedRoots(grpcServer, caSupport, bundle)
 		}
 	}
-	initializeMultichannelRegistrar(genesisConfig(t), localmsp.NewSigner(), callback)
+	initializeMultichannelRegistrar(false, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, genesisConfig(t), localmsp.NewSigner(), callback)
 	t.Logf("# app CAs: %d", len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
 	t.Logf("# orderer CAs: %d", len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
 	
@@ -333,19 +336,26 @@ func TestUpdateTrustedRoots(t *testing.T) {
 		AppRootCAsByChain:     make(map[string][][]byte),
 		OrdererRootCAsByChain: make(map[string][][]byte),
 	}
+
+	predDialer := &cluster.PredicateDialer{}
+	clusterConf := initializeClusterConfig(conf)
+	predDialer.SetConfig(clusterConf)
+
 	callback = func(bundle *channelconfig.Bundle) {
 		if grpcServer.MutualTLSRequired() {
 			t.Log("callback called")
 			updateTrustedRoots(grpcServer, caSupport, bundle)
+			updateClusterDialer(caSupport, predDialer, clusterConf.SecOpts.ServerRootCAs)
 		}
 	}
-	initializeMultichannelRegistrar(genesisConfig(t), localmsp.NewSigner(), callback)
+	initializeMultichannelRegistrar(false, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, genesisConfig(t), localmsp.NewSigner(), callback)
 	t.Logf("# app CAs: %d", len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
 	t.Logf("# orderer CAs: %d", len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
 	
 	
 	assert.Equal(t, 2, len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
 	assert.Equal(t, 2, len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
+	assert.Len(t, predDialer.Config.Load().(comm.ClientConfig).SecOpts.ServerRootCAs, 2)
 	grpcServer.Listener().Close()
 }
 

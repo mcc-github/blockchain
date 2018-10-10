@@ -62,6 +62,7 @@ type Cluster struct {
 	ClientCertificate string
 	ClientPrivateKey  string
 	DialTimeout       time.Duration
+	RPCTimeout        time.Duration
 }
 
 
@@ -269,8 +270,12 @@ func Load() (*TopLevel, error) {
 func (c *TopLevel) completeInitialization(configDir string) {
 	defer func() {
 		
-		coreconfig.TranslatePathInPlace(configDir, &c.General.Cluster.ClientPrivateKey)
-		coreconfig.TranslatePathInPlace(configDir, &c.General.Cluster.ClientCertificate)
+		if c.General.Cluster.ClientPrivateKey != "" {
+			coreconfig.TranslatePathInPlace(configDir, &c.General.Cluster.ClientPrivateKey)
+		}
+		if c.General.Cluster.ClientCertificate != "" {
+			coreconfig.TranslatePathInPlace(configDir, &c.General.Cluster.ClientCertificate)
+		}
 		c.General.Cluster.RootCAs = translateCAs(configDir, c.General.Cluster.RootCAs)
 		
 		c.General.TLS.RootCAs = translateCAs(configDir, c.General.TLS.RootCAs)

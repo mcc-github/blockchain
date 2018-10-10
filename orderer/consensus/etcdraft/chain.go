@@ -8,19 +8,24 @@ package etcdraft
 
 import (
 	"context"
+	"encoding/pem"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/orderer/consensus"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
-
 	"code.cloudfoundry.org/clock"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/configtx"
+	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/orderer/common/cluster"
+	"github.com/mcc-github/blockchain/orderer/consensus"
+	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
+	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/pkg/errors"
 )
 
@@ -52,7 +57,8 @@ type Options struct {
 
 
 type Chain struct {
-	raftID uint64
+	communication cluster.Communicator
+	raftID        uint64
 
 	submitC  chan *orderer.SubmitRequest
 	commitC  chan *common.Block
@@ -76,19 +82,20 @@ type Chain struct {
 }
 
 
-func NewChain(support consensus.ConsenterSupport, opts Options, observe chan<- uint64) (*Chain, error) {
+func NewChain(support consensus.ConsenterSupport, opts Options, observe chan<- uint64, comm cluster.Communicator) (*Chain, error) {
 	return &Chain{
-		raftID:   opts.RaftID,
-		submitC:  make(chan *orderer.SubmitRequest),
-		commitC:  make(chan *common.Block),
-		haltC:    make(chan struct{}),
-		doneC:    make(chan struct{}),
-		observeC: observe,
-		support:  support,
-		clock:    opts.Clock,
-		logger:   opts.Logger.With("channel", support.ChainID()),
-		storage:  opts.Storage,
-		opts:     opts,
+		communication: comm,
+		raftID:        opts.RaftID,
+		submitC:       make(chan *orderer.SubmitRequest),
+		commitC:       make(chan *common.Block),
+		haltC:         make(chan struct{}),
+		doneC:         make(chan struct{}),
+		observeC:      observe,
+		support:       support,
+		clock:         opts.Clock,
+		logger:        opts.Logger.With("channel", support.ChainID()),
+		storage:       opts.Storage,
+		opts:          opts,
 	}, nil
 }
 
@@ -104,6 +111,12 @@ func (c *Chain) Start() {
 		Storage:         c.opts.Storage,
 	}
 
+	if err := c.configureComm(); err != nil {
+		c.logger.Errorf("Failed starting chain, aborting: +%v", err)
+		close(c.doneC)
+		return
+	}
+
 	c.node = raft.StartNode(config, c.opts.Peers)
 
 	go c.serveRaft()
@@ -117,8 +130,53 @@ func (c *Chain) Order(env *common.Envelope, configSeq uint64) error {
 
 
 func (c *Chain) Configure(env *common.Envelope, configSeq uint64) error {
-	c.logger.Panicf("Configure not implemented yet")
-	return nil
+	if err := c.checkConfigUpdateValidity(env); err != nil {
+		return err
+	}
+	return c.Submit(&orderer.SubmitRequest{LastValidationSeq: configSeq, Content: env}, 0)
+}
+
+
+func (c *Chain) checkConfigUpdateValidity(ctx *common.Envelope) error {
+	var err error
+	payload, err := utils.UnmarshalPayload(ctx.Payload)
+	if err != nil {
+		return err
+	}
+	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	if err != nil {
+		return err
+	}
+
+	switch chdr.Type {
+	case int32(common.HeaderType_ORDERER_TRANSACTION):
+		return errors.Errorf("channel creation requests not supported yet")
+	case int32(common.HeaderType_CONFIG):
+		configEnv, err := configtx.UnmarshalConfigEnvelope(payload.Data)
+		if err != nil {
+			return err
+		}
+		configUpdateEnv, err := utils.EnvelopeToConfigUpdate(configEnv.LastUpdate)
+		if err != nil {
+			return err
+		}
+		configUpdate, err := configtx.UnmarshalConfigUpdate(configUpdateEnv.ConfigUpdate)
+		if err != nil {
+			return err
+		}
+
+		
+		
+		if ordererConfigGroup, ok := configUpdate.WriteSet.Groups["Orderer"]; ok {
+			if _, ok := ordererConfigGroup.Values["ConsensusType"]; ok {
+				return errors.Errorf("updates to ConsensusType not supported currently")
+			}
+		}
+		return nil
+
+	default:
+		return errors.Errorf("config transaction has unknown header type")
+	}
 }
 
 
@@ -197,28 +255,18 @@ func (c *Chain) serveRequest() {
 	}
 
 	for {
-		seq := c.support.Sequence()
 
 		select {
 		case msg := <-c.submitC:
-			if c.isConfig(msg.Content) {
-				c.logger.Panicf("Processing config envelope is not implemented yet")
+			batches, pending, err := c.ordered(msg)
+			if err != nil {
+				c.logger.Errorf("Failed to order message: %s", err)
 			}
-
-			if msg.LastValidationSeq < seq {
-				if _, err := c.support.ProcessNormalMsg(msg.Content); err != nil {
-					c.logger.Warningf("Discarding bad normal message: %s", err)
-					continue
-				}
+			if pending {
+				start() 
+			} else {
+				stop()
 			}
-
-			batches, _ := c.support.BlockCutter().Ordered(msg.Content)
-			if len(batches) == 0 {
-				start()
-				continue
-			}
-
-			stop()
 
 			if err := c.commitBatches(batches...); err != nil {
 				c.logger.Errorf("Failed to commit block: %s", err)
@@ -245,6 +293,42 @@ func (c *Chain) serveRequest() {
 	}
 }
 
+
+
+
+
+
+
+func (c *Chain) ordered(msg *orderer.SubmitRequest) (batches [][]*common.Envelope, pending bool, err error) {
+	seq := c.support.Sequence()
+
+	if c.isConfig(msg.Content) {
+		
+		if msg.LastValidationSeq < seq {
+			msg.Content, _, err = c.support.ProcessConfigMsg(msg.Content)
+			if err != nil {
+				return nil, true, errors.Errorf("bad config message: %s", err)
+			}
+		}
+		batch := c.support.BlockCutter().Cut()
+		batches = [][]*common.Envelope{}
+		if len(batch) != 0 {
+			batches = append(batches, batch)
+		}
+		batches = append(batches, []*common.Envelope{msg.Content})
+		return batches, false, nil
+	}
+	
+	if msg.LastValidationSeq < seq {
+		if _, err := c.support.ProcessNormalMsg(msg.Content); err != nil {
+			return nil, true, errors.Errorf("bad normal message: %s", err)
+		}
+	}
+	batches, pending = c.support.BlockCutter().Ordered(msg.Content)
+	return batches, pending, nil
+
+}
+
 func (c *Chain) commitBatches(batches ...[]*common.Envelope) error {
 	for _, batch := range batches {
 		b := c.support.CreateNextBlock(batch)
@@ -256,9 +340,10 @@ func (c *Chain) commitBatches(batches ...[]*common.Envelope) error {
 		select {
 		case block := <-c.commitC:
 			if utils.IsConfigBlock(block) {
-				c.logger.Panicf("Config block is not supported yet")
+				c.support.WriteConfigBlock(block, nil)
+			} else {
+				c.support.WriteBlock(block, nil)
 			}
-			c.support.WriteBlock(block, nil)
 
 		case <-c.doneC:
 			return nil
@@ -360,4 +445,53 @@ func (c *Chain) isConfig(env *common.Envelope) bool {
 	}
 
 	return h.Type == int32(common.HeaderType_CONFIG) || h.Type == int32(common.HeaderType_ORDERER_TRANSACTION)
+}
+
+func (c *Chain) configureComm() error {
+	nodes, err := c.nodeConfigFromMetadata()
+	if err != nil {
+		return err
+	}
+	c.communication.Configure(c.support.ChainID(), nodes)
+	return nil
+}
+
+func (c *Chain) nodeConfigFromMetadata() ([]cluster.RemoteNode, error) {
+	var nodes []cluster.RemoteNode
+	m := &etcdraft.Metadata{}
+	if err := proto.Unmarshal(c.support.SharedConfig().ConsensusMetadata(), m); err != nil {
+		return nil, errors.Wrap(err, "failed extracting consensus metadata")
+	}
+
+	for id, consenter := range m.Consenters {
+		raftID := uint64(id + 1)
+		
+		if raftID == c.raftID {
+			continue
+		}
+		serverCertAsDER, err := c.pemToDER(consenter.ServerTlsCert, raftID, "server")
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		clientCertAsDER, err := c.pemToDER(consenter.ClientTlsCert, raftID, "client")
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		nodes = append(nodes, cluster.RemoteNode{
+			ID:            raftID,
+			Endpoint:      fmt.Sprintf("%s:%d", consenter.Host, consenter.Port),
+			ServerTLSCert: serverCertAsDER,
+			ClientTLSCert: clientCertAsDER,
+		})
+	}
+	return nodes, nil
+}
+
+func (c *Chain) pemToDER(pemBytes []byte, id uint64, certType string) ([]byte, error) {
+	bl, _ := pem.Decode(pemBytes)
+	if bl == nil {
+		c.logger.Errorf("Rejecting PEM block of %s TLS cert for node %d, offending PEM is: %s", certType, id, string(pemBytes))
+		return nil, errors.Errorf("invalid PEM block")
+	}
+	return bl.Bytes, nil
 }
