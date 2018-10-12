@@ -206,8 +206,8 @@ func (r *Registrar) BroadcastChannelSupport(msg *cb.Envelope) (*cb.ChannelHeader
 		return nil, false, nil, fmt.Errorf("could not determine channel ID: %s", err)
 	}
 
-	cs, ok := r.GetChain(chdr.ChannelId)
-	if !ok {
+	cs := r.GetChain(chdr.ChannelId)
+	if cs == nil {
 		cs = r.systemChannel
 	}
 
@@ -224,12 +224,11 @@ func (r *Registrar) BroadcastChannelSupport(msg *cb.Envelope) (*cb.ChannelHeader
 }
 
 
-func (r *Registrar) GetChain(chainID string) (*ChainSupport, bool) {
+func (r *Registrar) GetChain(chainID string) *ChainSupport {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	cs, ok := r.chains[chainID]
-	return cs, ok
+	return r.chains[chainID]
 }
 
 func (r *Registrar) newLedgerResources(configTx *cb.Envelope) *ledgerResources {

@@ -33,7 +33,7 @@ type ChainGetter interface {
 	
 	
 	
-	GetChain(chainID string) (*multichannel.ChainSupport, bool)
+	GetChain(chainID string) *multichannel.ChainSupport
 }
 
 
@@ -61,8 +61,8 @@ func (c *Consenter) TargetChannel(message proto.Message) string {
 
 
 func (c *Consenter) ReceiverByChain(channelID string) MessageReceiver {
-	cs, exists := c.Chains.GetChain(channelID)
-	if !exists {
+	cs := c.Chains.GetChain(channelID)
+	if cs == nil {
 		return nil
 	}
 	if cs.Chain == nil {

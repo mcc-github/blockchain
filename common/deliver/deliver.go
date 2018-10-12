@@ -31,7 +31,7 @@ var logger = flogging.MustGetLogger("common/deliver")
 
 
 type ChainManager interface {
-	GetChain(chainID string) (Chain, bool)
+	GetChain(chainID string) Chain
 }
 
 
@@ -183,8 +183,8 @@ func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.E
 		return srv.SendStatusResponse(cb.Status_BAD_REQUEST)
 	}
 
-	chain, ok := h.ChainManager.GetChain(chdr.ChannelId)
-	if !ok {
+	chain := h.ChainManager.GetChain(chdr.ChannelId)
+	if chain == nil {
 		
 		
 		logger.Debugf("Rejecting deliver for %s because channel %s not found", addr, chdr.ChannelId)
