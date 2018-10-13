@@ -49,6 +49,7 @@ func hiddenIndices(Disclosure []byte) []int {
 
 
 func NewSignature(cred *Credential, sk *FP256BN.BIG, Nym *FP256BN.ECP, RNym *FP256BN.BIG, ipk *IssuerPublicKey, Disclosure []byte, msg []byte, rhIndex int, cri *CredentialRevocationInformation, rng *amcl.RAND) (*Signature, error) {
+	
 	if cred == nil || sk == nil || Nym == nil || RNym == nil || ipk == nil || rng == nil || cri == nil {
 		return nil, errors.Errorf("cannot create idemix signature: received nil input")
 	}
@@ -61,32 +62,48 @@ func NewSignature(cred *Credential, sk *FP256BN.BIG, Nym *FP256BN.ECP, RNym *FP2
 		return nil, errors.Errorf("Attribute %d is disclosed but also used as revocation handle attribute, which should remain hidden.", rhIndex)
 	}
 
+	
 	HiddenIndices := hiddenIndices(Disclosure)
 
 	
 	r1 := RandModOrder(rng)
 	r2 := RandModOrder(rng)
+	
 	r3 := FP256BN.NewBIGcopy(r1)
 	r3.Invmodp(GroupOrder)
 
+	
 	Nonce := RandModOrder(rng)
 
+	
 	A := EcpFromProto(cred.A)
 	B := EcpFromProto(cred.B)
 
-	APrime := FP256BN.G1mul(A, r1) 
-	ABar := FP256BN.G1mul(B, r1)
-	ABar.Sub(FP256BN.G1mul(APrime, FP256BN.FromBytes(cred.E))) 
+	
 
+	
+	APrime := FP256BN.G1mul(A, r1)
+
+	
+	ABar := FP256BN.G1mul(B, r1)
+	ABar.Sub(FP256BN.G1mul(APrime, FP256BN.FromBytes(cred.E)))
+
+	
 	BPrime := FP256BN.G1mul(B, r1)
 	HRand := EcpFromProto(ipk.HRand)
+	
 	HSk := EcpFromProto(ipk.HSk)
 
-	BPrime.Sub(FP256BN.G1mul(HRand, r2)) 
+	BPrime.Sub(FP256BN.G1mul(HRand, r2))
 
 	S := FP256BN.FromBytes(cred.S)
 	E := FP256BN.FromBytes(cred.E)
+
+	
 	sPrime := Modsub(S, FP256BN.Modmul(r2, r3, GroupOrder), GroupOrder)
+
+	
+	
 
 	
 	rSk := RandModOrder(rng)
@@ -95,34 +112,56 @@ func NewSignature(cred *Credential, sk *FP256BN.BIG, Nym *FP256BN.ECP, RNym *FP2
 	rR3 := RandModOrder(rng)
 	rSPrime := RandModOrder(rng)
 	rRNym := RandModOrder(rng)
+
 	rAttrs := make([]*FP256BN.BIG, len(HiddenIndices))
 	for i := range HiddenIndices {
 		rAttrs[i] = RandModOrder(rng)
 	}
 
 	
+	
 	prover, err := getNonRevocationProver(RevocationAlgorithm(cri.RevocationAlg))
 	if err != nil {
 		return nil, err
 	}
-	nonRevokedProofHashData, err := prover.getFSContribution(FP256BN.FromBytes(cred.Attrs[rhIndex]), rAttrs[sort.SearchInts(HiddenIndices, rhIndex)], cri, rng)
+	nonRevokedProofHashData, err := prover.getFSContribution(
+		FP256BN.FromBytes(cred.Attrs[rhIndex]),
+		rAttrs[sort.SearchInts(HiddenIndices, rhIndex)],
+		cri,
+		rng,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to compute non-revoked proof")
 	}
 
-	t1 := APrime.Mul2(re, HRand, rR2)
-	t2 := FP256BN.G1mul(HRand, rSPrime)
-	t2.Add(BPrime.Mul2(rR3, HSk, rSk))
+	
 
+	
+	t1 := APrime.Mul2(re, HRand, rR2) 
+
+	
+	t2 := FP256BN.G1mul(HRand, rSPrime) 
+	t2.Add(BPrime.Mul2(rR3, HSk, rSk))  
 	for i := 0; i < len(HiddenIndices)/2; i++ {
-		t2.Add(EcpFromProto(ipk.HAttrs[HiddenIndices[2*i]]).Mul2(rAttrs[2*i], EcpFromProto(ipk.HAttrs[HiddenIndices[2*i+1]]), rAttrs[2*i+1]))
+		t2.Add(
+			
+			EcpFromProto(ipk.HAttrs[HiddenIndices[2*i]]).Mul2(
+				rAttrs[2*i],
+				EcpFromProto(ipk.HAttrs[HiddenIndices[2*i+1]]),
+				rAttrs[2*i+1],
+			),
+		)
 	}
 	if len(HiddenIndices)%2 != 0 {
 		t2.Add(FP256BN.G1mul(EcpFromProto(ipk.HAttrs[HiddenIndices[len(HiddenIndices)-1]]), rAttrs[len(HiddenIndices)-1]))
 	}
 
-	t3 := HSk.Mul2(rSk, HRand, rRNym)
+	
+	t3 := HSk.Mul2(rSk, HRand, rRNym) 
 
+	
+
+	
 	
 	
 	
@@ -154,23 +193,29 @@ func NewSignature(cred *Credential, sk *FP256BN.BIG, Nym *FP256BN.ECP, RNym *FP2
 	index = appendBytesBig(proofData, index, c)
 	index = appendBytesBig(proofData, index, Nonce)
 	ProofC := HashModOrder(proofData)
-	ProofSSk := Modadd(rSk, FP256BN.Modmul(ProofC, sk, GroupOrder), GroupOrder)
-	ProofSE := Modsub(re, FP256BN.Modmul(ProofC, E, GroupOrder), GroupOrder)
-	ProofSR2 := Modadd(rR2, FP256BN.Modmul(ProofC, r2, GroupOrder), GroupOrder)
-	ProofSR3 := Modsub(rR3, FP256BN.Modmul(ProofC, r3, GroupOrder), GroupOrder)
-	ProofSSPrime := Modadd(rSPrime, FP256BN.Modmul(ProofC, sPrime, GroupOrder), GroupOrder)
-	ProofSRNym := Modadd(rRNym, FP256BN.Modmul(ProofC, RNym, GroupOrder), GroupOrder)
 
+	
+	ProofSSk := Modadd(rSk, FP256BN.Modmul(ProofC, sk, GroupOrder), GroupOrder)             
+	ProofSE := Modsub(re, FP256BN.Modmul(ProofC, E, GroupOrder), GroupOrder)                
+	ProofSR2 := Modadd(rR2, FP256BN.Modmul(ProofC, r2, GroupOrder), GroupOrder)             
+	ProofSR3 := Modsub(rR3, FP256BN.Modmul(ProofC, r3, GroupOrder), GroupOrder)             
+	ProofSSPrime := Modadd(rSPrime, FP256BN.Modmul(ProofC, sPrime, GroupOrder), GroupOrder) 
+	ProofSRNym := Modadd(rRNym, FP256BN.Modmul(ProofC, RNym, GroupOrder), GroupOrder)       
 	ProofSAttrs := make([][]byte, len(HiddenIndices))
 	for i, j := range HiddenIndices {
-		ProofSAttrs[i] = BigToBytes(Modadd(rAttrs[i], FP256BN.Modmul(ProofC, FP256BN.FromBytes(cred.Attrs[j]), GroupOrder), GroupOrder))
+		ProofSAttrs[i] = BigToBytes(
+			
+			Modadd(rAttrs[i], FP256BN.Modmul(ProofC, FP256BN.FromBytes(cred.Attrs[j]), GroupOrder), GroupOrder),
+		)
 	}
 
+	
 	nonRevokedProof, err := prover.getNonRevokedProof(ProofC)
 	if err != nil {
 		return nil, err
 	}
 
+	
 	return &Signature{
 			APrime:             EcpToProto(APrime),
 			ABar:               EcpToProto(ABar),
@@ -197,6 +242,7 @@ func NewSignature(cred *Credential, sk *FP256BN.BIG, Nym *FP256BN.ECP, RNym *FP2
 
 
 func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, attributeValues []*FP256BN.BIG, rhIndex int, revPk *ecdsa.PublicKey, epoch int) error {
+	
 	if ipk == nil || revPk == nil {
 		return errors.Errorf("cannot verify idemix signature: received nil input")
 	}
@@ -211,6 +257,7 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 
 	HiddenIndices := hiddenIndices(Disclosure)
 
+	
 	APrime := EcpFromProto(sig.GetAPrime())
 	ABar := EcpFromProto(sig.GetABar())
 	BPrime := EcpFromProto(sig.GetBPrime())
@@ -230,13 +277,14 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 	for i, b := range sig.ProofSAttrs {
 		ProofSAttrs[i] = FP256BN.FromBytes(b)
 	}
-
 	Nonce := FP256BN.FromBytes(sig.GetNonce())
 
+	
 	W := Ecp2FromProto(ipk.W)
 	HRand := EcpFromProto(ipk.HRand)
 	HSk := EcpFromProto(ipk.HSk)
 
+	
 	if APrime.Is_infinity() {
 		return errors.Errorf("signature invalid: APrime = 1")
 	}
@@ -248,25 +296,28 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 		return errors.Errorf("signature invalid: APrime and ABar don't have the expected structure")
 	}
 
+	
+
+	
+
+	
 	t1 := APrime.Mul2(ProofSE, HRand, ProofSR2)
 	temp := FP256BN.NewECP()
 	temp.Copy(ABar)
 	temp.Sub(BPrime)
 	t1.Sub(FP256BN.G1mul(temp, ProofC))
 
+	
 	t2 := FP256BN.G1mul(HRand, ProofSSPrime)
 	t2.Add(BPrime.Mul2(ProofSR3, HSk, ProofSSk))
-
 	for i := 0; i < len(HiddenIndices)/2; i++ {
 		t2.Add(EcpFromProto(ipk.HAttrs[HiddenIndices[2*i]]).Mul2(ProofSAttrs[2*i], EcpFromProto(ipk.HAttrs[HiddenIndices[2*i+1]]), ProofSAttrs[2*i+1]))
 	}
 	if len(HiddenIndices)%2 != 0 {
 		t2.Add(FP256BN.G1mul(EcpFromProto(ipk.HAttrs[HiddenIndices[len(HiddenIndices)-1]]), ProofSAttrs[len(HiddenIndices)-1]))
 	}
-
 	temp = FP256BN.NewECP()
 	temp.Copy(GenG1)
-
 	for index, disclose := range Disclosure {
 		if disclose != 0 {
 			temp.Add(FP256BN.G1mul(EcpFromProto(ipk.HAttrs[index]), attributeValues[index]))
@@ -274,9 +325,11 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 	}
 	t2.Add(FP256BN.G1mul(temp, ProofC))
 
+	
 	t3 := HSk.Mul2(ProofSSk, HRand, ProofSRNym)
 	t3.Sub(Nym.Mul(ProofC))
 
+	
 	nonRevokedVer, err := getNonRevocationVerifier(RevocationAlgorithm(sig.NonRevocationProof.RevocationAlg))
 	if err != nil {
 		return err
@@ -289,6 +342,7 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 		return err
 	}
 
+	
 	
 	
 	
@@ -321,5 +375,6 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 		return errors.Errorf("signature invalid: zero-knowledge proof is invalid")
 	}
 
+	
 	return nil
 }

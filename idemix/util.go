@@ -78,6 +78,8 @@ func appendBytesString(data []byte, index int, s string) int {
 
 
 func MakeNym(sk *FP256BN.BIG, IPk *IssuerPublicKey, rng *amcl.RAND) (*FP256BN.ECP, *FP256BN.BIG) {
+	
+	
 	RandNym := RandModOrder(rng)
 	Nym := EcpFromProto(IPk.HSk).Mul2(sk, EcpFromProto(IPk.HRand), RandNym)
 	return Nym, RandNym

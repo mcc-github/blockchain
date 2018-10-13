@@ -25,7 +25,11 @@ import (
 
 
 
+
 func NewIssuerKey(AttributeNames []string, rng *amcl.RAND) (*IssuerKey, error) {
+	
+
+	
 	attributeNamesMap := map[string]bool{}
 	for _, name := range AttributeNames {
 		if attributeNamesMap[name] {
@@ -53,9 +57,11 @@ func NewIssuerKey(AttributeNames []string, rng *amcl.RAND) (*IssuerKey, error) {
 		key.Ipk.HAttrs[i] = EcpToProto(GenG1.Mul(RandModOrder(rng)))
 	}
 
+	
 	HSk := GenG1.Mul(RandModOrder(rng))
 	key.Ipk.HSk = EcpToProto(HSk)
 
+	
 	HRand := GenG1.Mul(RandModOrder(rng))
 	key.Ipk.HRand = EcpToProto(HRand)
 
@@ -66,10 +72,16 @@ func NewIssuerKey(AttributeNames []string, rng *amcl.RAND) (*IssuerKey, error) {
 	key.Ipk.BarG2 = EcpToProto(BarG2)
 
 	
-	r := RandModOrder(rng)
-	t1 := GenG2.Mul(r)
-	t2 := BarG1.Mul(r)
+	
 
+	
+	r := RandModOrder(rng)
+
+	
+	t1 := GenG2.Mul(r) 
+	t2 := BarG1.Mul(r) 
+
+	
 	proofData := make([]byte, 18*FieldBytes+3)
 	index := 0
 	index = appendBytesG2(proofData, index, t1)
@@ -82,21 +94,25 @@ func NewIssuerKey(AttributeNames []string, rng *amcl.RAND) (*IssuerKey, error) {
 	proofC := HashModOrder(proofData)
 	key.Ipk.ProofC = BigToBytes(proofC)
 
-	proofS := Modadd(FP256BN.Modmul(proofC, ISk, GroupOrder), r, GroupOrder)
+	
+	proofS := Modadd(FP256BN.Modmul(proofC, ISk, GroupOrder), r, GroupOrder) 
 	key.Ipk.ProofS = BigToBytes(proofS)
 
+	
 	serializedIPk, err := proto.Marshal(key.Ipk)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal issuer public key")
 	}
 	key.Ipk.Hash = BigToBytes(HashModOrder(serializedIPk))
 
+	
 	return key, nil
 }
 
 
 
 func (IPk *IssuerPublicKey) Check() error {
+	
 	NumAttrs := len(IPk.GetAttributeNames())
 	HSk := EcpFromProto(IPk.GetHSk())
 	HRand := EcpFromProto(IPk.GetHRand())
@@ -110,6 +126,7 @@ func (IPk *IssuerPublicKey) Check() error {
 	ProofC := FP256BN.FromBytes(IPk.GetProofC())
 	ProofS := FP256BN.FromBytes(IPk.GetProofS())
 
+	
 	if NumAttrs < 0 ||
 		HSk == nil ||
 		HRand == nil ||
@@ -127,13 +144,17 @@ func (IPk *IssuerPublicKey) Check() error {
 	}
 
 	
+
+	
 	proofData := make([]byte, 18*FieldBytes+3)
 	index := 0
 
+	
 	t1 := GenG2.Mul(ProofS)
-	t1.Add(W.Mul(FP256BN.Modneg(ProofC, GroupOrder)))
+	t1.Add(W.Mul(FP256BN.Modneg(ProofC, GroupOrder))) 
+
 	t2 := BarG1.Mul(ProofS)
-	t2.Add(BarG2.Mul(FP256BN.Modneg(ProofC, GroupOrder)))
+	t2.Add(BarG2.Mul(FP256BN.Modneg(ProofC, GroupOrder))) 
 
 	index = appendBytesG2(proofData, index, t1)
 	index = appendBytesG1(proofData, index, t2)
@@ -142,6 +163,7 @@ func (IPk *IssuerPublicKey) Check() error {
 	index = appendBytesG2(proofData, index, W)
 	index = appendBytesG1(proofData, index, BarG2)
 
+	
 	if *ProofC != *HashModOrder(proofData) {
 		return errors.Errorf("zero knowledge proof in public key invalid")
 	}

@@ -47,27 +47,52 @@ func NewCredential(key *IssuerKey, m *CredRequest, attrs []*FP256BN.BIG, rng *am
 
 	
 	
+	
+
+	
+	
+	
+	
+	
+	
+
+	
 	E := RandModOrder(rng)
 	S := RandModOrder(rng)
 
+	
 	B := FP256BN.NewECP()
-	B.Copy(GenG1)
+	B.Copy(GenG1) 
 	Nym := EcpFromProto(m.Nym)
-	B.Add(Nym)
-	B.Add(EcpFromProto(key.Ipk.HRand).Mul(S))
+	B.Add(Nym)                                
+	B.Add(EcpFromProto(key.Ipk.HRand).Mul(S)) 
 
 	
+	
 	for i := 0; i < len(attrs)/2; i++ {
-		B.Add(EcpFromProto(key.Ipk.HAttrs[2*i]).Mul2(attrs[2*i], EcpFromProto(key.Ipk.HAttrs[2*i+1]), attrs[2*i+1]))
+		B.Add(
+			
+			EcpFromProto(key.Ipk.HAttrs[2*i]).Mul2(
+				attrs[2*i],
+				EcpFromProto(key.Ipk.HAttrs[2*i+1]),
+				attrs[2*i+1],
+			),
+		)
 	}
+	
 	if len(attrs)%2 != 0 {
 		B.Add(EcpFromProto(key.Ipk.HAttrs[len(attrs)-1]).Mul(attrs[len(attrs)-1]))
 	}
 
+	
 	Exp := Modadd(FP256BN.FromBytes(key.GetIsk()), E, GroupOrder)
 	Exp.Invmodp(GroupOrder)
+	
 	A := B.Mul(Exp)
+	
 
+	
+	
 	CredAttrs := make([][]byte, len(attrs))
 	for index, attribute := range attrs {
 		CredAttrs[index] = BigToBytes(attribute)
@@ -84,6 +109,7 @@ func NewCredential(key *IssuerKey, m *CredRequest, attrs []*FP256BN.BIG, rng *am
 
 
 func (cred *Credential) Ver(sk *FP256BN.BIG, ipk *IssuerPublicKey) error {
+	
 
 	
 	A := EcpFromProto(cred.GetA())
@@ -103,7 +129,13 @@ func (cred *Credential) Ver(sk *FP256BN.BIG, ipk *IssuerPublicKey) error {
 	BPrime.Copy(GenG1)
 	BPrime.Add(EcpFromProto(ipk.HSk).Mul2(sk, EcpFromProto(ipk.HRand), S))
 	for i := 0; i < len(cred.Attrs)/2; i++ {
-		BPrime.Add(EcpFromProto(ipk.HAttrs[2*i]).Mul2(FP256BN.FromBytes(cred.Attrs[2*i]), EcpFromProto(ipk.HAttrs[2*i+1]), FP256BN.FromBytes(cred.Attrs[2*i+1])))
+		BPrime.Add(
+			EcpFromProto(ipk.HAttrs[2*i]).Mul2(
+				FP256BN.FromBytes(cred.Attrs[2*i]),
+				EcpFromProto(ipk.HAttrs[2*i+1]),
+				FP256BN.FromBytes(cred.Attrs[2*i+1]),
+			),
+		)
 	}
 	if len(cred.Attrs)%2 != 0 {
 		BPrime.Add(EcpFromProto(ipk.HAttrs[len(cred.Attrs)-1]).Mul(FP256BN.FromBytes(cred.Attrs[len(cred.Attrs)-1])))
@@ -112,12 +144,17 @@ func (cred *Credential) Ver(sk *FP256BN.BIG, ipk *IssuerPublicKey) error {
 		return errors.Errorf("b-value from credential does not match the attribute values")
 	}
 
+	
 	a := GenG2.Mul(E)
 	a.Add(Ecp2FromProto(ipk.W))
 	a.Affine()
 
-	if !FP256BN.Fexp(FP256BN.Ate(a, A)).Equals(FP256BN.Fexp(FP256BN.Ate(GenG2, B))) {
+	left := FP256BN.Fexp(FP256BN.Ate(a, A))
+	right := FP256BN.Fexp(FP256BN.Ate(GenG2, B))
+
+	if !left.Equals(right) {
 		return errors.Errorf("credential is not cryptographically valid")
 	}
+
 	return nil
 }

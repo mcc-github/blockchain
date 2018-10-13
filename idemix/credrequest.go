@@ -31,14 +31,21 @@ const credRequestLabel = "credRequest"
 
 
 
+
 func NewCredRequest(sk *FP256BN.BIG, IssuerNonce *FP256BN.BIG, ipk *IssuerPublicKey, rng *amcl.RAND) *CredRequest {
+	
 	HSk := EcpFromProto(ipk.HSk)
 	Nym := HSk.Mul(sk)
 
 	
-	rSk := RandModOrder(rng)
-	t := HSk.Mul(rSk)
 
+	
+	rSk := RandModOrder(rng)
+
+	
+	t := HSk.Mul(rSk) 
+
+	
 	
 	
 	
@@ -52,10 +59,12 @@ func NewCredRequest(sk *FP256BN.BIG, IssuerNonce *FP256BN.BIG, ipk *IssuerPublic
 	index = appendBytesG1(proofData, index, Nym)
 	index = appendBytesBig(proofData, index, IssuerNonce)
 	copy(proofData[index:], ipk.Hash)
-
 	proofC := HashModOrder(proofData)
-	proofS := Modadd(FP256BN.Modmul(proofC, sk, GroupOrder), rSk, GroupOrder)
 
+	
+	proofS := Modadd(FP256BN.Modmul(proofC, sk, GroupOrder), rSk, GroupOrder) 
+
+	
 	return &CredRequest{
 		Nym:         EcpToProto(Nym),
 		IssuerNonce: BigToBytes(IssuerNonce),
@@ -76,13 +85,12 @@ func (m *CredRequest) Check(ipk *IssuerPublicKey) error {
 		return errors.Errorf("one of the proof values is undefined")
 	}
 
-	t := HSk.Mul(ProofS)
-	t.Sub(Nym.Mul(ProofC))
+	
 
 	
-	
-	
-	
+	t := HSk.Mul(ProofS)
+	t.Sub(Nym.Mul(ProofC)) 
+
 	
 	proofData := make([]byte, len([]byte(credRequestLabel))+3*(2*FieldBytes+1)+2*FieldBytes)
 	index := 0

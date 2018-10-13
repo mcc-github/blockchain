@@ -11,14 +11,19 @@ import (
 	"github.com/pkg/errors"
 )
 
+
 type nonRevocationVerifier interface {
+	
 	recomputeFSContribution(proof *NonRevocationProof, chal *FP256BN.BIG, epochPK *FP256BN.ECP2, proofSRh *FP256BN.BIG) ([]byte, error)
 }
+
+
 type nopNonRevocationVerifier struct{}
 
 func (verifier *nopNonRevocationVerifier) recomputeFSContribution(proof *NonRevocationProof, chal *FP256BN.BIG, epochPK *FP256BN.ECP2, proofSRh *FP256BN.BIG) ([]byte, error) {
 	return nil, nil
 }
+
 
 func getNonRevocationVerifier(algorithm RevocationAlgorithm) (nonRevocationVerifier, error) {
 	switch algorithm {
