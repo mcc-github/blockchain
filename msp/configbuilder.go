@@ -333,11 +333,11 @@ func getMspConfig(dir string, ID string, sigid *msp.SigningIdentityInfo) (*msp.M
 
 	
 	fmspconf := &msp.FabricMSPConfig{
-		Admins:            admincert,
-		RootCerts:         cacerts,
-		IntermediateCerts: intermediatecerts,
-		SigningIdentity:   sigid,
-		Name:              ID,
+		Admins:                        admincert,
+		RootCerts:                     cacerts,
+		IntermediateCerts:             intermediatecerts,
+		SigningIdentity:               sigid,
+		Name:                          ID,
 		OrganizationalUnitIdentifiers: ouis,
 		RevocationList:                crls,
 		CryptoConfig:                  cryptoConfig,

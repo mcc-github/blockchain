@@ -117,7 +117,7 @@ type ChannelPolicyManagerGetter interface {
 
 func NewChannelVerifier(policy string, polMgr policies.ChannelPolicyManagerGetter) *ChannelVerifier {
 	return &ChannelVerifier{
-		Policy: policy,
+		Policy:                     policy,
 		ChannelPolicyManagerGetter: polMgr,
 	}
 }

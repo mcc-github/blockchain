@@ -23,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/transientstore"
 	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
+	"github.com/mcc-github/blockchain/gossip/privdata/mocks"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
@@ -396,7 +397,7 @@ func (cs *collectionStore) RetrieveCollectionAccessPolicy(cc common.CollectionCr
 			n:  util.RandomUInt64(),
 		}, nil
 	}
-	return nil, errors.New("not found")
+	return nil, privdata.NoSuchCollectionError{}
 }
 
 func (cs *collectionStore) RetrieveCollection(common.CollectionCriteria) (privdata.Collection, error) {
@@ -1039,6 +1040,23 @@ func TestCoordinatorStoreBlock(t *testing.T) {
 	
 	
 	
+	mockCs := &mocks.CollectionStore{}
+	mockCs.On("RetrieveCollectionAccessPolicy", mock.Anything).Return(nil, errors.New("test error"))
+	coordinator = NewCoordinator(Support{
+		CollectionStore: mockCs,
+		Committer:       committer,
+		Fetcher:         fetcher,
+		TransientStore:  store,
+		Validator:       &validatorMock{},
+	}, peerSelfSignedData)
+	err = coordinator.StoreBlock(block, nil)
+	assert.Error(t, err)
+	assert.Equal(t, "test error", err.Error())
+
+	fmt.Println("Scenario VI")
+	
+	
+	
 	block = bf.AddTxn("tx3", "ns3", hash, "c3").create()
 	fetcher = &fetcherMock{t: t}
 	fetcher.On("fetch", mock.Anything).expectingDigests([]privdatacommon.DigKey{
@@ -1084,7 +1102,7 @@ func TestCoordinatorStoreBlock(t *testing.T) {
 	assert.NoError(t, err)
 	assertCommitHappened()
 
-	fmt.Println("Scenario VI")
+	fmt.Println("Scenario VII")
 	
 	
 	

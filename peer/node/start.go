@@ -335,6 +335,11 @@ func serve(args []string) error {
 
 	
 	
+	profileEnabled := viper.GetBool("peer.profile.enabled")
+	profileListenAddress := viper.GetString("peer.profile.listenAddress")
+
+	
+	
 	serve := make(chan error)
 
 	sigs := make(chan os.Signal, 1)
@@ -356,9 +361,8 @@ func serve(args []string) error {
 	}()
 
 	
-	if viper.GetBool("peer.profile.enabled") {
+	if profileEnabled {
 		go func() {
-			profileListenAddress := viper.GetString("peer.profile.listenAddress")
 			logger.Infof("Starting profiling server with listenAddress = %s", profileListenAddress)
 			if profileErr := http.ListenAndServe(profileListenAddress, nil); profileErr != nil {
 				logger.Errorf("Error starting profiler: %s", profileErr)
@@ -573,7 +577,7 @@ func computeChaincodeEndpoint(peerHostname string) (ccEndpoint string, err error
 
 
 
-func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca tlsgen.CA, packageProvider *persistence.PackageProvider, aclProvider aclmgmt.ACLProvider, pr *platforms.Registry) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider) {
+func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca tlsgen.CA, packageProvider *persistence.PackageProvider, aclProvider aclmgmt.ACLProvider, pr *platforms.Registry, lifecycleSCC *lifecycle.SCC) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider) {
 	
 	userRunsCC := chaincode.IsDevMode()
 	tlsEnabled := viper.GetBool("peer.tls.enabled")
@@ -583,7 +587,6 @@ func registerChaincodeSupport(grpcServer *comm.GRPCServer, ccEndpoint string, ca
 
 	sccp := scc.NewProvider(peer.Default, peer.DefaultSupport, ipRegistry)
 	lsccInst := lscc.New(sccp, aclProvider, pr)
-	lifecycleSCC := &lifecycle.SCC{}
 
 	chaincodeSupport := chaincode.NewChaincodeSupport(
 		chaincode.GlobalConfig(),
@@ -635,11 +638,22 @@ func startChaincodeServer(peerHost string, aclProvider aclmgmt.ACLProvider, pr *
 	chaincodeInstallPath := ccprovider.GetChaincodeInstallPathFromViper()
 	ccprovider.SetChaincodesPath(chaincodeInstallPath)
 
+	ccPackageParser := &persistence.ChaincodePackageParser{}
+	ccStore := &persistence.Store{
+		Path:       chaincodeInstallPath,
+		ReadWriter: &persistence.FilesystemIO{},
+	}
+
 	packageProvider := &persistence.PackageProvider{
 		LegacyPP: &ccprovider.CCInfoFSImpl{},
-		Store: &persistence.Store{
-			Path:       chaincodeInstallPath,
-			ReadWriter: &persistence.FilesystemIO{},
+		Store:    ccStore,
+	}
+
+	lifecycleSCC := &lifecycle.SCC{
+		Protobuf: &lifecycle.ProtobufImpl{},
+		Functions: &lifecycle.Lifecycle{
+			PackageParser:  ccPackageParser,
+			ChaincodeStore: ccStore,
 		},
 	}
 
@@ -659,6 +673,7 @@ func startChaincodeServer(peerHost string, aclProvider aclmgmt.ACLProvider, pr *
 		packageProvider,
 		aclProvider,
 		pr,
+		lifecycleSCC,
 	)
 	go ccSrv.Start()
 	return chaincodeSupport, ccp, sccp, packageProvider

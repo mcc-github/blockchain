@@ -31,6 +31,11 @@ type packageParser interface {
 	lifecycle.PackageParser
 }
 
+
+type sccFunctions interface {
+	lifecycle.SCCFunctions
+}
+
 func TestLifecycle(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Lifecycle Suite")

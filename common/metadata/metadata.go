@@ -9,7 +9,7 @@ package metadata
 
 var Version string = "latest"
 var CommitSHA string = "development build"
-var BaseVersion string = "0.4.13"
+var BaseVersion string = "0.4.14"
 var BaseDockerLabel string = "org.mcc-github.blockchain"
 var DockerNamespace string = "mcc-github"
 var BaseDockerNamespace string = "mcc-github"

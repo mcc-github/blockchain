@@ -11,11 +11,27 @@ import (
 
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	InstallChaincodeFuncName = "InstallChaincode"
 )
 
 
 
-type SCC struct{}
+type SCCFunctions interface {
+	InstallChaincode(name, version string, chaincodePackage []byte) (hash []byte, err error)
+}
+
+
+
+type SCC struct {
+	Protobuf  Protobuf
+	Functions SCCFunctions
+}
 
 
 func (scc *SCC) Name() string {
@@ -59,16 +75,47 @@ func (scc *SCC) Init(stub shim.ChaincodeStubInterface) pb.Response {
 
 
 
+
 func (scc *SCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 	args := stub.GetArgs()
 	if len(args) == 0 {
 		return shim.Error("lifecycle scc must be invoked with arguments")
 	}
 
-	funcName := args[0]
+	if len(args) != 2 {
+		return shim.Error(fmt.Sprintf("lifecycle scc operations require exactly two arguments but received %d", len(args)))
+	}
 
-	switch funcName {
+	funcName := args[0]
+	inputBytes := args[1]
+
 	
+
+	switch string(funcName) {
+	
+	case InstallChaincodeFuncName:
+		input := &lb.InstallChaincodeArgs{}
+		err := scc.Protobuf.Unmarshal(inputBytes, input)
+		if err != nil {
+			err = errors.WithMessage(err, "failed to decode input arg to InstallChaincode")
+			return shim.Error(err.Error())
+		}
+
+		hash, err := scc.Functions.InstallChaincode(input.Name, input.Version, input.ChaincodeInstallPackage)
+		if err != nil {
+			err = errors.WithMessage(err, "failed to invoke backing InstallChaincode")
+			return shim.Error(err.Error())
+		}
+
+		resultBytes, err := scc.Protobuf.Marshal(&lb.InstallChaincodeResult{
+			Hash: hash,
+		})
+		if err != nil {
+			err = errors.WithMessage(err, "failed to marshal result")
+			return shim.Error(err.Error())
+		}
+
+		return shim.Success(resultBytes)
 	default:
 		return shim.Error(fmt.Sprintf("unknown lifecycle function: %s", funcName))
 	}

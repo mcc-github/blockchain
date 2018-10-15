@@ -432,7 +432,7 @@ func (n *Network) OrdererOrgMSPDir(o *Organization) string {
 
 
 
-func (n *Network) ordererLocalCryptoDir(o *Orderer, cryptoType string) string {
+func (n *Network) OrdererLocalCryptoDir(o *Orderer, cryptoType string) string {
 	org := n.Organization(o.Organization)
 	Expect(org).NotTo(BeNil())
 
@@ -450,13 +450,13 @@ func (n *Network) ordererLocalCryptoDir(o *Orderer, cryptoType string) string {
 
 
 func (n *Network) OrdererLocalMSPDir(o *Orderer) string {
-	return n.ordererLocalCryptoDir(o, "msp")
+	return n.OrdererLocalCryptoDir(o, "msp")
 }
 
 
 
 func (n *Network) OrdererLocalTLSDir(o *Orderer) string {
-	return n.ordererLocalCryptoDir(o, "tls")
+	return n.OrdererLocalCryptoDir(o, "tls")
 }
 
 
@@ -647,29 +647,9 @@ func (n *Network) CreateAndJoinChannel(o *Orderer, channelName string) {
 	if len(peers) == 0 {
 		return
 	}
-	creator := peers[0]
 
-	tempFile, err := ioutil.TempFile("", "genesis-block")
-	Expect(err).NotTo(HaveOccurred())
-	tempFile.Close()
-	defer os.Remove(tempFile.Name())
-
-	sess, err := n.PeerAdminSession(creator, commands.ChannelCreate{
-		ChannelID:   channelName,
-		Orderer:     n.OrdererAddress(o, ListenPort),
-		File:        n.CreateChannelTxPath(channelName),
-		OutputBlock: tempFile.Name(),
-	})
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-
-	for _, p := range peers {
-		sess, err := n.PeerAdminSession(p, commands.ChannelJoin{
-			BlockPath: tempFile.Name(),
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-	}
+	n.CreateChannel(channelName, o, peers[0])
+	n.JoinChannel(channelName, o, peers...)
 }
 
 
@@ -688,10 +668,10 @@ func (n *Network) UpdateChannelAnchors(o *Orderer, channelName string) {
 
 	for orgName, p := range peersByOrg {
 		anchorUpdate := commands.OutputAnchorPeersUpdate{
-			ChannelID:  channelName,
-			Profile:    n.ProfileForChannel(channelName),
-			ConfigPath: n.RootDir,
-			AsOrg:      orgName,
+			ChannelID:               channelName,
+			Profile:                 n.ProfileForChannel(channelName),
+			ConfigPath:              n.RootDir,
+			AsOrg:                   orgName,
 			OutputAnchorPeersUpdate: tempFile.Name(),
 		}
 		sess, err := n.ConfigTxGen(anchorUpdate)
@@ -713,15 +693,19 @@ func (n *Network) UpdateChannelAnchors(o *Orderer, channelName string) {
 
 
 
-func (n *Network) CreateChannel(name string, o *Orderer, p *Peer) {
-	sess, err := n.PeerAdminSession(p, commands.ChannelCreate{
-		ChannelID:   name,
-		Orderer:     n.OrdererAddress(o, ListenPort),
-		File:        n.CreateChannelTxPath(name),
-		OutputBlock: "/dev/null",
-	})
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+func (n *Network) CreateChannel(channelName string, o *Orderer, p *Peer) {
+	createChannel := func() int {
+		sess, err := n.PeerAdminSession(p, commands.ChannelCreate{
+			ChannelID:   channelName,
+			Orderer:     n.OrdererAddress(o, ListenPort),
+			File:        n.CreateChannelTxPath(channelName),
+			OutputBlock: "/dev/null",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return sess.Wait(n.EventuallyTimeout).ExitCode()
+	}
+
+	Eventually(createChannel, n.EventuallyTimeout).Should(Equal(0))
 }
 
 

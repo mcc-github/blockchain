@@ -909,7 +909,7 @@ func TestKeyImportFromX509ECDSAPublicKey(t *testing.T) {
 		UnknownExtKeyUsage: testUnknownExtKeyUsage,
 
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 
 		OCSPServer:            []string{"http://ocurrentBCCSP.example.com"},
 		IssuingCertificateURL: []string{"http://crt.example.com/ca1.crt"},
@@ -1786,7 +1786,7 @@ func TestKeyImportFromX509RSAPublicKey(t *testing.T) {
 		UnknownExtKeyUsage: testUnknownExtKeyUsage,
 
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 
 		OCSPServer:            []string{"http://ocurrentBCCSP.example.com"},
 		IssuingCertificateURL: []string{"http://crt.example.com/ca1.crt"},
