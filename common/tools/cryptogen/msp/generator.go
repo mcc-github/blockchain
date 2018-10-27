@@ -12,13 +12,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v2"
-
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/tools/cryptogen/ca"
 	"github.com/mcc-github/blockchain/common/tools/cryptogen/csp"
 	blockchainmsp "github.com/mcc-github/blockchain/msp"
+	"gopkg.in/yaml.v2"
 )
 
 const (

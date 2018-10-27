@@ -135,7 +135,7 @@ type MSPPrincipal struct {
 	
 	
 	
-	PrincipalClassification MSPPrincipal_Classification `protobuf:"varint,1,opt,name=principal_classification,json=principalClassification,enum=common.MSPPrincipal_Classification" json:"principal_classification,omitempty"`
+	PrincipalClassification MSPPrincipal_Classification `protobuf:"varint,1,opt,name=principal_classification,json=principalClassification,proto3,enum=common.MSPPrincipal_Classification" json:"principal_classification,omitempty"`
 	
 	
 	
@@ -193,10 +193,10 @@ func (m *MSPPrincipal) GetPrincipal() []byte {
 type OrganizationUnit struct {
 	
 	
-	MspIdentifier string `protobuf:"bytes,1,opt,name=msp_identifier,json=mspIdentifier" json:"msp_identifier,omitempty"`
+	MspIdentifier string `protobuf:"bytes,1,opt,name=msp_identifier,json=mspIdentifier,proto3" json:"msp_identifier,omitempty"`
 	
 	
-	OrganizationalUnitIdentifier string `protobuf:"bytes,2,opt,name=organizational_unit_identifier,json=organizationalUnitIdentifier" json:"organizational_unit_identifier,omitempty"`
+	OrganizationalUnitIdentifier string `protobuf:"bytes,2,opt,name=organizational_unit_identifier,json=organizationalUnitIdentifier,proto3" json:"organizational_unit_identifier,omitempty"`
 	
 	
 	CertifiersIdentifier []byte   `protobuf:"bytes,3,opt,name=certifiers_identifier,json=certifiersIdentifier,proto3" json:"certifiers_identifier,omitempty"`
@@ -256,10 +256,10 @@ func (m *OrganizationUnit) GetCertifiersIdentifier() []byte {
 type MSPRole struct {
 	
 	
-	MspIdentifier string `protobuf:"bytes,1,opt,name=msp_identifier,json=mspIdentifier" json:"msp_identifier,omitempty"`
+	MspIdentifier string `protobuf:"bytes,1,opt,name=msp_identifier,json=mspIdentifier,proto3" json:"msp_identifier,omitempty"`
 	
 	
-	Role                 MSPRole_MSPRoleType `protobuf:"varint,2,opt,name=role,enum=common.MSPRole_MSPRoleType" json:"role,omitempty"`
+	Role                 MSPRole_MSPRoleType `protobuf:"varint,2,opt,name=role,proto3,enum=common.MSPRole_MSPRoleType" json:"role,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
 	XXX_unrecognized     []byte              `json:"-"`
 	XXX_sizecache        int32               `json:"-"`
@@ -305,7 +305,7 @@ func (m *MSPRole) GetRole() MSPRole_MSPRoleType {
 
 
 type MSPIdentityAnonymity struct {
-	AnonymityType        MSPIdentityAnonymity_MSPIdentityAnonymityType `protobuf:"varint,1,opt,name=anonymity_type,json=anonymityType,enum=common.MSPIdentityAnonymity_MSPIdentityAnonymityType" json:"anonymity_type,omitempty"`
+	AnonymityType        MSPIdentityAnonymity_MSPIdentityAnonymityType `protobuf:"varint,1,opt,name=anonymity_type,json=anonymityType,proto3,enum=common.MSPIdentityAnonymity_MSPIdentityAnonymityType" json:"anonymity_type,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                                      `json:"-"`
 	XXX_unrecognized     []byte                                        `json:"-"`
 	XXX_sizecache        int32                                         `json:"-"`
@@ -347,7 +347,7 @@ func (m *MSPIdentityAnonymity) GetAnonymityType() MSPIdentityAnonymity_MSPIdenti
 
 type CombinedPrincipal struct {
 	
-	Principals           []*MSPPrincipal `protobuf:"bytes,1,rep,name=principals" json:"principals,omitempty"`
+	Principals           []*MSPPrincipal `protobuf:"bytes,1,rep,name=principals,proto3" json:"principals,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
 	XXX_unrecognized     []byte          `json:"-"`
 	XXX_sizecache        int32           `json:"-"`

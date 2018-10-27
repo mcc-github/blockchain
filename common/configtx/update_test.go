@@ -12,7 +12,6 @@ import (
 
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
 	cb "github.com/mcc-github/blockchain/protos/common"
-
 	"github.com/stretchr/testify/assert"
 )
 

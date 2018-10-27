@@ -8,9 +8,8 @@ package statecouchdb
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/stretchr/testify/assert"
 )
 
 

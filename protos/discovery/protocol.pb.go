@@ -81,9 +81,9 @@ func (m *SignedRequest) GetSignature() []byte {
 type Request struct {
 	
 	
-	Authentication *AuthInfo `protobuf:"bytes,1,opt,name=authentication" json:"authentication,omitempty"`
+	Authentication *AuthInfo `protobuf:"bytes,1,opt,name=authentication,proto3" json:"authentication,omitempty"`
 	
-	Queries              []*Query `protobuf:"bytes,2,rep,name=queries" json:"queries,omitempty"`
+	Queries              []*Query `protobuf:"bytes,2,rep,name=queries,proto3" json:"queries,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -129,7 +129,7 @@ func (m *Request) GetQueries() []*Query {
 
 type Response struct {
 	
-	Results              []*QueryResult `protobuf:"bytes,1,rep,name=results" json:"results,omitempty"`
+	Results              []*QueryResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
 	XXX_unrecognized     []byte         `json:"-"`
 	XXX_sizecache        int32          `json:"-"`
@@ -226,7 +226,7 @@ func (m *AuthInfo) GetClientTlsCertHash() []byte {
 
 
 type Query struct {
-	Channel string `protobuf:"bytes,1,opt,name=channel" json:"channel,omitempty"`
+	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
 	
 	
 	
@@ -262,40 +262,46 @@ func (m *Query) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Query proto.InternalMessageInfo
 
+func (m *Query) GetChannel() string {
+	if m != nil {
+		return m.Channel
+	}
+	return ""
+}
+
 type isQuery_Query interface {
 	isQuery_Query()
 }
 
 type Query_ConfigQuery struct {
-	ConfigQuery *ConfigQuery `protobuf:"bytes,2,opt,name=config_query,json=configQuery,oneof"`
+	ConfigQuery *ConfigQuery `protobuf:"bytes,2,opt,name=config_query,json=configQuery,proto3,oneof"`
 }
+
 type Query_PeerQuery struct {
-	PeerQuery *PeerMembershipQuery `protobuf:"bytes,3,opt,name=peer_query,json=peerQuery,oneof"`
+	PeerQuery *PeerMembershipQuery `protobuf:"bytes,3,opt,name=peer_query,json=peerQuery,proto3,oneof"`
 }
+
 type Query_CcQuery struct {
-	CcQuery *ChaincodeQuery `protobuf:"bytes,4,opt,name=cc_query,json=ccQuery,oneof"`
+	CcQuery *ChaincodeQuery `protobuf:"bytes,4,opt,name=cc_query,json=ccQuery,proto3,oneof"`
 }
+
 type Query_LocalPeers struct {
-	LocalPeers *LocalPeerQuery `protobuf:"bytes,5,opt,name=local_peers,json=localPeers,oneof"`
+	LocalPeers *LocalPeerQuery `protobuf:"bytes,5,opt,name=local_peers,json=localPeers,proto3,oneof"`
 }
 
 func (*Query_ConfigQuery) isQuery_Query() {}
-func (*Query_PeerQuery) isQuery_Query()   {}
-func (*Query_CcQuery) isQuery_Query()     {}
-func (*Query_LocalPeers) isQuery_Query()  {}
+
+func (*Query_PeerQuery) isQuery_Query() {}
+
+func (*Query_CcQuery) isQuery_Query() {}
+
+func (*Query_LocalPeers) isQuery_Query() {}
 
 func (m *Query) GetQuery() isQuery_Query {
 	if m != nil {
 		return m.Query
 	}
 	return nil
-}
-
-func (m *Query) GetChannel() string {
-	if m != nil {
-		return m.Channel
-	}
-	return ""
 }
 
 func (m *Query) GetConfigQuery() *ConfigQuery {
@@ -483,22 +489,28 @@ type isQueryResult_Result interface {
 }
 
 type QueryResult_Error struct {
-	Error *Error `protobuf:"bytes,1,opt,name=error,oneof"`
-}
-type QueryResult_ConfigResult struct {
-	ConfigResult *ConfigResult `protobuf:"bytes,2,opt,name=config_result,json=configResult,oneof"`
-}
-type QueryResult_CcQueryRes struct {
-	CcQueryRes *ChaincodeQueryResult `protobuf:"bytes,3,opt,name=cc_query_res,json=ccQueryRes,oneof"`
-}
-type QueryResult_Members struct {
-	Members *PeerMembershipResult `protobuf:"bytes,4,opt,name=members,oneof"`
+	Error *Error `protobuf:"bytes,1,opt,name=error,proto3,oneof"`
 }
 
-func (*QueryResult_Error) isQueryResult_Result()        {}
+type QueryResult_ConfigResult struct {
+	ConfigResult *ConfigResult `protobuf:"bytes,2,opt,name=config_result,json=configResult,proto3,oneof"`
+}
+
+type QueryResult_CcQueryRes struct {
+	CcQueryRes *ChaincodeQueryResult `protobuf:"bytes,3,opt,name=cc_query_res,json=ccQueryRes,proto3,oneof"`
+}
+
+type QueryResult_Members struct {
+	Members *PeerMembershipResult `protobuf:"bytes,4,opt,name=members,proto3,oneof"`
+}
+
+func (*QueryResult_Error) isQueryResult_Result() {}
+
 func (*QueryResult_ConfigResult) isQueryResult_Result() {}
-func (*QueryResult_CcQueryRes) isQueryResult_Result()   {}
-func (*QueryResult_Members) isQueryResult_Result()      {}
+
+func (*QueryResult_CcQueryRes) isQueryResult_Result() {}
+
+func (*QueryResult_Members) isQueryResult_Result() {}
 
 func (m *QueryResult) GetResult() isQueryResult_Result {
 	if m != nil {
@@ -680,9 +692,9 @@ var xxx_messageInfo_ConfigQuery proto.InternalMessageInfo
 
 type ConfigResult struct {
 	
-	Msps map[string]*msp.FabricMSPConfig `protobuf:"bytes,1,rep,name=msps" json:"msps,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Msps map[string]*msp.FabricMSPConfig `protobuf:"bytes,1,rep,name=msps,proto3" json:"msps,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	
-	Orderers             map[string]*Endpoints `protobuf:"bytes,2,rep,name=orderers" json:"orderers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Orderers             map[string]*Endpoints `protobuf:"bytes,2,rep,name=orderers,proto3" json:"orderers,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -732,7 +744,7 @@ func (m *ConfigResult) GetOrderers() map[string]*Endpoints {
 
 
 type PeerMembershipQuery struct {
-	Filter               *ChaincodeInterest `protobuf:"bytes,1,opt,name=filter" json:"filter,omitempty"`
+	Filter               *ChaincodeInterest `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -771,7 +783,7 @@ func (m *PeerMembershipQuery) GetFilter() *ChaincodeInterest {
 
 
 type PeerMembershipResult struct {
-	PeersByOrg           map[string]*Peers `protobuf:"bytes,1,rep,name=peers_by_org,json=peersByOrg" json:"peers_by_org,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	PeersByOrg           map[string]*Peers `protobuf:"bytes,1,rep,name=peers_by_org,json=peersByOrg,proto3" json:"peers_by_org,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`
 	XXX_sizecache        int32             `json:"-"`
@@ -813,7 +825,7 @@ func (m *PeerMembershipResult) GetPeersByOrg() map[string]*Peers {
 
 
 type ChaincodeQuery struct {
-	Interests            []*ChaincodeInterest `protobuf:"bytes,1,rep,name=interests" json:"interests,omitempty"`
+	Interests            []*ChaincodeInterest `protobuf:"bytes,1,rep,name=interests,proto3" json:"interests,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
 	XXX_unrecognized     []byte               `json:"-"`
 	XXX_sizecache        int32                `json:"-"`
@@ -854,7 +866,7 @@ func (m *ChaincodeQuery) GetInterests() []*ChaincodeInterest {
 
 
 type ChaincodeInterest struct {
-	Chaincodes           []*ChaincodeCall `protobuf:"bytes,1,rep,name=chaincodes" json:"chaincodes,omitempty"`
+	Chaincodes           []*ChaincodeCall `protobuf:"bytes,1,rep,name=chaincodes,proto3" json:"chaincodes,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
 	XXX_unrecognized     []byte           `json:"-"`
 	XXX_sizecache        int32            `json:"-"`
@@ -894,8 +906,8 @@ func (m *ChaincodeInterest) GetChaincodes() []*ChaincodeCall {
 
 
 type ChaincodeCall struct {
-	Name                 string   `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	CollectionNames      []string `protobuf:"bytes,2,rep,name=collection_names,json=collectionNames" json:"collection_names,omitempty"`
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	CollectionNames      []string `protobuf:"bytes,2,rep,name=collection_names,json=collectionNames,proto3" json:"collection_names,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -942,7 +954,7 @@ func (m *ChaincodeCall) GetCollectionNames() []string {
 
 
 type ChaincodeQueryResult struct {
-	Content              []*EndorsementDescriptor `protobuf:"bytes,1,rep,name=content" json:"content,omitempty"`
+	Content              []*EndorsementDescriptor `protobuf:"bytes,1,rep,name=content,proto3" json:"content,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
 	XXX_unrecognized     []byte                   `json:"-"`
 	XXX_sizecache        int32                    `json:"-"`
@@ -1023,13 +1035,13 @@ var xxx_messageInfo_LocalPeerQuery proto.InternalMessageInfo
 
 
 type EndorsementDescriptor struct {
-	Chaincode string `protobuf:"bytes,1,opt,name=chaincode" json:"chaincode,omitempty"`
+	Chaincode string `protobuf:"bytes,1,opt,name=chaincode,proto3" json:"chaincode,omitempty"`
 	
-	EndorsersByGroups map[string]*Peers `protobuf:"bytes,2,rep,name=endorsers_by_groups,json=endorsersByGroups" json:"endorsers_by_groups,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	EndorsersByGroups map[string]*Peers `protobuf:"bytes,2,rep,name=endorsers_by_groups,json=endorsersByGroups,proto3" json:"endorsers_by_groups,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	
 	
 	
-	Layouts              []*Layout `protobuf:"bytes,3,rep,name=layouts" json:"layouts,omitempty"`
+	Layouts              []*Layout `protobuf:"bytes,3,rep,name=layouts,proto3" json:"layouts,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
 	XXX_unrecognized     []byte    `json:"-"`
 	XXX_sizecache        int32     `json:"-"`
@@ -1085,7 +1097,7 @@ func (m *EndorsementDescriptor) GetLayouts() []*Layout {
 type Layout struct {
 	
 	
-	QuantitiesByGroup    map[string]uint32 `protobuf:"bytes,1,rep,name=quantities_by_group,json=quantitiesByGroup" json:"quantities_by_group,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	QuantitiesByGroup    map[string]uint32 `protobuf:"bytes,1,rep,name=quantities_by_group,json=quantitiesByGroup,proto3" json:"quantities_by_group,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`
 	XXX_sizecache        int32             `json:"-"`
@@ -1124,7 +1136,7 @@ func (m *Layout) GetQuantitiesByGroup() map[string]uint32 {
 
 
 type Peers struct {
-	Peers                []*Peer  `protobuf:"bytes,1,rep,name=peers" json:"peers,omitempty"`
+	Peers                []*Peer  `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -1165,9 +1177,9 @@ func (m *Peers) GetPeers() []*Peer {
 
 type Peer struct {
 	
-	StateInfo *gossip.Envelope `protobuf:"bytes,1,opt,name=state_info,json=stateInfo" json:"state_info,omitempty"`
+	StateInfo *gossip.Envelope `protobuf:"bytes,1,opt,name=state_info,json=stateInfo,proto3" json:"state_info,omitempty"`
 	
-	MembershipInfo *gossip.Envelope `protobuf:"bytes,2,opt,name=membership_info,json=membershipInfo" json:"membership_info,omitempty"`
+	MembershipInfo *gossip.Envelope `protobuf:"bytes,2,opt,name=membership_info,json=membershipInfo,proto3" json:"membership_info,omitempty"`
 	
 	Identity             []byte   `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
@@ -1222,7 +1234,7 @@ func (m *Peer) GetIdentity() []byte {
 
 
 type Error struct {
-	Content              string   `protobuf:"bytes,1,opt,name=content" json:"content,omitempty"`
+	Content              string   `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -1261,7 +1273,7 @@ func (m *Error) GetContent() string {
 
 
 type Endpoints struct {
-	Endpoint             []*Endpoint `protobuf:"bytes,1,rep,name=endpoint" json:"endpoint,omitempty"`
+	Endpoint             []*Endpoint `protobuf:"bytes,1,rep,name=endpoint,proto3" json:"endpoint,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
@@ -1300,8 +1312,8 @@ func (m *Endpoints) GetEndpoint() []*Endpoint {
 
 
 type Endpoint struct {
-	Host                 string   `protobuf:"bytes,1,opt,name=host" json:"host,omitempty"`
-	Port                 uint32   `protobuf:"varint,2,opt,name=port" json:"port,omitempty"`
+	Host                 string   `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port                 uint32   `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -1385,6 +1397,7 @@ const _ = grpc.SupportPackageIsVersion4
 
 
 
+
 type DiscoveryClient interface {
 	
 	Discover(ctx context.Context, in *SignedRequest, opts ...grpc.CallOption) (*Response, error)
@@ -1400,13 +1413,12 @@ func NewDiscoveryClient(cc *grpc.ClientConn) DiscoveryClient {
 
 func (c *discoveryClient) Discover(ctx context.Context, in *SignedRequest, opts ...grpc.CallOption) (*Response, error) {
 	out := new(Response)
-	err := grpc.Invoke(ctx, "/discovery.Discovery/Discover", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/discovery.Discovery/Discover", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
-
 
 
 type DiscoveryServer interface {

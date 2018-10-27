@@ -20,7 +20,7 @@ const _ = proto.ProtoPackageIsVersion2
 
 
 type AnchorPeers struct {
-	AnchorPeers          []*AnchorPeer `protobuf:"bytes,1,rep,name=anchor_peers,json=anchorPeers" json:"anchor_peers,omitempty"`
+	AnchorPeers          []*AnchorPeer `protobuf:"bytes,1,rep,name=anchor_peers,json=anchorPeers,proto3" json:"anchor_peers,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
 	XXX_unrecognized     []byte        `json:"-"`
 	XXX_sizecache        int32         `json:"-"`
@@ -30,7 +30,7 @@ func (m *AnchorPeers) Reset()         { *m = AnchorPeers{} }
 func (m *AnchorPeers) String() string { return proto.CompactTextString(m) }
 func (*AnchorPeers) ProtoMessage()    {}
 func (*AnchorPeers) Descriptor() ([]byte, []int) {
-	return fileDescriptor_configuration_e51d0015b9cb595d, []int{0}
+	return fileDescriptor_configuration_d9ec63ae33c182ef, []int{0}
 }
 func (m *AnchorPeers) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_AnchorPeers.Unmarshal(m, b)
@@ -61,9 +61,9 @@ func (m *AnchorPeers) GetAnchorPeers() []*AnchorPeer {
 
 type AnchorPeer struct {
 	
-	Host string `protobuf:"bytes,1,opt,name=host" json:"host,omitempty"`
+	Host string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
 	
-	Port                 int32    `protobuf:"varint,2,opt,name=port" json:"port,omitempty"`
+	Port                 int32    `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -73,7 +73,7 @@ func (m *AnchorPeer) Reset()         { *m = AnchorPeer{} }
 func (m *AnchorPeer) String() string { return proto.CompactTextString(m) }
 func (*AnchorPeer) ProtoMessage()    {}
 func (*AnchorPeer) Descriptor() ([]byte, []int) {
-	return fileDescriptor_configuration_e51d0015b9cb595d, []int{1}
+	return fileDescriptor_configuration_d9ec63ae33c182ef, []int{1}
 }
 func (m *AnchorPeer) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_AnchorPeer.Unmarshal(m, b)
@@ -110,7 +110,7 @@ func (m *AnchorPeer) GetPort() int32 {
 
 
 type APIResource struct {
-	PolicyRef            string   `protobuf:"bytes,1,opt,name=policy_ref,json=policyRef" json:"policy_ref,omitempty"`
+	PolicyRef            string   `protobuf:"bytes,1,opt,name=policy_ref,json=policyRef,proto3" json:"policy_ref,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -120,7 +120,7 @@ func (m *APIResource) Reset()         { *m = APIResource{} }
 func (m *APIResource) String() string { return proto.CompactTextString(m) }
 func (*APIResource) ProtoMessage()    {}
 func (*APIResource) Descriptor() ([]byte, []int) {
-	return fileDescriptor_configuration_e51d0015b9cb595d, []int{2}
+	return fileDescriptor_configuration_d9ec63ae33c182ef, []int{2}
 }
 func (m *APIResource) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_APIResource.Unmarshal(m, b)
@@ -150,7 +150,7 @@ func (m *APIResource) GetPolicyRef() string {
 
 
 type ACLs struct {
-	Acls                 map[string]*APIResource `protobuf:"bytes,1,rep,name=acls" json:"acls,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Acls                 map[string]*APIResource `protobuf:"bytes,1,rep,name=acls,proto3" json:"acls,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
 	XXX_unrecognized     []byte                  `json:"-"`
 	XXX_sizecache        int32                   `json:"-"`
@@ -160,7 +160,7 @@ func (m *ACLs) Reset()         { *m = ACLs{} }
 func (m *ACLs) String() string { return proto.CompactTextString(m) }
 func (*ACLs) ProtoMessage()    {}
 func (*ACLs) Descriptor() ([]byte, []int) {
-	return fileDescriptor_configuration_e51d0015b9cb595d, []int{3}
+	return fileDescriptor_configuration_d9ec63ae33c182ef, []int{3}
 }
 func (m *ACLs) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ACLs.Unmarshal(m, b)
@@ -196,10 +196,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("peer/configuration.proto", fileDescriptor_configuration_e51d0015b9cb595d)
+	proto.RegisterFile("peer/configuration.proto", fileDescriptor_configuration_d9ec63ae33c182ef)
 }
 
-var fileDescriptor_configuration_e51d0015b9cb595d = []byte{
+var fileDescriptor_configuration_d9ec63ae33c182ef = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x4c, 0x91, 0xdf, 0x4b, 0xfb, 0x30,
 	0x14, 0xc5, 0xe9, 0x7e, 0x7c, 0x61, 0xb7, 0xdf, 0x07, 0x89, 0x20, 0x45, 0x10, 0x46, 0x9f, 0x36,

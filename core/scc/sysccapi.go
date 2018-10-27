@@ -17,10 +17,8 @@ import (
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/container/inproccontroller"
 	"github.com/mcc-github/blockchain/core/peer"
-
-	"github.com/spf13/viper"
-
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/spf13/viper"
 )
 
 var sysccLogger = flogging.MustGetLogger("sccapi")

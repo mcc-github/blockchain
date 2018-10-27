@@ -9,10 +9,9 @@ package golang
 import (
 	"errors"
 	"fmt"
-	"strings"
-
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	ccutil "github.com/mcc-github/blockchain/core/chaincode/platforms/util"

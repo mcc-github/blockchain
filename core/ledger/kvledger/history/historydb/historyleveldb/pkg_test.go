@@ -29,6 +29,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
+	"github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -59,9 +60,8 @@ func newTestHistoryEnv(t *testing.T) *levelDBLockBasedHistoryEnv {
 	testDB := testDBEnv.GetDBHandle(testLedgerID)
 	testBookkeepingEnv := bookkeeping.NewTestEnv(t)
 
-	txMgr, err := lockbasedtxmgr.NewLockBasedTxMgr(testLedgerID, testDB, nil, nil, testBookkeepingEnv.TestProvider)
+	txMgr, err := lockbasedtxmgr.NewLockBasedTxMgr(testLedgerID, testDB, nil, nil, testBookkeepingEnv.TestProvider, &mock.DeployedChaincodeInfoProvider{})
 	assert.NoError(t, err)
-
 	testHistoryDBProvider := NewHistoryDBProvider()
 	testHistoryDB, err := testHistoryDBProvider.GetDBHandle("TestHistoryDB")
 	assert.NoError(t, err)

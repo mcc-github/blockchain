@@ -19,9 +19,8 @@ package common
 import (
 	"fmt"
 
-	"github.com/mcc-github/blockchain/common/util"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/util"
 )
 
 

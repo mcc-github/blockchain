@@ -24,9 +24,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/tools/protolator/testprotos"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/tools/protolator/testprotos"
 	"github.com/stretchr/testify/assert"
 )
 

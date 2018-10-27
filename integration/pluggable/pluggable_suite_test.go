@@ -10,10 +10,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/mcc-github/blockchain/integration/nwo"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"github.com/mcc-github/blockchain/integration/nwo"
 )
 
 func TestPluggable(t *testing.T) {

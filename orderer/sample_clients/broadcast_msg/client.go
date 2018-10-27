@@ -17,7 +17,6 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/utils"
-
 	"google.golang.org/grpc"
 	"gopkg.in/cheggaaa/pb.v1"
 )

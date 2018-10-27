@@ -8,9 +8,8 @@ package blockcutter
 
 import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	cb "github.com/mcc-github/blockchain/protos/common"
-
 	"github.com/mcc-github/blockchain/common/flogging"
+	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 const pkgLogID = "orderer/common/blockcutter"

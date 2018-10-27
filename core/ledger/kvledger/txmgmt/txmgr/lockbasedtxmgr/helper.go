@@ -8,13 +8,12 @@ package lockbasedtxmgr
 import (
 	"fmt"
 
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/storageutil"
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
-
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	ledger "github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/storageutil"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/util"
@@ -34,7 +33,7 @@ type queryHelper struct {
 
 func newQueryHelper(txmgr *LockBasedTxMgr, rwsetBuilder *rwsetutil.RWSetBuilder) *queryHelper {
 	helper := &queryHelper{txmgr: txmgr, rwsetBuilder: rwsetBuilder}
-	validator := newCollNameValidator(helper)
+	validator := newCollNameValidator(txmgr.ccInfoProvider, &lockBasedQueryExecutor{helper: helper})
 	helper.collNameValidator = validator
 	return helper
 }

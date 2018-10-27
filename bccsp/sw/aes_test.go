@@ -19,11 +19,10 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/rand"
+	"io"
 	"math/big"
 	mrand "math/rand"
 	"testing"
-
-	"io"
 
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/mocks"

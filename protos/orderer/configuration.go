@@ -9,11 +9,10 @@ package orderer
 import (
 	"fmt"
 
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/msp"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/msp"
 )
 
 func init() {

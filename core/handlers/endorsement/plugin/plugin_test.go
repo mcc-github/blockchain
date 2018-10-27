@@ -13,7 +13,6 @@ import (
 	"github.com/mcc-github/blockchain/core/endorser/mocks"
 	mocks2 "github.com/mcc-github/blockchain/core/handlers/endorsement/builtin/mocks"
 	plgn "github.com/mcc-github/blockchain/core/handlers/endorsement/plugin"
-
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

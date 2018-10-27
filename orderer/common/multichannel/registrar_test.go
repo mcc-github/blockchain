@@ -16,6 +16,7 @@ import (
 	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
 	mockchannelconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	mockcrypto "github.com/mcc-github/blockchain/common/mocks/crypto"
+	mmsp "github.com/mcc-github/blockchain/common/mocks/msp"
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
 	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
@@ -25,8 +26,6 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	mmsp "github.com/mcc-github/blockchain/common/mocks/msp"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )

@@ -20,10 +20,9 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/tools/protolator/testprotos"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 )
 

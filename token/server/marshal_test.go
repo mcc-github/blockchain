@@ -10,14 +10,13 @@ import (
 	"crypto/sha256"
 	"time"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/token/server"
 	"github.com/mcc-github/blockchain/token/server/mock"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 )
 

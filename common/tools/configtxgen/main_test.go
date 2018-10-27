@@ -27,7 +27,6 @@ import (
 	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/core/config/configtest"
-
 	"github.com/stretchr/testify/assert"
 )
 

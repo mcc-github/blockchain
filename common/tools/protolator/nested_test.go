@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/tools/protolator/testprotos"
-
 	"github.com/stretchr/testify/assert"
 )
 

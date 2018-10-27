@@ -18,12 +18,9 @@ package chaincode
 
 import (
 	"fmt"
-
 	"io/ioutil"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/spf13/cobra"
-
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/core/common/ccpackage"
 	"github.com/mcc-github/blockchain/msp"
@@ -31,6 +28,7 @@ import (
 	pcommon "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/spf13/cobra"
 )
 
 var chaincodePackageCmd *cobra.Command

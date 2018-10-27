@@ -17,14 +17,12 @@ limitations under the License.
 package channel
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 
-	"errors"
-
 	"github.com/mcc-github/blockchain/peer/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
 	"github.com/spf13/cobra"
 )
 

@@ -18,9 +18,8 @@ package sw
 
 import (
 	"errors"
-	"testing"
-
 	"reflect"
+	"testing"
 
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/mocks"

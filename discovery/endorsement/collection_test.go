@@ -8,9 +8,8 @@ package endorsement
 
 import (
 	"bytes"
-	"testing"
-
 	"fmt"
+	"testing"
 
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/gossip/api"

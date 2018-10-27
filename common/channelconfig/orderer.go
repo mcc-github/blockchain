@@ -16,7 +16,6 @@ import (
 	"github.com/mcc-github/blockchain/common/capabilities"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-
 	"github.com/pkg/errors"
 )
 

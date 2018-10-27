@@ -1,4 +1,5 @@
 
+
 package mocks
 
 import etcdraft "github.com/mcc-github/blockchain/orderer/consensus/etcdraft"

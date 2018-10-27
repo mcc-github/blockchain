@@ -11,8 +11,6 @@ import (
 	"sync"
 
 	"github.com/mcc-github/blockchain/core/common/privdata"
-	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 )
 
@@ -30,9 +28,9 @@ type BTLPolicy interface {
 
 
 type LSCCBasedBTLPolicy struct {
-	collectionStore privdata.CollectionStore
-	cache           map[btlkey]uint64
-	lock            sync.Mutex
+	collInfoProvider collectionInfoProvider
+	cache            map[btlkey]uint64
+	lock             sync.Mutex
 }
 
 type btlkey struct {
@@ -41,15 +39,11 @@ type btlkey struct {
 }
 
 
-func NewBTLPolicy(ledger ledger.PeerLedger) BTLPolicy {
-	return ConstructBTLPolicy(privdata.NewSimpleCollectionStore(&collectionSupport{lgr: ledger}))
-}
-
-
-func ConstructBTLPolicy(collectionStore privdata.CollectionStore) BTLPolicy {
+func ConstructBTLPolicy(collInfoProvider collectionInfoProvider) BTLPolicy {
 	return &LSCCBasedBTLPolicy{
-		collectionStore: collectionStore,
-		cache:           make(map[btlkey]uint64)}
+		collInfoProvider: collInfoProvider,
+		cache:            make(map[btlkey]uint64),
+	}
 }
 
 
@@ -61,12 +55,14 @@ func (p *LSCCBasedBTLPolicy) GetBTL(namesapce string, collection string) (uint64
 	defer p.lock.Unlock()
 	btl, ok = p.cache[key]
 	if !ok {
-		persistenceConf, err := p.collectionStore.RetrieveCollectionPersistenceConfigs(
-			common.CollectionCriteria{Namespace: namesapce, Collection: collection})
+		collConfig, err := p.collInfoProvider.CollectionInfo(namesapce, collection)
 		if err != nil {
 			return 0, err
 		}
-		btlConfigured := persistenceConf.BlockToLive()
+		if collConfig == nil {
+			return 0, privdata.NoSuchCollectionError{Namespace: namesapce, Collection: collection}
+		}
+		btlConfigured := collConfig.BlockToLive
 		if btlConfigured > 0 {
 			btl = uint64(btlConfigured)
 		} else {
@@ -90,14 +86,8 @@ func (p *LSCCBasedBTLPolicy) GetExpiringBlock(namesapce string, collection strin
 	return expiryBlk, nil
 }
 
-type collectionSupport struct {
-	lgr ledger.PeerLedger
+type collectionInfoProvider interface {
+	CollectionInfo(chaincodeName, collectionName string) (*common.StaticCollectionConfig, error)
 }
 
-func (cs *collectionSupport) GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, error) {
-	return cs.lgr.NewQueryExecutor()
-}
 
-func (*collectionSupport) GetIdentityDeserializer(chainID string) msp.IdentityDeserializer {
-	return nil
-}

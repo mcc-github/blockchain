@@ -54,7 +54,7 @@ type Registry interface {
 
 type StandardRegistry struct {
 	metrics map[string]interface{}
-	mutex   sync.Mutex
+	mutex   sync.RWMutex
 }
 
 
@@ -71,8 +71,8 @@ func (r *StandardRegistry) Each(f func(string, interface{})) {
 
 
 func (r *StandardRegistry) Get(name string) interface{} {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 	return r.metrics[name]
 }
 
@@ -81,6 +81,15 @@ func (r *StandardRegistry) Get(name string) interface{} {
 
 
 func (r *StandardRegistry) GetOrRegister(name string, i interface{}) interface{} {
+	
+	r.mutex.RLock()
+	metric, ok := r.metrics[name]
+	r.mutex.RUnlock()
+	if ok {
+		return metric
+	}
+
+	
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if metric, ok := r.metrics[name]; ok {
@@ -103,8 +112,8 @@ func (r *StandardRegistry) Register(name string, i interface{}) error {
 
 
 func (r *StandardRegistry) RunHealthchecks() {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 	for _, i := range r.metrics {
 		if h, ok := i.(Healthcheck); ok {
 			h.Check()

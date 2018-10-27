@@ -8,7 +8,6 @@ package idemix
 
 import (
 	"crypto/ecdsa"
-
 	"sort"
 
 	"github.com/mcc-github/blockchain-amcl/amcl"

@@ -8,7 +8,6 @@ package shim
 
 import (
 	"github.com/golang/protobuf/ptypes/timestamp"
-
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 )

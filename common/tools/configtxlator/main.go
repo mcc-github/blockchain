@@ -23,21 +23,18 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/tools/configtxlator/metadata"
 	"github.com/mcc-github/blockchain/common/tools/configtxlator/rest"
 	"github.com/mcc-github/blockchain/common/tools/configtxlator/update"
 	"github.com/mcc-github/blockchain/common/tools/protolator"
-	cb "github.com/mcc-github/blockchain/protos/common"
-
-	
 	_ "github.com/mcc-github/blockchain/protos/common"
+	cb "github.com/mcc-github/blockchain/protos/common" 
 	_ "github.com/mcc-github/blockchain/protos/msp"
 	_ "github.com/mcc-github/blockchain/protos/orderer"
 	_ "github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	_ "github.com/mcc-github/blockchain/protos/peer"
-
-	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"gopkg.in/alecthomas/kingpin.v2"
 )

@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 )

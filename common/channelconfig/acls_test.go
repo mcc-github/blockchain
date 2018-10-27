@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	pb "github.com/mcc-github/blockchain/protos/peer"
-
 	"github.com/stretchr/testify/assert"
 )
 

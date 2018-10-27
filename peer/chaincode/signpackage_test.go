@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/mcc-github/blockchain/peer/common"
 	pcommon "github.com/mcc-github/blockchain/protos/common"
 )

@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	cb "github.com/mcc-github/blockchain/protos/common"
-
 	"github.com/stretchr/testify/assert"
 )
 

@@ -21,7 +21,6 @@ import (
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
 	"github.com/stretchr/testify/assert"
 )
 

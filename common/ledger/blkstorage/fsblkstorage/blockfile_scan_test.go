@@ -22,9 +22,8 @@ import (
 
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/ledger/util"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBlockFileScanSmallTxOnly(t *testing.T) {

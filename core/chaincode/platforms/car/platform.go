@@ -8,12 +8,11 @@ package car
 
 import (
 	"archive/tar"
-	"io/ioutil"
-	"strings"
-
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"strings"
 
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/util"

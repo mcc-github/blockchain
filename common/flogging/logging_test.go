@@ -95,7 +95,9 @@ func TestLoggingReset(t *testing.T) {
 }
 
 
-type writeSyncer interface{ zapcore.WriteSyncer }
+type writeSyncer interface {
+	zapcore.WriteSyncer
+}
 
 func TestLoggingSetWriter(t *testing.T) {
 	ws := &mock.WriteSyncer{}
@@ -114,4 +116,17 @@ func TestLoggingSetWriter(t *testing.T) {
 	ws.SyncReturns(errors.New("welp"))
 	err = logging.Sync()
 	assert.EqualError(t, err, "welp")
+}
+
+func TestZapLoggerNameConversion(t *testing.T) {
+	logging, err := flogging.New(flogging.Config{})
+	assert.NoError(t, err)
+
+	logging.Logger("test/module/name")
+
+	levels := logging.Levels()
+	_, ok := levels["test.module.name"]
+	assert.True(t, ok)
+	_, ok = levels["test/module/name"]
+	assert.False(t, ok)
 }

@@ -24,10 +24,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 )
 

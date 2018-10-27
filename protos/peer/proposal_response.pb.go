@@ -29,18 +29,18 @@ const _ = proto.ProtoPackageIsVersion2
 
 type ProposalResponse struct {
 	
-	Version int32 `protobuf:"varint,1,opt,name=version" json:"version,omitempty"`
+	Version int32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	
 	
-	Timestamp *timestamp.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp,omitempty"`
+	Timestamp *timestamp.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	
 	
-	Response *Response `protobuf:"bytes,4,opt,name=response" json:"response,omitempty"`
+	Response *Response `protobuf:"bytes,4,opt,name=response,proto3" json:"response,omitempty"`
 	
 	Payload []byte `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
 	
 	
-	Endorsement          *Endorsement `protobuf:"bytes,6,opt,name=endorsement" json:"endorsement,omitempty"`
+	Endorsement          *Endorsement `protobuf:"bytes,6,opt,name=endorsement,proto3" json:"endorsement,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
 	XXX_unrecognized     []byte       `json:"-"`
 	XXX_sizecache        int32        `json:"-"`
@@ -109,9 +109,9 @@ func (m *ProposalResponse) GetEndorsement() *Endorsement {
 
 type Response struct {
 	
-	Status int32 `protobuf:"varint,1,opt,name=status" json:"status,omitempty"`
+	Status int32 `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
 	
-	Message string `protobuf:"bytes,2,opt,name=message" json:"message,omitempty"`
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	
 	Payload              []byte   `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`

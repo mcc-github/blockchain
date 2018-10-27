@@ -10,9 +10,8 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/mcc-github/blockchain/protos/orderer"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/protos/orderer"
 )
 
 

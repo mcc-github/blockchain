@@ -24,9 +24,8 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {

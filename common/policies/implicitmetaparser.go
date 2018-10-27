@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	cb "github.com/mcc-github/blockchain/protos/common"
-
 	"github.com/pkg/errors"
 )
 

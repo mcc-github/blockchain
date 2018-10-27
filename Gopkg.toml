@@ -21,16 +21,6 @@ noverify = [
   name = "github.com/Shopify/sarama"
   version = "1.19.0"
 
-# Pinned in support of sarama as newer commits have data races
-# https://github.com/rcrowley/go-metrics/issues/245
-[[override]]
-  name = "github.com/rcrowley/go-metrics"
-  revision = "8732c616f52954686704c8645fe1a9d59e9df7c1"
-
-[[constraint]]
-  name = "github.com/cactus/go-statsd-client"
-  version = "3.1.1"
-
 [[constraint]]
   name = "github.com/davecgh/go-spew"
   version = "1.1.0"
@@ -86,10 +76,6 @@ noverify = [
   version = "0.8.0"
 
 [[constraint]]
-  name = "github.com/prometheus/client_golang"
-  version = "0.8.0"
-
-[[constraint]]
   name = "github.com/spf13/cobra"
   version = "0.0.3"
 
@@ -108,10 +94,6 @@ noverify = [
 [[constraint]]
   branch = "master"
   name = "github.com/syndtr/goleveldb"
-
-[[constraint]]
-  name = "github.com/uber-go/tally"
-  version = "=3.3.2"
 
 [[constraint]]
   branch = "master"
@@ -185,3 +167,7 @@ noverify = [
   [[prune.project]]
       name = "github.com/coreos/etcd"
       non-go = false
+
+[[constraint]]
+  name = "github.com/go-kit/kit"
+  version = "0.7.0"

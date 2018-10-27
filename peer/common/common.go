@@ -108,7 +108,7 @@ func InitConfig(cmdRoot string) error {
 		
 		if strings.Contains(fmt.Sprint(err), "Unsupported Config Type") {
 			return errors.New(fmt.Sprintf("Could not find config file. "+
-				"Please make sure that FABRIC_CFG_PATH or --configPath is set to a path "+
+				"Please make sure that FABRIC_CFG_PATH is set to a path "+
 				"which contains %s.yaml", cmdRoot))
 		} else {
 			return errors.WithMessage(err, fmt.Sprintf("error when reading %s config file", cmdRoot))
@@ -223,26 +223,6 @@ func GetOrdererEndpointOfChain(chainID string, signer msp.SigningIdentity, endor
 }
 
 
-
-func SetLogLevelFromViper(module string) error {
-	var err error
-	if module == "" {
-		return errors.New("log level not set, no module name provided")
-	}
-	logLevelFromViper := viper.GetString("logging." + module)
-	err = CheckLogLevel(logLevelFromViper)
-	if err != nil {
-		return err
-	}
-	
-	
-	module = strings.Replace(module, ".", "/", -1)
-	
-	err = flogging.SetModuleLevels("^"+module, logLevelFromViper)
-	return err
-}
-
-
 func CheckLogLevel(level string) error {
 	if !flogging.IsValidLevel(level) {
 		return errors.Errorf("invalid log level provided - %s", level)
@@ -302,12 +282,17 @@ func InitCmd(cmd *cobra.Command, args []string) {
 	
 	
 	
-	var loggingSpec string
+	var loggingLevel string
 	if viper.GetString("logging_level") != "" {
-		loggingSpec = viper.GetString("logging_level")
+		loggingLevel = viper.GetString("logging_level")
 	} else {
-		loggingSpec = viper.GetString("logging.level")
+		loggingLevel = viper.GetString("logging.level")
 	}
+	loggingSpec := os.Getenv("FABRIC_LOGGING_SPEC")
+	if loggingLevel != "" {
+		mainLogger.Warning("CORE_LOGGING_LEVEL is no longer supported, please use FABRIC_LOGGING_SPEC environment variable.")
+	}
+
 	flogging.Init(flogging.Config{
 		Format:  viper.GetString("logging.format"),
 		Writer:  logOutput,

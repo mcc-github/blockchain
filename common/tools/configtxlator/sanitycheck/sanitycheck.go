@@ -9,11 +9,10 @@ package sanitycheck
 import (
 	"fmt"
 
+	"github.com/golang/protobuf/proto"
 	newchannelconfig "github.com/mcc-github/blockchain/common/channelconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	mspprotos "github.com/mcc-github/blockchain/protos/msp"
-
-	"github.com/golang/protobuf/proto"
 )
 
 type Messages struct {

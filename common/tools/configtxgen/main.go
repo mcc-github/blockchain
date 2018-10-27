@@ -23,7 +23,6 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
-
 	"github.com/pkg/errors"
 )
 
@@ -238,13 +237,13 @@ func main() {
 		if err := recover(); err != nil {
 			if strings.Contains(fmt.Sprint(err), "Error reading configuration: Unsupported Config Type") {
 				logger.Error("Could not find configtx.yaml. " +
-					"Please make sure that FABRIC_CFG_PATH or --configPath is set to a path " +
+					"Please make sure that FABRIC_CFG_PATH or -configPath is set to a path " +
 					"which contains configtx.yaml")
 				os.Exit(1)
 			}
 			if strings.Contains(fmt.Sprint(err), "Could not find profile") {
 				logger.Error(fmt.Sprint(err) + ". " +
-					"Please make sure that FABRIC_CFG_PATH or --configPath is set to a path " +
+					"Please make sure that FABRIC_CFG_PATH or -configPath is set to a path " +
 					"which contains configtx.yaml with the specified profile")
 				os.Exit(1)
 			}

@@ -16,11 +16,10 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	localconfig "github.com/mcc-github/blockchain/orderer/common/localconfig"
+	"github.com/mcc-github/blockchain/orderer/common/multichannel"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"github.com/mcc-github/blockchain/orderer/common/multichannel"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"

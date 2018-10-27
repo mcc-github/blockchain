@@ -10,10 +10,9 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/golang/protobuf/proto"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"go.uber.org/zap/zapcore"
-
-	"github.com/golang/protobuf/proto"
 )
 
 type implicitMetaPolicy struct {

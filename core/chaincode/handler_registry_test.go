@@ -7,14 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package chaincode_test
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
-
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 )
 
 var _ = Describe("HandlerRegistry", func() {

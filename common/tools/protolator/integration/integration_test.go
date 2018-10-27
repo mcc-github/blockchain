@@ -11,6 +11,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
@@ -19,8 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/msp"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 )
 

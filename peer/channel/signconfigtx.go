@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 
 	"github.com/mcc-github/blockchain/protos/utils"
-
 	"github.com/spf13/cobra"
 )
 

@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/mcc-github/blockchain/msp"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/peer/common"

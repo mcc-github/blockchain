@@ -9,12 +9,11 @@ package plain_test
 import (
 	"io"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
 	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/token/tms"
 	"github.com/mcc-github/blockchain/token/tms/plain"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("MemoryPool", func() {

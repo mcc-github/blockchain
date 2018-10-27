@@ -9,10 +9,9 @@ package chaincode_test
 import (
 	"time"
 
+	"github.com/mcc-github/blockchain/core/chaincode"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/spf13/viper"
 )
 

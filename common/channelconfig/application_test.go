@@ -9,11 +9,10 @@ package channelconfig
 import (
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/capabilities"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"github.com/golang/protobuf/proto"
 	. "github.com/onsi/gomega"
 )
 

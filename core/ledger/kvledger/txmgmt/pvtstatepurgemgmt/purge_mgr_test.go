@@ -10,13 +10,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
-
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
+	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/spf13/viper"
@@ -42,12 +41,14 @@ func TestPurgeMgr(t *testing.T) {
 
 func testPurgeMgr(t *testing.T, dbEnv privacyenabledstate.TestEnv) {
 	ledgerid := "testledger-perge-mgr"
-	cs := btltestutil.NewMockCollectionStore()
-	cs.SetBTL("ns1", "coll1", 1)
-	cs.SetBTL("ns1", "coll2", 2)
-	cs.SetBTL("ns2", "coll3", 4)
-	cs.SetBTL("ns2", "coll4", 4)
-	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+	btlPolicy := btltestutil.SampleBTLPolicy(
+		map[[2]string]uint64{
+			{"ns1", "coll1"}: 1,
+			{"ns1", "coll2"}: 2,
+			{"ns2", "coll3"}: 4,
+			{"ns2", "coll4"}: 4,
+		},
+	)
 
 	testHelper := &testHelper{}
 	testHelper.init(t, ledgerid, btlPolicy, dbEnv)
@@ -103,9 +104,11 @@ func testPurgeMgr(t *testing.T, dbEnv privacyenabledstate.TestEnv) {
 func TestKeyUpdateBeforeExpiryBlock(t *testing.T) {
 	dbEnv := &privacyenabledstate.LevelDBCommonStorageTestEnv{}
 	ledgerid := "testledger-perge-mgr"
-	cs := btltestutil.NewMockCollectionStore()
-	cs.SetBTL("ns", "coll", 1) 
-	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+	btlPolicy := btltestutil.SampleBTLPolicy(
+		map[[2]string]uint64{
+			{"ns", "coll"}: 1, 
+		},
+	)
 	helper := &testHelper{}
 	helper.init(t, ledgerid, btlPolicy, dbEnv)
 	defer helper.cleanup()
@@ -141,9 +144,11 @@ func TestKeyUpdateBeforeExpiryBlock(t *testing.T) {
 func TestOnlyHashUpdateInExpiryBlock(t *testing.T) {
 	dbEnv := &privacyenabledstate.LevelDBCommonStorageTestEnv{}
 	ledgerid := "testledger-perge-mgr"
-	cs := btltestutil.NewMockCollectionStore()
-	cs.SetBTL("ns", "coll", 1) 
-	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+	btlPolicy := btltestutil.SampleBTLPolicy(
+		map[[2]string]uint64{
+			{"ns", "coll"}: 1, 
+		},
+	)
 	helper := &testHelper{}
 	helper.init(t, ledgerid, btlPolicy, dbEnv)
 	defer helper.cleanup()
@@ -186,9 +191,11 @@ func TestOnlyHashUpdateInExpiryBlock(t *testing.T) {
 func TestOnlyHashDeleteBeforeExpiryBlock(t *testing.T) {
 	dbEnv := &privacyenabledstate.LevelDBCommonStorageTestEnv{}
 	ledgerid := "testledger-perge-mgr"
-	cs := btltestutil.NewMockCollectionStore()
-	cs.SetBTL("ns", "coll", 1) 
-	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+	btlPolicy := btltestutil.SampleBTLPolicy(
+		map[[2]string]uint64{
+			{"ns", "coll"}: 1, 
+		},
+	)
 	testHelper := &testHelper{}
 	testHelper.init(t, ledgerid, btlPolicy, dbEnv)
 	defer testHelper.cleanup()

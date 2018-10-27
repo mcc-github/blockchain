@@ -8,7 +8,6 @@ package lifecycle
 
 import (
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
-
 	"github.com/pkg/errors"
 )
 

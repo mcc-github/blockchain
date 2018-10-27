@@ -13,7 +13,6 @@ import (
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-
 	"github.com/stretchr/testify/assert"
 )
 

@@ -12,7 +12,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
-
 	"github.com/pkg/errors"
 )
 

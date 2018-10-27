@@ -5,12 +5,11 @@ package lscc_test
 import (
 	"errors"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/scc/lscc"
 	"github.com/mcc-github/blockchain/core/scc/lscc/mock"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-
-	"github.com/golang/protobuf/proto"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

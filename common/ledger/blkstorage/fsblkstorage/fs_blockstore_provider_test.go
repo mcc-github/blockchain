@@ -17,9 +17,8 @@ limitations under the License.
 package fsblkstorage
 
 import (
-	"testing"
-
 	"fmt"
+	"testing"
 
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"

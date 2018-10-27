@@ -9,12 +9,11 @@ package configtx
 import (
 	"regexp"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/policies"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 )
 

@@ -20,7 +20,7 @@ import (
 	"text/template"
 	"time"
 
-	docker "github.com/fsouza/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/integration/helpers"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	"github.com/mcc-github/blockchain/integration/nwo/blockchainconfig"
@@ -310,14 +310,29 @@ func (n *Network) WritePeerConfig(p *Peer, config *blockchainconfig.Core) {
 
 
 
-func (n *Network) peerUserCrpytoDir(p *Peer, user, cryptoMaterialType string) string {
+func (n *Network) peerUserCryptoDir(p *Peer, user, cryptoMaterialType string) string {
 	org := n.Organization(p.Organization)
 	Expect(org).NotTo(BeNil())
 
+	return n.userCryptoDir(org, "peerOrganizations", user, cryptoMaterialType)
+}
+
+
+
+func (n *Network) ordererUserCryptoDir(o *Orderer, user, cryptoMaterialType string) string {
+	org := n.Organization(o.Organization)
+	Expect(org).NotTo(BeNil())
+
+	return n.userCryptoDir(org, "ordererOrganizations", user, cryptoMaterialType)
+}
+
+
+
+func (n *Network) userCryptoDir(org *Organization, nodeOrganizationType, user, cryptoMaterialType string) string {
 	return filepath.Join(
 		n.RootDir,
 		"crypto",
-		"peerOrganizations",
+		nodeOrganizationType,
 		org.Domain,
 		"users",
 		fmt.Sprintf("%s@%s", user, org.Domain),
@@ -328,13 +343,19 @@ func (n *Network) peerUserCrpytoDir(p *Peer, user, cryptoMaterialType string) st
 
 
 func (n *Network) PeerUserMSPDir(p *Peer, user string) string {
-	return n.peerUserCrpytoDir(p, user, "msp")
+	return n.peerUserCryptoDir(p, user, "msp")
+}
+
+
+
+func (n *Network) OrdererUserMSPDir(o *Orderer, user string) string {
+	return n.ordererUserCryptoDir(o, user, "msp")
 }
 
 
 
 func (n *Network) PeerUserTLSDir(p *Peer, user string) string {
-	return n.peerUserCrpytoDir(p, user, "tls")
+	return n.peerUserCryptoDir(p, user, "tls")
 }
 
 
@@ -956,6 +977,18 @@ func (n *Network) PeerUserSession(p *Peer, user string, command Command) (*gexec
 		command,
 		fmt.Sprintf("FABRIC_CFG_PATH=%s", n.PeerDir(p)),
 		fmt.Sprintf("CORE_PEER_MSPCONFIGPATH=%s", n.PeerUserMSPDir(p, user)),
+	)
+	return n.StartSession(cmd, command.SessionName())
+}
+
+
+
+func (n *Network) OrdererAdminSession(o *Orderer, p *Peer, command Command) (*gexec.Session, error) {
+	cmd := n.peerCommand(
+		command,
+		"CORE_PEER_LOCALMSPID=OrdererMSP",
+		fmt.Sprintf("FABRIC_CFG_PATH=%s", n.PeerDir(p)),
+		fmt.Sprintf("CORE_PEER_MSPCONFIGPATH=%s", n.OrdererUserMSPDir(o, "Admin")),
 	)
 	return n.StartSession(cmd, command.SessionName())
 }

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-
 	"github.com/stretchr/testify/assert"
 )
 

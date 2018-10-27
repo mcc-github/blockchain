@@ -10,11 +10,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mcc-github/blockchain/common/policies"
-	cb "github.com/mcc-github/blockchain/protos/common"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/msp"
+	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 type provider struct {

@@ -9,9 +9,8 @@ package statebased_test
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/cauthdsl"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/core/chaincode/shim/ext/statebased"
 	"github.com/stretchr/testify/assert"
 )

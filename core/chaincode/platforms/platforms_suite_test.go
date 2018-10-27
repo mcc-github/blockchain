@@ -7,12 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package platforms_test
 
 import (
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"testing"
 
+	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 

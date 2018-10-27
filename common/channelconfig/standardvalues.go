@@ -10,9 +10,8 @@ import (
 	"fmt"
 	"reflect"
 
-	cb "github.com/mcc-github/blockchain/protos/common"
-
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 

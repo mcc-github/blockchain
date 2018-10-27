@@ -14,12 +14,6 @@ import (
 	"path/filepath"
 	"syscall"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
-	"github.com/onsi/gomega/gexec"
-	"github.com/tedsuo/ifrit"
-
 	"github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
@@ -30,6 +24,11 @@ import (
 	"github.com/mcc-github/blockchain/protos/discovery"
 	pm "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/utils"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
+	"github.com/onsi/gomega/gexec"
+	"github.com/tedsuo/ifrit"
 	yaml "gopkg.in/yaml.v2"
 )
 

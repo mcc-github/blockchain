@@ -22,7 +22,6 @@ import (
 
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
-	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
 )
@@ -30,31 +29,29 @@ import (
 
 func InitializeTestEnv() {
 	remove()
-	initialize(&Initializer{
-		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
-		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
-	})
+	InitializeTestEnvWithInitializer(nil)
 }
 
 
-func InitializeTestEnvWithCustomProcessors(customTxProcessors customtx.Processors) {
+func InitializeTestEnvWithInitializer(initializer *Initializer) {
 	remove()
-	customtx.InitializeTestEnv(customTxProcessors)
-	initialize(&Initializer{
-		CustomTxProcessors:            customTxProcessors,
-		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
-		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
-	})
+	InitializeExistingTestEnvWithInitializer(initializer)
 }
 
 
 
 
-func InitializeExistingTestEnvWithCustomProcessors(customTxProcessors customtx.Processors) {
-	customtx.InitializeTestEnv(customTxProcessors)
-	initialize(&Initializer{
-		CustomTxProcessors: customTxProcessors,
-	})
+func InitializeExistingTestEnvWithInitializer(initializer *Initializer) {
+	if initializer == nil {
+		initializer = &Initializer{}
+	}
+	if initializer.DeployedChaincodeInfoProvider == nil {
+		initializer.DeployedChaincodeInfoProvider = &mock.DeployedChaincodeInfoProvider{}
+	}
+	if initializer.PlatformRegistry == nil {
+		initializer.PlatformRegistry = platforms.NewRegistry(&golang.Platform{})
+	}
+	initialize(initializer)
 }
 
 

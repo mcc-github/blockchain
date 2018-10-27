@@ -19,9 +19,8 @@ package common
 import (
 	"fmt"
 
-	"github.com/mcc-github/blockchain/protos/msp"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/protos/msp"
 )
 
 type DynamicConfigGroupFactory interface {

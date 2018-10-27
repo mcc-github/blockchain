@@ -12,8 +12,6 @@ import (
 	"os"
 	"testing"
 
-	. "github.com/onsi/gomega"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	mc "github.com/mcc-github/blockchain/common/mocks/config"
@@ -36,6 +34,7 @@ import (
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protos/utils"
+	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

@@ -10,7 +10,6 @@ import (
 	"github.com/mcc-github/blockchain/common/capabilities"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-
 	"github.com/pkg/errors"
 )
 

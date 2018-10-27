@@ -14,7 +14,6 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
 	"github.com/pkg/errors"
 )
 

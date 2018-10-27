@@ -7,15 +7,14 @@ SPDX-License-Identifier: Apache-2.0
 package server_test
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
-
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/token/server"
 	"github.com/mcc-github/blockchain/token/server/mock"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 )
 
 var _ = Describe("AccessControl", func() {

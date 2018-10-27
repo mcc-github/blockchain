@@ -11,10 +11,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
@@ -22,6 +18,8 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
@@ -446,11 +444,7 @@ func testHandleChainCodeDeploy(t *testing.T, env TestEnv) {
 
 	coll1 := createCollectionConfig("collectionMarbles")
 	ccp := &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1}}
-	ccpBytes, err := proto.Marshal(ccp)
-	assert.NoError(t, err)
-	assert.NotNil(t, ccpBytes)
-
-	chaincodeDef := &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: "", CollectionConfigs: ccpBytes}
+	chaincodeDef := &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: "", CollectionConfigs: ccp}
 
 	commonStorageDB := db.(*CommonStorageDB)
 
@@ -489,11 +483,7 @@ func testHandleChainCodeDeploy(t *testing.T, env TestEnv) {
 
 	coll2 := createCollectionConfig("collectionMarblesPrivateDetails")
 	ccp = &common.CollectionConfigPackage{Config: []*common.CollectionConfig{coll1, coll2}}
-	ccpBytes, err = proto.Marshal(ccp)
-	assert.NoError(t, err)
-	assert.NotNil(t, ccpBytes)
-
-	chaincodeDef = &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: "", CollectionConfigs: ccpBytes}
+	chaincodeDef = &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: "", CollectionConfigs: ccp}
 
 	
 	

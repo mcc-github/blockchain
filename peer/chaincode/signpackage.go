@@ -20,10 +20,9 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/spf13/cobra"
-
 	"github.com/mcc-github/blockchain/core/common/ccpackage"
 	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/spf13/cobra"
 )
 
 

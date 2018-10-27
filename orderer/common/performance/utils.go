@@ -15,7 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/common/localmsp"
 	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
-
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	protosutils "github.com/mcc-github/blockchain/protos/utils"

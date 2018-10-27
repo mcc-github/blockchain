@@ -24,6 +24,7 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMockStateRangeQueryIterator(t *testing.T) {
@@ -233,6 +234,64 @@ func TestGetTxTimestamp(t *testing.T) {
 	}
 
 	stub.MockTransactionEnd("init")
+}
+
+
+
+func TestPutEmptyState(t *testing.T) {
+	stub := NewMockStub("FAB-12545", nil)
+
+	
+	stub.MockTransactionStart("1")
+	err := stub.PutState("empty", []byte{})
+	assert.NoError(t, err)
+	err = stub.PutState("nil", nil)
+	assert.NoError(t, err)
+	stub.MockTransactionEnd("1")
+
+	
+	stub.MockTransactionStart("2")
+	val, err := stub.GetState("empty")
+	assert.NoError(t, err)
+	assert.Nil(t, val)
+	val, err = stub.GetState("nil")
+	assert.NoError(t, err)
+	assert.Nil(t, val)
+	
+	err = stub.PutState("empty", []byte{0})
+	assert.NoError(t, err)
+	err = stub.PutState("nil", []byte{0})
+	assert.NoError(t, err)
+	stub.MockTransactionEnd("2")
+
+	
+	stub.MockTransactionStart("3")
+	val, err = stub.GetState("empty")
+	assert.NoError(t, err)
+	assert.Equal(t, val, []byte{0})
+	val, err = stub.GetState("nil")
+	assert.NoError(t, err)
+	assert.Equal(t, val, []byte{0})
+	stub.MockTransactionEnd("3")
+
+	
+	stub.MockTransactionStart("4")
+	err = stub.PutState("empty", []byte{})
+	assert.NoError(t, err)
+	err = stub.PutState("nil", nil)
+	assert.NoError(t, err)
+	stub.MockTransactionEnd("4")
+
+	
+	stub.MockTransactionStart("5")
+	val, err = stub.GetState("empty")
+	assert.NoError(t, err)
+	assert.Nil(t, val)
+	val, err = stub.GetState("nil")
+	assert.NoError(t, err)
+	assert.Nil(t, val)
+	stub.MockTransactionEnd("5")
+
 }
 
 

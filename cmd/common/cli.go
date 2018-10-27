@@ -8,10 +8,9 @@ package common
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-
-	"io"
 
 	"github.com/mcc-github/blockchain/cmd/common/comm"
 	"github.com/mcc-github/blockchain/cmd/common/signer"

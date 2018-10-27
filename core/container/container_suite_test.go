@@ -6,11 +6,11 @@ SPDX-License-Identifier: Apache-2.0
 package container_test
 
 import (
+	"testing"
+
 	"github.com/mcc-github/blockchain/core/container"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 

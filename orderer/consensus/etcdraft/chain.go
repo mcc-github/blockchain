@@ -10,7 +10,7 @@ import (
 	"context"
 	"encoding/pem"
 	"fmt"
-	"sync"
+	"reflect"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +39,22 @@ type Storage interface {
 }
 
 
+
+
+
+type Configurator interface {
+	Configure(channel string, newNodes []cluster.RemoteNode)
+}
+
+
+
+
+type RPC interface {
+	Step(dest uint64, msg *orderer.StepRequest) (*orderer.StepResponse, error)
+	SendSubmit(dest uint64, request *orderer.SubmitRequest) error
+}
+
+
 type Options struct {
 	RaftID uint64
 
@@ -57,20 +73,24 @@ type Options struct {
 
 
 type Chain struct {
-	communication cluster.Communicator
-	raftID        uint64
+	configurator Configurator
+	rpc          RPC
+
+	raftID    uint64
+	channelID string
 
 	submitC  chan *orderer.SubmitRequest
 	commitC  chan *common.Block
 	observeC chan<- uint64 
-	haltC    chan struct{}
-	doneC    chan struct{}
+	haltC    chan struct{} 
+	doneC    chan struct{} 
+	resignC  chan struct{} 
+	startC   chan struct{} 
 
-	clock clock.Clock
+	clock clock.Clock 
 
 	support consensus.ConsenterSupport
 
-	leaderLock   sync.RWMutex
 	leader       uint64
 	appliedIndex uint64
 
@@ -82,42 +102,54 @@ type Chain struct {
 }
 
 
-func NewChain(support consensus.ConsenterSupport, opts Options, observe chan<- uint64, comm cluster.Communicator) (*Chain, error) {
+func NewChain(
+	support consensus.ConsenterSupport,
+	opts Options,
+	conf Configurator,
+	rpc RPC,
+	observeC chan<- uint64) (*Chain, error) {
 	return &Chain{
-		communication: comm,
-		raftID:        opts.RaftID,
-		submitC:       make(chan *orderer.SubmitRequest),
-		commitC:       make(chan *common.Block),
-		haltC:         make(chan struct{}),
-		doneC:         make(chan struct{}),
-		observeC:      observe,
-		support:       support,
-		clock:         opts.Clock,
-		logger:        opts.Logger.With("channel", support.ChainID()),
-		storage:       opts.Storage,
-		opts:          opts,
+		configurator: conf,
+		rpc:          rpc,
+		channelID:    support.ChainID(),
+		raftID:       opts.RaftID,
+		submitC:      make(chan *orderer.SubmitRequest),
+		commitC:      make(chan *common.Block),
+		haltC:        make(chan struct{}),
+		doneC:        make(chan struct{}),
+		resignC:      make(chan struct{}),
+		startC:       make(chan struct{}),
+		observeC:     observeC,
+		support:      support,
+		clock:        opts.Clock,
+		logger:       opts.Logger.With("channel", support.ChainID(), "node", opts.RaftID),
+		storage:      opts.Storage,
+		opts:         opts,
 	}, nil
 }
 
 
 func (c *Chain) Start() {
+	c.logger.Infof("Starting Raft node")
 	config := &raft.Config{
-		ID:              c.raftID,
-		ElectionTick:    c.opts.ElectionTick,
-		HeartbeatTick:   c.opts.HeartbeatTick,
-		MaxSizePerMsg:   c.opts.MaxSizePerMsg,
-		MaxInflightMsgs: c.opts.MaxInflightMsgs,
-		Logger:          c.logger,
-		Storage:         c.opts.Storage,
+		ID:                        c.raftID,
+		ElectionTick:              c.opts.ElectionTick,
+		HeartbeatTick:             c.opts.HeartbeatTick,
+		MaxSizePerMsg:             c.opts.MaxSizePerMsg,
+		MaxInflightMsgs:           c.opts.MaxInflightMsgs,
+		Logger:                    c.logger,
+		Storage:                   c.opts.Storage,
+		DisableProposalForwarding: true, 
 	}
 
 	if err := c.configureComm(); err != nil {
-		c.logger.Errorf("Failed starting chain, aborting: +%v", err)
+		c.logger.Errorf("Failed to start chain, aborting: +%v", err)
 		close(c.doneC)
 		return
 	}
 
 	c.node = raft.StartNode(config, c.opts.Peers)
+	close(c.startC)
 
 	go c.serveRaft()
 	go c.serveRequest()
@@ -125,7 +157,7 @@ func (c *Chain) Start() {
 
 
 func (c *Chain) Order(env *common.Envelope, configSeq uint64) error {
-	return c.Submit(&orderer.SubmitRequest{LastValidationSeq: configSeq, Content: env}, 0)
+	return c.Submit(&orderer.SubmitRequest{LastValidationSeq: configSeq, Content: env, Channel: c.channelID}, 0)
 }
 
 
@@ -133,7 +165,7 @@ func (c *Chain) Configure(env *common.Envelope, configSeq uint64) error {
 	if err := c.checkConfigUpdateValidity(env); err != nil {
 		return err
 	}
-	return c.Submit(&orderer.SubmitRequest{LastValidationSeq: configSeq, Content: env}, 0)
+	return c.Submit(&orderer.SubmitRequest{LastValidationSeq: configSeq, Content: env, Channel: c.channelID}, 0)
 }
 
 
@@ -166,10 +198,9 @@ func (c *Chain) checkConfigUpdateValidity(ctx *common.Envelope) error {
 		}
 
 		
-		
 		if ordererConfigGroup, ok := configUpdate.WriteSet.Groups["Orderer"]; ok {
-			if _, ok := ordererConfigGroup.Values["ConsensusType"]; ok {
-				return errors.Errorf("updates to ConsensusType not supported currently")
+			if val, ok := ordererConfigGroup.Values["ConsensusType"]; ok {
+				return c.checkConsentersSet(val)
 			}
 		}
 		return nil
@@ -192,6 +223,13 @@ func (c *Chain) Errored() <-chan struct{} {
 
 func (c *Chain) Halt() {
 	select {
+	case <-c.startC:
+	default:
+		c.logger.Warnf("Attempted to halt a chain that has not started")
+		return
+	}
+
+	select {
 	case c.haltC <- struct{}{}:
 	case <-c.doneC:
 		return
@@ -199,9 +237,38 @@ func (c *Chain) Halt() {
 	<-c.doneC
 }
 
+func (c *Chain) isRunning() error {
+	select {
+	case <-c.startC:
+	default:
+		return errors.Errorf("chain is not started")
+	}
+
+	select {
+	case <-c.doneC:
+		return errors.Errorf("chain is stopped")
+	default:
+	}
+
+	return nil
+}
+
 
 func (c *Chain) Step(req *orderer.StepRequest, sender uint64) error {
-	panic("not implemented")
+	if err := c.isRunning(); err != nil {
+		return err
+	}
+
+	stepMsg := &raftpb.Message{}
+	if err := proto.Unmarshal(req.Payload, stepMsg); err != nil {
+		return fmt.Errorf("failed to unmarshal StepRequest payload to Raft Message: %s", err)
+	}
+
+	if err := c.node.Step(context.TODO(), *stepMsg); err != nil {
+		return fmt.Errorf("failed to process Raft Step message: %s", err)
+	}
+
+	return nil
 }
 
 
@@ -209,14 +276,17 @@ func (c *Chain) Step(req *orderer.StepRequest, sender uint64) error {
 
 
 func (c *Chain) Submit(req *orderer.SubmitRequest, sender uint64) error {
-	c.leaderLock.RLock()
-	defer c.leaderLock.RUnlock()
-
-	if c.leader == raft.None {
-		return errors.Errorf("no raft leader")
+	if err := c.isRunning(); err != nil {
+		return err
 	}
 
-	if c.leader == c.raftID {
+	lead := atomic.LoadUint64(&c.leader)
+
+	if lead == raft.None {
+		return errors.Errorf("no Raft leader")
+	}
+
+	if lead == c.raftID {
 		select {
 		case c.submitC <- req:
 			return nil
@@ -225,8 +295,8 @@ func (c *Chain) Submit(req *orderer.SubmitRequest, sender uint64) error {
 		}
 	}
 
-	
-	return errors.Errorf("only single raft node is currently supported")
+	c.logger.Debugf("Forwarding submit request to Raft leader %d", lead)
+	return c.rpc.SendSubmit(lead, req)
 }
 
 func (c *Chain) serveRequest() {
@@ -272,6 +342,13 @@ func (c *Chain) serveRequest() {
 				c.logger.Errorf("Failed to commit block: %s", err)
 			}
 
+		case b := <-c.commitC:
+			c.writeBlock(b)
+
+		case <-c.resignC:
+			_ = c.support.BlockCutter().Cut()
+			stop()
+
 		case <-timer.C():
 			ticking = false
 
@@ -291,6 +368,15 @@ func (c *Chain) serveRequest() {
 			return
 		}
 	}
+}
+
+func (c *Chain) writeBlock(b *common.Block) {
+	if utils.IsConfigBlock(b) {
+		c.support.WriteConfigBlock(b, nil)
+		return
+	}
+
+	c.support.WriteBlock(b, nil)
 }
 
 
@@ -334,7 +420,7 @@ func (c *Chain) commitBatches(batches ...[]*common.Envelope) error {
 		b := c.support.CreateNextBlock(batch)
 		data := utils.MarshalOrPanic(b)
 		if err := c.node.Propose(context.TODO(), data); err != nil {
-			return errors.Errorf("failed to propose data to raft: %s", err)
+			return errors.Errorf("failed to propose data to Raft node: %s", err)
 		}
 
 		select {
@@ -344,6 +430,9 @@ func (c *Chain) commitBatches(batches ...[]*common.Envelope) error {
 			} else {
 				c.support.WriteBlock(block, nil)
 			}
+
+		case <-c.resignC:
+			return errors.Errorf("aborted block committing: lost leadership")
 
 		case <-c.doneC:
 			return nil
@@ -363,16 +452,20 @@ func (c *Chain) serveRaft() {
 
 		case rd := <-c.node.Ready():
 			c.storage.Append(rd.Entries)
-			
 			c.apply(c.entriesToApply(rd.CommittedEntries))
 			c.node.Advance()
+			c.send(rd.Messages)
 
 			if rd.SoftState != nil {
-				c.leaderLock.Lock()
 				newLead := atomic.LoadUint64(&rd.SoftState.Lead)
-				if newLead != c.leader {
-					c.logger.Infof("Raft leader changed on node %x: %x -> %x", c.raftID, c.leader, newLead)
-					c.leader = newLead
+				lead := atomic.LoadUint64(&c.leader)
+				if newLead != lead {
+					c.logger.Infof("Raft leader changed: %d -> %d", lead, newLead)
+					atomic.StoreUint64(&c.leader, newLead)
+
+					if lead == c.raftID {
+						c.resignC <- struct{}{}
+					}
 
 					
 					select {
@@ -380,7 +473,6 @@ func (c *Chain) serveRaft() {
 					default:
 					}
 				}
-				c.leaderLock.Unlock()
 			}
 
 		case <-c.haltC:
@@ -417,6 +509,21 @@ func (c *Chain) apply(ents []raftpb.Entry) {
 	}
 }
 
+func (c *Chain) send(msgs []raftpb.Message) {
+	for _, msg := range msgs {
+		if msg.To == 0 {
+			continue
+		}
+
+		msgBytes := utils.MarshalOrPanic(&msg)
+		_, err := c.rpc.Step(msg.To, &orderer.StepRequest{Channel: c.support.ChainID(), Payload: msgBytes})
+		if err != nil {
+			
+			c.logger.Errorf("Failed to send StepRequest to %d, because: %s", msg.To, err)
+		}
+	}
+}
+
 
 func (c *Chain) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 	if len(ents) == 0 {
@@ -441,7 +548,7 @@ func (c *Chain) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 func (c *Chain) isConfig(env *common.Envelope) bool {
 	h, err := utils.ChannelHeader(env)
 	if err != nil {
-		c.logger.Panicf("programming error: failed to extract channel header from envelope")
+		c.logger.Panicf("failed to extract channel header from envelope")
 	}
 
 	return h.Type == int32(common.HeaderType_CONFIG) || h.Type == int32(common.HeaderType_ORDERER_TRANSACTION)
@@ -452,7 +559,8 @@ func (c *Chain) configureComm() error {
 	if err != nil {
 		return err
 	}
-	c.communication.Configure(c.support.ChainID(), nodes)
+
+	c.configurator.Configure(c.channelID, nodes)
 	return nil
 }
 
@@ -460,7 +568,7 @@ func (c *Chain) nodeConfigFromMetadata() ([]cluster.RemoteNode, error) {
 	var nodes []cluster.RemoteNode
 	m := &etcdraft.Metadata{}
 	if err := proto.Unmarshal(c.support.SharedConfig().ConsensusMetadata(), m); err != nil {
-		return nil, errors.Wrap(err, "failed extracting consensus metadata")
+		return nil, errors.Wrap(err, "failed to extract consensus metadata")
 	}
 
 	for id, consenter := range m.Consenters {
@@ -494,4 +602,46 @@ func (c *Chain) pemToDER(pemBytes []byte, id uint64, certType string) ([]byte, e
 		return nil, errors.Errorf("invalid PEM block")
 	}
 	return bl.Bytes, nil
+}
+
+func (c *Chain) checkConsentersSet(configValue *common.ConfigValue) error {
+	consensusTypeValue := &orderer.ConsensusType{}
+	if err := proto.Unmarshal(configValue.Value, consensusTypeValue); err != nil {
+		return errors.Wrap(err, "failed to unmarshal consensusType config update")
+	}
+
+	updatedMetadata := &etcdraft.Metadata{}
+	if err := proto.Unmarshal(consensusTypeValue.Metadata, updatedMetadata); err != nil {
+		return errors.Wrap(err, "failed to unmarshal updated (new) etcdraft metadata configuration")
+	}
+
+	currentMetadata := &etcdraft.Metadata{}
+	if err := proto.Unmarshal(c.support.SharedConfig().ConsensusMetadata(), currentMetadata); err != nil {
+		return errors.Wrap(err, "failed to unmarshal current etcdraft metadata configuration")
+	}
+
+	if !c.consentersSetEqual(currentMetadata.Consenters, updatedMetadata.Consenters) {
+		return errors.New("update of consenters set is not supported yet")
+	}
+
+	return nil
+}
+
+func (c *Chain) consentersSetEqual(c1 []*etcdraft.Consenter, c2 []*etcdraft.Consenter) bool {
+	if len(c1) != len(c2) {
+		return false
+	}
+
+	consentersSet1 := c.consentersToMap(c1)
+	consentersSet2 := c.consentersToMap(c2)
+
+	return reflect.DeepEqual(consentersSet1, consentersSet2)
+}
+
+func (c *Chain) consentersToMap(c1 []*etcdraft.Consenter) map[string]*etcdraft.Consenter {
+	set := map[string]*etcdraft.Consenter{}
+	for _, c := range c1 {
+		set[string(c.ClientTlsCert)] = c
+	}
+	return set
 }

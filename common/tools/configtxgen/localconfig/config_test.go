@@ -11,7 +11,6 @@ import (
 
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -27,9 +27,9 @@ const _ = proto.ProtoPackageIsVersion2
 
 
 type FilteredBlock struct {
-	ChannelId            string                 `protobuf:"bytes,1,opt,name=channel_id,json=channelId" json:"channel_id,omitempty"`
-	Number               uint64                 `protobuf:"varint,2,opt,name=number" json:"number,omitempty"`
-	FilteredTransactions []*FilteredTransaction `protobuf:"bytes,4,rep,name=filtered_transactions,json=filteredTransactions" json:"filtered_transactions,omitempty"`
+	ChannelId            string                 `protobuf:"bytes,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	Number               uint64                 `protobuf:"varint,2,opt,name=number,proto3" json:"number,omitempty"`
+	FilteredTransactions []*FilteredTransaction `protobuf:"bytes,4,rep,name=filtered_transactions,json=filteredTransactions,proto3" json:"filtered_transactions,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
 	XXX_unrecognized     []byte                 `json:"-"`
 	XXX_sizecache        int32                  `json:"-"`
@@ -83,9 +83,9 @@ func (m *FilteredBlock) GetFilteredTransactions() []*FilteredTransaction {
 
 
 type FilteredTransaction struct {
-	Txid             string            `protobuf:"bytes,1,opt,name=txid" json:"txid,omitempty"`
-	Type             common.HeaderType `protobuf:"varint,2,opt,name=type,enum=common.HeaderType" json:"type,omitempty"`
-	TxValidationCode TxValidationCode  `protobuf:"varint,3,opt,name=tx_validation_code,json=txValidationCode,enum=protos.TxValidationCode" json:"tx_validation_code,omitempty"`
+	Txid             string            `protobuf:"bytes,1,opt,name=txid,proto3" json:"txid,omitempty"`
+	Type             common.HeaderType `protobuf:"varint,2,opt,name=type,proto3,enum=common.HeaderType" json:"type,omitempty"`
+	TxValidationCode TxValidationCode  `protobuf:"varint,3,opt,name=tx_validation_code,json=txValidationCode,proto3,enum=protos.TxValidationCode" json:"tx_validation_code,omitempty"`
 	
 	
 	Data                 isFilteredTransaction_Data `protobuf_oneof:"Data"`
@@ -118,23 +118,6 @@ func (m *FilteredTransaction) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_FilteredTransaction proto.InternalMessageInfo
 
-type isFilteredTransaction_Data interface {
-	isFilteredTransaction_Data()
-}
-
-type FilteredTransaction_TransactionActions struct {
-	TransactionActions *FilteredTransactionActions `protobuf:"bytes,4,opt,name=transaction_actions,json=transactionActions,oneof"`
-}
-
-func (*FilteredTransaction_TransactionActions) isFilteredTransaction_Data() {}
-
-func (m *FilteredTransaction) GetData() isFilteredTransaction_Data {
-	if m != nil {
-		return m.Data
-	}
-	return nil
-}
-
 func (m *FilteredTransaction) GetTxid() string {
 	if m != nil {
 		return m.Txid
@@ -154,6 +137,23 @@ func (m *FilteredTransaction) GetTxValidationCode() TxValidationCode {
 		return m.TxValidationCode
 	}
 	return TxValidationCode_VALID
+}
+
+type isFilteredTransaction_Data interface {
+	isFilteredTransaction_Data()
+}
+
+type FilteredTransaction_TransactionActions struct {
+	TransactionActions *FilteredTransactionActions `protobuf:"bytes,4,opt,name=transaction_actions,json=transactionActions,proto3,oneof"`
+}
+
+func (*FilteredTransaction_TransactionActions) isFilteredTransaction_Data() {}
+
+func (m *FilteredTransaction) GetData() isFilteredTransaction_Data {
+	if m != nil {
+		return m.Data
+	}
+	return nil
 }
 
 func (m *FilteredTransaction) GetTransactionActions() *FilteredTransactionActions {
@@ -221,7 +221,7 @@ func _FilteredTransaction_OneofSizer(msg proto.Message) (n int) {
 
 
 type FilteredTransactionActions struct {
-	ChaincodeActions     []*FilteredChaincodeAction `protobuf:"bytes,1,rep,name=chaincode_actions,json=chaincodeActions" json:"chaincode_actions,omitempty"`
+	ChaincodeActions     []*FilteredChaincodeAction `protobuf:"bytes,1,rep,name=chaincode_actions,json=chaincodeActions,proto3" json:"chaincode_actions,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
 	XXX_unrecognized     []byte                     `json:"-"`
 	XXX_sizecache        int32                      `json:"-"`
@@ -261,7 +261,7 @@ func (m *FilteredTransactionActions) GetChaincodeActions() []*FilteredChaincodeA
 
 
 type FilteredChaincodeAction struct {
-	ChaincodeEvent       *ChaincodeEvent `protobuf:"bytes,1,opt,name=chaincode_event,json=chaincodeEvent" json:"chaincode_event,omitempty"`
+	ChaincodeEvent       *ChaincodeEvent `protobuf:"bytes,1,opt,name=chaincode_event,json=chaincodeEvent,proto3" json:"chaincode_event,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
 	XXX_unrecognized     []byte          `json:"-"`
 	XXX_sizecache        int32           `json:"-"`
@@ -339,17 +339,21 @@ type isDeliverResponse_Type interface {
 }
 
 type DeliverResponse_Status struct {
-	Status common.Status `protobuf:"varint,1,opt,name=status,enum=common.Status,oneof"`
-}
-type DeliverResponse_Block struct {
-	Block *common.Block `protobuf:"bytes,2,opt,name=block,oneof"`
-}
-type DeliverResponse_FilteredBlock struct {
-	FilteredBlock *FilteredBlock `protobuf:"bytes,3,opt,name=filtered_block,json=filteredBlock,oneof"`
+	Status common.Status `protobuf:"varint,1,opt,name=status,proto3,enum=common.Status,oneof"`
 }
 
-func (*DeliverResponse_Status) isDeliverResponse_Type()        {}
-func (*DeliverResponse_Block) isDeliverResponse_Type()         {}
+type DeliverResponse_Block struct {
+	Block *common.Block `protobuf:"bytes,2,opt,name=block,proto3,oneof"`
+}
+
+type DeliverResponse_FilteredBlock struct {
+	FilteredBlock *FilteredBlock `protobuf:"bytes,3,opt,name=filtered_block,json=filteredBlock,proto3,oneof"`
+}
+
+func (*DeliverResponse_Status) isDeliverResponse_Type() {}
+
+func (*DeliverResponse_Block) isDeliverResponse_Type() {}
+
 func (*DeliverResponse_FilteredBlock) isDeliverResponse_Type() {}
 
 func (m *DeliverResponse) GetType() isDeliverResponse_Type {
@@ -486,6 +490,7 @@ const _ = grpc.SupportPackageIsVersion4
 
 
 
+
 type DeliverClient interface {
 	
 	
@@ -506,7 +511,7 @@ func NewDeliverClient(cc *grpc.ClientConn) DeliverClient {
 }
 
 func (c *deliverClient) Deliver(ctx context.Context, opts ...grpc.CallOption) (Deliver_DeliverClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_Deliver_serviceDesc.Streams[0], c.cc, "/protos.Deliver/Deliver", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Deliver_serviceDesc.Streams[0], "/protos.Deliver/Deliver", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +542,7 @@ func (x *deliverDeliverClient) Recv() (*DeliverResponse, error) {
 }
 
 func (c *deliverClient) DeliverFiltered(ctx context.Context, opts ...grpc.CallOption) (Deliver_DeliverFilteredClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_Deliver_serviceDesc.Streams[1], c.cc, "/protos.Deliver/DeliverFiltered", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Deliver_serviceDesc.Streams[1], "/protos.Deliver/DeliverFiltered", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +571,6 @@ func (x *deliverDeliverFilteredClient) Recv() (*DeliverResponse, error) {
 	}
 	return m, nil
 }
-
 
 
 type DeliverServer interface {

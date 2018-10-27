@@ -10,13 +10,12 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/car"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"

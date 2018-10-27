@@ -12,7 +12,6 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	mspprotos "github.com/mcc-github/blockchain/protos/msp"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-
 	"github.com/stretchr/testify/assert"
 )
 

@@ -10,10 +10,8 @@ import (
 	"encoding/base64"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
@@ -21,7 +19,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
 
@@ -234,53 +231,6 @@ func (s *CommonStorageDB) GetPrivateDataMetadataByHash(namespace, collection str
 	return vv.Metadata, nil
 }
 
-func (s *CommonStorageDB) getCollectionConfigMap(chaincodeDefinition *cceventmgmt.ChaincodeDefinition) (map[string]bool, error) {
-	var collectionConfigsBytes []byte
-	collectionConfigsMap := make(map[string]bool)
-
-	
-	
-	
-	if chaincodeDefinition.CollectionConfigs != nil {
-		
-		
-		collectionConfigsBytes = chaincodeDefinition.CollectionConfigs
-	} else {
-		
-		
-		
-		lsccNamespace := "lscc"
-		collectionConfigKey := privdata.BuildCollectionKVSKey(chaincodeDefinition.Name)
-
-		versionedValue, err := s.VersionedDB.GetState(lsccNamespace, collectionConfigKey)
-		if err != nil {
-			return nil, err
-		}
-		
-		
-		if versionedValue != nil {
-			collectionConfigsBytes = versionedValue.Value
-		}
-	}
-
-	if collectionConfigsBytes != nil {
-		collectionConfigs := &common.CollectionConfigPackage{}
-		if err := proto.Unmarshal(collectionConfigsBytes, collectionConfigs); err != nil {
-			return nil, err
-		}
-
-		for _, config := range collectionConfigs.Config {
-			sConfig := config.GetStaticCollectionConfig()
-			if sConfig == nil {
-				continue
-			}
-			collectionConfigsMap[sConfig.Name] = true
-		}
-	}
-
-	return collectionConfigsMap, nil
-}
-
 
 
 
@@ -302,7 +252,7 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 		return nil
 	}
 
-	collectionConfigMap, err := s.getCollectionConfigMap(chaincodeDefinition)
+	collectionConfigMap, err := extractCollectionNames(chaincodeDefinition)
 	if err != nil {
 		logger.Errorf("Error while retrieving collection config for chaincode=[%s]: %s",
 			chaincodeDefinition.Name, err)
@@ -372,4 +322,19 @@ func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedU
 			}
 		}
 	}
+}
+
+func extractCollectionNames(chaincodeDefinition *cceventmgmt.ChaincodeDefinition) (map[string]bool, error) {
+	collectionConfigs := chaincodeDefinition.CollectionConfigs
+	collectionConfigsMap := make(map[string]bool)
+	if collectionConfigs != nil {
+		for _, config := range collectionConfigs.Config {
+			sConfig := config.GetStaticCollectionConfig()
+			if sConfig == nil {
+				continue
+			}
+			collectionConfigsMap[sConfig.Name] = true
+		}
+	}
+	return collectionConfigsMap, nil
 }

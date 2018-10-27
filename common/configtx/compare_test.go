@@ -9,9 +9,8 @@ package configtx
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCompareConfigValue(t *testing.T) {

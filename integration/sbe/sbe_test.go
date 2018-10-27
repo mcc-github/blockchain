@@ -14,14 +14,13 @@ import (
 	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
+	"github.com/mcc-github/blockchain/integration/nwo"
+	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/tedsuo/ifrit"
-
-	"github.com/mcc-github/blockchain/integration/nwo"
-	"github.com/mcc-github/blockchain/integration/nwo/commands"
 )
 
 var _ = Describe("SBE_E2E", func() {

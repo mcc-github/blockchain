@@ -9,8 +9,7 @@ package encoder
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
-
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -20,9 +19,8 @@ import (
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

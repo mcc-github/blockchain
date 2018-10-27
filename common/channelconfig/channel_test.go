@@ -14,7 +14,6 @@ import (
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/common/util"
 	cb "github.com/mcc-github/blockchain/protos/common"
-
 	"github.com/stretchr/testify/assert"
 )
 

@@ -10,11 +10,10 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/channelconfig"
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter/mock"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-
-	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/stretchr/testify/assert"
 )
 

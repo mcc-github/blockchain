@@ -40,8 +40,8 @@ const _ = proto.ProtoPackageIsVersion2
 
 
 type ConfigEnvelope struct {
-	Config               *Config   `protobuf:"bytes,1,opt,name=config" json:"config,omitempty"`
-	LastUpdate           *Envelope `protobuf:"bytes,2,opt,name=last_update,json=lastUpdate" json:"last_update,omitempty"`
+	Config               *Config   `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+	LastUpdate           *Envelope `protobuf:"bytes,2,opt,name=last_update,json=lastUpdate,proto3" json:"last_update,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
 	XXX_unrecognized     []byte    `json:"-"`
 	XXX_sizecache        int32     `json:"-"`
@@ -86,9 +86,9 @@ func (m *ConfigEnvelope) GetLastUpdate() *Envelope {
 }
 
 type ConfigGroupSchema struct {
-	Groups               map[string]*ConfigGroupSchema  `protobuf:"bytes,1,rep,name=groups" json:"groups,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Values               map[string]*ConfigValueSchema  `protobuf:"bytes,2,rep,name=values" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Policies             map[string]*ConfigPolicySchema `protobuf:"bytes,3,rep,name=policies" json:"policies,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Groups               map[string]*ConfigGroupSchema  `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Values               map[string]*ConfigValueSchema  `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Policies             map[string]*ConfigPolicySchema `protobuf:"bytes,3,rep,name=policies,proto3" json:"policies,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	XXX_NoUnkeyedLiteral struct{}                       `json:"-"`
 	XXX_unrecognized     []byte                         `json:"-"`
 	XXX_sizecache        int32                          `json:"-"`
@@ -201,8 +201,8 @@ var xxx_messageInfo_ConfigPolicySchema proto.InternalMessageInfo
 
 
 type Config struct {
-	Sequence             uint64       `protobuf:"varint,1,opt,name=sequence" json:"sequence,omitempty"`
-	ChannelGroup         *ConfigGroup `protobuf:"bytes,2,opt,name=channel_group,json=channelGroup" json:"channel_group,omitempty"`
+	Sequence             uint64       `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	ChannelGroup         *ConfigGroup `protobuf:"bytes,2,opt,name=channel_group,json=channelGroup,proto3" json:"channel_group,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
 	XXX_unrecognized     []byte       `json:"-"`
 	XXX_sizecache        int32        `json:"-"`
@@ -248,7 +248,7 @@ func (m *Config) GetChannelGroup() *ConfigGroup {
 
 type ConfigUpdateEnvelope struct {
 	ConfigUpdate         []byte             `protobuf:"bytes,1,opt,name=config_update,json=configUpdate,proto3" json:"config_update,omitempty"`
-	Signatures           []*ConfigSignature `protobuf:"bytes,2,rep,name=signatures" json:"signatures,omitempty"`
+	Signatures           []*ConfigSignature `protobuf:"bytes,2,rep,name=signatures,proto3" json:"signatures,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -302,10 +302,10 @@ func (m *ConfigUpdateEnvelope) GetSignatures() []*ConfigSignature {
 
 
 type ConfigUpdate struct {
-	ChannelId            string            `protobuf:"bytes,1,opt,name=channel_id,json=channelId" json:"channel_id,omitempty"`
-	ReadSet              *ConfigGroup      `protobuf:"bytes,2,opt,name=read_set,json=readSet" json:"read_set,omitempty"`
-	WriteSet             *ConfigGroup      `protobuf:"bytes,3,opt,name=write_set,json=writeSet" json:"write_set,omitempty"`
-	IsolatedData         map[string][]byte `protobuf:"bytes,5,rep,name=isolated_data,json=isolatedData" json:"isolated_data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	ChannelId            string            `protobuf:"bytes,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	ReadSet              *ConfigGroup      `protobuf:"bytes,2,opt,name=read_set,json=readSet,proto3" json:"read_set,omitempty"`
+	WriteSet             *ConfigGroup      `protobuf:"bytes,3,opt,name=write_set,json=writeSet,proto3" json:"write_set,omitempty"`
+	IsolatedData         map[string][]byte `protobuf:"bytes,5,rep,name=isolated_data,json=isolatedData,proto3" json:"isolated_data,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`
 	XXX_sizecache        int32             `json:"-"`
@@ -365,11 +365,11 @@ func (m *ConfigUpdate) GetIsolatedData() map[string][]byte {
 
 
 type ConfigGroup struct {
-	Version              uint64                   `protobuf:"varint,1,opt,name=version" json:"version,omitempty"`
-	Groups               map[string]*ConfigGroup  `protobuf:"bytes,2,rep,name=groups" json:"groups,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Values               map[string]*ConfigValue  `protobuf:"bytes,3,rep,name=values" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Policies             map[string]*ConfigPolicy `protobuf:"bytes,4,rep,name=policies" json:"policies,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ModPolicy            string                   `protobuf:"bytes,5,opt,name=mod_policy,json=modPolicy" json:"mod_policy,omitempty"`
+	Version              uint64                   `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Groups               map[string]*ConfigGroup  `protobuf:"bytes,2,rep,name=groups,proto3" json:"groups,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Values               map[string]*ConfigValue  `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Policies             map[string]*ConfigPolicy `protobuf:"bytes,4,rep,name=policies,proto3" json:"policies,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	ModPolicy            string                   `protobuf:"bytes,5,opt,name=mod_policy,json=modPolicy,proto3" json:"mod_policy,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
 	XXX_unrecognized     []byte                   `json:"-"`
 	XXX_sizecache        int32                    `json:"-"`
@@ -436,9 +436,9 @@ func (m *ConfigGroup) GetModPolicy() string {
 
 
 type ConfigValue struct {
-	Version              uint64   `protobuf:"varint,1,opt,name=version" json:"version,omitempty"`
+	Version              uint64   `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	Value                []byte   `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	ModPolicy            string   `protobuf:"bytes,3,opt,name=mod_policy,json=modPolicy" json:"mod_policy,omitempty"`
+	ModPolicy            string   `protobuf:"bytes,3,opt,name=mod_policy,json=modPolicy,proto3" json:"mod_policy,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -490,9 +490,9 @@ func (m *ConfigValue) GetModPolicy() string {
 }
 
 type ConfigPolicy struct {
-	Version              uint64   `protobuf:"varint,1,opt,name=version" json:"version,omitempty"`
-	Policy               *Policy  `protobuf:"bytes,2,opt,name=policy" json:"policy,omitempty"`
-	ModPolicy            string   `protobuf:"bytes,3,opt,name=mod_policy,json=modPolicy" json:"mod_policy,omitempty"`
+	Version              uint64   `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Policy               *Policy  `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
+	ModPolicy            string   `protobuf:"bytes,3,opt,name=mod_policy,json=modPolicy,proto3" json:"mod_policy,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`

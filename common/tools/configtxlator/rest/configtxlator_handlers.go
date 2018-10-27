@@ -22,11 +22,10 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/tools/configtxlator/sanitycheck"
 	"github.com/mcc-github/blockchain/common/tools/configtxlator/update"
 	cb "github.com/mcc-github/blockchain/protos/common"
-
-	"github.com/golang/protobuf/proto"
 )
 
 func fieldBytes(fieldName string, r *http.Request) ([]byte, error) {

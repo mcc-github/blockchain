@@ -21,7 +21,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/peer/common"
-
 	"github.com/spf13/cobra"
 )
 

@@ -3,9 +3,8 @@
 package main
 
 import (
-	"fmt"
-
 	"chaincodes/AutoVendor/directdep"
+	"fmt"
 
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	pb "github.com/mcc-github/blockchain/protos/peer"

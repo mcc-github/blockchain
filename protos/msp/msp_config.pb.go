@@ -24,7 +24,7 @@ const _ = proto.ProtoPackageIsVersion2
 type MSPConfig struct {
 	
 	
-	Type int32 `protobuf:"varint,1,opt,name=type" json:"type,omitempty"`
+	Type int32 `protobuf:"varint,1,opt,name=type,proto3" json:"type,omitempty"`
 	
 	Config               []byte   `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
@@ -84,7 +84,7 @@ type FabricMSPConfig struct {
 	
 	
 	
-	Name string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	
 	
 	
@@ -105,14 +105,14 @@ type FabricMSPConfig struct {
 	
 	
 	
-	SigningIdentity *SigningIdentityInfo `protobuf:"bytes,6,opt,name=signing_identity,json=signingIdentity" json:"signing_identity,omitempty"`
+	SigningIdentity *SigningIdentityInfo `protobuf:"bytes,6,opt,name=signing_identity,json=signingIdentity,proto3" json:"signing_identity,omitempty"`
 	
 	
 	
-	OrganizationalUnitIdentifiers []*FabricOUIdentifier `protobuf:"bytes,7,rep,name=organizational_unit_identifiers,json=organizationalUnitIdentifiers" json:"organizational_unit_identifiers,omitempty"`
+	OrganizationalUnitIdentifiers []*FabricOUIdentifier `protobuf:"bytes,7,rep,name=organizational_unit_identifiers,json=organizationalUnitIdentifiers,proto3" json:"organizational_unit_identifiers,omitempty"`
 	
 	
-	CryptoConfig *FabricCryptoConfig `protobuf:"bytes,8,opt,name=crypto_config,json=cryptoConfig" json:"crypto_config,omitempty"`
+	CryptoConfig *FabricCryptoConfig `protobuf:"bytes,8,opt,name=crypto_config,json=cryptoConfig,proto3" json:"crypto_config,omitempty"`
 	
 	
 	TlsRootCerts [][]byte `protobuf:"bytes,9,rep,name=tls_root_certs,json=tlsRootCerts,proto3" json:"tls_root_certs,omitempty"`
@@ -121,7 +121,7 @@ type FabricMSPConfig struct {
 	TlsIntermediateCerts [][]byte `protobuf:"bytes,10,rep,name=tls_intermediate_certs,json=tlsIntermediateCerts,proto3" json:"tls_intermediate_certs,omitempty"`
 	
 	
-	FabricNodeOus        *FabricNodeOUs `protobuf:"bytes,11,opt,name=blockchain_node_ous,json=blockchainNodeOus" json:"blockchain_node_ous,omitempty"`
+	FabricNodeOus        *FabricNodeOUs `protobuf:"bytes,11,opt,name=blockchain_node_ous,json=blockchainNodeOus,proto3" json:"blockchain_node_ous,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
 	XXX_unrecognized     []byte         `json:"-"`
 	XXX_sizecache        int32          `json:"-"`
@@ -235,11 +235,11 @@ type FabricCryptoConfig struct {
 	
 	
 	
-	SignatureHashFamily string `protobuf:"bytes,1,opt,name=signature_hash_family,json=signatureHashFamily" json:"signature_hash_family,omitempty"`
+	SignatureHashFamily string `protobuf:"bytes,1,opt,name=signature_hash_family,json=signatureHashFamily,proto3" json:"signature_hash_family,omitempty"`
 	
 	
 	
-	IdentityIdentifierHashFunction string   `protobuf:"bytes,2,opt,name=identity_identifier_hash_function,json=identityIdentifierHashFunction" json:"identity_identifier_hash_function,omitempty"`
+	IdentityIdentifierHashFunction string   `protobuf:"bytes,2,opt,name=identity_identifier_hash_function,json=identityIdentifierHashFunction,proto3" json:"identity_identifier_hash_function,omitempty"`
 	XXX_NoUnkeyedLiteral           struct{} `json:"-"`
 	XXX_unrecognized               []byte   `json:"-"`
 	XXX_sizecache                  int32    `json:"-"`
@@ -287,15 +287,15 @@ func (m *FabricCryptoConfig) GetIdentityIdentifierHashFunction() string {
 
 type IdemixMSPConfig struct {
 	
-	Name string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	
 	Ipk []byte `protobuf:"bytes,2,opt,name=ipk,proto3" json:"ipk,omitempty"`
 	
-	Signer *IdemixMSPSignerConfig `protobuf:"bytes,3,opt,name=signer" json:"signer,omitempty"`
+	Signer *IdemixMSPSignerConfig `protobuf:"bytes,3,opt,name=signer,proto3" json:"signer,omitempty"`
 	
 	RevocationPk []byte `protobuf:"bytes,4,opt,name=revocation_pk,json=revocationPk,proto3" json:"revocation_pk,omitempty"`
 	
-	Epoch                int64    `protobuf:"varint,5,opt,name=epoch" json:"epoch,omitempty"`
+	Epoch                int64    `protobuf:"varint,5,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -367,11 +367,11 @@ type IdemixMSPSignerConfig struct {
 	
 	Sk []byte `protobuf:"bytes,2,opt,name=sk,proto3" json:"sk,omitempty"`
 	
-	OrganizationalUnitIdentifier string `protobuf:"bytes,3,opt,name=organizational_unit_identifier,json=organizationalUnitIdentifier" json:"organizational_unit_identifier,omitempty"`
+	OrganizationalUnitIdentifier string `protobuf:"bytes,3,opt,name=organizational_unit_identifier,json=organizationalUnitIdentifier,proto3" json:"organizational_unit_identifier,omitempty"`
 	
-	Role int32 `protobuf:"varint,4,opt,name=role" json:"role,omitempty"`
+	Role int32 `protobuf:"varint,4,opt,name=role,proto3" json:"role,omitempty"`
 	
-	EnrollmentId string `protobuf:"bytes,5,opt,name=enrollment_id,json=enrollmentId" json:"enrollment_id,omitempty"`
+	EnrollmentId string `protobuf:"bytes,5,opt,name=enrollment_id,json=enrollmentId,proto3" json:"enrollment_id,omitempty"`
 	
 	CredentialRevocationInformation []byte   `protobuf:"bytes,6,opt,name=credential_revocation_information,json=credentialRevocationInformation,proto3" json:"credential_revocation_information,omitempty"`
 	XXX_NoUnkeyedLiteral            struct{} `json:"-"`
@@ -455,7 +455,7 @@ type SigningIdentityInfo struct {
 	PublicSigner []byte `protobuf:"bytes,1,opt,name=public_signer,json=publicSigner,proto3" json:"public_signer,omitempty"`
 	
 	
-	PrivateSigner        *KeyInfo `protobuf:"bytes,2,opt,name=private_signer,json=privateSigner" json:"private_signer,omitempty"`
+	PrivateSigner        *KeyInfo `protobuf:"bytes,2,opt,name=private_signer,json=privateSigner,proto3" json:"private_signer,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -507,7 +507,7 @@ type KeyInfo struct {
 	
 	
 	
-	KeyIdentifier string `protobuf:"bytes,1,opt,name=key_identifier,json=keyIdentifier" json:"key_identifier,omitempty"`
+	KeyIdentifier string `protobuf:"bytes,1,opt,name=key_identifier,json=keyIdentifier,proto3" json:"key_identifier,omitempty"`
 	
 	
 	KeyMaterial          []byte   `protobuf:"bytes,2,opt,name=key_material,json=keyMaterial,proto3" json:"key_material,omitempty"`
@@ -567,7 +567,7 @@ type FabricOUIdentifier struct {
 	Certificate []byte `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
 	
 	
-	OrganizationalUnitIdentifier string   `protobuf:"bytes,2,opt,name=organizational_unit_identifier,json=organizationalUnitIdentifier" json:"organizational_unit_identifier,omitempty"`
+	OrganizationalUnitIdentifier string   `protobuf:"bytes,2,opt,name=organizational_unit_identifier,json=organizationalUnitIdentifier,proto3" json:"organizational_unit_identifier,omitempty"`
 	XXX_NoUnkeyedLiteral         struct{} `json:"-"`
 	XXX_unrecognized             []byte   `json:"-"`
 	XXX_sizecache                int32    `json:"-"`
@@ -616,11 +616,11 @@ func (m *FabricOUIdentifier) GetOrganizationalUnitIdentifier() string {
 
 type FabricNodeOUs struct {
 	
-	Enable bool `protobuf:"varint,1,opt,name=enable" json:"enable,omitempty"`
+	Enable bool `protobuf:"varint,1,opt,name=enable,proto3" json:"enable,omitempty"`
 	
-	ClientOuIdentifier *FabricOUIdentifier `protobuf:"bytes,2,opt,name=client_ou_identifier,json=clientOuIdentifier" json:"client_ou_identifier,omitempty"`
+	ClientOuIdentifier *FabricOUIdentifier `protobuf:"bytes,2,opt,name=client_ou_identifier,json=clientOuIdentifier,proto3" json:"client_ou_identifier,omitempty"`
 	
-	PeerOuIdentifier     *FabricOUIdentifier `protobuf:"bytes,3,opt,name=peer_ou_identifier,json=peerOuIdentifier" json:"peer_ou_identifier,omitempty"`
+	PeerOuIdentifier     *FabricOUIdentifier `protobuf:"bytes,3,opt,name=peer_ou_identifier,json=peerOuIdentifier,proto3" json:"peer_ou_identifier,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
 	XXX_unrecognized     []byte              `json:"-"`
 	XXX_sizecache        int32               `json:"-"`

@@ -67,7 +67,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/service"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/peer/common"
 	peergossip "github.com/mcc-github/blockchain/peer/gossip"
 	"github.com/mcc-github/blockchain/peer/version"
 	cb "github.com/mcc-github/blockchain/protos/common"
@@ -125,16 +124,6 @@ func serve(args []string) error {
 	mspType := mgmt.GetLocalMSP().GetType()
 	if mspType != msp.FABRIC {
 		panic("Unsupported msp type " + msp.ProviderTypeToString(mspType))
-	}
-
-	
-	
-	overrideLogModules := []string{"msp", "gossip", "ledger", "cauthdsl", "policies", "grpc", "peer.gossip"}
-	for _, module := range overrideLogModules {
-		err := common.SetLogLevelFromViper(module)
-		if err != nil {
-			logger.Warningf("Error setting log level for module '%s': %s", module, err.Error())
-		}
 	}
 
 	

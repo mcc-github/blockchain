@@ -13,9 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
@@ -24,6 +21,8 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	ledgertestutil "github.com/mcc-github/blockchain/core/ledger/testutil"
 	"github.com/mcc-github/blockchain/integration/runner"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
@@ -244,11 +243,11 @@ func TestDebugFunctions(t *testing.T) {
 	
 	loadKeys := []*statedb.CompositeKey{}
 	
-	compositeKey := statedb.CompositeKey{Namespace: "ns", Key: "key3"}
-	loadKeys = append(loadKeys, &compositeKey)
-	compositeKey = statedb.CompositeKey{Namespace: "ns", Key: "key4"}
-	loadKeys = append(loadKeys, &compositeKey)
-	assert.Equal(t, "[ns,key4],[ns,key4]", printCompositeKeys(loadKeys))
+	compositeKey3 := statedb.CompositeKey{Namespace: "ns", Key: "key3"}
+	loadKeys = append(loadKeys, &compositeKey3)
+	compositeKey4 := statedb.CompositeKey{Namespace: "ns", Key: "key4"}
+	loadKeys = append(loadKeys, &compositeKey4)
+	assert.Equal(t, "[ns,key3],[ns,key4]", printCompositeKeys(loadKeys))
 
 }
 

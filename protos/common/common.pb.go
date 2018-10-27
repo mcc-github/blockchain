@@ -140,7 +140,7 @@ func (BlockMetadataIndex) EnumDescriptor() ([]byte, []int) {
 
 
 type LastConfig struct {
-	Index                uint64   `protobuf:"varint,1,opt,name=index" json:"index,omitempty"`
+	Index                uint64   `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -180,7 +180,7 @@ func (m *LastConfig) GetIndex() uint64 {
 
 type Metadata struct {
 	Value                []byte               `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	Signatures           []*MetadataSignature `protobuf:"bytes,2,rep,name=signatures" json:"signatures,omitempty"`
+	Signatures           []*MetadataSignature `protobuf:"bytes,2,rep,name=signatures,proto3" json:"signatures,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
 	XXX_unrecognized     []byte               `json:"-"`
 	XXX_sizecache        int32                `json:"-"`
@@ -318,29 +318,29 @@ func (m *Header) GetSignatureHeader() []byte {
 
 
 type ChannelHeader struct {
-	Type int32 `protobuf:"varint,1,opt,name=type" json:"type,omitempty"`
+	Type int32 `protobuf:"varint,1,opt,name=type,proto3" json:"type,omitempty"`
 	
-	Version int32 `protobuf:"varint,2,opt,name=version" json:"version,omitempty"`
-	
-	
-	Timestamp *timestamp.Timestamp `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp,omitempty"`
-	
-	ChannelId string `protobuf:"bytes,4,opt,name=channel_id,json=channelId" json:"channel_id,omitempty"`
+	Version int32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	
 	
+	Timestamp *timestamp.Timestamp `protobuf:"bytes,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	
-	
-	
-	
-	TxId string `protobuf:"bytes,5,opt,name=tx_id,json=txId" json:"tx_id,omitempty"`
+	ChannelId string `protobuf:"bytes,4,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
 	
 	
 	
 	
 	
 	
+	TxId string `protobuf:"bytes,5,opt,name=tx_id,json=txId,proto3" json:"tx_id,omitempty"`
 	
-	Epoch uint64 `protobuf:"varint,6,opt,name=epoch" json:"epoch,omitempty"`
+	
+	
+	
+	
+	
+	
+	Epoch uint64 `protobuf:"varint,6,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	
 	Extension []byte `protobuf:"bytes,7,opt,name=extension,proto3" json:"extension,omitempty"`
 	
@@ -482,7 +482,7 @@ func (m *SignatureHeader) GetNonce() []byte {
 
 type Payload struct {
 	
-	Header *Header `protobuf:"bytes,1,opt,name=header" json:"header,omitempty"`
+	Header *Header `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
 	
 	Data                 []byte   `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
@@ -582,9 +582,9 @@ func (m *Envelope) GetSignature() []byte {
 
 
 type Block struct {
-	Header               *BlockHeader   `protobuf:"bytes,1,opt,name=header" json:"header,omitempty"`
-	Data                 *BlockData     `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
-	Metadata             *BlockMetadata `protobuf:"bytes,3,opt,name=metadata" json:"metadata,omitempty"`
+	Header               *BlockHeader   `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	Data                 *BlockData     `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Metadata             *BlockMetadata `protobuf:"bytes,3,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
 	XXX_unrecognized     []byte         `json:"-"`
 	XXX_sizecache        int32          `json:"-"`
@@ -639,7 +639,7 @@ func (m *Block) GetMetadata() *BlockMetadata {
 
 
 type BlockHeader struct {
-	Number               uint64   `protobuf:"varint,1,opt,name=number" json:"number,omitempty"`
+	Number               uint64   `protobuf:"varint,1,opt,name=number,proto3" json:"number,omitempty"`
 	PreviousHash         []byte   `protobuf:"bytes,2,opt,name=previous_hash,json=previousHash,proto3" json:"previous_hash,omitempty"`
 	DataHash             []byte   `protobuf:"bytes,3,opt,name=data_hash,json=dataHash,proto3" json:"data_hash,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`

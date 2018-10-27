@@ -23,7 +23,7 @@ const _ = proto.ProtoPackageIsVersion2
 
 
 type ChaincodeQueryResponse struct {
-	Chaincodes           []*ChaincodeInfo `protobuf:"bytes,1,rep,name=chaincodes" json:"chaincodes,omitempty"`
+	Chaincodes           []*ChaincodeInfo `protobuf:"bytes,1,rep,name=chaincodes,proto3" json:"chaincodes,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
 	XXX_unrecognized     []byte           `json:"-"`
 	XXX_sizecache        int32            `json:"-"`
@@ -63,19 +63,19 @@ func (m *ChaincodeQueryResponse) GetChaincodes() []*ChaincodeInfo {
 
 
 type ChaincodeInfo struct {
-	Name    string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	Version string `protobuf:"bytes,2,opt,name=version" json:"version,omitempty"`
+	Name    string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	
-	Path string `protobuf:"bytes,3,opt,name=path" json:"path,omitempty"`
-	
-	
-	Input string `protobuf:"bytes,4,opt,name=input" json:"input,omitempty"`
+	Path string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
 	
 	
-	Escc string `protobuf:"bytes,5,opt,name=escc" json:"escc,omitempty"`
+	Input string `protobuf:"bytes,4,opt,name=input,proto3" json:"input,omitempty"`
 	
 	
-	Vscc string `protobuf:"bytes,6,opt,name=vscc" json:"vscc,omitempty"`
+	Escc string `protobuf:"bytes,5,opt,name=escc,proto3" json:"escc,omitempty"`
+	
+	
+	Vscc string `protobuf:"bytes,6,opt,name=vscc,proto3" json:"vscc,omitempty"`
 	
 	
 	
@@ -164,7 +164,7 @@ func (m *ChaincodeInfo) GetId() []byte {
 
 
 type ChannelQueryResponse struct {
-	Channels             []*ChannelInfo `protobuf:"bytes,1,rep,name=channels" json:"channels,omitempty"`
+	Channels             []*ChannelInfo `protobuf:"bytes,1,rep,name=channels,proto3" json:"channels,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
 	XXX_unrecognized     []byte         `json:"-"`
 	XXX_sizecache        int32          `json:"-"`
@@ -203,7 +203,7 @@ func (m *ChannelQueryResponse) GetChannels() []*ChannelInfo {
 
 
 type ChannelInfo struct {
-	ChannelId            string   `protobuf:"bytes,1,opt,name=channel_id,json=channelId" json:"channel_id,omitempty"`
+	ChannelId            string   `protobuf:"bytes,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`

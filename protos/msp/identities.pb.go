@@ -23,7 +23,7 @@ const _ = proto.ProtoPackageIsVersion2
 
 type SerializedIdentity struct {
 	
-	Mspid string `protobuf:"bytes,1,opt,name=mspid" json:"mspid,omitempty"`
+	Mspid string `protobuf:"bytes,1,opt,name=mspid,proto3" json:"mspid,omitempty"`
 	
 	IdBytes              []byte   `protobuf:"bytes,2,opt,name=id_bytes,json=idBytes,proto3" json:"id_bytes,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`

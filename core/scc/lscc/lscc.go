@@ -599,7 +599,7 @@ func (lscc *LifeCycleSysCC) executeInstall(stub shim.ChaincodeStubInterface, ccb
 	
 	
 	
-	err = cceventmgmt.GetMgr().HandleChaincodeInstall(chaincodeDefinition, statedbArtifactsTar, lscc.SCCProvider)
+	err = cceventmgmt.GetMgr().HandleChaincodeInstall(chaincodeDefinition, statedbArtifactsTar)
 	defer func() {
 		cceventmgmt.GetMgr().ChaincodeInstallDone(err == nil)
 	}()

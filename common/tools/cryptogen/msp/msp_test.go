@@ -11,12 +11,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v2"
-
 	"github.com/mcc-github/blockchain/common/tools/cryptogen/ca"
 	"github.com/mcc-github/blockchain/common/tools/cryptogen/msp"
 	blockchainmsp "github.com/mcc-github/blockchain/msp"
+	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v2"
 )
 
 const (

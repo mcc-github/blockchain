@@ -9,7 +9,6 @@ package capabilities
 import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	cb "github.com/mcc-github/blockchain/protos/common"
-
 	"github.com/pkg/errors"
 )
 

@@ -9,13 +9,12 @@ import (
 	"fmt"
 	"os"
 
-	"google.golang.org/grpc"
-
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
+	"google.golang.org/grpc"
 )
 
 type broadcastClient struct {

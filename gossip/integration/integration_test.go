@@ -11,7 +11,6 @@ import (
 	"net"
 	"strings"
 	"testing"
-
 	"time"
 
 	"github.com/mcc-github/blockchain/core/config/configtest"

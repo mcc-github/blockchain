@@ -11,11 +11,10 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
-
-	"github.com/mcc-github/blockchain/integration/nwo/commands"
 )
 
 type Chaincode struct {

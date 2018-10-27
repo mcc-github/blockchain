@@ -17,9 +17,8 @@ limitations under the License.
 package policy
 
 import (
-	"fmt"
-
 	"errors"
+	"fmt"
 
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/msp"

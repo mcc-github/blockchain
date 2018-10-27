@@ -13,12 +13,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/spf13/viper"
-
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/msp"
+	"github.com/spf13/viper"
 )
 
 var configLogger = flogging.MustGetLogger("config")

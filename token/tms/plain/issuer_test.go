@@ -9,7 +9,6 @@ package plain_test
 import (
 	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/token/tms/plain"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

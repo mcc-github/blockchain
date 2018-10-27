@@ -79,16 +79,15 @@ func (NilEWMA) Update(n int64) {}
 type StandardEWMA struct {
 	uncounted int64 
 	alpha     float64
-	rate      float64
-	init      bool
+	rate      uint64
+	init      uint32
 	mutex     sync.Mutex
 }
 
 
 func (a *StandardEWMA) Rate() float64 {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-	return a.rate * float64(1e9)
+	currentRate := math.Float64frombits(atomic.LoadUint64(&a.rate)) * float64(1e9)
+	return currentRate
 }
 
 
@@ -99,17 +98,38 @@ func (a *StandardEWMA) Snapshot() EWMA {
 
 
 func (a *StandardEWMA) Tick() {
+	
+	if atomic.LoadUint32(&a.init) == 1 {
+		a.updateRate(a.fetchInstantRate())
+	} else {
+		
+		
+		
+		
+		a.mutex.Lock()
+		if atomic.LoadUint32(&a.init) == 1 {
+			
+			
+			a.updateRate(a.fetchInstantRate())
+		} else {
+			atomic.StoreUint32(&a.init, 1)
+			atomic.StoreUint64(&a.rate, math.Float64bits(a.fetchInstantRate()))
+		}
+		a.mutex.Unlock()
+	}
+}
+
+func (a *StandardEWMA) fetchInstantRate() float64 {
 	count := atomic.LoadInt64(&a.uncounted)
 	atomic.AddInt64(&a.uncounted, -count)
 	instantRate := float64(count) / float64(5e9)
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-	if a.init {
-		a.rate += a.alpha * (instantRate - a.rate)
-	} else {
-		a.init = true
-		a.rate = instantRate
-	}
+	return instantRate
+}
+
+func (a *StandardEWMA) updateRate(instantRate float64) {
+	currentRate := math.Float64frombits(atomic.LoadUint64(&a.rate))
+	currentRate += a.alpha * (instantRate - currentRate)
+	atomic.StoreUint64(&a.rate, math.Float64bits(currentRate))
 }
 
 

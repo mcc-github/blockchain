@@ -11,9 +11,8 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/stretchr/testify/require"
 )
 

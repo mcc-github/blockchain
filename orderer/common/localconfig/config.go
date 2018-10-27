@@ -9,12 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Shopify/sarama"
 	bccsp "github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/viperutil"
 	coreconfig "github.com/mcc-github/blockchain/core/config"
-
-	"github.com/Shopify/sarama"
 	"github.com/spf13/viper"
 )
 

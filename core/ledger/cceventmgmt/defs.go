@@ -9,9 +9,8 @@ package cceventmgmt
 import (
 	"fmt"
 
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/common/sysccprovider"
+	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/protos/common"
 )
 
 
@@ -19,7 +18,7 @@ type ChaincodeDefinition struct {
 	Name              string
 	Hash              []byte
 	Version           string
-	CollectionConfigs []byte
+	CollectionConfigs *common.CollectionConfigPackage
 }
 
 func (cdef *ChaincodeDefinition) String() string {
@@ -45,22 +44,8 @@ type ChaincodeInfoProvider interface {
 	
 	
 	
-	IsChaincodeDeployed(chainid string, chaincodeDefinition *ChaincodeDefinition, sccp sysccprovider.SystemChaincodeProvider) (bool, error)
+	GetDeployedChaincodeInfo(chainid string, chaincodeDefinition *ChaincodeDefinition) (*ledger.DeployedChaincodeInfo, error)
 	
 	
 	RetrieveChaincodeArtifacts(chaincodeDefinition *ChaincodeDefinition) (installed bool, dbArtifactsTar []byte, err error)
-}
-
-type chaincodeInfoProviderImpl struct {
-	PlatformRegistry *platforms.Registry
-}
-
-
-func (p *chaincodeInfoProviderImpl) IsChaincodeDeployed(chainid string, chaincodeDefinition *ChaincodeDefinition, sccp sysccprovider.SystemChaincodeProvider) (bool, error) {
-	return ccprovider.IsChaincodeDeployed(chainid, chaincodeDefinition.Name, chaincodeDefinition.Version, chaincodeDefinition.Hash, sccp)
-}
-
-
-func (p *chaincodeInfoProviderImpl) RetrieveChaincodeArtifacts(chaincodeDefinition *ChaincodeDefinition) (installed bool, dbArtifactsTar []byte, err error) {
-	return ccprovider.ExtractStatedbArtifactsForChaincode(chaincodeDefinition.Name, chaincodeDefinition.Version, p.PlatformRegistry)
 }

@@ -23,10 +23,9 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/mcc-github/blockchain/common/tools/protolator"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/gorilla/mux"
+	"github.com/mcc-github/blockchain/common/tools/protolator"
 )
 
 func getMsgType(r *http.Request) (proto.Message, error) {

@@ -11,7 +11,6 @@ import (
 	"strconv"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/ledger"

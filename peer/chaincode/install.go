@@ -12,14 +12,12 @@ import (
 	"io/ioutil"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/mcc-github/blockchain/core/common/ccpackage"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/peer/common"
 	pcommon "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
-
 	"github.com/spf13/cobra"
 )
 

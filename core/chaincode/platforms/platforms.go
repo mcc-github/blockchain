@@ -7,7 +7,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-
 	"strings"
 
 	"github.com/mcc-github/blockchain/common/flogging"

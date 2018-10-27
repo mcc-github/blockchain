@@ -28,7 +28,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
-	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/mocks/scc/lscc"
 	"github.com/mcc-github/blockchain/core/policy"
 	policymocks "github.com/mcc-github/blockchain/core/policy/mocks"
@@ -109,9 +109,8 @@ func constructDeploymentSpec(name string, path string, version string, initArgs 
 
 func TestInstall(t *testing.T) {
 	
-	
-	cceventmgmt.Initialize(platforms.NewRegistry(&golang.Platform{}))
-
+	ledgermgmt.InitializeTestEnv()
+	defer ledgermgmt.CleanupTestEnv()
 	scc := New(NewMockProvider(), mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	scc.Support = &lscc.MockSupport{}
 	stub := shim.NewMockStub("lscc", scc)

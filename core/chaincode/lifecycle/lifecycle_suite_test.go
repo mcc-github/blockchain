@@ -9,11 +9,10 @@ package lifecycle_test
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 

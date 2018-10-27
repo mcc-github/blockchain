@@ -22,11 +22,10 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	ledgerutil "github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	putil "github.com/mcc-github/blockchain/protos/utils"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBlockfileMgrBlockReadWrite(t *testing.T) {

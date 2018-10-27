@@ -128,6 +128,7 @@ func (id *identity) GetOrganizationalUnits() []*OUIdentifier {
 	return res
 }
 
+
 func (id *identity) Anonymous() bool {
 	return false
 }
@@ -251,6 +252,8 @@ func (id *signingidentity) Sign(msg []byte) ([]byte, error) {
 	
 	return id.signer.Sign(rand.Reader, digest, nil)
 }
+
+
 
 func (id *signingidentity) GetPublicVersion() Identity {
 	return &id.identity

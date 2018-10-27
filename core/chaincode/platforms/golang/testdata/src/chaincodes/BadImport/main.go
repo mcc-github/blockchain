@@ -5,6 +5,7 @@ package main
 import (
 	"bogus/package"
 	"fmt"
+
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 )
 

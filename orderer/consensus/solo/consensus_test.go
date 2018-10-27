@@ -27,7 +27,6 @@ import (
 	mockmultichannel "github.com/mcc-github/blockchain/orderer/mocks/common/multichannel"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
 	"github.com/stretchr/testify/assert"
 )
 

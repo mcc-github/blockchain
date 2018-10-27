@@ -16,6 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/peer"
+	"github.com/mcc-github/blockchain/core/scc/lscc"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -127,7 +128,12 @@ func setupConfigs(conf config) {
 }
 
 func initLedgerMgmt() {
-	ledgermgmt.InitializeExistingTestEnvWithCustomProcessors(peer.ConfigTxProcessors)
+	ledgermgmt.InitializeExistingTestEnvWithInitializer(
+		&ledgermgmt.Initializer{
+			CustomTxProcessors:            peer.ConfigTxProcessors,
+			DeployedChaincodeInfoProvider: &lscc.DeployedCCInfoProvider{},
+		},
+	)
 }
 
 func closeLedgerMgmt() {

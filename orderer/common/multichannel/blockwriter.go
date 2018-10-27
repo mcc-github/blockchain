@@ -9,6 +9,7 @@ package multichannel
 import (
 	"sync"
 
+	"github.com/golang/protobuf/proto"
 	newchannelconfig "github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/crypto"
@@ -16,8 +17,6 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
-
-	"github.com/golang/protobuf/proto"
 )
 
 type blockWriterSupport interface {

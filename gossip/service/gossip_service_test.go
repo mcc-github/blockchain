@@ -14,9 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
-
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/localmsp"
 	"github.com/mcc-github/blockchain/core/deliverservice"
@@ -34,7 +31,9 @@ import (
 	peergossip "github.com/mcc-github/blockchain/peer/gossip"
 	"github.com/mcc-github/blockchain/peer/gossip/mocks"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/peer"
+	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
