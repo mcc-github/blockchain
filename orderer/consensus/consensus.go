@@ -75,6 +75,9 @@ type ConsenterSupport interface {
 	msgprocessor.Processor
 
 	
+	VerifyBlockSignature([]*cb.SignedData) error
+
+	
 	BlockCutter() blockcutter.Receiver
 
 	
@@ -83,6 +86,10 @@ type ConsenterSupport interface {
 	
 	
 	CreateNextBlock(messages []*cb.Envelope) *cb.Block
+
+	
+	
+	Block(number uint64) *cb.Block
 
 	
 	WriteBlock(block *cb.Block, encodedMetadataValue []byte)

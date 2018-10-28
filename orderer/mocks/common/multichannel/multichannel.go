@@ -26,6 +26,9 @@ type ConsenterSupport struct {
 	BlockCutterVal *mockblockcutter.Receiver
 
 	
+	BlockByIndex map[uint64]*cb.Block
+
+	
 	Blocks chan *cb.Block
 
 	
@@ -60,6 +63,14 @@ type ConsenterSupport struct {
 
 	
 	SequenceVal uint64
+
+	
+	BlockVerificationErr error
+}
+
+
+func (mcs *ConsenterSupport) Block(number uint64) *cb.Block {
+	return mcs.BlockByIndex[number]
 }
 
 
@@ -141,4 +152,9 @@ func (mcs *ConsenterSupport) ProcessConfigMsg(env *cb.Envelope) (*cb.Envelope, u
 
 func (mcs *ConsenterSupport) Sequence() uint64 {
 	return mcs.SequenceVal
+}
+
+
+func (mcs *ConsenterSupport) VerifyBlockSignature(_ []*cb.SignedData) error {
+	return mcs.BlockVerificationErr
 }

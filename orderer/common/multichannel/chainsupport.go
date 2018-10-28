@@ -9,6 +9,7 @@ package multichannel
 import (
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
+	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	"github.com/mcc-github/blockchain/orderer/consensus"
@@ -73,6 +74,15 @@ func newChainSupport(
 	return cs
 }
 
+
+
+func (cs *ChainSupport) Block(number uint64) *cb.Block {
+	if cs.Height() <= number {
+		return nil
+	}
+	return blockledger.GetBlock(cs.Reader(), number)
+}
+
 func (cs *ChainSupport) Reader() blockledger.Reader {
 	return cs
 }
@@ -128,4 +138,17 @@ func (cs *ChainSupport) ConfigProto() *cb.Config {
 
 func (cs *ChainSupport) Sequence() uint64 {
 	return cs.ConfigtxValidator().Sequence()
+}
+
+
+func (cs *ChainSupport) VerifyBlockSignature(sd []*cb.SignedData) error {
+	policy, exists := cs.PolicyManager().GetPolicy(policies.BlockValidation)
+	if !exists {
+		return errors.Errorf("policy %s wasn't found", policies.BlockValidation)
+	}
+	err := policy.Evaluate(sd)
+	if err != nil {
+		return errors.Wrap(err, "block verification failed")
+	}
+	return nil
 }

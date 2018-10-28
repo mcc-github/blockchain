@@ -10,8 +10,10 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/pem"
+	"reflect"
 	"sync/atomic"
 
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -106,6 +108,31 @@ func NewTLSPinningDialer(config comm.ClientConfig) *PredicateDialer {
 }
 
 
+
+func (dialer *PredicateDialer) ClientConfig() (comm.ClientConfig, error) {
+	val := dialer.Config.Load()
+	if val == nil {
+		return comm.ClientConfig{}, errors.New("client config not initialized")
+	}
+	if cc, isClientConfig := val.(comm.ClientConfig); !isClientConfig {
+		err := errors.Errorf("value stored is %v, not comm.ClientConfig",
+			reflect.TypeOf(val))
+		return comm.ClientConfig{}, err
+	} else {
+		if cc.SecOpts == nil {
+			return comm.ClientConfig{}, errors.New("SecOpts is nil")
+		}
+		
+		secOpts := *cc.SecOpts
+		return comm.ClientConfig{
+			Timeout: cc.Timeout,
+			SecOpts: &secOpts,
+			KaOpts:  cc.KaOpts,
+		}, nil
+	}
+}
+
+
 func (dialer *PredicateDialer) SetConfig(config comm.ClientConfig) {
 	configCopy := comm.ClientConfig{
 		Timeout: config.Timeout,
@@ -148,11 +175,11 @@ func DERtoPEM(der []byte) string {
 
 
 
-type StandardDialerDialer struct {
+type StandardDialer struct {
 	Dialer *PredicateDialer
 }
 
-func (bdp *StandardDialerDialer) Dial(address string) (*grpc.ClientConn, error) {
+func (bdp *StandardDialer) Dial(address string) (*grpc.ClientConn, error) {
 	return bdp.Dialer.Dial(address, nil)
 }
 
@@ -261,4 +288,47 @@ func VerifyBlockSignature(block *common.Block, verifier BlockVerifier) error {
 	}
 
 	return verifier.VerifyBlockSignature(signatureSet)
+}
+
+
+
+type EndpointConfig struct {
+	TLSRootCAs [][]byte
+	Endpoints  []string
+}
+
+
+
+func EndpointconfigFromConfigBlock(block *common.Block) (*EndpointConfig, error) {
+	if block == nil {
+		return nil, errors.New("nil block")
+	}
+	envelopeConfig, err := utils.ExtractEnvelope(block, 0)
+	if err != nil {
+		return nil, err
+	}
+	var tlsCACerts [][]byte
+	bundle, err := channelconfig.NewBundleFromEnvelope(envelopeConfig)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed extracting bundle from envelope")
+	}
+	msps, err := bundle.MSPManager().GetMSPs()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed obtaining MSPs from MSPManager")
+	}
+	ordererConfig, ok := bundle.OrdererConfig()
+	if !ok {
+		return nil, errors.New("failed obtaining orderer config from bundle")
+	}
+	for _, org := range ordererConfig.Organizations() {
+		msp := msps[org.MSPID()]
+		if msp == nil {
+			return nil, errors.Errorf("no MSP found for MSP with ID of %s", org.MSPID())
+		}
+		tlsCACerts = append(tlsCACerts, msp.GetTLSRootCerts()...)
+	}
+	return &EndpointConfig{
+		Endpoints:  bundle.ChannelConfig().OrdererAddresses(),
+		TLSRootCAs: tlsCACerts,
+	}, nil
 }
