@@ -39,6 +39,8 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/token/tms/manager"
+	"github.com/mcc-github/blockchain/token/transaction"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/semaphore"
@@ -49,8 +51,12 @@ var peerLogger = flogging.MustGetLogger("peer")
 var peerServer *comm.GRPCServer
 
 var configTxProcessor = newConfigTxProcessor()
+var tokenTxProcessor = &transaction.Processor{
+	TMSManager: &manager.Manager{
+		IdentityDeserializerManager: &manager.FabricIdentityDeserializerManager{}}}
 var ConfigTxProcessors = customtx.Processors{
-	common.HeaderType_CONFIG: configTxProcessor,
+	common.HeaderType_CONFIG:            configTxProcessor,
+	common.HeaderType_TOKEN_TRANSACTION: tokenTxProcessor,
 }
 
 

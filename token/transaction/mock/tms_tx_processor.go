@@ -5,17 +5,19 @@ import (
 	"sync"
 
 	"github.com/mcc-github/blockchain/protos/token"
+	"github.com/mcc-github/blockchain/token/identity"
+	"github.com/mcc-github/blockchain/token/ledger"
 	"github.com/mcc-github/blockchain/token/transaction"
 )
 
 type TMSTxProcessor struct {
-	ProcessTxStub        func(txID string, creator transaction.CreatorInfo, ttx *token.TokenTransaction, simulator transaction.LedgerWriter) error
+	ProcessTxStub        func(txID string, creator identity.PublicInfo, ttx *token.TokenTransaction, simulator ledger.LedgerWriter) error
 	processTxMutex       sync.RWMutex
 	processTxArgsForCall []struct {
 		txID      string
-		creator   transaction.CreatorInfo
+		creator   identity.PublicInfo
 		ttx       *token.TokenTransaction
-		simulator transaction.LedgerWriter
+		simulator ledger.LedgerWriter
 	}
 	processTxReturns struct {
 		result1 error
@@ -27,14 +29,14 @@ type TMSTxProcessor struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *TMSTxProcessor) ProcessTx(txID string, creator transaction.CreatorInfo, ttx *token.TokenTransaction, simulator transaction.LedgerWriter) error {
+func (fake *TMSTxProcessor) ProcessTx(txID string, creator identity.PublicInfo, ttx *token.TokenTransaction, simulator ledger.LedgerWriter) error {
 	fake.processTxMutex.Lock()
 	ret, specificReturn := fake.processTxReturnsOnCall[len(fake.processTxArgsForCall)]
 	fake.processTxArgsForCall = append(fake.processTxArgsForCall, struct {
 		txID      string
-		creator   transaction.CreatorInfo
+		creator   identity.PublicInfo
 		ttx       *token.TokenTransaction
-		simulator transaction.LedgerWriter
+		simulator ledger.LedgerWriter
 	}{txID, creator, ttx, simulator})
 	fake.recordInvocation("ProcessTx", []interface{}{txID, creator, ttx, simulator})
 	fake.processTxMutex.Unlock()
@@ -53,7 +55,7 @@ func (fake *TMSTxProcessor) ProcessTxCallCount() int {
 	return len(fake.processTxArgsForCall)
 }
 
-func (fake *TMSTxProcessor) ProcessTxArgsForCall(i int) (string, transaction.CreatorInfo, *token.TokenTransaction, transaction.LedgerWriter) {
+func (fake *TMSTxProcessor) ProcessTxArgsForCall(i int) (string, identity.PublicInfo, *token.TokenTransaction, ledger.LedgerWriter) {
 	fake.processTxMutex.RLock()
 	defer fake.processTxMutex.RUnlock()
 	return fake.processTxArgsForCall[i].txID, fake.processTxArgsForCall[i].creator, fake.processTxArgsForCall[i].ttx, fake.processTxArgsForCall[i].simulator

@@ -160,6 +160,9 @@ type ApplicationCapabilities interface {
 	
 	
 	KeyLevelEndorsement() bool
+
+	
+	FabToken() bool
 }
 
 

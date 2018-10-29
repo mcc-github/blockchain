@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package flogging
 
 import (
-	"regexp"
 	"strings"
 
 	"go.uber.org/zap/zapcore"
@@ -46,7 +45,6 @@ func Init(config Config) {
 
 
 func Reset() {
-	Global.ResetLevels()
 	Global.Apply(Config{})
 }
 
@@ -57,38 +55,14 @@ func GetModuleLevel(module string) string {
 
 
 
-
-func SetModuleLevels(moduleRegexp, level string) error {
-	re, err := regexp.Compile(moduleRegexp)
-	if err != nil {
-		return err
-	}
-
-	Global.SetLevels(re, NameToLevel(level))
-	return nil
-}
-
-
-func SetModuleLevel(module string, level string) error {
-	Global.SetLevel(module, NameToLevel(level))
-	return nil
-}
-
-
-
 func MustGetLogger(module string) *FabricLogger {
 	return Global.Logger(module)
 }
 
 
-
-
-func GetModuleLevels() map[string]zapcore.Level {
-	return Global.Levels()
-}
-
-
-
-func RestoreLevels(levels map[string]zapcore.Level) {
-	Global.RestoreLevels(levels)
+func ActivateSpec(spec string) {
+	err := Global.ActivateSpec(spec)
+	if err != nil {
+		panic(err)
+	}
 }

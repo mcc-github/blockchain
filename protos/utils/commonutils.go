@@ -196,7 +196,7 @@ func MakeSignatureHeader(serializedCreatorCertChain []byte, nonce []byte) *cb.Si
 
 
 func SetTxID(channelHeader *cb.ChannelHeader, signatureHeader *cb.SignatureHeader) error {
-	txid, err := ComputeProposalTxID(
+	txid, err := ComputeTxID(
 		signatureHeader.Nonce,
 		signatureHeader.Creator,
 	)

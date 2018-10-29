@@ -311,8 +311,7 @@ func (vm *DockerVM) Start(ccid ccintf.CCID,
 			is := bufio.NewReader(r)
 
 			
-			containerLogger := flogging.MustGetLogger(containerName)
-			flogging.SetModuleLevel(flogging.GetModuleLevel("peer"), containerName)
+			containerLogger := flogging.MustGetLogger("peer.chaincode." + containerName)
 
 			for {
 				

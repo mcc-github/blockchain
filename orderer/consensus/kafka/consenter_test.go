@@ -189,8 +189,9 @@ func setupTestLogging(logLevel string) {
 	
 	
 	
-	flogging.SetModuleLevel(pkgLogID, logLevel)
-	flogging.SetModuleLevel(saramaLogID, logLevel)
+	spec := fmt.Sprintf("%s,%s=%s", pkgLogID, saramaLogID, logLevel)
+	spec = strings.Replace(spec, "/", ".", -1)
+	flogging.ActivateSpec(spec)
 }
 
 func tamperBytes(original []byte) []byte {

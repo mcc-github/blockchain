@@ -248,7 +248,7 @@ func CreateChaincodeProposalWithTransient(typ common.HeaderType, chainID string,
 	}
 
 	
-	txid, err := ComputeProposalTxID(nonce, creator)
+	txid, err := ComputeTxID(nonce, creator)
 	if err != nil {
 		return nil, "", err
 	}
@@ -268,7 +268,7 @@ func CreateChaincodeProposalWithTxIDAndTransient(typ common.HeaderType, chainID 
 
 	
 	if txid == "" {
-		txid, err = ComputeProposalTxID(nonce, creator)
+		txid, err = ComputeTxID(nonce, creator)
 		if err != nil {
 			return nil, "", err
 		}
@@ -573,7 +573,7 @@ func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, pr
 
 
 
-func ComputeProposalTxID(nonce, creator []byte) (string, error) {
+func ComputeTxID(nonce, creator []byte) (string, error) {
 	
 	
 	digest, err := factory.GetDefault().Hash(
@@ -587,8 +587,8 @@ func ComputeProposalTxID(nonce, creator []byte) (string, error) {
 
 
 
-func CheckProposalTxID(txid string, nonce, creator []byte) error {
-	computedTxID, err := ComputeProposalTxID(nonce, creator)
+func CheckTxID(txid string, nonce, creator []byte) error {
+	computedTxID, err := ComputeTxID(nonce, creator)
 	if err != nil {
 		return errors.WithMessage(err, "error computing target txid")
 	}

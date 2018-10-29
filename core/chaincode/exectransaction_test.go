@@ -29,6 +29,7 @@ import (
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
+	"github.com/mcc-github/blockchain/common/flogging"
 	mc "github.com/mcc-github/blockchain/common/mocks/config"
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
 	"github.com/mcc-github/blockchain/common/policies"
@@ -1398,6 +1399,7 @@ func TestMain(m *testing.M) {
 	}
 
 	setupTestConfig()
+	flogging.ActivateSpec("chaincode=debug")
 	os.Exit(m.Run())
 }
 

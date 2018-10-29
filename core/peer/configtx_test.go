@@ -24,6 +24,7 @@ import (
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	ordererconfig "github.com/mcc-github/blockchain/orderer/common/localconfig"
@@ -128,6 +129,21 @@ func TestGenesisBlockCreateLedger(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, chanConf)
 	t.Logf("chanConf = %s", chanConf)
+}
+
+func TestCustomTxProcessors(t *testing.T) {
+	cleanup := setupPeerFS(t)
+	defer cleanup()
+
+	ledgermgmt.InitializeExistingTestEnvWithInitializer(&ledgermgmt.Initializer{
+		CustomTxProcessors: ConfigTxProcessors,
+	})
+	defer ledgermgmt.CleanupTestEnv()
+
+	processor := customtx.GetProcessor(common.HeaderType_CONFIG)
+	assert.NotNil(t, processor)
+	processor = customtx.GetProcessor(common.HeaderType_TOKEN_TRANSACTION)
+	assert.NotNil(t, processor)
 }
 
 type testHelper struct {

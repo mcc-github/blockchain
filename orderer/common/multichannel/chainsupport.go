@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package multichannel
 
 import (
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	"github.com/mcc-github/blockchain/common/policies"
@@ -141,8 +142,22 @@ func (cs *ChainSupport) Sequence() uint64 {
 }
 
 
-func (cs *ChainSupport) VerifyBlockSignature(sd []*cb.SignedData) error {
-	policy, exists := cs.PolicyManager().GetPolicy(policies.BlockValidation)
+
+
+
+
+
+func (cs *ChainSupport) VerifyBlockSignature(sd []*cb.SignedData, envelope *cb.ConfigEnvelope) error {
+	policyMgr := cs.PolicyManager()
+	
+	if envelope != nil {
+		bundle, err := channelconfig.NewBundle(cs.ChainID(), envelope.Config)
+		if err != nil {
+			return err
+		}
+		policyMgr = bundle.PolicyManager()
+	}
+	policy, exists := policyMgr.GetPolicy(policies.BlockValidation)
 	if !exists {
 		return errors.Errorf("policy %s wasn't found", policies.BlockValidation)
 	}

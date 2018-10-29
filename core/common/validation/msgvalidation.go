@@ -117,7 +117,7 @@ func ValidateProposalMessage(signedProp *pb.SignedProposal) (*pb.Proposal, *comm
 	
 	
 	
-	err = utils.CheckProposalTxID(
+	err = utils.CheckTxID(
 		chdr.TxId,
 		shdr.Nonce,
 		shdr.Creator)
@@ -220,7 +220,8 @@ func validateChannelHeader(cHdr *common.ChannelHeader) error {
 	
 	if common.HeaderType(cHdr.Type) != common.HeaderType_ENDORSER_TRANSACTION &&
 		common.HeaderType(cHdr.Type) != common.HeaderType_CONFIG_UPDATE &&
-		common.HeaderType(cHdr.Type) != common.HeaderType_CONFIG {
+		common.HeaderType(cHdr.Type) != common.HeaderType_CONFIG &&
+		common.HeaderType(cHdr.Type) != common.HeaderType_TOKEN_TRANSACTION {
 		return errors.Errorf("invalid header type %s", common.HeaderType(cHdr.Type))
 	}
 
@@ -410,13 +411,13 @@ func ValidateTransaction(e *common.Envelope, c channelconfig.ApplicationCapabili
 		
 		
 		
-		err = utils.CheckProposalTxID(
+		err = utils.CheckTxID(
 			chdr.TxId,
 			shdr.Nonce,
 			shdr.Creator)
 
 		if err != nil {
-			putilsLogger.Errorf("CheckProposalTxID returns err %s", err)
+			putilsLogger.Errorf("CheckTxID returns err %s", err)
 			return nil, pb.TxValidationCode_BAD_PROPOSAL_TXID
 		}
 
@@ -441,6 +442,21 @@ func ValidateTransaction(e *common.Envelope, c channelconfig.ApplicationCapabili
 		} else {
 			return payload, pb.TxValidationCode_VALID
 		}
+	case common.HeaderType_TOKEN_TRANSACTION:
+		
+		
+		
+		err = utils.CheckTxID(
+			chdr.TxId,
+			shdr.Nonce,
+			shdr.Creator)
+
+		if err != nil {
+			putilsLogger.Errorf("CheckTxID returns err %s", err)
+			return nil, pb.TxValidationCode_BAD_PROPOSAL_TXID
+		}
+
+		return payload, pb.TxValidationCode_VALID
 	default:
 		return nil, pb.TxValidationCode_UNSUPPORTED_TX_PAYLOAD
 	}

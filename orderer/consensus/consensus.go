@@ -75,7 +75,8 @@ type ConsenterSupport interface {
 	msgprocessor.Processor
 
 	
-	VerifyBlockSignature([]*cb.SignedData) error
+	
+	VerifyBlockSignature([]*cb.SignedData, *cb.ConfigEnvelope) error
 
 	
 	BlockCutter() blockcutter.Receiver

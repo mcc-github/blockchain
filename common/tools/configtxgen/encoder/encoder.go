@@ -35,10 +35,6 @@ const (
 
 var logger = flogging.MustGetLogger(pkgLogID)
 
-func init() {
-	flogging.SetModuleLevel(pkgLogID, "info")
-}
-
 const (
 	
 	ConsensusTypeSolo = "solo"

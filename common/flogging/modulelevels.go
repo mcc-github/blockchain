@@ -7,7 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package flogging
 
 import (
-	"regexp"
+	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -20,16 +21,9 @@ import (
 type ModuleLevels struct {
 	defaultLevel zapcore.Level
 
-	mutex  sync.RWMutex
-	levels map[string]zapcore.Level
-}
-
-
-
-func (m *ModuleLevels) SetDefaultLevel(l zapcore.Level) {
-	m.mutex.Lock()
-	m.defaultLevel = l
-	m.mutex.Unlock()
+	mutex      sync.RWMutex
+	levelCache map[string]zapcore.Level
+	specs      map[string]zapcore.Level
 }
 
 
@@ -43,37 +37,35 @@ func (m *ModuleLevels) DefaultLevel() zapcore.Level {
 
 
 
-func (m *ModuleLevels) ResetLevels() {
-	m.mutex.Lock()
-	m.levels = nil
-	m.defaultLevel = zapcore.InfoLevel
-	m.mutex.Unlock()
-}
-
-
-
 
 
 func (m *ModuleLevels) ActivateSpec(spec string) error {
-	var levelAll *zapcore.Level
-	updates := map[string]zapcore.Level{}
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
-	fields := strings.Split(spec, ":")
-	for _, field := range fields {
+	defaultLevel := zapcore.InfoLevel
+	specs := map[string]zapcore.Level{}
+	for _, field := range strings.Split(spec, ":") {
 		split := strings.Split(field, "=")
 		switch len(split) {
 		case 1: 
-			l := NameToLevel(field)
-			levelAll = &l
+			if field != "" && !IsValidLevel(field) {
+				return errors.Errorf("invalid logging specification '%s': bad segment '%s'", spec, field)
+			}
+			defaultLevel = NameToLevel(field)
+
 		case 2: 
-			level := NameToLevel(split[1])
 			if split[0] == "" {
-				return errors.Errorf("invalid logging specification '%s': no module specified in segment '%s'", spec, field)
+				return errors.Errorf("invalid logging specification '%s': no logger specified in segment '%s'", spec, field)
+			}
+			if field != "" && !IsValidLevel(split[1]) {
+				return errors.Errorf("invalid logging specification '%s': bad segment '%s'", spec, field)
 			}
 
-			modules := strings.Split(split[0], ",")
-			for _, module := range modules {
-				updates[module] = level
+			level := NameToLevel(split[1])
+			loggers := strings.Split(split[0], ",")
+			for _, loggers := range loggers {
+				specs[loggers] = level
 			}
 
 		default:
@@ -81,81 +73,53 @@ func (m *ModuleLevels) ActivateSpec(spec string) error {
 		}
 	}
 
-	
-	if levelAll != nil {
-		l := *levelAll
-		m.SetDefaultLevel(l)
-		for module := range m.Levels() {
-			m.SetLevel(module, l)
-		}
-	}
-
-	for module, level := range updates {
-		m.SetLevel(module, level)
-	}
+	m.defaultLevel = defaultLevel
+	m.specs = specs
+	m.levelCache = map[string]zapcore.Level{}
 
 	return nil
 }
 
 
-func (m *ModuleLevels) SetLevel(module string, l zapcore.Level) {
-	m.mutex.Lock()
-	if m.levels == nil {
-		m.levels = map[string]zapcore.Level{}
+
+
+func (m *ModuleLevels) Level(loggerName string) zapcore.Level {
+	if level, ok := m.cachedLevel(loggerName); ok {
+		return level
 	}
-	m.levels[module] = l
+
+	m.mutex.Lock()
+	level := m.calculateLevel(loggerName)
+	m.levelCache[loggerName] = level
 	m.mutex.Unlock()
+
+	return level
 }
 
 
 
-func (m *ModuleLevels) SetLevels(re *regexp.Regexp, l zapcore.Level) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	for module := range m.levels {
-		if re.MatchString(module) {
-			m.levels[module] = l
+func (m *ModuleLevels) calculateLevel(loggerName string) zapcore.Level {
+	candidate := loggerName + "."
+	for {
+		if lvl, ok := m.specs[candidate]; ok {
+			return lvl
 		}
+
+		idx := strings.LastIndex(candidate, ".")
+		if idx <= 0 {
+			return m.defaultLevel
+		}
+		candidate = candidate[:idx]
 	}
 }
 
 
 
-
-func (m *ModuleLevels) Level(module string) zapcore.Level {
+func (m *ModuleLevels) cachedLevel(loggerName string) (lvl zapcore.Level, ok bool) {
 	m.mutex.RLock()
-	l, ok := m.levels[module]
-	if !ok {
-		l = m.defaultLevel
-	}
+	level, ok := m.levelCache[loggerName]
 	m.mutex.RUnlock()
-
-	return l
-}
-
-
-func (m *ModuleLevels) Levels() map[string]zapcore.Level {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-
-	levels := make(map[string]zapcore.Level, len(m.levels))
-	for k, v := range m.levels {
-		levels[k] = v
-	}
-	return levels
-}
-
-
-
-func (m *ModuleLevels) RestoreLevels(levels map[string]zapcore.Level) {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-
-	m.levels = map[string]zapcore.Level{}
-	for k, v := range levels {
-		m.levels[k] = v
-	}
+	return level, ok
 }
 
 
@@ -163,4 +127,20 @@ func (m *ModuleLevels) LevelEnabler(module string) zapcore.LevelEnabler {
 	return zap.LevelEnablerFunc(func(l zapcore.Level) bool {
 		return m.Level(module).Enabled(l)
 	})
+}
+
+
+func (m *ModuleLevels) Spec() string {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	var fields []string
+	for k, v := range m.specs {
+		fields = append(fields, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	sort.Strings(fields)
+	fields = append(fields, m.defaultLevel.String())
+
+	return strings.Join(fields, ":")
 }

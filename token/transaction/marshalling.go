@@ -12,10 +12,11 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/token/identity"
 	"github.com/pkg/errors"
 )
 
-func UnmarshalTokenTransaction(raw []byte) (*cb.ChannelHeader, *token.TokenTransaction, CreatorInfo, error) {
+func UnmarshalTokenTransaction(raw []byte) (*cb.ChannelHeader, *token.TokenTransaction, identity.PublicInfo, error) {
 	
 	payload := &common.Payload{}
 	err := proto.Unmarshal(raw, payload)

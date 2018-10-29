@@ -22,7 +22,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
-	"github.com/mcc-github/blockchain/common/flogging"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	mc "github.com/mcc-github/blockchain/common/mocks/config"
 	mocklgr "github.com/mcc-github/blockchain/common/mocks/ledger"
@@ -338,7 +337,7 @@ func execCC(t *testing.T, txParams *ccprovider.TransactionParams, ccSide *mockpe
 func startCC(t *testing.T, channelID string, ccname string, chaincodeSupport *ChaincodeSupport) (*mockpeer.MockCCComm, *mockpeer.MockCCComm) {
 	peerSide, ccSide := setupcc(ccname)
 	defer mockPeerCCSupport.RemoveCC(ccname)
-	flogging.SetModuleLevel("chaincode", "debug")
+
 	
 	go func() {
 		chaincodeSupport.HandleChaincodeStream(peerSide)
@@ -460,7 +459,20 @@ func initializeCC(t *testing.T, chainID, ccname string, ccSide *mockpeer.MockCCC
 	execCC(t, txParams, ccSide, cccid, false, true, done, cis, respSet, chaincodeSupport)
 
 	
-	resp.RespMsg.(*pb.ChaincodeMessage).Txid = txid
+	resp = &mockpeer.MockResponse{
+		RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION},
+		RespMsg: &pb.ChaincodeMessage{
+			Type:      pb.ChaincodeMessage_COMPLETED,
+			Payload:   putils.MarshalOrPanic(&pb.Response{Status: shim.OK, Payload: []byte("init succeeded")}),
+			Txid:      txid,
+			ChannelId: chainID,
+		},
+	}
+	respSet = &mockpeer.MockResponseSet{
+		DoneFunc:  errorFunc,
+		ErrorFunc: nil,
+		Responses: []*mockpeer.MockResponse{resp},
+	}
 
 	badcccid := &ccprovider.CCContext{
 		Name:    ccname,

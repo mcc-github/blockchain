@@ -194,6 +194,7 @@ func (v *TxValidator) Validate(block *common.Block) error {
 				if res.txsUpgradedChaincode != nil {
 					txsUpgradedChaincodes[res.tIdx] = res.txsUpgradedChaincode
 				}
+				logger.Error("res.txid", res.txid, "")
 				txidArray[res.tIdx] = res.txid
 			}
 		}
@@ -250,6 +251,7 @@ func markTXIdDuplicates(txids []string, txsfltr ledgerUtil.TxValidationFlags) {
 	txidMap := make(map[string]struct{})
 
 	for id, txid := range txids {
+		logger.Error(" txid", txid, "found")
 		if txid == "" {
 			continue
 		}
@@ -330,29 +332,15 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 		}
 
 		if common.HeaderType(chdr.Type) == common.HeaderType_ENDORSER_TRANSACTION {
-			
+
 			txID = chdr.TxId
+
 			
-			_, err := v.Support.Ledger().GetTransactionByID(txID)
-			
-			if err == nil {
-				logger.Error("Duplicate transaction found, ", txID, ", skipping")
-				results <- &blockValidationResult{
-					tIdx:           tIdx,
-					validationCode: peer.TxValidationCode_DUPLICATE_TXID,
-				}
+			erroneousResultEntry := v.checkTxIdDupsLedger(tIdx, chdr, v.Support.Ledger())
+			if erroneousResultEntry != nil {
+				results <- erroneousResultEntry
 				return
 			}
-			
-			if _, isNotFoundInIndexErrType := err.(ledger.NotFoundInIndexErr); !isNotFoundInIndexErrType {
-				logger.Errorf("Ledger failure while attempting to detect duplicate status for txid %s, err '%s'. Aborting", txID, err)
-				results <- &blockValidationResult{
-					tIdx: tIdx,
-					err:  err,
-				}
-				return
-			}
-			
 
 			
 			logger.Debug("Validating transaction vscc tx validate")
@@ -395,6 +383,32 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 				logger.Infof("Find chaincode upgrade transaction for chaincode %s on channel %s with new version %s", upgradeCC.ChaincodeName, upgradeCC.ChainID, upgradeCC.ChaincodeVersion)
 				txsUpgradedChaincode = upgradeCC
 			}
+		} else if common.HeaderType(chdr.Type) == common.HeaderType_TOKEN_TRANSACTION {
+
+			txID = chdr.TxId
+			if !v.Support.Capabilities().FabToken() {
+				logger.Errorf("FabToken capability is not enabled. Unsupported transaction type [%s] in block [%d] transaction [%d]",
+					common.HeaderType(chdr.Type), block.Header.Number, tIdx)
+				results <- &blockValidationResult{
+					tIdx:           tIdx,
+					validationCode: peer.TxValidationCode_UNSUPPORTED_TX_PAYLOAD,
+				}
+				return
+			}
+
+			
+			
+			erroneousResultEntry := v.checkTxIdDupsLedger(tIdx, chdr, v.Support.Ledger())
+			if erroneousResultEntry != nil {
+				results <- erroneousResultEntry
+				return
+			}
+
+			
+			txsChaincodeName = &sysccprovider.ChaincodeInstance{
+				ChainID:          channel,
+				ChaincodeName:    "Token",
+				ChaincodeVersion: ""}
 		} else if common.HeaderType(chdr.Type) == common.HeaderType_CONFIG {
 			configEnvelope, err := configtx.UnmarshalConfigEnvelope(payload.Data)
 			if err != nil {
@@ -452,6 +466,45 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 		}
 		return
 	}
+}
+
+
+
+
+
+
+func (v *TxValidator) checkTxIdDupsLedger(tIdx int, chdr *common.ChannelHeader, ldgr ledger.PeerLedger) (errorTuple *blockValidationResult) {
+
+	
+	txID := chdr.TxId
+
+	
+	_, err := ldgr.GetTransactionByID(txID)
+
+	
+	
+	if err == nil {
+		logger.Error("Duplicate transaction found, ", txID, ", skipping")
+		return &blockValidationResult{
+			tIdx:           tIdx,
+			validationCode: peer.TxValidationCode_DUPLICATE_TXID,
+		}
+	}
+
+	
+	
+	if _, isNotFoundInIndexErrType := err.(ledger.NotFoundInIndexErr); !isNotFoundInIndexErrType {
+		logger.Errorf("Ledger failure while attempting to detect duplicate status for "+
+			"txid %s, err '%s'. Aborting", txID, err)
+		return &blockValidationResult{
+			tIdx: tIdx,
+			err:  err,
+		}
+	}
+
+	
+	
+	return nil
 }
 
 
@@ -600,6 +653,11 @@ func (ds *dynamicCapabilities) ACLs() bool {
 
 func (ds *dynamicCapabilities) CollectionUpgrade() bool {
 	return ds.support.Capabilities().CollectionUpgrade()
+}
+
+
+func (ds *dynamicCapabilities) FabToken() bool {
+	return ds.support.Capabilities().FabToken()
 }
 
 func (ds *dynamicCapabilities) ForbidDuplicateTXIdInBlock() bool {

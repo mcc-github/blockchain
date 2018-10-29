@@ -8,6 +8,8 @@ package transaction
 
 import (
 	"github.com/mcc-github/blockchain/protos/token"
+	"github.com/mcc-github/blockchain/token/identity"
+	"github.com/mcc-github/blockchain/token/ledger"
 )
 
 
@@ -19,21 +21,12 @@ import (
 
 type TMSTxProcessor interface {
 	
-	ProcessTx(txID string, creator CreatorInfo, ttx *token.TokenTransaction, simulator LedgerWriter) error
+	ProcessTx(txID string, creator identity.PublicInfo, ttx *token.TokenTransaction, simulator ledger.LedgerWriter) error
 }
 
 type TMSManager interface {
 	
 	GetTxProcessor(channel string) (TMSTxProcessor, error)
-	
-	SetPolicyValidator(channel string, validator PolicyValidator)
-}
-
-
-
-
-type CreatorInfo interface {
-	Public() []byte
 }
 
 type TxCreatorInfo struct {
@@ -42,27 +35,4 @@ type TxCreatorInfo struct {
 
 func (t *TxCreatorInfo) Public() []byte {
 	return t.public
-}
-
-
-
-
-type PolicyValidator interface {
-	
-	IsIssuer(creator CreatorInfo, tokenType string) error
-}
-
-
-type LedgerReader interface {
-	
-	GetState(namespace string, key string) ([]byte, error)
-}
-
-
-
-
-type LedgerWriter interface {
-	LedgerReader
-	
-	SetState(namespace string, key string, value []byte) error
 }

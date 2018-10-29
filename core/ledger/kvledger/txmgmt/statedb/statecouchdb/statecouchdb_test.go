@@ -26,8 +26,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	flogging.SetModuleLevel("statecouchdb", "debug")
-	flogging.SetModuleLevel("couchdb", "debug")
 	os.Exit(testMain(m))
 }
 
@@ -53,7 +51,7 @@ func testMain(m *testing.M) int {
 	
 	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", false)
 
-	flogging.SetModuleLevel("statecouchdb", "debug")
+	flogging.ActivateSpec("statecouchdb,couchdb=debug")
 	
 	return m.Run()
 }

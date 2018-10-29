@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/mcc-github/blockchain/common/channelconfig"
+	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -188,7 +189,12 @@ func (bdp *StandardDialer) Dial(address string) (*grpc.ClientConn, error) {
 
 type BlockVerifier interface {
 	
-	VerifyBlockSignature(sd []*common.SignedData) error
+	
+	
+	
+	
+	
+	VerifyBlockSignature(sd []*common.SignedData, config *common.ConfigEnvelope) error
 }
 
 
@@ -215,9 +221,62 @@ func VerifyBlocks(blockBuff []*common.Block, signatureVerifier BlockVerifier) er
 		}
 	}
 
+	var config *common.ConfigEnvelope
+	
+	
+	
+	for _, block := range blockBuff {
+		configFromBlock, err := ConfigFromBlock(block)
+		if err == notAConfig {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		
+		if err := VerifyBlockSignature(block, signatureVerifier, config); err != nil {
+			return err
+		}
+		config = configFromBlock
+	}
+
 	
 	lastBlock := blockBuff[len(blockBuff)-1]
-	return VerifyBlockSignature(lastBlock, signatureVerifier)
+	return VerifyBlockSignature(lastBlock, signatureVerifier, config)
+}
+
+var notAConfig = errors.New("not a config block")
+
+
+
+func ConfigFromBlock(block *common.Block) (*common.ConfigEnvelope, error) {
+	if block == nil || block.Data == nil || len(block.Data.Data) == 0 {
+		return nil, errors.New("empty block")
+	}
+	txn := block.Data.Data[0]
+	env, err := utils.GetEnvelopeFromBlock(txn)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	payload, err := utils.GetPayload(env)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	if payload.Header == nil {
+		return nil, errors.New("nil header in payload")
+	}
+	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	if common.HeaderType(chdr.Type) != common.HeaderType_CONFIG {
+		return nil, notAConfig
+	}
+	configEnvelope, err := configtx.UnmarshalConfigEnvelope(payload.Data)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid config envelope")
+	}
+	return configEnvelope, nil
 }
 
 
@@ -261,20 +320,20 @@ func VerifyBlockHash(indexInBuffer int, blockBuff []*common.Block) error {
 }
 
 
-func VerifyBlockSignature(block *common.Block, verifier BlockVerifier) error {
+func SignatureSetFromBlock(block *common.Block) ([]*common.SignedData, error) {
 	if block.Metadata == nil || len(block.Metadata.Metadata) <= int(common.BlockMetadataIndex_SIGNATURES) {
-		return errors.New("no metadata in block")
+		return nil, errors.New("no metadata in block")
 	}
 	metadata, err := utils.GetMetadataFromBlock(block, common.BlockMetadataIndex_SIGNATURES)
 	if err != nil {
-		return errors.Errorf("failed unmarshaling medatata for signatures: %v", err)
+		return nil, errors.Errorf("failed unmarshaling medatata for signatures: %v", err)
 	}
 
 	var signatureSet []*common.SignedData
 	for _, metadataSignature := range metadata.Signatures {
 		sigHdr, err := utils.GetSignatureHeader(metadataSignature.SignatureHeader)
 		if err != nil {
-			return errors.Errorf("failed unmarshaling signature header for block with id %d: %v",
+			return nil, errors.Errorf("failed unmarshaling signature header for block with id %d: %v",
 				block.Header.Number, err)
 		}
 		signatureSet = append(signatureSet,
@@ -286,8 +345,16 @@ func VerifyBlockSignature(block *common.Block, verifier BlockVerifier) error {
 			},
 		)
 	}
+	return signatureSet, nil
+}
 
-	return verifier.VerifyBlockSignature(signatureSet)
+
+func VerifyBlockSignature(block *common.Block, verifier BlockVerifier, config *common.ConfigEnvelope) error {
+	signatureSet, err := SignatureSetFromBlock(block)
+	if err != nil {
+		return err
+	}
+	return verifier.VerifyBlockSignature(signatureSet, config)
 }
 
 

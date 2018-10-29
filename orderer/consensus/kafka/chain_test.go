@@ -3633,11 +3633,10 @@ type mockConsenterSupport struct {
 }
 
 func (c *mockConsenterSupport) Block(seq uint64) *cb.Block {
-	
 	return nil
 }
 
-func (c *mockConsenterSupport) VerifyBlockSignature([]*cb.SignedData) error {
+func (c *mockConsenterSupport) VerifyBlockSignature([]*cb.SignedData, *cb.ConfigEnvelope) error {
 	return nil
 }
 
