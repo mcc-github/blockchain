@@ -25,7 +25,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("common/deliver")
+var logger = flogging.MustGetLogger("common.deliver")
 
 
 

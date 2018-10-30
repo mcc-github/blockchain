@@ -22,17 +22,15 @@ import (
 )
 
 const (
-	pkgLogID = "common.tools.configtxgen.localconfig"
-
 	
 	Prefix string = "CONFIGTX"
 )
 
-var logger = flogging.MustGetLogger(pkgLogID)
+var logger = flogging.MustGetLogger("common.tools.configtxgen.localconfig")
 var configName = strings.ToLower(Prefix)
 
 func init() {
-	flogging.InitFromSpec(pkgLogID + "=error")
+	flogging.InitFromSpec("common.tools.configtxgen.localconfig=error")
 }
 
 const (

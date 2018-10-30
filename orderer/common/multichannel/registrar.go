@@ -27,13 +27,11 @@ import (
 )
 
 const (
-	pkgLogID = "orderer/commmon/multichannel"
-
 	msgVersion = int32(0)
 	epoch      = 0
 )
 
-var logger = flogging.MustGetLogger(pkgLogID)
+var logger = flogging.MustGetLogger("orderer.commmon.multichannel")
 
 
 func checkResources(res channelconfig.Resources) error {

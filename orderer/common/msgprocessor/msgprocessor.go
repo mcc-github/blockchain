@@ -16,14 +16,12 @@ import (
 )
 
 const (
-	pkgLogID = "orderer/common/msgprocessor"
-
 	
 	msgVersion = int32(0)
 	epoch      = 0
 )
 
-var logger = flogging.MustGetLogger(pkgLogID)
+var logger = flogging.MustGetLogger("orderer.common.msgprocessor")
 
 
 

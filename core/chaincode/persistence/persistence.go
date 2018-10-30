@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("chaincode/persistence")
+var logger = flogging.MustGetLogger("chaincode.persistence")
 
 
 

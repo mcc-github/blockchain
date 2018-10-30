@@ -14,9 +14,7 @@ import (
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 )
 
-const pkgLogID = "common/ledger/blockledger/file"
-
-var logger = flogging.MustGetLogger(pkgLogID)
+var logger = flogging.MustGetLogger("common.ledger.blockledger.file")
 
 
 type FileLedger struct {

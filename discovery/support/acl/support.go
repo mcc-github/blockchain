@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	logger = flogging.MustGetLogger("discovery/acl")
+	logger = flogging.MustGetLogger("discovery.acl")
 )
 
 

@@ -33,6 +33,7 @@ type TopLevel struct {
 	RAMLedger  RAMLedger
 	Kafka      Kafka
 	Debug      Debug
+	Consensus  interface{}
 }
 
 

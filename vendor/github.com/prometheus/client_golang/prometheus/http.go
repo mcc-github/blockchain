@@ -62,10 +62,10 @@ func giveBuf(buf *bytes.Buffer) {
 
 
 
-
 func Handler() http.Handler {
 	return InstrumentHandler("prometheus", UninstrumentedHandler())
 }
+
 
 
 
@@ -95,7 +95,7 @@ func UninstrumentedHandler() http.Handler {
 			closer.Close()
 		}
 		if lastErr != nil && buf.Len() == 0 {
-			http.Error(w, "No metrics encoded, last error:\n\n"+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "No metrics encoded, last error:\n\n"+lastErr.Error(), http.StatusInternalServerError)
 			return
 		}
 		header := w.Header()
@@ -115,7 +115,7 @@ func decorateWriter(request *http.Request, writer io.Writer) (io.Writer, string)
 	header := request.Header.Get(acceptEncodingHeader)
 	parts := strings.Split(header, ",")
 	for _, part := range parts {
-		part := strings.TrimSpace(part)
+		part = strings.TrimSpace(part)
 		if part == "gzip" || strings.HasPrefix(part, "gzip;") {
 			return gzip.NewWriter(writer), "gzip"
 		}
@@ -138,23 +138,6 @@ func (n nowFunc) Now() time.Time {
 var now nower = nowFunc(func() time.Time {
 	return time.Now()
 })
-
-func nowSeries(t ...time.Time) nower {
-	return nowFunc(func() time.Time {
-		defer func() {
-			t = t[1:]
-		}()
-
-		return t[0]
-	})
-}
-
-
-
-
-
-
-
 
 
 
@@ -190,6 +173,7 @@ func InstrumentHandlerFunc(handlerName string, handlerFunc func(http.ResponseWri
 		SummaryOpts{
 			Subsystem:   "http",
 			ConstLabels: Labels{"handler": handlerName},
+			Objectives:  map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
 		handlerFunc,
 	)
@@ -245,34 +229,52 @@ func InstrumentHandlerFuncWithOpts(opts SummaryOpts, handlerFunc func(http.Respo
 		},
 		instLabels,
 	)
+	if err := Register(reqCnt); err != nil {
+		if are, ok := err.(AlreadyRegisteredError); ok {
+			reqCnt = are.ExistingCollector.(*CounterVec)
+		} else {
+			panic(err)
+		}
+	}
 
 	opts.Name = "request_duration_microseconds"
 	opts.Help = "The HTTP request latencies in microseconds."
 	reqDur := NewSummary(opts)
+	if err := Register(reqDur); err != nil {
+		if are, ok := err.(AlreadyRegisteredError); ok {
+			reqDur = are.ExistingCollector.(Summary)
+		} else {
+			panic(err)
+		}
+	}
 
 	opts.Name = "request_size_bytes"
 	opts.Help = "The HTTP request sizes in bytes."
 	reqSz := NewSummary(opts)
+	if err := Register(reqSz); err != nil {
+		if are, ok := err.(AlreadyRegisteredError); ok {
+			reqSz = are.ExistingCollector.(Summary)
+		} else {
+			panic(err)
+		}
+	}
 
 	opts.Name = "response_size_bytes"
 	opts.Help = "The HTTP response sizes in bytes."
 	resSz := NewSummary(opts)
-
-	regReqCnt := MustRegisterOrGet(reqCnt).(*CounterVec)
-	regReqDur := MustRegisterOrGet(reqDur).(Summary)
-	regReqSz := MustRegisterOrGet(reqSz).(Summary)
-	regResSz := MustRegisterOrGet(resSz).(Summary)
+	if err := Register(resSz); err != nil {
+		if are, ok := err.(AlreadyRegisteredError); ok {
+			resSz = are.ExistingCollector.(Summary)
+		} else {
+			panic(err)
+		}
+	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 
 		delegate := &responseWriterDelegator{ResponseWriter: w}
-		out := make(chan int)
-		urlLen := 0
-		if r.URL != nil {
-			urlLen = len(r.URL.String())
-		}
-		go computeApproximateRequestSize(r, out, urlLen)
+		out := computeApproximateRequestSize(r)
 
 		_, cn := w.(http.CloseNotifier)
 		_, fl := w.(http.Flusher)
@@ -290,39 +292,52 @@ func InstrumentHandlerFuncWithOpts(opts SummaryOpts, handlerFunc func(http.Respo
 
 		method := sanitizeMethod(r.Method)
 		code := sanitizeCode(delegate.status)
-		regReqCnt.WithLabelValues(method, code).Inc()
-		regReqDur.Observe(elapsed)
-		regResSz.Observe(float64(delegate.written))
-		regReqSz.Observe(float64(<-out))
+		reqCnt.WithLabelValues(method, code).Inc()
+		reqDur.Observe(elapsed)
+		resSz.Observe(float64(delegate.written))
+		reqSz.Observe(float64(<-out))
 	})
 }
 
-func computeApproximateRequestSize(r *http.Request, out chan int, s int) {
-	s += len(r.Method)
-	s += len(r.Proto)
-	for name, values := range r.Header {
-		s += len(name)
-		for _, value := range values {
-			s += len(value)
-		}
-	}
-	s += len(r.Host)
-
+func computeApproximateRequestSize(r *http.Request) <-chan int {
 	
-
-	if r.ContentLength != -1 {
-		s += int(r.ContentLength)
+	
+	s := 0
+	if r.URL != nil {
+		s += len(r.URL.String())
 	}
-	out <- s
+
+	out := make(chan int, 1)
+
+	go func() {
+		s += len(r.Method)
+		s += len(r.Proto)
+		for name, values := range r.Header {
+			s += len(name)
+			for _, value := range values {
+				s += len(value)
+			}
+		}
+		s += len(r.Host)
+
+		
+
+		if r.ContentLength != -1 {
+			s += int(r.ContentLength)
+		}
+		out <- s
+		close(out)
+	}()
+
+	return out
 }
 
 type responseWriterDelegator struct {
 	http.ResponseWriter
 
-	handler, method string
-	status          int
-	written         int64
-	wroteHeader     bool
+	status      int
+	written     int64
+	wroteHeader bool
 }
 
 func (r *responseWriterDelegator) WriteHeader(code int) {

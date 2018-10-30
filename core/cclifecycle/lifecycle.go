@@ -18,7 +18,7 @@ import (
 var (
 	
 	
-	Logger = flogging.MustGetLogger("discovery/lifecycle")
+	Logger = flogging.MustGetLogger("discovery.lifecycle")
 )
 
 

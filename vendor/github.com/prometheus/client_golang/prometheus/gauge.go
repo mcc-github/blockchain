@@ -13,6 +13,14 @@
 
 package prometheus
 
+import (
+	"math"
+	"sync/atomic"
+	"time"
+
+	dto "github.com/prometheus/client_model/go"
+)
+
 
 
 
@@ -28,7 +36,9 @@ type Gauge interface {
 	
 	Set(float64)
 	
+	
 	Inc()
+	
 	
 	Dec()
 	
@@ -37,19 +47,83 @@ type Gauge interface {
 	
 	
 	Sub(float64)
+
+	
+	SetToCurrentTime()
 }
 
 
 type GaugeOpts Opts
 
 
+
+
+
+
+
+
+
 func NewGauge(opts GaugeOpts) Gauge {
-	return newValue(NewDesc(
+	desc := NewDesc(
 		BuildFQName(opts.Namespace, opts.Subsystem, opts.Name),
 		opts.Help,
 		nil,
 		opts.ConstLabels,
-	), GaugeValue, 0)
+	)
+	result := &gauge{desc: desc, labelPairs: desc.constLabelPairs}
+	result.init(result) 
+	return result
+}
+
+type gauge struct {
+	
+	
+	
+	valBits uint64
+
+	selfCollector
+
+	desc       *Desc
+	labelPairs []*dto.LabelPair
+}
+
+func (g *gauge) Desc() *Desc {
+	return g.desc
+}
+
+func (g *gauge) Set(val float64) {
+	atomic.StoreUint64(&g.valBits, math.Float64bits(val))
+}
+
+func (g *gauge) SetToCurrentTime() {
+	g.Set(float64(time.Now().UnixNano()) / 1e9)
+}
+
+func (g *gauge) Inc() {
+	g.Add(1)
+}
+
+func (g *gauge) Dec() {
+	g.Add(-1)
+}
+
+func (g *gauge) Add(val float64) {
+	for {
+		oldBits := atomic.LoadUint64(&g.valBits)
+		newBits := math.Float64bits(math.Float64frombits(oldBits) + val)
+		if atomic.CompareAndSwapUint64(&g.valBits, oldBits, newBits) {
+			return
+		}
+	}
+}
+
+func (g *gauge) Sub(val float64) {
+	g.Add(val * -1)
+}
+
+func (g *gauge) Write(out *dto.Metric) error {
+	val := math.Float64frombits(atomic.LoadUint64(&g.valBits))
+	return populateMetric(GaugeValue, val, g.labelPairs, out)
 }
 
 
@@ -58,9 +132,8 @@ func NewGauge(opts GaugeOpts) Gauge {
 
 
 type GaugeVec struct {
-	*MetricVec
+	*metricVec
 }
-
 
 
 
@@ -72,8 +145,13 @@ func NewGaugeVec(opts GaugeOpts, labelNames []string) *GaugeVec {
 		opts.ConstLabels,
 	)
 	return &GaugeVec{
-		MetricVec: newMetricVec(desc, func(lvs ...string) Metric {
-			return newValue(desc, GaugeValue, 0, lvs...)
+		metricVec: newMetricVec(desc, func(lvs ...string) Metric {
+			if len(lvs) != len(desc.variableLabels) {
+				panic(errInconsistentCardinality)
+			}
+			result := &gauge{desc: desc, labelPairs: makeLabelPairs(desc, lvs)}
+			result.init(result) 
+			return result
 		}),
 	}
 }
@@ -81,8 +159,28 @@ func NewGaugeVec(opts GaugeOpts, labelNames []string) *GaugeVec {
 
 
 
-func (m *GaugeVec) GetMetricWithLabelValues(lvs ...string) (Gauge, error) {
-	metric, err := m.MetricVec.GetMetricWithLabelValues(lvs...)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (v *GaugeVec) GetMetricWithLabelValues(lvs ...string) (Gauge, error) {
+	metric, err := v.metricVec.getMetricWithLabelValues(lvs...)
 	if metric != nil {
 		return metric.(Gauge), err
 	}
@@ -92,8 +190,17 @@ func (m *GaugeVec) GetMetricWithLabelValues(lvs ...string) (Gauge, error) {
 
 
 
-func (m *GaugeVec) GetMetricWith(labels Labels) (Gauge, error) {
-	metric, err := m.MetricVec.GetMetricWith(labels)
+
+
+
+
+
+
+
+
+
+func (v *GaugeVec) GetMetricWith(labels Labels) (Gauge, error) {
+	metric, err := v.metricVec.getMetricWith(labels)
 	if metric != nil {
 		return metric.(Gauge), err
 	}
@@ -104,15 +211,54 @@ func (m *GaugeVec) GetMetricWith(labels Labels) (Gauge, error) {
 
 
 
-func (m *GaugeVec) WithLabelValues(lvs ...string) Gauge {
-	return m.MetricVec.WithLabelValues(lvs...).(Gauge)
+func (v *GaugeVec) WithLabelValues(lvs ...string) Gauge {
+	g, err := v.GetMetricWithLabelValues(lvs...)
+	if err != nil {
+		panic(err)
+	}
+	return g
 }
 
 
 
 
-func (m *GaugeVec) With(labels Labels) Gauge {
-	return m.MetricVec.With(labels).(Gauge)
+func (v *GaugeVec) With(labels Labels) Gauge {
+	g, err := v.GetMetricWith(labels)
+	if err != nil {
+		panic(err)
+	}
+	return g
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (v *GaugeVec) CurryWith(labels Labels) (*GaugeVec, error) {
+	vec, err := v.curryWith(labels)
+	if vec != nil {
+		return &GaugeVec{vec}, err
+	}
+	return nil, err
+}
+
+
+
+func (v *GaugeVec) MustCurryWith(labels Labels) *GaugeVec {
+	vec, err := v.CurryWith(labels)
+	if err != nil {
+		panic(err)
+	}
+	return vec
 }
 
 

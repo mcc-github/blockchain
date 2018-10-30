@@ -8,12 +8,15 @@ package etcdraft
 
 import (
 	"encoding/pem"
+	"reflect"
 
+	"github.com/coreos/etcd/raft"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/pkg/errors"
 )
@@ -100,7 +103,7 @@ func newBlockPuller(support consensus.ConsenterSupport,
 
 	return &cluster.BlockPuller{
 		VerifyBlockSequence: verifyBlockSequence,
-		Logger:              flogging.MustGetLogger("orderer/common/cluster/puller"),
+		Logger:              flogging.MustGetLogger("orderer.common.cluster.puller"),
 		RetryTimeout:        clusterConfig.ReplicationRetryTimeout,
 		MaxTotalBufferBytes: clusterConfig.ReplicationBufferSize,
 		FetchTimeout:        clusterConfig.ReplicationPullTimeout,
@@ -110,4 +113,45 @@ func newBlockPuller(support consensus.ConsenterSupport,
 		Channel:             support.ChainID(),
 		Dialer:              stdDialer,
 	}, nil
+}
+
+
+func RaftPeers(consenters map[uint64]*etcdraft.Consenter) []raft.Peer {
+	var peers []raft.Peer
+
+	for raftID := range consenters {
+		peers = append(peers, raft.Peer{ID: raftID})
+	}
+	return peers
+}
+
+
+func ConsentersToMap(consenters []*etcdraft.Consenter) map[string]struct{} {
+	set := map[string]struct{}{}
+	for _, c := range consenters {
+		set[string(c.ClientTlsCert)] = struct{}{}
+	}
+	return set
+}
+
+
+
+func MembershipByCert(consenters map[uint64]*etcdraft.Consenter) map[string]struct{} {
+	set := map[string]struct{}{}
+	for _, c := range consenters {
+		set[string(c.ClientTlsCert)] = struct{}{}
+	}
+	return set
+}
+
+
+func ConsentersChanged(oldConsenters map[uint64]*etcdraft.Consenter, newConsenters []*etcdraft.Consenter) bool {
+	if len(oldConsenters) != len(newConsenters) {
+		return false
+	}
+
+	consentersSet1 := MembershipByCert(oldConsenters)
+	consentersSet2 := ConsentersToMap(newConsenters)
+
+	return reflect.DeepEqual(consentersSet1, consentersSet2)
 }

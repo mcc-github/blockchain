@@ -21,7 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/utils"
 )
 
-var logger = flogging.MustGetLogger("common/configtx/test")
+var logger = flogging.MustGetLogger("common.configtx.test")
 
 
 func MakeGenesisBlock(chainID string) (*cb.Block, error) {

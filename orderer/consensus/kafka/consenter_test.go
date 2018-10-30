@@ -189,8 +189,7 @@ func setupTestLogging(logLevel string) {
 	
 	
 	
-	spec := fmt.Sprintf("%s,%s=%s", pkgLogID, saramaLogID, logLevel)
-	spec = strings.Replace(spec, "/", ".", -1)
+	spec := fmt.Sprintf("orderer.consensus.kafka=%s", logLevel)
 	flogging.ActivateSpec(spec)
 }
 

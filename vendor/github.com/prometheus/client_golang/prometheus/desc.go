@@ -16,32 +16,14 @@ package prometheus
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/prometheus/common/model"
 
 	dto "github.com/prometheus/client_model/go"
 )
-
-var (
-	metricNameRE = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_:]*$`)
-	labelNameRE  = regexp.MustCompile("^[a-zA-Z_][a-zA-Z0-9_]*$")
-)
-
-
-
-const reservedLabelPrefix = "__"
-
-
-
-
-
-
-
-
-type Labels map[string]string
 
 
 
@@ -92,18 +74,13 @@ type Desc struct {
 
 
 
-
 func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *Desc {
 	d := &Desc{
 		fqName:         fqName,
 		help:           help,
 		variableLabels: variableLabels,
 	}
-	if help == "" {
-		d.err = errors.New("empty help string")
-		return d
-	}
-	if !metricNameRE.MatchString(fqName) {
+	if !model.IsValidMetricName(model.LabelValue(fqName)) {
 		d.err = fmt.Errorf("%q is not a valid metric name", fqName)
 		return d
 	}
@@ -129,6 +106,12 @@ func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *
 	}
 	
 	
+	if err := validateLabelValues(labelValues, len(labelValues)); err != nil {
+		d.err = err
+		return d
+	}
+	
+	
 	
 	for _, labelName := range variableLabels {
 		if !checkLabelName(labelName) {
@@ -142,6 +125,7 @@ func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *
 		d.err = errors.New("duplicate label names")
 		return d
 	}
+
 	vh := hashNew()
 	for _, val := range labelValues {
 		vh = hashAdd(vh, val)
@@ -168,7 +152,7 @@ func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *
 			Value: proto.String(v),
 		})
 	}
-	sort.Sort(LabelPairSorter(d.constLabelPairs))
+	sort.Sort(labelPairSorter(d.constLabelPairs))
 	return d
 }
 
@@ -197,9 +181,4 @@ func (d *Desc) String() string {
 		strings.Join(lpStrings, ","),
 		d.variableLabels,
 	)
-}
-
-func checkLabelName(l string) bool {
-	return labelNameRE.MatchString(l) &&
-		!strings.HasPrefix(l, reservedLabelPrefix)
 }

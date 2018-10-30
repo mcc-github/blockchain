@@ -45,6 +45,9 @@ const quantileLabel = "quantile"
 
 
 
+
+
+
 type Summary interface {
 	Metric
 	Collector
@@ -52,6 +55,9 @@ type Summary interface {
 	
 	Observe(float64)
 }
+
+
+
 
 
 var (
@@ -73,6 +79,8 @@ const (
 	
 	DefBufCap = 500
 )
+
+
 
 
 
@@ -108,10 +116,14 @@ type SummaryOpts struct {
 	
 	
 	
-	
-	
 	ConstLabels Labels
 
+	
+	
+	
+	
+	
+	
 	
 	
 	
@@ -183,7 +195,7 @@ func newSummary(desc *Desc, opts SummaryOpts, labelValues ...string) Summary {
 		}
 	}
 
-	if len(opts.Objectives) == 0 {
+	if opts.Objectives == nil {
 		opts.Objectives = DefObjectives
 	}
 
@@ -390,13 +402,21 @@ func (s quantSort) Less(i, j int) bool {
 
 
 type SummaryVec struct {
-	*MetricVec
+	*metricVec
 }
 
 
 
 
+
+
+
 func NewSummaryVec(opts SummaryOpts, labelNames []string) *SummaryVec {
+	for _, ln := range labelNames {
+		if ln == quantileLabel {
+			panic(errQuantileLabelNotAllowed)
+		}
+	}
 	desc := NewDesc(
 		BuildFQName(opts.Namespace, opts.Subsystem, opts.Name),
 		opts.Help,
@@ -404,7 +424,7 @@ func NewSummaryVec(opts SummaryOpts, labelNames []string) *SummaryVec {
 		opts.ConstLabels,
 	)
 	return &SummaryVec{
-		MetricVec: newMetricVec(desc, func(lvs ...string) Metric {
+		metricVec: newMetricVec(desc, func(lvs ...string) Metric {
 			return newSummary(desc, opts, lvs...)
 		}),
 	}
@@ -413,10 +433,31 @@ func NewSummaryVec(opts SummaryOpts, labelNames []string) *SummaryVec {
 
 
 
-func (m *SummaryVec) GetMetricWithLabelValues(lvs ...string) (Summary, error) {
-	metric, err := m.MetricVec.GetMetricWithLabelValues(lvs...)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (v *SummaryVec) GetMetricWithLabelValues(lvs ...string) (Observer, error) {
+	metric, err := v.metricVec.getMetricWithLabelValues(lvs...)
 	if metric != nil {
-		return metric.(Summary), err
+		return metric.(Observer), err
 	}
 	return nil, err
 }
@@ -424,10 +465,19 @@ func (m *SummaryVec) GetMetricWithLabelValues(lvs ...string) (Summary, error) {
 
 
 
-func (m *SummaryVec) GetMetricWith(labels Labels) (Summary, error) {
-	metric, err := m.MetricVec.GetMetricWith(labels)
+
+
+
+
+
+
+
+
+
+func (v *SummaryVec) GetMetricWith(labels Labels) (Observer, error) {
+	metric, err := v.metricVec.getMetricWith(labels)
 	if metric != nil {
-		return metric.(Summary), err
+		return metric.(Observer), err
 	}
 	return nil, err
 }
@@ -436,15 +486,54 @@ func (m *SummaryVec) GetMetricWith(labels Labels) (Summary, error) {
 
 
 
-func (m *SummaryVec) WithLabelValues(lvs ...string) Summary {
-	return m.MetricVec.WithLabelValues(lvs...).(Summary)
+func (v *SummaryVec) WithLabelValues(lvs ...string) Observer {
+	s, err := v.GetMetricWithLabelValues(lvs...)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 
 
 
-func (m *SummaryVec) With(labels Labels) Summary {
-	return m.MetricVec.With(labels).(Summary)
+func (v *SummaryVec) With(labels Labels) Observer {
+	s, err := v.GetMetricWith(labels)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (v *SummaryVec) CurryWith(labels Labels) (ObserverVec, error) {
+	vec, err := v.curryWith(labels)
+	if vec != nil {
+		return &SummaryVec{vec}, err
+	}
+	return nil, err
+}
+
+
+
+func (v *SummaryVec) MustCurryWith(labels Labels) ObserverVec {
+	vec, err := v.CurryWith(labels)
+	if err != nil {
+		panic(err)
+	}
+	return vec
 }
 
 type constSummary struct {
@@ -505,8 +594,11 @@ func NewConstSummary(
 	quantiles map[float64]float64,
 	labelValues ...string,
 ) (Metric, error) {
-	if len(desc.variableLabels) != len(labelValues) {
-		return nil, errInconsistentCardinality
+	if desc.err != nil {
+		return nil, desc.err
+	}
+	if err := validateLabelValues(labelValues, len(desc.variableLabels)); err != nil {
+		return nil, err
 	}
 	return &constSummary{
 		desc:       desc,

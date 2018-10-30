@@ -15,6 +15,9 @@ package prometheus
 
 import (
 	"strings"
+	"time"
+
+	"github.com/golang/protobuf/proto"
 
 	dto "github.com/prometheus/client_model/go"
 )
@@ -45,13 +48,13 @@ type Metric interface {
 	
 	
 	
-	
 	Write(*dto.Metric) error
 	
 	
 	
 	
 }
+
 
 
 
@@ -75,14 +78,6 @@ type Opts struct {
 	
 	Help string
 
-	
-	
-	
-	
-	
-	
-	
-	
 	
 	
 	
@@ -120,33 +115,18 @@ func BuildFQName(namespace, subsystem, name string) string {
 
 
 
+type labelPairSorter []*dto.LabelPair
 
-type LabelPairSorter []*dto.LabelPair
-
-func (s LabelPairSorter) Len() int {
+func (s labelPairSorter) Len() int {
 	return len(s)
 }
 
-func (s LabelPairSorter) Swap(i, j int) {
+func (s labelPairSorter) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-func (s LabelPairSorter) Less(i, j int) bool {
+func (s labelPairSorter) Less(i, j int) bool {
 	return s[i].GetName() < s[j].GetName()
-}
-
-type hashSorter []uint64
-
-func (s hashSorter) Len() int {
-	return len(s)
-}
-
-func (s hashSorter) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s hashSorter) Less(i, j int) bool {
-	return s[i] < s[j]
 }
 
 type invalidMetric struct {
@@ -164,3 +144,31 @@ func NewInvalidMetric(desc *Desc, err error) Metric {
 func (m *invalidMetric) Desc() *Desc { return m.desc }
 
 func (m *invalidMetric) Write(*dto.Metric) error { return m.err }
+
+type timestampedMetric struct {
+	Metric
+	t time.Time
+}
+
+func (m timestampedMetric) Write(pb *dto.Metric) error {
+	e := m.Metric.Write(pb)
+	pb.TimestampMs = proto.Int64(m.t.Unix()*1000 + int64(m.t.Nanosecond()/1000000))
+	return e
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func NewMetricWithTimestamp(t time.Time, m Metric) Metric {
+	return timestampedMetric{Metric: m, t: t}
+}

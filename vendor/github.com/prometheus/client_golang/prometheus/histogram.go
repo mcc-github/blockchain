@@ -16,7 +16,9 @@ package prometheus
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"sort"
+	"sync"
 	"sync/atomic"
 
 	"github.com/golang/protobuf/proto"
@@ -110,6 +112,7 @@ func ExponentialBuckets(start, factor float64, count int) []float64 {
 
 
 
+
 type HistogramOpts struct {
 	
 	
@@ -126,13 +129,6 @@ type HistogramOpts struct {
 	
 	Help string
 
-	
-	
-	
-	
-	
-	
-	
 	
 	
 	
@@ -191,6 +187,7 @@ func newHistogram(desc *Desc, opts HistogramOpts, labelValues ...string) Histogr
 		desc:        desc,
 		upperBounds: opts.Buckets,
 		labelPairs:  makeLabelPairs(desc, labelValues),
+		counts:      [2]*histogramCounts{&histogramCounts{}, &histogramCounts{}},
 	}
 	for i, upperBound := range h.upperBounds {
 		if i < len(h.upperBounds)-1 {
@@ -208,10 +205,22 @@ func newHistogram(desc *Desc, opts HistogramOpts, labelValues ...string) Histogr
 		}
 	}
 	
-	h.counts = make([]uint64, len(h.upperBounds))
+	
+	h.counts[0].buckets = make([]uint64, len(h.upperBounds))
+	h.counts[1].buckets = make([]uint64, len(h.upperBounds))
 
 	h.init(h) 
 	return h
+}
+
+type histogramCounts struct {
+	
+	
+	
+	
+	sumBits uint64
+	count   uint64
+	buckets []uint64
 }
 
 type histogram struct {
@@ -219,16 +228,29 @@ type histogram struct {
 	
 	
 	
-	sumBits uint64
-	count   uint64
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	countAndHotIdx uint64
 
 	selfCollector
-	
-
-	desc *Desc
+	desc     *Desc
+	writeMtx sync.Mutex 
 
 	upperBounds []float64
-	counts      []uint64
+
+	
+	
+	
+	
+	counts [2]*histogramCounts
+	hotIdx int 
 
 	labelPairs []*dto.LabelPair
 }
@@ -248,36 +270,113 @@ func (h *histogram) Observe(v float64) {
 	
 	
 	i := sort.SearchFloat64s(h.upperBounds, v)
-	if i < len(h.counts) {
-		atomic.AddUint64(&h.counts[i], 1)
+
+	
+	
+	
+	n := atomic.AddUint64(&h.countAndHotIdx, 2)
+	hotCounts := h.counts[n%2]
+
+	if i < len(h.upperBounds) {
+		atomic.AddUint64(&hotCounts.buckets[i], 1)
 	}
-	atomic.AddUint64(&h.count, 1)
 	for {
-		oldBits := atomic.LoadUint64(&h.sumBits)
+		oldBits := atomic.LoadUint64(&hotCounts.sumBits)
 		newBits := math.Float64bits(math.Float64frombits(oldBits) + v)
-		if atomic.CompareAndSwapUint64(&h.sumBits, oldBits, newBits) {
+		if atomic.CompareAndSwapUint64(&hotCounts.sumBits, oldBits, newBits) {
 			break
 		}
 	}
+	
+	
+	atomic.AddUint64(&hotCounts.count, 1)
 }
 
 func (h *histogram) Write(out *dto.Metric) error {
-	his := &dto.Histogram{}
-	buckets := make([]*dto.Bucket, len(h.upperBounds))
+	var (
+		his                   = &dto.Histogram{}
+		buckets               = make([]*dto.Bucket, len(h.upperBounds))
+		hotCounts, coldCounts *histogramCounts
+		count                 uint64
+	)
 
-	his.SampleSum = proto.Float64(math.Float64frombits(atomic.LoadUint64(&h.sumBits)))
-	his.SampleCount = proto.Uint64(atomic.LoadUint64(&h.count))
-	var count uint64
+	
+	
+	
+	h.writeMtx.Lock()
+	defer h.writeMtx.Unlock()
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	if h.hotIdx == 0 {
+		count = atomic.AddUint64(&h.countAndHotIdx, 1) >> 1
+		h.hotIdx = 1
+		hotCounts = h.counts[1]
+		coldCounts = h.counts[0]
+	} else {
+		count = atomic.AddUint64(&h.countAndHotIdx, ^uint64(0)) >> 1 
+		h.hotIdx = 0
+		hotCounts = h.counts[0]
+		coldCounts = h.counts[1]
+	}
+
+	
+	
+	
+	
+	for {
+		if count == atomic.LoadUint64(&coldCounts.count) {
+			break
+		}
+		runtime.Gosched() 
+	}
+
+	his.SampleCount = proto.Uint64(count)
+	his.SampleSum = proto.Float64(math.Float64frombits(atomic.LoadUint64(&coldCounts.sumBits)))
+	var cumCount uint64
 	for i, upperBound := range h.upperBounds {
-		count += atomic.LoadUint64(&h.counts[i])
+		cumCount += atomic.LoadUint64(&coldCounts.buckets[i])
 		buckets[i] = &dto.Bucket{
-			CumulativeCount: proto.Uint64(count),
+			CumulativeCount: proto.Uint64(cumCount),
 			UpperBound:      proto.Float64(upperBound),
 		}
 	}
+
 	his.Bucket = buckets
 	out.Histogram = his
 	out.Label = h.labelPairs
+
+	
+	atomic.AddUint64(&hotCounts.count, count)
+	atomic.StoreUint64(&coldCounts.count, 0)
+	for {
+		oldBits := atomic.LoadUint64(&hotCounts.sumBits)
+		newBits := math.Float64bits(math.Float64frombits(oldBits) + his.GetSampleSum())
+		if atomic.CompareAndSwapUint64(&hotCounts.sumBits, oldBits, newBits) {
+			atomic.StoreUint64(&coldCounts.sumBits, 0)
+			break
+		}
+	}
+	for i := range h.upperBounds {
+		atomic.AddUint64(&hotCounts.buckets[i], atomic.LoadUint64(&coldCounts.buckets[i]))
+		atomic.StoreUint64(&coldCounts.buckets[i], 0)
+	}
 	return nil
 }
 
@@ -287,9 +386,8 @@ func (h *histogram) Write(out *dto.Metric) error {
 
 
 type HistogramVec struct {
-	*MetricVec
+	*metricVec
 }
-
 
 
 
@@ -301,7 +399,7 @@ func NewHistogramVec(opts HistogramOpts, labelNames []string) *HistogramVec {
 		opts.ConstLabels,
 	)
 	return &HistogramVec{
-		MetricVec: newMetricVec(desc, func(lvs ...string) Metric {
+		metricVec: newMetricVec(desc, func(lvs ...string) Metric {
 			return newHistogram(desc, opts, lvs...)
 		}),
 	}
@@ -310,10 +408,31 @@ func NewHistogramVec(opts HistogramOpts, labelNames []string) *HistogramVec {
 
 
 
-func (m *HistogramVec) GetMetricWithLabelValues(lvs ...string) (Histogram, error) {
-	metric, err := m.MetricVec.GetMetricWithLabelValues(lvs...)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (v *HistogramVec) GetMetricWithLabelValues(lvs ...string) (Observer, error) {
+	metric, err := v.metricVec.getMetricWithLabelValues(lvs...)
 	if metric != nil {
-		return metric.(Histogram), err
+		return metric.(Observer), err
 	}
 	return nil, err
 }
@@ -321,10 +440,19 @@ func (m *HistogramVec) GetMetricWithLabelValues(lvs ...string) (Histogram, error
 
 
 
-func (m *HistogramVec) GetMetricWith(labels Labels) (Histogram, error) {
-	metric, err := m.MetricVec.GetMetricWith(labels)
+
+
+
+
+
+
+
+
+
+func (v *HistogramVec) GetMetricWith(labels Labels) (Observer, error) {
+	metric, err := v.metricVec.getMetricWith(labels)
 	if metric != nil {
-		return metric.(Histogram), err
+		return metric.(Observer), err
 	}
 	return nil, err
 }
@@ -333,15 +461,54 @@ func (m *HistogramVec) GetMetricWith(labels Labels) (Histogram, error) {
 
 
 
-func (m *HistogramVec) WithLabelValues(lvs ...string) Histogram {
-	return m.MetricVec.WithLabelValues(lvs...).(Histogram)
+func (v *HistogramVec) WithLabelValues(lvs ...string) Observer {
+	h, err := v.GetMetricWithLabelValues(lvs...)
+	if err != nil {
+		panic(err)
+	}
+	return h
 }
 
 
 
 
-func (m *HistogramVec) With(labels Labels) Histogram {
-	return m.MetricVec.With(labels).(Histogram)
+func (v *HistogramVec) With(labels Labels) Observer {
+	h, err := v.GetMetricWith(labels)
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (v *HistogramVec) CurryWith(labels Labels) (ObserverVec, error) {
+	vec, err := v.curryWith(labels)
+	if vec != nil {
+		return &HistogramVec{vec}, err
+	}
+	return nil, err
+}
+
+
+
+func (v *HistogramVec) MustCurryWith(labels Labels) ObserverVec {
+	vec, err := v.CurryWith(labels)
+	if err != nil {
+		panic(err)
+	}
+	return vec
 }
 
 type constHistogram struct {
@@ -401,8 +568,11 @@ func NewConstHistogram(
 	buckets map[float64]uint64,
 	labelValues ...string,
 ) (Metric, error) {
-	if len(desc.variableLabels) != len(labelValues) {
-		return nil, errInconsistentCardinality
+	if desc.err != nil {
+		return nil, desc.err
+	}
+	if err := validateLabelValues(labelValues, len(desc.variableLabels)); err != nil {
+		return nil, err
 	}
 	return &constHistogram{
 		desc:       desc,

@@ -25,26 +25,173 @@ import (
 
 
 
-type MetricVec struct {
-	mtx      sync.RWMutex 
-	children map[uint64][]metricWithLabelValues
-	desc     *Desc
+type metricVec struct {
+	*metricMap
 
-	newMetric   func(labelValues ...string) Metric
-	hashAdd     func(h uint64, s string) uint64 
+	curry []curriedLabelValue
+
+	
+	hashAdd     func(h uint64, s string) uint64
 	hashAddByte func(h uint64, b byte) uint64
 }
 
 
-
-func newMetricVec(desc *Desc, newMetric func(lvs ...string) Metric) *MetricVec {
-	return &MetricVec{
-		children:    map[uint64][]metricWithLabelValues{},
-		desc:        desc,
-		newMetric:   newMetric,
+func newMetricVec(desc *Desc, newMetric func(lvs ...string) Metric) *metricVec {
+	return &metricVec{
+		metricMap: &metricMap{
+			metrics:   map[uint64][]metricWithLabelValues{},
+			desc:      desc,
+			newMetric: newMetric,
+		},
 		hashAdd:     hashAdd,
 		hashAddByte: hashAddByte,
 	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (m *metricVec) DeleteLabelValues(lvs ...string) bool {
+	h, err := m.hashLabelValues(lvs)
+	if err != nil {
+		return false
+	}
+
+	return m.metricMap.deleteByHashWithLabelValues(h, lvs, m.curry)
+}
+
+
+
+
+
+
+
+
+
+
+
+func (m *metricVec) Delete(labels Labels) bool {
+	h, err := m.hashLabels(labels)
+	if err != nil {
+		return false
+	}
+
+	return m.metricMap.deleteByHashWithLabels(h, labels, m.curry)
+}
+
+func (m *metricVec) curryWith(labels Labels) (*metricVec, error) {
+	var (
+		newCurry []curriedLabelValue
+		oldCurry = m.curry
+		iCurry   int
+	)
+	for i, label := range m.desc.variableLabels {
+		val, ok := labels[label]
+		if iCurry < len(oldCurry) && oldCurry[iCurry].index == i {
+			if ok {
+				return nil, fmt.Errorf("label name %q is already curried", label)
+			}
+			newCurry = append(newCurry, oldCurry[iCurry])
+			iCurry++
+		} else {
+			if !ok {
+				continue 
+			}
+			newCurry = append(newCurry, curriedLabelValue{i, val})
+		}
+	}
+	if l := len(oldCurry) + len(labels) - len(newCurry); l > 0 {
+		return nil, fmt.Errorf("%d unknown label(s) found during currying", l)
+	}
+
+	return &metricVec{
+		metricMap:   m.metricMap,
+		curry:       newCurry,
+		hashAdd:     m.hashAdd,
+		hashAddByte: m.hashAddByte,
+	}, nil
+}
+
+func (m *metricVec) getMetricWithLabelValues(lvs ...string) (Metric, error) {
+	h, err := m.hashLabelValues(lvs)
+	if err != nil {
+		return nil, err
+	}
+
+	return m.metricMap.getOrCreateMetricWithLabelValues(h, lvs, m.curry), nil
+}
+
+func (m *metricVec) getMetricWith(labels Labels) (Metric, error) {
+	h, err := m.hashLabels(labels)
+	if err != nil {
+		return nil, err
+	}
+
+	return m.metricMap.getOrCreateMetricWithLabels(h, labels, m.curry), nil
+}
+
+func (m *metricVec) hashLabelValues(vals []string) (uint64, error) {
+	if err := validateLabelValues(vals, len(m.desc.variableLabels)-len(m.curry)); err != nil {
+		return 0, err
+	}
+
+	var (
+		h             = hashNew()
+		curry         = m.curry
+		iVals, iCurry int
+	)
+	for i := 0; i < len(m.desc.variableLabels); i++ {
+		if iCurry < len(curry) && curry[iCurry].index == i {
+			h = m.hashAdd(h, curry[iCurry].value)
+			iCurry++
+		} else {
+			h = m.hashAdd(h, vals[iVals])
+			iVals++
+		}
+		h = m.hashAddByte(h, model.SeparatorByte)
+	}
+	return h, nil
+}
+
+func (m *metricVec) hashLabels(labels Labels) (uint64, error) {
+	if err := validateValuesInLabels(labels, len(m.desc.variableLabels)-len(m.curry)); err != nil {
+		return 0, err
+	}
+
+	var (
+		h      = hashNew()
+		curry  = m.curry
+		iCurry int
+	)
+	for i, label := range m.desc.variableLabels {
+		val, ok := labels[label]
+		if iCurry < len(curry) && curry[iCurry].index == i {
+			if ok {
+				return 0, fmt.Errorf("label name %q is already curried", label)
+			}
+			h = m.hashAdd(h, curry[iCurry].value)
+			iCurry++
+		} else {
+			if !ok {
+				return 0, fmt.Errorf("label name %q missing in label map", label)
+			}
+			h = m.hashAdd(h, val)
+		}
+		h = m.hashAddByte(h, model.SeparatorByte)
+	}
+	return h, nil
 }
 
 
@@ -55,17 +202,32 @@ type metricWithLabelValues struct {
 }
 
 
+type curriedLabelValue struct {
+	index int
+	value string
+}
 
-func (m *MetricVec) Describe(ch chan<- *Desc) {
+
+
+type metricMap struct {
+	mtx       sync.RWMutex 
+	metrics   map[uint64][]metricWithLabelValues
+	desc      *Desc
+	newMetric func(labelValues ...string) Metric
+}
+
+
+
+func (m *metricMap) Describe(ch chan<- *Desc) {
 	ch <- m.desc
 }
 
 
-func (m *MetricVec) Collect(ch chan<- Metric) {
+func (m *metricMap) Collect(ch chan<- Metric) {
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
 
-	for _, metrics := range m.children {
+	for _, metrics := range m.metrics {
 		for _, metric := range metrics {
 			ch <- metric.metric
 		}
@@ -73,147 +235,38 @@ func (m *MetricVec) Collect(ch chan<- Metric) {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-func (m *MetricVec) GetMetricWithLabelValues(lvs ...string) (Metric, error) {
-	h, err := m.hashLabelValues(lvs)
-	if err != nil {
-		return nil, err
-	}
-
-	return m.getOrCreateMetricWithLabelValues(h, lvs), nil
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-func (m *MetricVec) GetMetricWith(labels Labels) (Metric, error) {
-	h, err := m.hashLabels(labels)
-	if err != nil {
-		return nil, err
-	}
-
-	return m.getOrCreateMetricWithLabels(h, labels), nil
-}
-
-
-
-
-func (m *MetricVec) WithLabelValues(lvs ...string) Metric {
-	metric, err := m.GetMetricWithLabelValues(lvs...)
-	if err != nil {
-		panic(err)
-	}
-	return metric
-}
-
-
-
-
-func (m *MetricVec) With(labels Labels) Metric {
-	metric, err := m.GetMetricWith(labels)
-	if err != nil {
-		panic(err)
-	}
-	return metric
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-func (m *MetricVec) DeleteLabelValues(lvs ...string) bool {
+func (m *metricMap) Reset() {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	h, err := m.hashLabelValues(lvs)
-	if err != nil {
-		return false
+	for h := range m.metrics {
+		delete(m.metrics, h)
 	}
-	return m.deleteByHashWithLabelValues(h, lvs)
 }
 
 
 
 
-
-
-
-
-
-
-
-func (m *MetricVec) Delete(labels Labels) bool {
+func (m *metricMap) deleteByHashWithLabelValues(
+	h uint64, lvs []string, curry []curriedLabelValue,
+) bool {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	h, err := m.hashLabels(labels)
-	if err != nil {
-		return false
-	}
-
-	return m.deleteByHashWithLabels(h, labels)
-}
-
-
-
-
-func (m *MetricVec) deleteByHashWithLabelValues(h uint64, lvs []string) bool {
-	metrics, ok := m.children[h]
+	metrics, ok := m.metrics[h]
 	if !ok {
 		return false
 	}
 
-	i := m.findMetricWithLabelValues(metrics, lvs)
+	i := findMetricWithLabelValues(metrics, lvs, curry)
 	if i >= len(metrics) {
 		return false
 	}
 
 	if len(metrics) > 1 {
-		m.children[h] = append(metrics[:i], metrics[i+1:]...)
+		m.metrics[h] = append(metrics[:i], metrics[i+1:]...)
 	} else {
-		delete(m.children, h)
+		delete(m.metrics, h)
 	}
 	return true
 }
@@ -221,69 +274,38 @@ func (m *MetricVec) deleteByHashWithLabelValues(h uint64, lvs []string) bool {
 
 
 
-func (m *MetricVec) deleteByHashWithLabels(h uint64, labels Labels) bool {
-	metrics, ok := m.children[h]
+func (m *metricMap) deleteByHashWithLabels(
+	h uint64, labels Labels, curry []curriedLabelValue,
+) bool {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	metrics, ok := m.metrics[h]
 	if !ok {
 		return false
 	}
-	i := m.findMetricWithLabels(metrics, labels)
+	i := findMetricWithLabels(m.desc, metrics, labels, curry)
 	if i >= len(metrics) {
 		return false
 	}
 
 	if len(metrics) > 1 {
-		m.children[h] = append(metrics[:i], metrics[i+1:]...)
+		m.metrics[h] = append(metrics[:i], metrics[i+1:]...)
 	} else {
-		delete(m.children, h)
+		delete(m.metrics, h)
 	}
 	return true
 }
 
 
-func (m *MetricVec) Reset() {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-
-	for h := range m.children {
-		delete(m.children, h)
-	}
-}
-
-func (m *MetricVec) hashLabelValues(vals []string) (uint64, error) {
-	if len(vals) != len(m.desc.variableLabels) {
-		return 0, errInconsistentCardinality
-	}
-	h := hashNew()
-	for _, val := range vals {
-		h = m.hashAdd(h, val)
-		h = m.hashAddByte(h, model.SeparatorByte)
-	}
-	return h, nil
-}
-
-func (m *MetricVec) hashLabels(labels Labels) (uint64, error) {
-	if len(labels) != len(m.desc.variableLabels) {
-		return 0, errInconsistentCardinality
-	}
-	h := hashNew()
-	for _, label := range m.desc.variableLabels {
-		val, ok := labels[label]
-		if !ok {
-			return 0, fmt.Errorf("label name %q missing in label map", label)
-		}
-		h = m.hashAdd(h, val)
-		h = m.hashAddByte(h, model.SeparatorByte)
-	}
-	return h, nil
-}
 
 
 
-
-
-func (m *MetricVec) getOrCreateMetricWithLabelValues(hash uint64, lvs []string) Metric {
+func (m *metricMap) getOrCreateMetricWithLabelValues(
+	hash uint64, lvs []string, curry []curriedLabelValue,
+) Metric {
 	m.mtx.RLock()
-	metric, ok := m.getMetricWithLabelValues(hash, lvs)
+	metric, ok := m.getMetricWithHashAndLabelValues(hash, lvs, curry)
 	m.mtx.RUnlock()
 	if ok {
 		return metric
@@ -291,13 +313,11 @@ func (m *MetricVec) getOrCreateMetricWithLabelValues(hash uint64, lvs []string) 
 
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
-	metric, ok = m.getMetricWithLabelValues(hash, lvs)
+	metric, ok = m.getMetricWithHashAndLabelValues(hash, lvs, curry)
 	if !ok {
-		
-		copiedLVs := make([]string, len(lvs))
-		copy(copiedLVs, lvs)
-		metric = m.newMetric(copiedLVs...)
-		m.children[hash] = append(m.children[hash], metricWithLabelValues{values: copiedLVs, metric: metric})
+		inlinedLVs := inlineLabelValues(lvs, curry)
+		metric = m.newMetric(inlinedLVs...)
+		m.metrics[hash] = append(m.metrics[hash], metricWithLabelValues{values: inlinedLVs, metric: metric})
 	}
 	return metric
 }
@@ -306,9 +326,11 @@ func (m *MetricVec) getOrCreateMetricWithLabelValues(hash uint64, lvs []string) 
 
 
 
-func (m *MetricVec) getOrCreateMetricWithLabels(hash uint64, labels Labels) Metric {
+func (m *metricMap) getOrCreateMetricWithLabels(
+	hash uint64, labels Labels, curry []curriedLabelValue,
+) Metric {
 	m.mtx.RLock()
-	metric, ok := m.getMetricWithLabels(hash, labels)
+	metric, ok := m.getMetricWithHashAndLabels(hash, labels, curry)
 	m.mtx.RUnlock()
 	if ok {
 		return metric
@@ -316,21 +338,23 @@ func (m *MetricVec) getOrCreateMetricWithLabels(hash uint64, labels Labels) Metr
 
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
-	metric, ok = m.getMetricWithLabels(hash, labels)
+	metric, ok = m.getMetricWithHashAndLabels(hash, labels, curry)
 	if !ok {
-		lvs := m.extractLabelValues(labels)
+		lvs := extractLabelValues(m.desc, labels, curry)
 		metric = m.newMetric(lvs...)
-		m.children[hash] = append(m.children[hash], metricWithLabelValues{values: lvs, metric: metric})
+		m.metrics[hash] = append(m.metrics[hash], metricWithLabelValues{values: lvs, metric: metric})
 	}
 	return metric
 }
 
 
 
-func (m *MetricVec) getMetricWithLabelValues(h uint64, lvs []string) (Metric, bool) {
-	metrics, ok := m.children[h]
+func (m *metricMap) getMetricWithHashAndLabelValues(
+	h uint64, lvs []string, curry []curriedLabelValue,
+) (Metric, bool) {
+	metrics, ok := m.metrics[h]
 	if ok {
-		if i := m.findMetricWithLabelValues(metrics, lvs); i < len(metrics) {
+		if i := findMetricWithLabelValues(metrics, lvs, curry); i < len(metrics) {
 			return metrics[i].metric, true
 		}
 	}
@@ -339,10 +363,12 @@ func (m *MetricVec) getMetricWithLabelValues(h uint64, lvs []string) (Metric, bo
 
 
 
-func (m *MetricVec) getMetricWithLabels(h uint64, labels Labels) (Metric, bool) {
-	metrics, ok := m.children[h]
+func (m *metricMap) getMetricWithHashAndLabels(
+	h uint64, labels Labels, curry []curriedLabelValue,
+) (Metric, bool) {
+	metrics, ok := m.metrics[h]
 	if ok {
-		if i := m.findMetricWithLabels(metrics, labels); i < len(metrics) {
+		if i := findMetricWithLabels(m.desc, metrics, labels, curry); i < len(metrics) {
 			return metrics[i].metric, true
 		}
 	}
@@ -351,9 +377,11 @@ func (m *MetricVec) getMetricWithLabels(h uint64, labels Labels) (Metric, bool) 
 
 
 
-func (m *MetricVec) findMetricWithLabelValues(metrics []metricWithLabelValues, lvs []string) int {
+func findMetricWithLabelValues(
+	metrics []metricWithLabelValues, lvs []string, curry []curriedLabelValue,
+) int {
 	for i, metric := range metrics {
-		if m.matchLabelValues(metric.values, lvs) {
+		if matchLabelValues(metric.values, lvs, curry) {
 			return i
 		}
 	}
@@ -362,32 +390,51 @@ func (m *MetricVec) findMetricWithLabelValues(metrics []metricWithLabelValues, l
 
 
 
-func (m *MetricVec) findMetricWithLabels(metrics []metricWithLabelValues, labels Labels) int {
+func findMetricWithLabels(
+	desc *Desc, metrics []metricWithLabelValues, labels Labels, curry []curriedLabelValue,
+) int {
 	for i, metric := range metrics {
-		if m.matchLabels(metric.values, labels) {
+		if matchLabels(desc, metric.values, labels, curry) {
 			return i
 		}
 	}
 	return len(metrics)
 }
 
-func (m *MetricVec) matchLabelValues(values []string, lvs []string) bool {
-	if len(values) != len(lvs) {
+func matchLabelValues(values []string, lvs []string, curry []curriedLabelValue) bool {
+	if len(values) != len(lvs)+len(curry) {
 		return false
 	}
+	var iLVs, iCurry int
 	for i, v := range values {
-		if v != lvs[i] {
+		if iCurry < len(curry) && curry[iCurry].index == i {
+			if v != curry[iCurry].value {
+				return false
+			}
+			iCurry++
+			continue
+		}
+		if v != lvs[iLVs] {
 			return false
 		}
+		iLVs++
 	}
 	return true
 }
 
-func (m *MetricVec) matchLabels(values []string, labels Labels) bool {
-	if len(labels) != len(values) {
+func matchLabels(desc *Desc, values []string, labels Labels, curry []curriedLabelValue) bool {
+	if len(values) != len(labels)+len(curry) {
 		return false
 	}
-	for i, k := range m.desc.variableLabels {
+	iCurry := 0
+	for i, k := range desc.variableLabels {
+		if iCurry < len(curry) && curry[iCurry].index == i {
+			if values[i] != curry[iCurry].value {
+				return false
+			}
+			iCurry++
+			continue
+		}
 		if values[i] != labels[k] {
 			return false
 		}
@@ -395,10 +442,31 @@ func (m *MetricVec) matchLabels(values []string, labels Labels) bool {
 	return true
 }
 
-func (m *MetricVec) extractLabelValues(labels Labels) []string {
-	labelValues := make([]string, len(labels))
-	for i, k := range m.desc.variableLabels {
+func extractLabelValues(desc *Desc, labels Labels, curry []curriedLabelValue) []string {
+	labelValues := make([]string, len(labels)+len(curry))
+	iCurry := 0
+	for i, k := range desc.variableLabels {
+		if iCurry < len(curry) && curry[iCurry].index == i {
+			labelValues[i] = curry[iCurry].value
+			iCurry++
+			continue
+		}
 		labelValues[i] = labels[k]
+	}
+	return labelValues
+}
+
+func inlineLabelValues(lvs []string, curry []curriedLabelValue) []string {
+	labelValues := make([]string, len(lvs)+len(curry))
+	var iCurry, iLVs int
+	for i := range labelValues {
+		if iCurry < len(curry) && curry[iCurry].index == i {
+			labelValues[i] = curry[iCurry].value
+			iCurry++
+			continue
+		}
+		labelValues[i] = lvs[iLVs]
+		iLVs++
 	}
 	return labelValues
 }

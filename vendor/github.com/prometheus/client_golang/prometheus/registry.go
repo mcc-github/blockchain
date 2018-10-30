@@ -15,15 +15,18 @@ package prometheus
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"os"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/golang/protobuf/proto"
 
 	dto "github.com/prometheus/client_model/go"
+
+	"github.com/prometheus/client_golang/prometheus/internal"
 )
 
 const (
@@ -42,6 +45,7 @@ const (
 
 
 
+
 var (
 	defaultRegistry              = NewRegistry()
 	DefaultRegisterer Registerer = defaultRegistry
@@ -49,7 +53,7 @@ var (
 )
 
 func init() {
-	MustRegister(NewProcessCollector(os.Getpid(), ""))
+	MustRegister(NewProcessCollector(ProcessCollectorOpts{}))
 	MustRegister(NewGoCollector())
 }
 
@@ -62,6 +66,7 @@ func NewRegistry() *Registry {
 		dimHashesByName: map[string]uint64{},
 	}
 }
+
 
 
 
@@ -97,11 +102,18 @@ type Registerer interface {
 	
 	
 	
+	
+	
+	
+	
+	
 	Register(Collector) error
 	
 	
 	
 	MustRegister(...Collector)
+	
+	
 	
 	
 	
@@ -121,6 +133,14 @@ type Registerer interface {
 
 
 type Gatherer interface {
+	
+	
+	
+	
+	
+	
+	
+	
 	
 	
 	
@@ -157,38 +177,6 @@ func MustRegister(cs ...Collector) {
 
 
 
-
-
-
-
-func RegisterOrGet(c Collector) (Collector, error) {
-	if err := Register(c); err != nil {
-		if are, ok := err.(AlreadyRegisteredError); ok {
-			return are.ExistingCollector, nil
-		}
-		return nil, err
-	}
-	return c, nil
-}
-
-
-
-
-
-
-func MustRegisterOrGet(c Collector) Collector {
-	c, err := RegisterOrGet(c)
-	if err != nil {
-		panic(err)
-	}
-	return c
-}
-
-
-
-
-
-
 func Unregister(c Collector) bool {
 	return DefaultRegisterer.Unregister(c)
 }
@@ -199,25 +187,6 @@ type GathererFunc func() ([]*dto.MetricFamily, error)
 
 func (gf GathererFunc) Gather() ([]*dto.MetricFamily, error) {
 	return gf()
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-func SetMetricFamilyInjectionHook(hook func() []*dto.MetricFamily) {
-	DefaultGatherer = Gatherers{
-		DefaultGatherer,
-		GathererFunc(func() ([]*dto.MetricFamily, error) { return hook(), nil }),
-	}
 }
 
 
@@ -253,6 +222,13 @@ func (errs MultiError) Error() string {
 }
 
 
+func (errs *MultiError) Append(err error) {
+	if err != nil {
+		*errs = append(*errs, err)
+	}
+}
+
+
 
 
 
@@ -276,6 +252,7 @@ type Registry struct {
 	collectorsByID        map[uint64]Collector 
 	descIDs               map[uint64]struct{}
 	dimHashesByName       map[string]uint64
+	uncheckedCollectors   []Collector
 	pedanticChecksEnabled bool
 }
 
@@ -293,7 +270,12 @@ func (r *Registry) Register(c Collector) error {
 		close(descChan)
 	}()
 	r.mtx.Lock()
-	defer r.mtx.Unlock()
+	defer func() {
+		
+		for range descChan {
+		}
+		r.mtx.Unlock()
+	}()
 	
 	for desc := range descChan {
 
@@ -335,7 +317,8 @@ func (r *Registry) Register(c Collector) error {
 	}
 	
 	if len(newDescIDs) == 0 {
-		return errors.New("collector has no descriptors")
+		r.uncheckedCollectors = append(r.uncheckedCollectors, c)
+		return nil
 	}
 	if existing, exists := r.collectorsByID[collectorID]; exists {
 		return AlreadyRegisteredError{
@@ -409,31 +392,25 @@ func (r *Registry) MustRegister(cs ...Collector) {
 
 func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 	var (
-		metricChan        = make(chan Metric, capMetricChan)
-		metricHashes      = map[uint64]struct{}{}
-		dimHashes         = map[string]uint64{}
-		wg                sync.WaitGroup
-		errs              MultiError          
-		registeredDescIDs map[uint64]struct{} 
+		checkedMetricChan   = make(chan Metric, capMetricChan)
+		uncheckedMetricChan = make(chan Metric, capMetricChan)
+		metricHashes        = map[uint64]struct{}{}
+		wg                  sync.WaitGroup
+		errs                MultiError          
+		registeredDescIDs   map[uint64]struct{} 
 	)
 
 	r.mtx.RLock()
+	goroutineBudget := len(r.collectorsByID) + len(r.uncheckedCollectors)
 	metricFamiliesByName := make(map[string]*dto.MetricFamily, len(r.dimHashesByName))
-
-	
-	
-	wg.Add(len(r.collectorsByID))
-	go func() {
-		wg.Wait()
-		close(metricChan)
-	}()
+	checkedCollectors := make(chan Collector, len(r.collectorsByID))
+	uncheckedCollectors := make(chan Collector, len(r.uncheckedCollectors))
 	for _, collector := range r.collectorsByID {
-		go func(collector Collector) {
-			defer wg.Done()
-			collector.Collect(metricChan)
-		}(collector)
+		checkedCollectors <- collector
 	}
-
+	for _, collector := range r.uncheckedCollectors {
+		uncheckedCollectors <- collector
+	}
 	
 	
 	if r.pedanticChecksEnabled {
@@ -442,127 +419,226 @@ func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 			registeredDescIDs[id] = struct{}{}
 		}
 	}
-
 	r.mtx.RUnlock()
+
+	wg.Add(goroutineBudget)
+
+	collectWorker := func() {
+		for {
+			select {
+			case collector := <-checkedCollectors:
+				collector.Collect(checkedMetricChan)
+			case collector := <-uncheckedCollectors:
+				collector.Collect(uncheckedMetricChan)
+			default:
+				return
+			}
+			wg.Done()
+		}
+	}
+
+	
+	go collectWorker()
+	goroutineBudget--
+
+	
+	
+	go func() {
+		wg.Wait()
+		close(checkedMetricChan)
+		close(uncheckedMetricChan)
+	}()
 
 	
 	defer func() {
-		for _ = range metricChan {
+		if checkedMetricChan != nil {
+			for range checkedMetricChan {
+			}
+		}
+		if uncheckedMetricChan != nil {
+			for range uncheckedMetricChan {
+			}
 		}
 	}()
 
 	
-	for metric := range metricChan {
-		
-		
-		
-		desc := metric.Desc()
-		dtoMetric := &dto.Metric{}
-		if err := metric.Write(dtoMetric); err != nil {
-			errs = append(errs, fmt.Errorf(
-				"error collecting metric %v: %s", desc, err,
+	
+	cmc := checkedMetricChan
+	umc := uncheckedMetricChan
+
+	for {
+		select {
+		case metric, ok := <-cmc:
+			if !ok {
+				cmc = nil
+				break
+			}
+			errs.Append(processMetric(
+				metric, metricFamiliesByName,
+				metricHashes,
+				registeredDescIDs,
 			))
-			continue
-		}
-		metricFamily, ok := metricFamiliesByName[desc.fqName]
-		if ok {
-			if metricFamily.GetHelp() != desc.help {
-				errs = append(errs, fmt.Errorf(
-					"collected metric %s %s has help %q but should have %q",
-					desc.fqName, dtoMetric, desc.help, metricFamily.GetHelp(),
-				))
-				continue
+		case metric, ok := <-umc:
+			if !ok {
+				umc = nil
+				break
+			}
+			errs.Append(processMetric(
+				metric, metricFamiliesByName,
+				metricHashes,
+				nil,
+			))
+		default:
+			if goroutineBudget <= 0 || len(checkedCollectors)+len(uncheckedCollectors) == 0 {
+				
+				
+				
+				
+				select {
+				case metric, ok := <-cmc:
+					if !ok {
+						cmc = nil
+						break
+					}
+					errs.Append(processMetric(
+						metric, metricFamiliesByName,
+						metricHashes,
+						registeredDescIDs,
+					))
+				case metric, ok := <-umc:
+					if !ok {
+						umc = nil
+						break
+					}
+					errs.Append(processMetric(
+						metric, metricFamiliesByName,
+						metricHashes,
+						nil,
+					))
+				}
+				break
 			}
 			
-			switch metricFamily.GetType() {
-			case dto.MetricType_COUNTER:
-				if dtoMetric.Counter == nil {
-					errs = append(errs, fmt.Errorf(
-						"collected metric %s %s should be a Counter",
-						desc.fqName, dtoMetric,
-					))
-					continue
-				}
-			case dto.MetricType_GAUGE:
-				if dtoMetric.Gauge == nil {
-					errs = append(errs, fmt.Errorf(
-						"collected metric %s %s should be a Gauge",
-						desc.fqName, dtoMetric,
-					))
-					continue
-				}
-			case dto.MetricType_SUMMARY:
-				if dtoMetric.Summary == nil {
-					errs = append(errs, fmt.Errorf(
-						"collected metric %s %s should be a Summary",
-						desc.fqName, dtoMetric,
-					))
-					continue
-				}
-			case dto.MetricType_UNTYPED:
-				if dtoMetric.Untyped == nil {
-					errs = append(errs, fmt.Errorf(
-						"collected metric %s %s should be Untyped",
-						desc.fqName, dtoMetric,
-					))
-					continue
-				}
-			case dto.MetricType_HISTOGRAM:
-				if dtoMetric.Histogram == nil {
-					errs = append(errs, fmt.Errorf(
-						"collected metric %s %s should be a Histogram",
-						desc.fqName, dtoMetric,
-					))
-					continue
-				}
-			default:
-				panic("encountered MetricFamily with invalid type")
-			}
-		} else {
-			metricFamily = &dto.MetricFamily{}
-			metricFamily.Name = proto.String(desc.fqName)
-			metricFamily.Help = proto.String(desc.help)
-			
-			switch {
-			case dtoMetric.Gauge != nil:
-				metricFamily.Type = dto.MetricType_GAUGE.Enum()
-			case dtoMetric.Counter != nil:
-				metricFamily.Type = dto.MetricType_COUNTER.Enum()
-			case dtoMetric.Summary != nil:
-				metricFamily.Type = dto.MetricType_SUMMARY.Enum()
-			case dtoMetric.Untyped != nil:
-				metricFamily.Type = dto.MetricType_UNTYPED.Enum()
-			case dtoMetric.Histogram != nil:
-				metricFamily.Type = dto.MetricType_HISTOGRAM.Enum()
-			default:
-				errs = append(errs, fmt.Errorf(
-					"empty metric collected: %s", dtoMetric,
-				))
-				continue
-			}
-			metricFamiliesByName[desc.fqName] = metricFamily
+			go collectWorker()
+			goroutineBudget--
+			runtime.Gosched()
 		}
-		if err := checkMetricConsistency(metricFamily, dtoMetric, metricHashes, dimHashes); err != nil {
-			errs = append(errs, err)
-			continue
+		
+		
+		
+		if cmc == nil && umc == nil {
+			break
 		}
-		if r.pedanticChecksEnabled {
-			
-			if _, exist := registeredDescIDs[desc.id]; !exist {
-				errs = append(errs, fmt.Errorf(
-					"collected metric %s %s with unregistered descriptor %s",
-					metricFamily.GetName(), dtoMetric, desc,
-				))
-				continue
-			}
-			if err := checkDescConsistency(metricFamily, dtoMetric, desc); err != nil {
-				errs = append(errs, err)
-				continue
-			}
-		}
-		metricFamily.Metric = append(metricFamily.Metric, dtoMetric)
 	}
-	return normalizeMetricFamilies(metricFamiliesByName), errs.MaybeUnwrap()
+	return internal.NormalizeMetricFamilies(metricFamiliesByName), errs.MaybeUnwrap()
+}
+
+
+func processMetric(
+	metric Metric,
+	metricFamiliesByName map[string]*dto.MetricFamily,
+	metricHashes map[uint64]struct{},
+	registeredDescIDs map[uint64]struct{},
+) error {
+	desc := metric.Desc()
+	
+	
+	if desc.err != nil {
+		return desc.err
+	}
+	dtoMetric := &dto.Metric{}
+	if err := metric.Write(dtoMetric); err != nil {
+		return fmt.Errorf("error collecting metric %v: %s", desc, err)
+	}
+	metricFamily, ok := metricFamiliesByName[desc.fqName]
+	if ok { 
+		if metricFamily.GetHelp() != desc.help {
+			return fmt.Errorf(
+				"collected metric %s %s has help %q but should have %q",
+				desc.fqName, dtoMetric, desc.help, metricFamily.GetHelp(),
+			)
+		}
+		
+		switch metricFamily.GetType() {
+		case dto.MetricType_COUNTER:
+			if dtoMetric.Counter == nil {
+				return fmt.Errorf(
+					"collected metric %s %s should be a Counter",
+					desc.fqName, dtoMetric,
+				)
+			}
+		case dto.MetricType_GAUGE:
+			if dtoMetric.Gauge == nil {
+				return fmt.Errorf(
+					"collected metric %s %s should be a Gauge",
+					desc.fqName, dtoMetric,
+				)
+			}
+		case dto.MetricType_SUMMARY:
+			if dtoMetric.Summary == nil {
+				return fmt.Errorf(
+					"collected metric %s %s should be a Summary",
+					desc.fqName, dtoMetric,
+				)
+			}
+		case dto.MetricType_UNTYPED:
+			if dtoMetric.Untyped == nil {
+				return fmt.Errorf(
+					"collected metric %s %s should be Untyped",
+					desc.fqName, dtoMetric,
+				)
+			}
+		case dto.MetricType_HISTOGRAM:
+			if dtoMetric.Histogram == nil {
+				return fmt.Errorf(
+					"collected metric %s %s should be a Histogram",
+					desc.fqName, dtoMetric,
+				)
+			}
+		default:
+			panic("encountered MetricFamily with invalid type")
+		}
+	} else { 
+		metricFamily = &dto.MetricFamily{}
+		metricFamily.Name = proto.String(desc.fqName)
+		metricFamily.Help = proto.String(desc.help)
+		
+		switch {
+		case dtoMetric.Gauge != nil:
+			metricFamily.Type = dto.MetricType_GAUGE.Enum()
+		case dtoMetric.Counter != nil:
+			metricFamily.Type = dto.MetricType_COUNTER.Enum()
+		case dtoMetric.Summary != nil:
+			metricFamily.Type = dto.MetricType_SUMMARY.Enum()
+		case dtoMetric.Untyped != nil:
+			metricFamily.Type = dto.MetricType_UNTYPED.Enum()
+		case dtoMetric.Histogram != nil:
+			metricFamily.Type = dto.MetricType_HISTOGRAM.Enum()
+		default:
+			return fmt.Errorf("empty metric collected: %s", dtoMetric)
+		}
+		if err := checkSuffixCollisions(metricFamily, metricFamiliesByName); err != nil {
+			return err
+		}
+		metricFamiliesByName[desc.fqName] = metricFamily
+	}
+	if err := checkMetricConsistency(metricFamily, dtoMetric, metricHashes); err != nil {
+		return err
+	}
+	if registeredDescIDs != nil {
+		
+		if _, exist := registeredDescIDs[desc.id]; !exist {
+			return fmt.Errorf(
+				"collected metric %s %s with unregistered descriptor %s",
+				metricFamily.GetName(), dtoMetric, desc,
+			)
+		}
+		if err := checkDescConsistency(metricFamily, dtoMetric, desc); err != nil {
+			return err
+		}
+	}
+	metricFamily.Metric = append(metricFamily.Metric, dtoMetric)
+	return nil
 }
 
 
@@ -588,7 +664,6 @@ func (gs Gatherers) Gather() ([]*dto.MetricFamily, error) {
 	var (
 		metricFamiliesByName = map[string]*dto.MetricFamily{}
 		metricHashes         = map[uint64]struct{}{}
-		dimHashes            = map[string]uint64{}
 		errs                 MultiError 
 	)
 
@@ -625,10 +700,14 @@ func (gs Gatherers) Gather() ([]*dto.MetricFamily, error) {
 				existingMF.Name = mf.Name
 				existingMF.Help = mf.Help
 				existingMF.Type = mf.Type
+				if err := checkSuffixCollisions(existingMF, metricFamiliesByName); err != nil {
+					errs = append(errs, err)
+					continue
+				}
 				metricFamiliesByName[mf.GetName()] = existingMF
 			}
 			for _, m := range mf.Metric {
-				if err := checkMetricConsistency(existingMF, m, metricHashes, dimHashes); err != nil {
+				if err := checkMetricConsistency(existingMF, m, metricHashes); err != nil {
 					errs = append(errs, err)
 					continue
 				}
@@ -636,77 +715,68 @@ func (gs Gatherers) Gather() ([]*dto.MetricFamily, error) {
 			}
 		}
 	}
-	return normalizeMetricFamilies(metricFamiliesByName), errs.MaybeUnwrap()
+	return internal.NormalizeMetricFamilies(metricFamiliesByName), errs.MaybeUnwrap()
 }
 
 
-type metricSorter []*dto.Metric
 
-func (s metricSorter) Len() int {
-	return len(s)
-}
 
-func (s metricSorter) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s metricSorter) Less(i, j int) bool {
-	if len(s[i].Label) != len(s[j].Label) {
-		
-		
-		
-		
-		
-		
-		return len(s[i].Label) < len(s[j].Label)
+func checkSuffixCollisions(mf *dto.MetricFamily, mfs map[string]*dto.MetricFamily) error {
+	var (
+		newName              = mf.GetName()
+		newType              = mf.GetType()
+		newNameWithoutSuffix = ""
+	)
+	switch {
+	case strings.HasSuffix(newName, "_count"):
+		newNameWithoutSuffix = newName[:len(newName)-6]
+	case strings.HasSuffix(newName, "_sum"):
+		newNameWithoutSuffix = newName[:len(newName)-4]
+	case strings.HasSuffix(newName, "_bucket"):
+		newNameWithoutSuffix = newName[:len(newName)-7]
 	}
-	for n, lp := range s[i].Label {
-		vi := lp.GetValue()
-		vj := s[j].Label[n].GetValue()
-		if vi != vj {
-			return vi < vj
+	if newNameWithoutSuffix != "" {
+		if existingMF, ok := mfs[newNameWithoutSuffix]; ok {
+			switch existingMF.GetType() {
+			case dto.MetricType_SUMMARY:
+				if !strings.HasSuffix(newName, "_bucket") {
+					return fmt.Errorf(
+						"collected metric named %q collides with previously collected summary named %q",
+						newName, newNameWithoutSuffix,
+					)
+				}
+			case dto.MetricType_HISTOGRAM:
+				return fmt.Errorf(
+					"collected metric named %q collides with previously collected histogram named %q",
+					newName, newNameWithoutSuffix,
+				)
+			}
 		}
 	}
-
-	
-	
-	
-	
-	
-	
-	if s[i].TimestampMs == nil {
-		return false
-	}
-	if s[j].TimestampMs == nil {
-		return true
-	}
-	return s[i].GetTimestampMs() < s[j].GetTimestampMs()
-}
-
-
-
-
-func normalizeMetricFamilies(metricFamiliesByName map[string]*dto.MetricFamily) []*dto.MetricFamily {
-	for _, mf := range metricFamiliesByName {
-		sort.Sort(metricSorter(mf.Metric))
-	}
-	names := make([]string, 0, len(metricFamiliesByName))
-	for name, mf := range metricFamiliesByName {
-		if len(mf.Metric) > 0 {
-			names = append(names, name)
+	if newType == dto.MetricType_SUMMARY || newType == dto.MetricType_HISTOGRAM {
+		if _, ok := mfs[newName+"_count"]; ok {
+			return fmt.Errorf(
+				"collected histogram or summary named %q collides with previously collected metric named %q",
+				newName, newName+"_count",
+			)
+		}
+		if _, ok := mfs[newName+"_sum"]; ok {
+			return fmt.Errorf(
+				"collected histogram or summary named %q collides with previously collected metric named %q",
+				newName, newName+"_sum",
+			)
 		}
 	}
-	sort.Strings(names)
-	result := make([]*dto.MetricFamily, 0, len(names))
-	for _, name := range names {
-		result = append(result, metricFamiliesByName[name])
+	if newType == dto.MetricType_HISTOGRAM {
+		if _, ok := mfs[newName+"_bucket"]; ok {
+			return fmt.Errorf(
+				"collected histogram named %q collides with previously collected metric named %q",
+				newName, newName+"_bucket",
+			)
+		}
 	}
-	return result
+	return nil
 }
-
-
-
-
 
 
 
@@ -716,8 +786,9 @@ func checkMetricConsistency(
 	metricFamily *dto.MetricFamily,
 	dtoMetric *dto.Metric,
 	metricHashes map[uint64]struct{},
-	dimHashes map[string]uint64,
 ) error {
+	name := metricFamily.GetName()
+
 	
 	if metricFamily.GetType() == dto.MetricType_GAUGE && dtoMetric.Gauge == nil ||
 		metricFamily.GetType() == dto.MetricType_COUNTER && dtoMetric.Counter == nil ||
@@ -725,40 +796,58 @@ func checkMetricConsistency(
 		metricFamily.GetType() == dto.MetricType_HISTOGRAM && dtoMetric.Histogram == nil ||
 		metricFamily.GetType() == dto.MetricType_UNTYPED && dtoMetric.Untyped == nil {
 		return fmt.Errorf(
-			"collected metric %s %s is not a %s",
-			metricFamily.GetName(), dtoMetric, metricFamily.GetType(),
+			"collected metric %q { %s} is not a %s",
+			name, dtoMetric, metricFamily.GetType(),
 		)
+	}
+
+	previousLabelName := ""
+	for _, labelPair := range dtoMetric.GetLabel() {
+		labelName := labelPair.GetName()
+		if labelName == previousLabelName {
+			return fmt.Errorf(
+				"collected metric %q { %s} has two or more labels with the same name: %s",
+				name, dtoMetric, labelName,
+			)
+		}
+		if !checkLabelName(labelName) {
+			return fmt.Errorf(
+				"collected metric %q { %s} has a label with an invalid name: %s",
+				name, dtoMetric, labelName,
+			)
+		}
+		if dtoMetric.Summary != nil && labelName == quantileLabel {
+			return fmt.Errorf(
+				"collected metric %q { %s} must not have an explicit %q label",
+				name, dtoMetric, quantileLabel,
+			)
+		}
+		if !utf8.ValidString(labelPair.GetValue()) {
+			return fmt.Errorf(
+				"collected metric %q { %s} has a label named %q whose value is not utf8: %#v",
+				name, dtoMetric, labelName, labelPair.GetValue())
+		}
+		previousLabelName = labelName
 	}
 
 	
 	h := hashNew()
-	h = hashAdd(h, metricFamily.GetName())
+	h = hashAdd(h, name)
 	h = hashAddByte(h, separatorByte)
-	dh := hashNew()
 	
 	
-	sort.Sort(LabelPairSorter(dtoMetric.Label))
+	sort.Sort(labelPairSorter(dtoMetric.Label))
 	for _, lp := range dtoMetric.Label {
+		h = hashAdd(h, lp.GetName())
+		h = hashAddByte(h, separatorByte)
 		h = hashAdd(h, lp.GetValue())
 		h = hashAddByte(h, separatorByte)
-		dh = hashAdd(dh, lp.GetName())
-		dh = hashAddByte(dh, separatorByte)
 	}
 	if _, exists := metricHashes[h]; exists {
 		return fmt.Errorf(
-			"collected metric %s %s was collected before with the same name and label values",
-			metricFamily.GetName(), dtoMetric,
+			"collected metric %q { %s} was collected before with the same name and label values",
+			name, dtoMetric,
 		)
-	}
-	if dimHash, ok := dimHashes[metricFamily.GetName()]; ok {
-		if dimHash != dh {
-			return fmt.Errorf(
-				"collected metric %s %s has label dimensions inconsistent with previously collected metrics in the same metric family",
-				metricFamily.GetName(), dtoMetric,
-			)
-		}
-	} else {
-		dimHashes[metricFamily.GetName()] = dh
 	}
 	metricHashes[h] = struct{}{}
 	return nil
@@ -791,7 +880,7 @@ func checkDescConsistency(
 			metricFamily.GetName(), dtoMetric, desc,
 		)
 	}
-	sort.Sort(LabelPairSorter(lpsFromDesc))
+	sort.Sort(labelPairSorter(lpsFromDesc))
 	for i, lpFromDesc := range lpsFromDesc {
 		lpFromMetric := dtoMetric.Label[i]
 		if lpFromDesc.GetName() != lpFromMetric.GetName() ||

@@ -36,6 +36,16 @@ type Collector interface {
 	
 	
 	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	Describe(chan<- *Desc)
 	
 	
@@ -47,7 +57,42 @@ type Collector interface {
 	
 	
 	
+	
+	
 	Collect(chan<- Metric)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func DescribeByCollect(c Collector, descs chan<- *Desc) {
+	metrics := make(chan Metric)
+	go func() {
+		c.Collect(metrics)
+		close(metrics)
+	}()
+	for m := range metrics {
+		descs <- m.Desc()
+	}
 }
 
 

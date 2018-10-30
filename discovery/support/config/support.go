@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("discovery/config")
+var logger = flogging.MustGetLogger("discovery.config")
 
 
 type CurrentConfigBlockGetter interface {

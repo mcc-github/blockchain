@@ -335,3 +335,8 @@ func EnhancedExactUnmarshalKey(baseKey string, output interface{}) error {
 
 	return decoder.Decode(leafKeys[baseKey])
 }
+
+
+func Decode(input interface{}, output interface{}) error {
+	return mapstructure.Decode(input, output)
+}

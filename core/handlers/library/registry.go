@@ -20,7 +20,7 @@ import (
 	"github.com/mcc-github/blockchain/core/handlers/validation/api"
 )
 
-var logger = flogging.MustGetLogger("core/handlers")
+var logger = flogging.MustGetLogger("core.handlers")
 
 
 
