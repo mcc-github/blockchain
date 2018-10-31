@@ -1,4 +1,8 @@
+/*
+Copyright IBM Corp. All Rights Reserved.
 
+SPDX-License-Identifier: Apache-2.0
+*/
 
 package clilogging
 
@@ -40,6 +44,8 @@ func initLoggingTest(command string) (*cobra.Command, *LoggingCmdFactory) {
 		cmd = setLevelCmd(mockCF)
 	} else if command == "revertlevels" {
 		cmd = revertLevelsCmd(mockCF)
+	} else if command == "getlogspec" {
+		cmd = getLogSpecCmd(mockCF)
 	} else {
 		
 	}
@@ -93,4 +99,14 @@ func TestRevertLevels(t *testing.T) {
 		testCase{"ExtraParameter", []string{"peer"}, true},
 	)
 	runTests(t, "revertlevels", tc)
+}
+
+
+func TestGetLogSpec(t *testing.T) {
+	var tc []testCase
+	tc = append(tc,
+		testCase{"Valid", []string{}, false},
+		testCase{"ExtraParameter", []string{"peer"}, true},
+	)
+	runTests(t, "getlogspec", tc)
 }

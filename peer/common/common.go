@@ -280,21 +280,21 @@ func InitCmd(cmd *cobra.Command, args []string) {
 
 	
 	
-	
-	
 	var loggingLevel string
 	if viper.GetString("logging_level") != "" {
 		loggingLevel = viper.GetString("logging_level")
 	} else {
 		loggingLevel = viper.GetString("logging.level")
 	}
-	loggingSpec := os.Getenv("FABRIC_LOGGING_SPEC")
 	if loggingLevel != "" {
-		mainLogger.Warning("CORE_LOGGING_LEVEL is no longer supported, please use FABRIC_LOGGING_SPEC environment variable.")
+		mainLogger.Warning("CORE_LOGGING_LEVEL is no longer supported, please use the FABRIC_LOGGING_SPEC environment variable")
 	}
 
+	loggingSpec := os.Getenv("FABRIC_LOGGING_SPEC")
+	loggingFormat := os.Getenv("FABRIC_LOGGING_FORMAT")
+
 	flogging.Init(flogging.Config{
-		Format:  viper.GetString("logging.format"),
+		Format:  loggingFormat,
 		Writer:  logOutput,
 		LogSpec: loggingSpec,
 	})

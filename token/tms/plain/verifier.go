@@ -19,6 +19,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	minUnicodeRuneValue   = 0            
+	maxUnicodeRuneValue   = utf8.MaxRune 
+	compositeKeyNamespace = "\x00"
+	tokenOutput           = "tokenOutput"
+	tokenTx               = "tokenTx"
+)
+
 
 type Verifier struct {
 	IssuingValidator identity.IssuingValidator
@@ -193,20 +201,14 @@ func (v *Verifier) addTransaction(txID string, ttx *token.TokenTransaction, simu
 }
 
 
-const tokenOutputKey = "tokenOutput"
-
-
 
 func createOutputKey(txID string, index int) (string, error) {
-	return createCompositeKey(tokenOutputKey, []string{txID, strconv.Itoa(index)})
+	return createCompositeKey(tokenOutput, []string{txID, strconv.Itoa(index)})
 }
 
 
-const tokenTxKey = "tokenTx"
-
-
 func createTxKey(txID string) (string, error) {
-	return createCompositeKey(tokenTxKey, []string{txID})
+	return createCompositeKey(tokenTx, []string{txID})
 }
 
 
@@ -223,12 +225,6 @@ func createCompositeKey(objectType string, attributes []string) (string, error) 
 	}
 	return ck, nil
 }
-
-const (
-	minUnicodeRuneValue   = 0            
-	maxUnicodeRuneValue   = utf8.MaxRune 
-	compositeKeyNamespace = "\x00"
-)
 
 func validateCompositeKeyAttribute(str string) error {
 	if !utf8.ValidString(str) {

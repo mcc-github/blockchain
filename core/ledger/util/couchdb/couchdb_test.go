@@ -84,8 +84,6 @@ func testMain(m *testing.M) int {
 	
 	flogging.ActivateSpec("couchdb=debug")
 
-	viper.Set("logging.peer", "debug")
-
 	
 	couchDBDef = GetCouchDBDefinition()
 

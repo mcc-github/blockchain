@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package common
 
 import (
+	"os"
 	"time"
 
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -28,7 +29,18 @@ var (
 func SetOrdererEnv(cmd *cobra.Command, args []string) {
 	
 	
-	loggingSpec := viper.GetString("logging.level")
+	var loggingLevel string
+	if viper.GetString("logging_level") != "" {
+		loggingLevel = viper.GetString("logging_level")
+	} else {
+		loggingLevel = viper.GetString("logging.level")
+	}
+	if loggingLevel != "" {
+		mainLogger.Warning("CORE_LOGGING_LEVEL is no longer supported, please use the FABRIC_LOGGING_SPEC environment variable")
+	}
+	
+	
+	loggingSpec := os.Getenv("FABRIC_LOGGING_SPEC")
 	flogging.InitFromSpec(loggingSpec)
 	
 	viper.Set("orderer.tls.rootcert.file", caFile)

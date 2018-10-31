@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"time"
 
+	"github.com/go-kit/kit/metrics"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -59,6 +60,8 @@ type ServerConfig struct {
 	UnaryInterceptors []grpc.UnaryServerInterceptor
 	
 	Logger *flogging.FabricLogger
+	
+	Metrics *Metrics
 }
 
 
@@ -115,6 +118,13 @@ type KeepaliveOptions struct {
 	
 	
 	ServerMinInterval time.Duration
+}
+
+type Metrics struct {
+	
+	OpenConnCounter metrics.Counter
+	
+	ClosedConnCounter metrics.Counter
 }
 
 

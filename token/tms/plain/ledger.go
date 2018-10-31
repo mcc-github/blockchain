@@ -6,6 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 package plain
 
+import (
+	"github.com/mcc-github/blockchain/common/ledger"
+)
+
 
 
 type MemoryLedger struct {
@@ -31,4 +35,10 @@ func (p *MemoryLedger) SetState(namespace string, key string, value []byte) erro
 	p.entries[key] = value
 
 	return nil
+}
+
+
+
+func (p *MemoryLedger) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ledger.ResultsIterator, error) {
+	return nil, nil
 }
