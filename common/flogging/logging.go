@@ -189,8 +189,15 @@ func (s *Logging) Encoding() Encoding {
 func (s *Logging) ZapLogger(module string) *zap.Logger {
 	s.mutex.RLock()
 	module = strings.Replace(module, "/", ".", -1)
+	levelEnabler := zap.LevelEnablerFunc(func(l zapcore.Level) bool {
+		
+		
+		
+		return true
+	})
 	core := &Core{
-		LevelEnabler: s.ModuleLevels.LevelEnabler(module),
+		LevelEnabler: levelEnabler,
+		Levels:       s.ModuleLevels,
 		Encoders: map[Encoding]zapcore.Encoder{
 			JSON:    zapcore.NewJSONEncoder(s.encoderConfig),
 			CONSOLE: fabenc.NewFormatEncoder(s.multiFormatter),

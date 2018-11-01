@@ -73,6 +73,8 @@ type ClientConfig struct {
 	
 	
 	Timeout time.Duration
+	
+	AsyncConnect bool
 }
 
 

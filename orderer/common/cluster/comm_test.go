@@ -23,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/cluster/mocks"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
@@ -169,7 +170,8 @@ func newTestNode(t *testing.T) *clusterNode {
 
 	handler := &mocks.Handler{}
 	clientConfig := comm_utils.ClientConfig{
-		Timeout: time.Millisecond * 100,
+		AsyncConnect: true,
+		Timeout:      time.Hour,
 		SecOpts: &comm_utils.SecureOptions{
 			RequireClientCert: true,
 			Key:               clientKeyPair.Key,
@@ -246,14 +248,24 @@ func TestUnavailableHosts(t *testing.T) {
 	
 	
 	node1 := newTestNode(t)
+	clientConfig, err := node1.dialer.ClientConfig()
+	assert.NoError(t, err)
+	
+	
+	
+	clientConfig.Timeout = time.Hour
+	node1.dialer.SetConfig(clientConfig)
 	defer node1.stop()
 
 	node2 := newTestNode(t)
 	node2.stop()
 
 	node1.c.Configure(testChannel, []cluster.RemoteNode{node2.nodeInfo})
-	_, err := node1.c.Remote(testChannel, node2.nodeInfo.ID)
-	assert.EqualError(t, err, "failed to create new connection: context deadline exceeded")
+	remote, err := node1.c.Remote(testChannel, node2.nodeInfo.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, remote)
+	_, err = remote.Step(&orderer.StepRequest{})
+	assert.Contains(t, err.Error(), "rpc error")
 }
 
 func TestStreamAbort(t *testing.T) {
@@ -494,7 +506,8 @@ func TestNoTLSCertificate(t *testing.T) {
 	node1.c.Configure(testChannel, []cluster.RemoteNode{node1.nodeInfo})
 
 	clientConfig := comm_utils.ClientConfig{
-		Timeout: time.Millisecond * 100,
+		AsyncConnect: true,
+		Timeout:      time.Millisecond * 100,
 		SecOpts: &comm_utils.SecureOptions{
 			ServerRootCAs: [][]byte{ca.CertBytes()},
 			UseTLS:        true,
@@ -526,6 +539,10 @@ func TestReconnect(t *testing.T) {
 
 	node1 := newTestNode(t)
 	defer node1.stop()
+	conf, err := node1.dialer.ClientConfig()
+	assert.NoError(t, err)
+	conf.Timeout = time.Hour
+	node1.dialer.SetConfig(conf)
 
 	node2 := newTestNode(t)
 	node2.handler.On("OnStep", testChannel, node1.nodeInfo.ID, mock.Anything).Return(testStepRes, nil)
@@ -591,8 +608,11 @@ func TestRenewCertificates(t *testing.T) {
 	
 	
 	
-	_, err := node1.c.Remote(testChannel, node2.nodeInfo.ID)
-	assert.Error(t, err)
+	remote, err := node1.c.Remote(testChannel, node2.nodeInfo.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, remote)
+	_, err = remote.Step(&orderer.StepRequest{})
+	assert.Contains(t, err.Error(), "rpc error")
 
 	
 	node1.srv.Stop()
@@ -740,6 +760,25 @@ func TestMultiChannelConfig(t *testing.T) {
 	})
 }
 
+func TestConnectionFailure(t *testing.T) {
+	t.Parallel()
+	
+
+	node1 := newTestNode(t)
+	defer node1.stop()
+
+	node2 := newTestNode(t)
+	defer node2.stop()
+
+	dialer := &mocks.SecureDialer{}
+	dialer.On("Dial", mock.Anything, mock.Anything).Return(nil, errors.New("oops"))
+	node1.c.Connections = cluster.NewConnectionStore(dialer)
+	node1.c.Configure(testChannel, []cluster.RemoteNode{node2.nodeInfo})
+
+	_, err := node1.c.Remote(testChannel, node2.nodeInfo.ID)
+	assert.EqualError(t, err, "oops")
+}
+
 func assertBiDiCommunication(t *testing.T, node1, node2 *clusterNode, msgToSend *orderer.StepRequest) {
 	for _, tst := range []struct {
 		label    string
@@ -753,13 +792,15 @@ func assertBiDiCommunication(t *testing.T, node1, node2 *clusterNode, msgToSend 
 		t.Run(tst.label, func(t *testing.T) {
 			stub, err := tst.sender.c.Remote(testChannel, tst.target)
 			assert.NoError(t, err)
-
+			assertEventuallyConnect(t, stub, msgToSend)
 			msg, err := stub.Step(msgToSend)
 			assert.NoError(t, err)
 			assert.Equal(t, msg.Payload, msgToSend.Payload)
 
 			expectedRes := &orderer.SubmitResponse{}
 			tst.receiver.handler.On("OnSubmit", testChannel, tst.sender.nodeInfo.ID, mock.Anything).Return(expectedRes, nil).Once()
+			stub, err = tst.sender.c.Remote(testChannel, tst.target)
+			assert.NoError(t, err)
 			stream, err := stub.SubmitStream()
 			assert.NoError(t, err)
 

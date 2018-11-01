@@ -46,22 +46,26 @@ func TestCoreWith(t *testing.T) {
 
 func TestCoreCheck(t *testing.T) {
 	var enabledArgs []zapcore.Level
+	levels := &flogging.ModuleLevels{}
+	err := levels.ActivateSpec("warning")
+	assert.NoError(t, err)
 	core := &flogging.Core{
 		LevelEnabler: zap.LevelEnablerFunc(func(l zapcore.Level) bool {
 			enabledArgs = append(enabledArgs, l)
-			return l != zapcore.WarnLevel
+			return l >= zapcore.WarnLevel
 		}),
+		Levels: levels,
 	}
 
 	
 	ce := core.Check(zapcore.Entry{Level: zapcore.DebugLevel}, nil)
-	assert.NotNil(t, ce)
+	assert.Nil(t, ce)
 	ce = core.Check(zapcore.Entry{Level: zapcore.InfoLevel}, nil)
-	assert.NotNil(t, ce)
+	assert.Nil(t, ce)
 
 	
 	ce = core.Check(zapcore.Entry{Level: zapcore.WarnLevel}, nil)
-	assert.Nil(t, ce)
+	assert.NotNil(t, ce)
 
 	assert.Equal(t, enabledArgs, []zapcore.Level{zapcore.DebugLevel, zapcore.InfoLevel, zapcore.WarnLevel})
 }

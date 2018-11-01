@@ -56,8 +56,11 @@ func NewGRPCClient(config ClientConfig) (*GRPCClient, error) {
 	}
 	kap.PermitWithoutStream = true
 	
-	client.dialOpts = append(client.dialOpts, grpc.WithKeepaliveParams(kap),
-		grpc.WithBlock())
+	client.dialOpts = append(client.dialOpts, grpc.WithKeepaliveParams(kap))
+	
+	if !config.AsyncConnect {
+		client.dialOpts = append(client.dialOpts, grpc.WithBlock())
+	}
 	client.timeout = config.Timeout
 	
 	client.maxRecvMsgSize = MaxRecvMsgSize

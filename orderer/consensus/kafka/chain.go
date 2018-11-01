@@ -172,7 +172,7 @@ func (chain *chainImpl) WaitReady() error {
 			return nil
 		}
 	default: 
-		return fmt.Errorf("will not enqueue, consenter for this channel hasn't started yet")
+		return fmt.Errorf("backing Kafka cluster has not completed booting; try again later")
 	}
 }
 

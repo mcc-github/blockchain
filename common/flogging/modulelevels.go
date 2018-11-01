@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -120,13 +119,6 @@ func (m *ModuleLevels) cachedLevel(loggerName string) (lvl zapcore.Level, ok boo
 	level, ok := m.levelCache[loggerName]
 	m.mutex.RUnlock()
 	return level, ok
-}
-
-
-func (m *ModuleLevels) LevelEnabler(module string) zapcore.LevelEnabler {
-	return zap.LevelEnablerFunc(func(l zapcore.Level) bool {
-		return m.Level(module).Enabled(l)
-	})
 }
 
 
