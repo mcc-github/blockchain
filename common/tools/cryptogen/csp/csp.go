@@ -18,6 +18,7 @@ import (
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/bccsp/signer"
+	"github.com/pkg/errors"
 )
 
 
@@ -51,6 +52,9 @@ func LoadPrivateKey(keystorePath string) (bccsp.Key, crypto.Signer, error) {
 			}
 
 			block, _ := pem.Decode(rawKey)
+			if block == nil {
+				return errors.Errorf("%s: wrong PEM encoding", path)
+			}
 			priv, err = csp.KeyImport(block.Bytes, &bccsp.ECDSAPrivateKeyImportOpts{Temporary: true})
 			if err != nil {
 				return err

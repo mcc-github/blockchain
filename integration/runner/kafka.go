@@ -44,7 +44,6 @@ type Kafka struct {
 	ZooKeeperConnect             string
 	ReplicaFetchResponseMaxBytes int
 	AdvertisedListeners          string
-	LogLevel                     string
 
 	ErrorStream  io.Writer
 	OutputStream io.Writer
@@ -110,10 +109,6 @@ func (k *Kafka) Run(sigCh <-chan os.Signal, ready chan<- struct{}) error {
 
 	if k.ReplicaFetchResponseMaxBytes == 0 {
 		k.ReplicaFetchResponseMaxBytes = 10485760
-	}
-
-	if k.LogLevel == "" {
-		k.LogLevel = "warn"
 	}
 
 	containerOptions := docker.CreateContainerOptions{

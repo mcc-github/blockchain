@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,20 +27,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestInitializeLoggingLevel(t *testing.T) {
-	initializeLoggingLevel(
-		&localconfig.TopLevel{
-			
-			
-			
-			
-			General: localconfig.General{LogLevel: "foo=debug"},
-		},
-	)
-	assert.Equal(t, flogging.GetModuleLevel("foo"), "DEBUG")
+func TestInitializeLogging(t *testing.T) {
+	origEnvValue := os.Getenv("FABRIC_LOGGING_SPEC")
+	os.Setenv("FABRIC_LOGGING_SPEC", "foo=debug")
+	initializeLogging()
+	assert.Equal(t, "debug", flogging.Global.Level("foo").String())
+	os.Setenv("FABRIC_LOGGING_SPEC", origEnvValue)
 }
 
 func TestInitializeProfilingService(t *testing.T) {
+	origEnvValue := os.Getenv("FABRIC_LOGGING_SPEC")
+	defer os.Setenv("FABRIC_LOGGING_SPEC", origEnvValue)
+	os.Setenv("FABRIC_LOGGING_SPEC", "debug")
 	
 	listenAddr := func() string {
 		l, _ := net.Listen("tcp", "localhost:0")
@@ -49,7 +48,6 @@ func TestInitializeProfilingService(t *testing.T) {
 	initializeProfilingService(
 		&localconfig.TopLevel{
 			General: localconfig.General{
-				LogLevel: "debug",
 				Profile: localconfig.Profile{
 					Enabled: true,
 					Address: listenAddr,
