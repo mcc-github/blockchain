@@ -16,13 +16,21 @@ import (
 )
 
 const (
+	
 	InstallChaincodeFuncName = "InstallChaincode"
+
+	
+	QueryInstalledChaincodeFuncName = "QueryInstalledChaincode"
 )
 
 
 
 type SCCFunctions interface {
+	
 	InstallChaincode(name, version string, chaincodePackage []byte) (hash []byte, err error)
+
+	
+	QueryInstalledChaincode(name, version string) (hash []byte, err error)
 }
 
 
@@ -107,6 +115,29 @@ func (scc *SCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 		}
 
 		resultBytes, err := scc.Protobuf.Marshal(&lb.InstallChaincodeResult{
+			Hash: hash,
+		})
+		if err != nil {
+			err = errors.WithMessage(err, "failed to marshal result")
+			return shim.Error(err.Error())
+		}
+
+		return shim.Success(resultBytes)
+	case QueryInstalledChaincodeFuncName:
+		input := &lb.QueryInstalledChaincodeArgs{}
+		err := scc.Protobuf.Unmarshal(inputBytes, input)
+		if err != nil {
+			err = errors.WithMessage(err, "failed to decode input arg to QueryInstalledChaincode")
+			return shim.Error(err.Error())
+		}
+
+		hash, err := scc.Functions.QueryInstalledChaincode(input.Name, input.Version)
+		if err != nil {
+			err = errors.WithMessage(err, "failed to invoke backing QueryInstalledChaincode")
+			return shim.Error(err.Error())
+		}
+
+		resultBytes, err := scc.Protobuf.Marshal(&lb.QueryInstalledChaincodeResult{
 			Hash: hash,
 		})
 		if err != nil {
