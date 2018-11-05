@@ -40,6 +40,8 @@ context_whitelist=(
     "^github.com/mcc-github/blockchain/protos(:|/.*:)"
     "^github.com/mcc-github/blockchain/common/grpclogging/fakes:"
     "^github.com/mcc-github/blockchain/common/grpclogging/testpb:"
+    "^github.com/mcc-github/blockchain/common/grpcmetrics/fakes:"
+    "^github.com/mcc-github/blockchain/common/grpcmetrics/testpb:"
 )
 TEMPLATE='{{with $d := .}}{{range $d.Imports}}{{ printf "%s:%s " $d.ImportPath . }}{{end}}{{end}}'
 OUTPUT="$(go list -f "$TEMPLATE" ./... | grep -Ev $(IFS='|' ; echo "${context_whitelist[*]}") | grep 'golang.org/x/net/context' | cut -f1 -d:)"

@@ -11,8 +11,8 @@ import (
 	"crypto/x509"
 	"time"
 
-	"github.com/go-kit/kit/metrics"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 )
@@ -61,7 +61,7 @@ type ServerConfig struct {
 	
 	Logger *flogging.FabricLogger
 	
-	Metrics *Metrics
+	MetricsProvider metrics.Provider
 }
 
 

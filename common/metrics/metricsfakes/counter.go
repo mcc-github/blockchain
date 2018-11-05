@@ -4,7 +4,7 @@ package metricsfakes
 import (
 	"sync"
 
-	"github.com/go-kit/kit/metrics"
+	"github.com/mcc-github/blockchain/common/metrics"
 )
 
 type Counter struct {
@@ -125,3 +125,5 @@ func (fake *Counter) recordInvocation(key string, args []interface{}) {
 	}
 	fake.invocations[key] = append(fake.invocations[key], args)
 }
+
+var _ metrics.Counter = new(Counter)
