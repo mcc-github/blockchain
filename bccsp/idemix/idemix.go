@@ -27,3 +27,15 @@ type Issuer interface {
 	
 	NewKey(AttributeNames []string) (IssuerSecretKey, error)
 }
+
+
+type Big interface {
+	
+	Bytes() ([]byte, error)
+}
+
+
+type User interface {
+	
+	NewKey() (Big, error)
+}
