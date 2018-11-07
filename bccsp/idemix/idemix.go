@@ -35,7 +35,16 @@ type Big interface {
 }
 
 
+type Ecp interface {
+	
+	Bytes() ([]byte, error)
+}
+
+
 type User interface {
 	
 	NewKey() (Big, error)
+
+	
+	MakeNym(sk Big, key IssuerPublicKey) (Ecp, Big, error)
 }

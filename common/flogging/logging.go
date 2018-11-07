@@ -9,7 +9,6 @@ package flogging
 import (
 	"io"
 	"os"
-	"strings"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging/fabenc"
@@ -188,7 +187,6 @@ func (s *Logging) Encoding() Encoding {
 
 func (s *Logging) ZapLogger(module string) *zap.Logger {
 	s.mutex.RLock()
-	module = strings.Replace(module, "/", ".", -1)
 	levelEnabler := zap.LevelEnablerFunc(func(l zapcore.Level) bool {
 		
 		
