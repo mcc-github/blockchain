@@ -49,6 +49,21 @@ type BlockPuller struct {
 
 
 
+func (p *BlockPuller) Clone() *BlockPuller {
+	
+	copy := *p
+	
+	copy.stream = nil
+	copy.blockBuff = nil
+	copy.latestSeq = 0
+	copy.endpoint = ""
+	copy.conn = nil
+	copy.cancelStream = nil
+	return &copy
+}
+
+
+
 func (p *BlockPuller) Close() {
 	if p.cancelStream != nil {
 		p.cancelStream()
@@ -72,6 +87,16 @@ func (p *BlockPuller) PullBlock(seq uint64) *common.Block {
 			return block
 		}
 	}
+}
+
+
+func (p *BlockPuller) HeightsByEndpoints() map[string]uint64 {
+	res := make(map[string]uint64)
+	for endpoint, endpointInfo := range p.probeEndpoints(1).byEndpoints() {
+		endpointInfo.conn.Close()
+		res[endpoint] = endpointInfo.lastBlockSeq + 1
+	}
+	return res
 }
 
 func (p *BlockPuller) tryFetchBlock(seq uint64) *common.Block {

@@ -8,6 +8,7 @@ package etcdraft
 
 import (
 	"bytes"
+	"path"
 	"reflect"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/viperutil"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
@@ -37,11 +39,17 @@ type ChainGetter interface {
 }
 
 
+type Config struct {
+	WALDir string 
+}
+
+
 type Consenter struct {
 	Communication cluster.Communicator
 	*Dispatcher
 	Chains ChainGetter
 	Logger *flogging.FabricLogger
+	Config Config
 	Cert   []byte
 }
 
@@ -125,6 +133,7 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		MaxSizePerMsg:   m.Options.MaxSizePerMsg,
 
 		RaftMetadata: raftMetadata,
+		WALDir:       path.Join(c.Config.WALDir, support.ChainID()),
 	}
 
 	rpc := &cluster.RPC{Channel: support.ChainID(), Comm: c.Communication}
@@ -132,33 +141,41 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 }
 
 func raftMetadata(blockMetadata *common.Metadata, configMetadata *etcdraft.Metadata) (*etcdraft.RaftMetadata, error) {
-	membership := &etcdraft.RaftMetadata{
+	m := &etcdraft.RaftMetadata{
 		Consenters:      map[uint64]*etcdraft.Consenter{},
 		NextConsenterID: 1,
 	}
 	if blockMetadata != nil && len(blockMetadata.Value) != 0 { 
-		if err := proto.Unmarshal(blockMetadata.Value, membership); err != nil {
+		if err := proto.Unmarshal(blockMetadata.Value, m); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal block's metadata")
 		}
-		return membership, nil
+		return m, nil
 	}
 
 	
 	for _, consenter := range configMetadata.Consenters {
-		membership.Consenters[membership.NextConsenterID] = consenter
-		membership.NextConsenterID++
+		m.Consenters[m.NextConsenterID] = consenter
+		m.NextConsenterID++
 	}
 
-	return membership, nil
+	return m, nil
 }
+
 
 func New(clusterDialer *cluster.PredicateDialer, conf *localconfig.TopLevel,
 	srvConf comm.ServerConfig, srv *comm.GRPCServer, r *multichannel.Registrar) *Consenter {
 	logger := flogging.MustGetLogger("orderer.consensus.etcdraft")
+
+	var config Config
+	if err := viperutil.Decode(conf.Consensus, &config); err != nil {
+		logger.Panicf("Failed to decode etcdraft configuration: %s", err)
+	}
+
 	consenter := &Consenter{
 		Cert:   srvConf.SecOpts.Certificate,
 		Logger: logger,
 		Chains: r,
+		Config: config,
 	}
 	consenter.Dispatcher = &Dispatcher{
 		Logger:        logger,

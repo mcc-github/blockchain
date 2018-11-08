@@ -164,7 +164,9 @@ func (ds *deliverServer) Deliver(stream orderer.AtomicBroadcast_DeliverServer) e
 
 	if seekInfo.GetStart().GetSpecified() != nil {
 		for resp := range ds.blockResponses {
-			stream.Send(resp)
+			if err := stream.Send(resp); err != nil {
+				return nil
+			}
 		}
 		return nil
 	}
@@ -364,6 +366,96 @@ func TestBlockPullerHeavyBlocks(t *testing.T) {
 	}
 
 	assert.Equal(t, 50, gotBlockMessageCount)
+	bp.Close()
+	dialer.assertAllConnectionsClosed(t)
+}
+
+func TestBlockPullerClone(t *testing.T) {
+	
+	
+	
+	
+	osn1 := newClusterNode(t)
+	defer osn1.stop()
+
+	osn1.addExpectProbeAssert()
+	osn1.addExpectPullAssert(1)
+	
+	osn1.enqueueResponse(100)
+	osn1.enqueueResponse(1)
+
+	dialer := newCountingDialer()
+	bp := newBlockPuller(dialer, osn1.srv.Address())
+	
+	bp.MaxTotalBufferBytes = 1
+	
+	bpClone := bp.Clone()
+	
+	bpClone.Channel = "foo"
+	
+	assert.Equal(t, "mychannel", bp.Channel)
+
+	block := bp.PullBlock(1)
+	assert.Equal(t, uint64(1), block.Header.Number)
+
+	
+	
+	bp.Close()
+	dialer.assertAllConnectionsClosed(t)
+	
+	osn1.enqueueResponse(200)
+
+	
+	
+	
+	osn1.addExpectProbeAssert()
+	osn1.addExpectPullAssert(2)
+	osn1.enqueueResponse(100)
+	osn1.enqueueResponse(2)
+
+	block = bpClone.PullBlock(2)
+	assert.Equal(t, uint64(2), block.Header.Number)
+
+	bpClone.Close()
+	dialer.assertAllConnectionsClosed(t)
+}
+
+func TestBlockPullerHeightsByEndpoints(t *testing.T) {
+	
+	
+	
+	
+	osn1 := newClusterNode(t)
+
+	osn2 := newClusterNode(t)
+	defer osn2.stop()
+
+	osn3 := newClusterNode(t)
+	defer osn3.stop()
+
+	dialer := newCountingDialer()
+	bp := newBlockPuller(dialer, osn1.srv.Address(), osn2.srv.Address(), osn3.srv.Address())
+
+	
+	osn1.addExpectProbeAssert()
+	osn2.addExpectProbeAssert()
+	osn3.addExpectProbeAssert()
+
+	
+	osn1.stop()
+	
+	osn2.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Status{Status: common.Status_FORBIDDEN},
+	}
+	
+	osn3.enqueueResponse(5)
+
+	res := bp.HeightsByEndpoints()
+	expected := map[string]uint64{
+		osn3.srv.Address(): 6,
+	}
+	assert.Equal(t, expected, res)
+
 	bp.Close()
 	dialer.assertAllConnectionsClosed(t)
 }

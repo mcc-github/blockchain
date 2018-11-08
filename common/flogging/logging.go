@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package flogging
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -44,7 +45,7 @@ type Config struct {
 
 
 type Logging struct {
-	*ModuleLevels
+	*LoggerLevels
 
 	mutex          sync.RWMutex
 	encoding       Encoding
@@ -60,7 +61,7 @@ func New(c Config) (*Logging, error) {
 	encoderConfig.NameKey = "name"
 
 	s := &Logging{
-		ModuleLevels: &ModuleLevels{
+		LoggerLevels: &LoggerLevels{
 			defaultLevel: defaultLevel,
 		},
 		encoderConfig:  encoderConfig,
@@ -85,7 +86,7 @@ func (s *Logging) Apply(c Config) error {
 		c.LogSpec = "INFO"
 	}
 
-	err = s.ModuleLevels.ActivateSpec(c.LogSpec)
+	err = s.LoggerLevels.ActivateSpec(c.LogSpec)
 	if err != nil {
 		return err
 	}
@@ -184,18 +185,20 @@ func (s *Logging) Encoding() Encoding {
 
 
 
+func (s *Logging) ZapLogger(name string) *zap.Logger {
+	if !isValidLoggerName(name) {
+		panic(fmt.Sprintf("invalid logger name: %s", name))
+	}
 
-func (s *Logging) ZapLogger(module string) *zap.Logger {
+	
+	
+	
+	levelEnabler := zap.LevelEnablerFunc(func(l zapcore.Level) bool { return true })
+
 	s.mutex.RLock()
-	levelEnabler := zap.LevelEnablerFunc(func(l zapcore.Level) bool {
-		
-		
-		
-		return true
-	})
 	core := &Core{
 		LevelEnabler: levelEnabler,
-		Levels:       s.ModuleLevels,
+		Levels:       s.LoggerLevels,
 		Encoders: map[Encoding]zapcore.Encoder{
 			JSON:    zapcore.NewJSONEncoder(s.encoderConfig),
 			CONSOLE: fabenc.NewFormatEncoder(s.multiFormatter),
@@ -205,13 +208,12 @@ func (s *Logging) ZapLogger(module string) *zap.Logger {
 	}
 	s.mutex.RUnlock()
 
-	return NewZapLogger(core).Named(module)
+	return NewZapLogger(core).Named(name)
 }
 
 
 
-
-func (s *Logging) Logger(module string) *FabricLogger {
-	zl := s.ZapLogger(module)
+func (s *Logging) Logger(name string) *FabricLogger {
+	zl := s.ZapLogger(name)
 	return NewFabricLogger(zl)
 }

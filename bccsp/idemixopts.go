@@ -80,11 +80,19 @@ type IdemixCredentialRequestSignerOpts struct {
 	
 	Attributes []int
 	
+	IssuerPK Key
+	
 	H crypto.Hash
 }
 
 func (o *IdemixCredentialRequestSignerOpts) HashFunc() crypto.Hash {
 	return o.H
+}
+
+
+
+func (o *IdemixCredentialRequestSignerOpts) IssuerPublicKey() Key {
+	return o.IssuerPK
 }
 
 

@@ -48,3 +48,14 @@ type User interface {
 	
 	MakeNym(sk Big, key IssuerPublicKey) (Ecp, Big, error)
 }
+
+
+
+type CredRequest interface {
+	
+	
+	Sign(sk Big, ipk IssuerPublicKey) ([]byte, error)
+
+	
+	Verify(credRequest []byte, ipk IssuerPublicKey) error
+}

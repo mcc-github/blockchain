@@ -49,14 +49,15 @@ func Reset() {
 }
 
 
-func GetModuleLevel(module string) string {
-	return strings.ToUpper(Global.Level(module).String())
+
+func GetLoggerLevel(loggerName string) string {
+	return strings.ToUpper(Global.Level(loggerName).String())
 }
 
 
 
-func MustGetLogger(module string) *FabricLogger {
-	return Global.Logger(module)
+func MustGetLogger(loggerName string) *FabricLogger {
+	return Global.Logger(loggerName)
 }
 
 

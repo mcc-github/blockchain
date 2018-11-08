@@ -92,6 +92,10 @@ func (*NoopBlockVerifier) VerifyBlockSignature(sd []*common.SignedData, config *
 type ChainPuller interface {
 	
 	PullBlock(seq uint64) *common.Block
+
+	
+	HeightsByEndpoints() map[string]uint64
+
 	
 	Close()
 }
@@ -101,6 +105,52 @@ type ChainInspector struct {
 	Logger          *flogging.FabricLogger
 	Puller          ChainPuller
 	LastConfigBlock *common.Block
+}
+
+
+var NotInChannelError = errors.New("not in the channel")
+
+
+type selfMembershipPredicate func(configBlock *common.Block) error
+
+
+
+
+
+
+func Participant(puller ChainPuller, analyzeLastConfBlock selfMembershipPredicate) error {
+	endpoint, latestHeight := latestHeightAndEndpoint(puller)
+	if endpoint == "" {
+		return errors.New("no available orderer")
+	}
+
+	lastBlock := puller.PullBlock(latestHeight - 1)
+	lastConfNumber, err := lastConfigFromBlock(lastBlock)
+	if err != nil {
+		return err
+	}
+
+	lastConfigBlock := puller.PullBlock(lastConfNumber)
+	return analyzeLastConfBlock(lastConfigBlock)
+}
+
+func latestHeightAndEndpoint(puller ChainPuller) (string, uint64) {
+	var maxHeight uint64
+	var mostUpToDateEndpoint string
+	for endpoint, height := range puller.HeightsByEndpoints() {
+		if height > maxHeight {
+			maxHeight = height
+			mostUpToDateEndpoint = endpoint
+		}
+	}
+	return mostUpToDateEndpoint, maxHeight
+}
+
+func lastConfigFromBlock(block *common.Block) (uint64, error) {
+	if block.Metadata == nil || len(block.Metadata.Metadata) <= int(common.BlockMetadataIndex_LAST_CONFIG) {
+		return 0, errors.New("no metadata in block")
+	}
+	return utils.GetLastConfigIndexFromBlock(block)
 }
 
 
