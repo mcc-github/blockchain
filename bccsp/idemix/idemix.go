@@ -5,6 +5,8 @@ SPDX-License-Identifier: Apache-2.0
 */
 package idemix
 
+import "github.com/mcc-github/blockchain/bccsp"
+
 
 type IssuerPublicKey interface {
 
@@ -58,4 +60,18 @@ type CredRequest interface {
 
 	
 	Verify(credRequest []byte, ipk IssuerPublicKey) error
+}
+
+
+
+type Credential interface {
+
+	
+	
+	
+	Sign(key IssuerSecretKey, credentialRequest []byte, attributes []bccsp.IdemixAttribute) ([]byte, error)
+
+	
+	
+	Verify(sk Big, ipk IssuerPublicKey, credential []byte, attributes []bccsp.IdemixAttribute) error
 }

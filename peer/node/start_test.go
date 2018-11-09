@@ -47,6 +47,14 @@ func TestStartCmd(t *testing.T) {
 		assert.NoError(t, cmd.Execute(), "expected to successfully start command")
 	}()
 
+	grpcProbe := func(addr string) bool {
+		c, err := grpc.Dial(addr, grpc.WithBlock(), grpc.WithInsecure())
+		if err == nil {
+			c.Close()
+			return true
+		}
+		return false
+	}
 	g.Eventually(grpcProbe("localhost:6051")).Should(BeTrue())
 }
 
@@ -168,13 +176,4 @@ func TestComputeChaincodeEndpoint(t *testing.T) {
 
 	
 	
-}
-
-func grpcProbe(addr string) bool {
-	c, err := grpc.Dial(addr, grpc.WithBlock(), grpc.WithInsecure())
-	if err == nil {
-		c.Close()
-		return true
-	}
-	return false
 }

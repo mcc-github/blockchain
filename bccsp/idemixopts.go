@@ -96,8 +96,30 @@ func (o *IdemixCredentialRequestSignerOpts) IssuerPublicKey() Key {
 }
 
 
+type IdemixAttributeType int
+
+const (
+	
+	IdemixHiddenAttribute IdemixAttributeType = iota
+	
+	IdemixBytesAttribute
+	
+	IdemixIntAttribute
+)
+
+type IdemixAttribute struct {
+	
+	Type IdemixAttributeType
+	
+	Value interface{}
+}
+
+
 type IdemixCredentialSignerOpts struct {
-	Attributes []int
+	
+	Attributes []IdemixAttribute
+	
+	IssuerPK Key
 	
 	H crypto.Hash
 }
@@ -107,6 +129,10 @@ type IdemixCredentialSignerOpts struct {
 
 func (o *IdemixCredentialSignerOpts) HashFunc() crypto.Hash {
 	return o.H
+}
+
+func (o *IdemixCredentialSignerOpts) IssuerPublicKey() Key {
+	return o.IssuerPK
 }
 
 
