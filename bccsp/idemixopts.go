@@ -171,3 +171,20 @@ type IdemixNymSignerOpts struct {
 func (o *IdemixNymSignerOpts) HashFunc() crypto.Hash {
 	return o.H
 }
+
+
+type IdemixRevocationKeyGenOpts struct {
+	
+	Temporary bool
+}
+
+
+func (*IdemixRevocationKeyGenOpts) Algorithm() string {
+	return IDEMIX
+}
+
+
+
+func (o *IdemixRevocationKeyGenOpts) Ephemeral() bool {
+	return o.Temporary
+}

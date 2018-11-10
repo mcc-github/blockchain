@@ -5,7 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 */
 package idemix
 
-import "github.com/mcc-github/blockchain/bccsp"
+import (
+	"crypto/ecdsa"
+
+	"github.com/mcc-github/blockchain/bccsp"
+)
 
 
 type IssuerPublicKey interface {
@@ -74,4 +78,11 @@ type Credential interface {
 	
 	
 	Verify(sk Big, ipk IssuerPublicKey, credential []byte, attributes []bccsp.IdemixAttribute) error
+}
+
+
+type Revocation interface {
+
+	
+	NewKey() (*ecdsa.PrivateKey, error)
 }
