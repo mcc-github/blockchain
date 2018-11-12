@@ -130,7 +130,7 @@ var _ = Describe("Chain", func() {
 				MaxInflightMsgs: 256,
 				RaftMetadata:    membership,
 				Logger:          logger,
-				Storage:         storage,
+				MemoryStorage:   storage,
 				WALDir:          walDir,
 			}
 
@@ -581,8 +581,8 @@ var _ = Describe("Chain", func() {
 					)
 
 					BeforeEach(func() {
-						newOpts = opts                            
-						newOpts.Storage = raft.NewMemoryStorage() 
+						newOpts = opts                                  
+						newOpts.MemoryStorage = raft.NewMemoryStorage() 
 					})
 
 					JustBeforeEach(func() {
@@ -711,10 +711,10 @@ var _ = Describe("Chain", func() {
 						chain, err := etcdraft.NewChain(
 							support,
 							etcdraft.Options{
-								WALDir:       f.Name(),
-								Logger:       logger,
-								Storage:      storage,
-								RaftMetadata: &raftprotos.RaftMetadata{},
+								WALDir:        f.Name(),
+								Logger:        logger,
+								MemoryStorage: storage,
+								RaftMetadata:  &raftprotos.RaftMetadata{},
 							},
 							configurator,
 							nil,
@@ -740,10 +740,10 @@ var _ = Describe("Chain", func() {
 						chain, err := etcdraft.NewChain(
 							support,
 							etcdraft.Options{
-								WALDir:       d,
-								Logger:       logger,
-								Storage:      storage,
-								RaftMetadata: &raftprotos.RaftMetadata{},
+								WALDir:        d,
+								Logger:        logger,
+								MemoryStorage: storage,
+								RaftMetadata:  &raftprotos.RaftMetadata{},
 							},
 							nil,
 							nil,
@@ -1173,7 +1173,7 @@ func newChain(timeout time.Duration, channel string, walDir string, applied uint
 		MaxInflightMsgs: 256,
 		RaftMetadata:    meta,
 		Logger:          flogging.NewFabricLogger(zap.NewNop()),
-		Storage:         storage,
+		MemoryStorage:   storage,
 		WALDir:          walDir,
 	}
 
@@ -1354,9 +1354,9 @@ func (n *network) rejoin(id uint64, wasLeader bool) {
 	}
 
 	
-	i, err := n.chains[n.leader].opts.Storage.LastIndex()
+	i, err := n.chains[n.leader].opts.MemoryStorage.LastIndex()
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(n.chains[id].opts.Storage.LastIndex).Should(Equal(i))
+	Eventually(n.chains[id].opts.MemoryStorage.LastIndex).Should(Equal(i))
 }
 
 

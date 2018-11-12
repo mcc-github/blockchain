@@ -123,7 +123,7 @@ func (jcm *joinChannelMessage) AnchorPeersOf(org api.OrgIdentityType) []api.Anch
 	return jcm.members2AnchorPeers[string(org)]
 }
 
-var logger = util.GetLogger(util.LoggingServiceModule, "")
+var logger = util.GetLogger(util.ServiceLogger, "")
 
 
 func InitGossipService(peerIdentity []byte, endpoint string, s *grpc.Server, certs *gossipCommon.TLSCertificates,
@@ -131,7 +131,7 @@ func InitGossipService(peerIdentity []byte, endpoint string, s *grpc.Server, cer
 	
 	
 	
-	util.GetLogger(util.LoggingElectionModule, "")
+	util.GetLogger(util.ElectionLogger, "")
 	return InitGossipServiceCustomDeliveryFactory(peerIdentity, endpoint, s, certs, &deliveryFactoryImpl{},
 		mcs, secAdv, secureDialOpts, bootPeers...)
 }

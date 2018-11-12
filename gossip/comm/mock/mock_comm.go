@@ -54,7 +54,7 @@ type commMock struct {
 	done chan struct{}
 }
 
-var logger = util.GetLogger(util.LoggingMockModule, "")
+var logger = util.GetLogger(util.CommMockLogger, "")
 
 
 func NewCommMock(id string, members map[string]*socketMock) comm.Comm {

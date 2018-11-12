@@ -253,12 +253,12 @@ func initFromSpec(spec string, defaultLevel logging.Level) {
 			}
 
 			if split[0] == "" {
-				chaincodeLogger.Warningf("Invalid logging override specification '%s' ignored - no module specified", field)
+				chaincodeLogger.Warningf("Invalid logging override specification '%s' ignored - no logger specified", field)
 			} else {
-				modules := strings.Split(split[0], ",")
-				for _, module := range modules {
-					chaincodeLogger.Debugf("Setting logging level for module '%s' to '%s'", module, levelSingle)
-					logging.SetLevel(levelSingle, module)
+				loggers := strings.Split(split[0], ",")
+				for _, logger := range loggers {
+					chaincodeLogger.Debugf("Setting logging level for logger '%s' to '%s'", logger, levelSingle)
+					logging.SetLevel(levelSingle, logger)
 				}
 			}
 		default:

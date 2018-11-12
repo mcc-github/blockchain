@@ -15,19 +15,19 @@ import (
 
 
 const (
-	LoggingChannelModule   = "gossip.channel"
-	LoggingCommModule      = "gossip.comm"
-	LoggingDiscoveryModule = "gossip.discovery"
-	LoggingElectionModule  = "gossip.election"
-	LoggingGossipModule    = "gossip.gossip"
-	LoggingMockModule      = "gossip.comm.mock"
-	LoggingPullModule      = "gossip.pull"
-	LoggingServiceModule   = "gossip.service"
-	LoggingStateModule     = "gossip.state"
-	LoggingPrivModule      = "gossip.privdata"
+	ChannelLogger     = "gossip.channel"
+	CommLogger        = "gossip.comm"
+	DiscoveryLogger   = "gossip.discovery"
+	ElectionLogger    = "gossip.election"
+	GossipLogger      = "gossip.gossip"
+	CommMockLogger    = "gossip.comm.mock"
+	PullLogger        = "gossip.pull"
+	ServiceLogger     = "gossip.service"
+	StateLogger       = "gossip.state"
+	PrivateDataLogger = "gossip.privdata"
 )
 
-var loggersByModules = make(map[string]Logger)
+var loggers = make(map[string]Logger)
 var lock = sync.Mutex{}
 var testMode bool
 
@@ -51,21 +51,21 @@ type Logger interface {
 }
 
 
-func GetLogger(module string, peerID string) Logger {
+func GetLogger(name string, peerID string) Logger {
 	if peerID != "" && testMode {
-		module = module + "#" + peerID
+		name = name + "#" + peerID
 	}
 
 	lock.Lock()
 	defer lock.Unlock()
 
-	if lgr, ok := loggersByModules[module]; ok {
+	if lgr, ok := loggers[name]; ok {
 		return lgr
 	}
 
 	
-	lgr := flogging.MustGetLogger(module)
-	loggersByModules[module] = lgr
+	lgr := flogging.MustGetLogger(name)
+	loggers[name] = lgr
 	return lgr
 }
 

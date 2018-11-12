@@ -149,7 +149,7 @@ type GossipStateProviderImpl struct {
 	stateTransferActive int32
 }
 
-var logger = util.GetLogger(util.LoggingStateModule, "")
+var logger = util.GetLogger(util.StateLogger, "")
 
 
 
