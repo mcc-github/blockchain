@@ -66,6 +66,17 @@ type Store interface {
 	
 	ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error
 	
+	
+	
+	
+	
+	
+	CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error
+	
+	GetLastUpdatedOldBlocksList() ([]uint64, error)
+	
+	ResetLastUpdatedOldBlocksList() error
+	
 	IsEmpty() (bool, error)
 	
 	LastCommittedBlockHeight() (uint64, error)
