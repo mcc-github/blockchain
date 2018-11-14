@@ -7,9 +7,15 @@ package bccsp
 
 import "crypto"
 
+
+type RevocationAlgorithm int32
+
 const (
 	
 	IDEMIX = "IDEMIX"
+
+	
+	AlgNoRevocation RevocationAlgorithm = iota
 )
 
 
@@ -187,4 +193,19 @@ func (*IdemixRevocationKeyGenOpts) Algorithm() string {
 
 func (o *IdemixRevocationKeyGenOpts) Ephemeral() bool {
 	return o.Temporary
+}
+
+
+
+
+type IdemixCRISignerOpts struct {
+	Epoch               int
+	RevocationAlgorithm RevocationAlgorithm
+	UnrevokedHandles    [][]byte
+	
+	H crypto.Hash
+}
+
+func (o *IdemixCRISignerOpts) HashFunc() crypto.Hash {
+	return o.H
 }

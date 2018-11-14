@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -74,6 +75,9 @@ type dockerClient interface {
 	KillContainer(opts docker.KillContainerOptions) error
 	
 	RemoveContainer(opts docker.RemoveContainerOptions) error
+	
+	
+	PingWithContext(context.Context) error
 }
 
 
@@ -389,6 +393,21 @@ func (vm *DockerVM) Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremo
 	err = vm.stopInternal(client, id, timeout, dontkill, dontremove)
 
 	return err
+}
+
+
+
+func (vm *DockerVM) HealthCheck(ctx context.Context) error {
+	errMsg := "failed to ping Docker daemon [%s]"
+	client, err := vm.getClientFnc()
+	if err != nil {
+		return fmt.Errorf(errMsg, err)
+	}
+	pingErr := client.PingWithContext(ctx)
+	if pingErr != nil {
+		return fmt.Errorf(errMsg, pingErr)
+	}
+	return nil
 }
 
 func (vm *DockerVM) stopInternal(client dockerClient,

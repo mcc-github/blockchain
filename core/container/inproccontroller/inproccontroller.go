@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package inproccontroller
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -234,6 +235,12 @@ func (vm *InprocVM) Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremo
 
 	delete(vm.registry.instRegistry, instName)
 	
+	return nil
+}
+
+
+
+func (vm *InprocVM) HealthCheck(ctx context.Context) error {
 	return nil
 }
 

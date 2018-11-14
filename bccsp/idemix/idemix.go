@@ -81,8 +81,22 @@ type Credential interface {
 }
 
 
+
 type Revocation interface {
 
 	
 	NewKey() (*ecdsa.PrivateKey, error)
+
+	
+	
+	
+	
+	Sign(key *ecdsa.PrivateKey, unrevokedHandles [][]byte, epoch int, alg bccsp.RevocationAlgorithm) ([]byte, error)
+
+	
+	
+	
+	
+	
+	Verify(pk *ecdsa.PublicKey, cri []byte, epoch int, alg bccsp.RevocationAlgorithm) error
 }
