@@ -27,6 +27,12 @@ type Transactor interface {
 	RequestTransfer(request *token.TransferRequest) (*token.TokenTransaction, error)
 
 	
+	
+	
+	
+	RequestRedeem(request *token.RedeemRequest) (*token.TokenTransaction, error)
+
+	
 	ListTokens() (*token.UnspentTokens, error)
 }
 

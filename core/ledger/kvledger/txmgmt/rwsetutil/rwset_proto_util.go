@@ -48,6 +48,32 @@ type CollHashedRwSet struct {
 }
 
 
+func (txRwSet *TxRwSet) GetPvtDataHash(ns, coll string) []byte {
+	
+	
+	
+	
+	
+	for _, nsRwSet := range txRwSet.NsRwSets {
+		if nsRwSet.NameSpace != ns {
+			continue
+		}
+		return nsRwSet.getPvtDataHash(coll)
+	}
+	return nil
+}
+
+func (nsRwSet *NsRwSet) getPvtDataHash(coll string) []byte {
+	for _, collHashedRwSet := range nsRwSet.CollHashedRwSets {
+		if collHashedRwSet.CollectionName != coll {
+			continue
+		}
+		return collHashedRwSet.PvtRwSetHash
+	}
+	return nil
+}
+
+
 
 
 

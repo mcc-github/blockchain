@@ -1160,23 +1160,23 @@ type PortName string
 type Ports map[PortName]uint16
 
 const (
-	ChaincodePort PortName = "Chaincode"
-	EventsPort    PortName = "Events"
-	HostPort      PortName = "HostPort"
-	ListenPort    PortName = "Listen"
-	ProfilePort   PortName = "Profile"
-	MetricsPort   PortName = "Metrics"
+	ChaincodePort  PortName = "Chaincode"
+	EventsPort     PortName = "Events"
+	HostPort       PortName = "HostPort"
+	ListenPort     PortName = "Listen"
+	ProfilePort    PortName = "Profile"
+	OperationsPort PortName = "Operations"
 )
 
 
 func PeerPortNames() []PortName {
-	return []PortName{ListenPort, ChaincodePort, EventsPort, ProfilePort, MetricsPort}
+	return []PortName{ListenPort, ChaincodePort, EventsPort, ProfilePort, OperationsPort}
 }
 
 
 
 func OrdererPortNames() []PortName {
-	return []PortName{ListenPort, ProfilePort}
+	return []PortName{ListenPort, ProfilePort, OperationsPort}
 }
 
 

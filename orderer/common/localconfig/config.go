@@ -34,6 +34,7 @@ type TopLevel struct {
 	Kafka      Kafka
 	Debug      Debug
 	Consensus  interface{}
+	Operations Operations
 }
 
 
@@ -178,6 +179,33 @@ type Debug struct {
 }
 
 
+type Operations struct {
+	ListenAddress string
+	Metrics       Metrics
+	TLS           TLS
+}
+
+
+type Metrics struct {
+	Provider   string
+	Statsd     Statsd
+	Prometheus Prometheus
+}
+
+
+type Statsd struct {
+	Network       string
+	Address       string
+	WriteInterval time.Duration
+	Prefix        string
+}
+
+
+type Prometheus struct {
+	HandlerPath string
+}
+
+
 var Defaults = TopLevel{
 	General: General{
 		LedgerType:     "file",
@@ -240,6 +268,12 @@ var Defaults = TopLevel{
 	Debug: Debug{
 		BroadcastTraceDir: "",
 		DeliverTraceDir:   "",
+	},
+	Operations: Operations{
+		ListenAddress: "127.0.0.1:0",
+		Metrics: Metrics{
+			Provider: "disabled",
+		},
 	},
 }
 

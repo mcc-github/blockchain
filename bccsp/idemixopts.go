@@ -152,7 +152,19 @@ type IdemixSignerOpts struct {
 	
 	
 	
-	Disclosure []byte
+	
+	
+	
+	Attributes []IdemixAttribute
+	
+	
+	RhIndex int
+	
+	CRI []byte
+	
+	Epoch int
+	
+	RevocationPublicKey Key
 	
 	H crypto.Hash
 }

@@ -58,22 +58,17 @@ func NewProvider() (ledger.PeerLedgerProvider, error) {
 	
 	idStore := openIDStore(ledgerconfig.GetLedgerProviderPath())
 	ledgerStoreProvider := ledgerstorage.NewProvider()
-	bookkeepingProvider := bookkeeping.NewProvider()
-	
-	vdbProvider, err := privacyenabledstate.NewCommonStorageDBProvider(bookkeepingProvider)
-	if err != nil {
-		return nil, err
-	}
 	
 	historydbProvider := historyleveldb.NewHistoryDBProvider()
 	logger.Info("ledger provider Initialized")
 	provider := &Provider{idStore, ledgerStoreProvider,
-		vdbProvider, historydbProvider, nil, nil, bookkeepingProvider, nil, nil}
+		nil, historydbProvider, nil, nil, nil, nil, nil}
 	return provider, nil
 }
 
 
-func (provider *Provider) Initialize(initializer *ledger.Initializer) {
+func (provider *Provider) Initialize(initializer *ledger.Initializer) error {
+	var err error
 	configHistoryMgr := confighistory.NewMgr(initializer.DeployedChaincodeInfoProvider)
 	collElgNotifier := &collElgNotifier{
 		initializer.DeployedChaincodeInfoProvider,
@@ -91,7 +86,13 @@ func (provider *Provider) Initialize(initializer *ledger.Initializer) {
 	provider.configHistoryMgr = configHistoryMgr
 	provider.stateListeners = stateListeners
 	provider.collElgNotifier = collElgNotifier
+	provider.bookkeepingProvider = bookkeeping.NewProvider()
+	provider.vdbProvider, err = privacyenabledstate.NewCommonStorageDBProvider(provider.bookkeepingProvider)
+	if err != nil {
+		return err
+	}
 	provider.recoverUnderConstructionLedger()
+	return nil
 }
 
 

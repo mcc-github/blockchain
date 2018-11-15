@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -42,6 +43,7 @@ type Initializer struct {
 	PlatformRegistry              *platforms.Registry
 	DeployedChaincodeInfoProvider ledger.DeployedChaincodeInfoProvider
 	MembershipInfoProvider        ledger.MembershipInfoProvider
+	MetricsProvider               metrics.Provider
 }
 
 
@@ -71,6 +73,7 @@ func initialize(initializer *Initializer) {
 		StateListeners:                finalStateListeners,
 		DeployedChaincodeInfoProvider: initializer.DeployedChaincodeInfoProvider,
 		MembershipInfoProvider:        initializer.MembershipInfoProvider,
+		MetricsProvider:               initializer.MetricsProvider,
 	})
 	ledgerProvider = provider
 	logger.Info("ledger mgmt initialized")

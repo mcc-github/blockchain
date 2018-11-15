@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package kvledger
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -337,8 +336,29 @@ func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, e
 	return l.configHistoryRetriever, nil
 }
 
+
 func (l *kvLedger) CommitPvtData(pvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error) {
-	return nil, fmt.Errorf("not yet implemented")
+	validPvtData, hashMismatches, err := ConstructValidAndInvalidPvtData(pvtData, l.blockStore)
+	if err != nil {
+		return nil, err
+	}
+
+	err = l.blockStore.CommitPvtDataOfOldBlocks(validPvtData)
+	if err != nil {
+		return nil, err
+	}
+
+	
+	
+	
+	
+	
+
+	if err := l.blockStore.ResetLastUpdatedOldBlocksList(); err != nil {
+		return nil, err
+	}
+
+	return hashMismatches, nil
 }
 
 func (l *kvLedger) GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error) {

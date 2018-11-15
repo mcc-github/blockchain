@@ -133,6 +133,15 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 }
 
 
+func (s *Store) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	err := s.pvtdataStore.CommitPvtDataOfOldBlocks(blocksPvtData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+
 
 func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
 	s.rwlock.RLock()
@@ -183,6 +192,16 @@ func (s *Store) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.M
 
 func (s *Store) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
 	return s.pvtdataStore.ProcessCollsEligibilityEnabled(committingBlk, nsCollMap)
+}
+
+
+func (s *Store) GetLastUpdatedOldBlocksList() ([]uint64, error) {
+	return s.pvtdataStore.GetLastUpdatedOldBlocksList()
+}
+
+
+func (s *Store) ResetLastUpdatedOldBlocksList() error {
+	return s.pvtdataStore.ResetLastUpdatedOldBlocksList()
 }
 
 

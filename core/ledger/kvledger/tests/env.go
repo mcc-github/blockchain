@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
+
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/util"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
@@ -132,6 +134,7 @@ func initLedgerMgmt() {
 		&ledgermgmt.Initializer{
 			CustomTxProcessors:            peer.ConfigTxProcessors,
 			DeployedChaincodeInfoProvider: &lscc.DeployedCCInfoProvider{},
+			MetricsProvider:               &disabled.Provider{},
 		},
 	)
 }

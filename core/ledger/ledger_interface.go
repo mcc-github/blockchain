@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
@@ -22,11 +23,12 @@ type Initializer struct {
 	StateListeners                []StateListener
 	DeployedChaincodeInfoProvider DeployedChaincodeInfoProvider
 	MembershipInfoProvider        MembershipInfoProvider
+	MetricsProvider               metrics.Provider
 }
 
 
 type PeerLedgerProvider interface {
-	Initialize(initializer *Initializer)
+	Initialize(initializer *Initializer) error
 	
 	
 	
@@ -450,9 +452,9 @@ func (e *InvalidCollNameError) Error() string {
 
 
 type PvtdataHashMismatch struct {
-	BlockNum, TxNum               uint64
-	ChaincodeName, CollectionName string
-	ExpectedHash                  []byte
+	BlockNum, TxNum       uint64
+	Namespace, Collection string
+	ExpectedHash          []byte
 }
 
 

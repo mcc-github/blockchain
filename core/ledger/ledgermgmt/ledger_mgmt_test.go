@@ -21,6 +21,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
+
 	"github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
@@ -90,6 +92,7 @@ func TestLedgerMgmt(t *testing.T) {
 	
 	Initialize(&Initializer{
 		PlatformRegistry: platforms.NewRegistry(&golang.Platform{}),
+		MetricsProvider:  &disabled.Provider{},
 	})
 	l, err = OpenLedger(ledgerID)
 	assert.NoError(t, err)

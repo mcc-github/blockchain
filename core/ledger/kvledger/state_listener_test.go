@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
@@ -29,6 +30,7 @@ func TestStateListener(t *testing.T) {
 	provider.Initialize(&ledger.Initializer{
 		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
 		StateListeners:                []ledger.StateListener{mockListener},
+		MetricsProvider:               &disabled.Provider{},
 	})
 
 	bg, gb := testutil.NewBlockGenerator(t, channelid, false)

@@ -17,12 +17,15 @@ import (
 
 	kitstatsd "github.com/go-kit/kit/metrics/statsd"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/flogging/httpadmin"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/metrics/prometheus"
 	"github.com/mcc-github/blockchain/common/metrics/statsd"
 	"github.com/mcc-github/blockchain/common/metrics/statsd/goruntime"
+	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/comm"
+	"github.com/mcc-github/blockchain/core/middleware"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
 )
@@ -45,13 +48,13 @@ func initializeMetrics() (provider metrics.Provider, shutdown func(), err error)
 		return nil
 	})
 
-	providerType := viper.GetString("metrics.provider")
+	providerType := viper.GetString("operations.metrics.provider")
 	switch providerType {
 	case "statsd":
-		network := viper.GetString("metrics.statsd.network")               
-		address := viper.GetString("metrics.statsd.address")               
-		writeInterval := viper.GetDuration("metrics.statsd.writeInterval") 
-		prefix := viper.GetString("metrics.statsd.prefix")                 
+		network := viper.GetString("operations.metrics.statsd.network")               
+		address := viper.GetString("operations.metrics.statsd.address")               
+		writeInterval := viper.GetDuration("operations.metrics.statsd.writeInterval") 
+		prefix := viper.GetString("operations.metrics.statsd.prefix")                 
 		if prefix != "" {
 			prefix = prefix + "."
 		}
@@ -81,46 +84,29 @@ func initializeMetrics() (provider metrics.Provider, shutdown func(), err error)
 	case "prometheus":
 		prometheusProvider := &prometheus.Provider{}
 
-		address := viper.GetString("metrics.prometheus.listenAddress")                   
-		handlerPath := viper.GetString("metrics.prometheus.handlerPath")                 
-		tlsEnabled := viper.GetBool("metrics.prometheus.tls.enabled")                    
-		certificate := viper.GetString("metrics.prometheus.tls.cert.file")               
-		key := viper.GetString("metrics.prometheus.tls.key.file")                        
-		clientCertRequired := viper.GetBool("metrics.prometheus.tls.clientAuthRequired") 
-		caCerts := viper.GetStringSlice("metrics.prometheus.tls.clientRootCAs.files")    
+		handlerPath := viper.GetString("operations.metrics.prometheus.handlerPath") 
+		address := viper.GetString("operations.listenAddress")                      
+		tlsConfig, err := viperTLSConfig("operations.tls")
+		if err != nil {
+			return nil, nil, err
+		}
+
+		var chain middleware.Chain
+		if tlsConfig == nil || tlsConfig.ClientAuth != tls.RequireAndVerifyClientCert {
+			chain = middleware.NewChain(middleware.WithRequestID(util.GenerateUUID))
+		} else {
+			chain = middleware.NewChain(middleware.RequireCert(), middleware.WithRequestID(util.GenerateUUID))
+		}
 
 		mux := http.NewServeMux()
-		mux.Handle(handlerPath, prom.Handler())
+		mux.Handle(handlerPath, chain.Handler(prom.Handler()))
+		mux.Handle("/logspec", chain.Handler(httpadmin.NewSpecHandler()))
+
 		httpServer := &http.Server{
 			Addr:         address,
 			Handler:      mux,
 			ReadTimeout:  10 * time.Second,
 			WriteTimeout: 2 * time.Minute,
-		}
-
-		var tlsConfig *tls.Config
-		if tlsEnabled {
-			cert, err := tls.LoadX509KeyPair(certificate, key)
-			if err != nil {
-				return nil, nil, err
-			}
-			caCertPool := x509.NewCertPool()
-			for _, caPath := range caCerts {
-				caPem, err := ioutil.ReadFile(caPath)
-				if err != nil {
-					return nil, nil, err
-				}
-				caCertPool.AppendCertsFromPEM(caPem)
-			}
-			tlsConfig = &tls.Config{
-				Certificates: []tls.Certificate{cert},
-				CipherSuites: comm.DefaultTLSCipherSuites,
-				ClientCAs:    caCertPool,
-				NextProtos:   []string{"h2", "http/1.1"},
-			}
-			if clientCertRequired {
-				tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
-			}
 		}
 
 		listener, err := net.Listen("tcp", address)
@@ -147,4 +133,41 @@ func initializeMetrics() (provider metrics.Provider, shutdown func(), err error)
 		disabledProvider := &disabled.Provider{}
 		return disabledProvider, func() {}, nil
 	}
+}
+
+func viperTLSConfig(viperStem string) (*tls.Config, error) {
+	tlsEnabled := viper.GetBool(viperStem + ".enabled")                    
+	certificate := viper.GetString(viperStem + ".cert.file")               
+	key := viper.GetString(viperStem + ".key.file")                        
+	clientCertRequired := viper.GetBool(viperStem + ".clientAuthRequired") 
+	caCerts := viper.GetStringSlice(viperStem + ".clientRootCAs.files")    
+
+	var tlsConfig *tls.Config
+	if tlsEnabled {
+		cert, err := tls.LoadX509KeyPair(certificate, key)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool := x509.NewCertPool()
+		for _, caPath := range caCerts {
+			caPem, err := ioutil.ReadFile(caPath)
+			if err != nil {
+				return nil, err
+			}
+			caCertPool.AppendCertsFromPEM(caPem)
+		}
+		tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			CipherSuites: comm.DefaultTLSCipherSuites,
+			ClientCAs:    caCertPool,
+			NextProtos:   []string{"h2", "http/1.1"},
+		}
+		if clientCertRequired {
+			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		} else {
+			tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
+		}
+	}
+
+	return tlsConfig, nil
 }

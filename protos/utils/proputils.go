@@ -423,12 +423,16 @@ func GetBytesEnvelope(env *common.Envelope) ([]byte, error) {
 
 
 
+
 func GetActionFromEnvelope(envBytes []byte) (*peer.ChaincodeAction, error) {
 	env, err := GetEnvelopeFromBlock(envBytes)
 	if err != nil {
 		return nil, err
 	}
+	return GetActionFromEnvelopeMsg(env)
+}
 
+func GetActionFromEnvelopeMsg(env *common.Envelope) (*peer.ChaincodeAction, error) {
 	payl, err := GetPayload(env)
 	if err != nil {
 		return nil, err

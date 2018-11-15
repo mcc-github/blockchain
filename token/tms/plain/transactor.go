@@ -33,52 +33,10 @@ type Transactor struct {
 
 func (t *Transactor) RequestTransfer(request *token.TransferRequest) (*token.TokenTransaction, error) {
 	var outputs []*token.PlainOutput
-	var inputs []*token.InputId
-	tokenType := ""
-	for _, inKeyBytes := range request.GetTokenIds() {
-		
-		inKey := parseCompositeKeyBytes(inKeyBytes)
 
-		
-		namespace, components, err := splitCompositeKey(inKey)
-		if err != nil {
-			return nil, &customtx.InvalidTxError{Msg: fmt.Sprintf("error splitting input composite key: '%s'", err)}
-		}
-		if namespace != tokenOutput {
-			return nil, &customtx.InvalidTxError{Msg: fmt.Sprintf("namespace not '%s': '%s'", tokenOutput, namespace)}
-		}
-		if len(components) != 2 {
-			return nil, &customtx.InvalidTxError{Msg: fmt.Sprintf("not enough components in output ID composite key; expected 2, received '%s'", components)}
-		}
-		txID := components[0]
-		index, err := strconv.Atoi(components[1])
-		if err != nil {
-			return nil, &customtx.InvalidTxError{Msg: fmt.Sprintf("error parsing output index '%s': '%s'", components[1], err)}
-		}
-
-		
-		inBytes, err := t.Ledger.GetState(tokenNamespace, inKey)
-		if err != nil {
-			return nil, err
-		}
-		if inBytes == nil {
-			return nil, &customtx.InvalidTxError{Msg: fmt.Sprintf("input '%s' does not exist", inKey)}
-		}
-		input := &token.PlainOutput{}
-		err = proto.Unmarshal(inBytes, input)
-		if err != nil {
-			return nil, &customtx.InvalidTxError{Msg: fmt.Sprintf("error unmarshaling input bytes: '%s'", err)}
-		}
-
-		
-		if tokenType == "" {
-			tokenType = input.Type
-		} else if tokenType != input.Type {
-			return nil, &customtx.InvalidTxError{Msg: fmt.Sprintf("two or more token types specified in input: '%s', '%s'", tokenType, input.Type)}
-		}
-
-		
-		inputs = append(inputs, &token.InputId{TxId: txID, Index: uint32(index)})
+	inputs, tokenType, _, err := t.getInputsFromTokenIds(request.GetTokenIds())
+	if err != nil {
+		return nil, err
 	}
 
 	for _, ttt := range request.GetShares() {
@@ -104,6 +62,115 @@ func (t *Transactor) RequestTransfer(request *token.TransferRequest) (*token.Tok
 	}
 
 	return transaction, nil
+}
+
+
+func (t *Transactor) RequestRedeem(request *token.RedeemRequest) (*token.TokenTransaction, error) {
+	if len(request.GetTokenIds()) == 0 {
+		return nil, errors.New("no token ids in RedeemRequest")
+	}
+	if request.GetQuantityToRedeem() <= 0 {
+		return nil, errors.Errorf("quantity to redeem [%d] must be greater than 0", request.GetQuantityToRedeem())
+	}
+
+	inputs, tokenType, quantitySum, err := t.getInputsFromTokenIds(request.GetTokenIds())
+	if err != nil {
+		return nil, err
+	}
+
+	if quantitySum < request.QuantityToRedeem {
+		return nil, errors.Errorf("total quantity [%d] from TokenIds is less than quantity [%d] to be redeemed", quantitySum, request.QuantityToRedeem)
+	}
+
+	
+	var outputs []*token.PlainOutput
+	outputs = append(outputs, &token.PlainOutput{
+		Type:     tokenType,
+		Quantity: request.QuantityToRedeem,
+	})
+
+	
+	if quantitySum > request.QuantityToRedeem {
+		outputs = append(outputs, &token.PlainOutput{
+			Owner:    t.PublicCredential, 
+			Type:     tokenType,
+			Quantity: quantitySum - request.QuantityToRedeem,
+		})
+	}
+
+	
+	transaction := &token.TokenTransaction{
+		Action: &token.TokenTransaction_PlainAction{
+			PlainAction: &token.PlainTokenAction{
+				Data: &token.PlainTokenAction_PlainRedeem{
+					PlainRedeem: &token.PlainTransfer{
+						Inputs:  inputs,
+						Outputs: outputs,
+					},
+				},
+			},
+		},
+	}
+
+	return transaction, nil
+}
+
+
+
+func (t *Transactor) getInputsFromTokenIds(tokenIds [][]byte) ([]*token.InputId, string, uint64, error) {
+	var inputs []*token.InputId
+	var tokenType string = ""
+	var quantitySum uint64 = 0
+	for _, inKeyBytes := range tokenIds {
+		
+		inKey := parseCompositeKeyBytes(inKeyBytes)
+
+		
+		namespace, components, err := splitCompositeKey(inKey)
+		if err != nil {
+			return nil, "", 0, &customtx.InvalidTxError{Msg: fmt.Sprintf("error splitting input composite key: '%s'", err)}
+		}
+		if namespace != tokenOutput {
+			return nil, "", 0, &customtx.InvalidTxError{Msg: fmt.Sprintf("namespace not '%s': '%s'", tokenOutput, namespace)}
+		}
+		if len(components) != 2 {
+			return nil, "", 0, &customtx.InvalidTxError{Msg: fmt.Sprintf("not enough components in output ID composite key; expected 2, received '%s'", components)}
+		}
+		txID := components[0]
+		index, err := strconv.Atoi(components[1])
+		if err != nil {
+			return nil, "", 0, &customtx.InvalidTxError{Msg: fmt.Sprintf("error parsing output index '%s': '%s'", components[1], err)}
+		}
+
+		
+		inBytes, err := t.Ledger.GetState(tokenNamespace, inKey)
+		if err != nil {
+			return nil, "", 0, err
+		}
+		if inBytes == nil {
+			return nil, "", 0, &customtx.InvalidTxError{Msg: fmt.Sprintf("input '%s' does not exist", inKey)}
+		}
+		input := &token.PlainOutput{}
+		err = proto.Unmarshal(inBytes, input)
+		if err != nil {
+			return nil, "", 0, &customtx.InvalidTxError{Msg: fmt.Sprintf("error unmarshaling input bytes: '%s'", err)}
+		}
+
+		
+		if tokenType == "" {
+			tokenType = input.Type
+		} else if tokenType != input.Type {
+			return nil, "", 0, &customtx.InvalidTxError{Msg: fmt.Sprintf("two or more token types specified in input: '%s', '%s'", tokenType, input.Type)}
+		}
+
+		
+		inputs = append(inputs, &token.InputId{TxId: txID, Index: uint32(index)})
+
+		
+		quantitySum += input.Quantity
+	}
+
+	return inputs, tokenType, quantitySum, nil
 }
 
 
