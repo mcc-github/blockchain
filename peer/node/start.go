@@ -20,6 +20,7 @@ import (
 	ccdef "github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/deliver"
+	"github.com/mcc-github/blockchain/common/diag"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/grpclogging"
 	"github.com/mcc-github/blockchain/common/grpcmetrics"
@@ -54,6 +55,7 @@ import (
 	"github.com/mcc-github/blockchain/core/handlers/validation/api"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	"github.com/mcc-github/blockchain/core/operations"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/core/scc/cscc"
@@ -155,11 +157,14 @@ func serve(args []string) error {
 		return mgmt.GetManagerForChain(chainID)
 	}
 
-	metricsProvider, metricsShutdown, err := initializeMetrics()
+	opsSystem := newOperationsSystem()
+	err := opsSystem.Start()
 	if err != nil {
-		return errors.WithMessage(err, "failed to initialize metrics system")
+		return errors.WithMessage(err, "failed to initialize operations subystems")
 	}
-	defer metricsShutdown()
+	defer opsSystem.Stop()
+
+	metricsProvider := opsSystem.Provider
 
 	membershipInfoProvider := privdata.NewMembershipInfoProvider(createSelfSignedData(), identityDeserializerFactory)
 	
@@ -353,14 +358,6 @@ func serve(args []string) error {
 	
 	serve := make(chan error)
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigs
-		logger.Debugf("sig: %s", sig)
-		serve <- nil
-	}()
-
 	go func() {
 		var grpcErr error
 		if grpcErr = peerServer.Start(); grpcErr != nil {
@@ -381,10 +378,31 @@ func serve(args []string) error {
 		}()
 	}
 
+	go handleSignals(map[os.Signal]func(){
+		syscall.SIGUSR1: func() { diag.LogGoRoutines(logger.Named("diag")) },
+		syscall.SIGINT:  func() { serve <- nil },
+		syscall.SIGTERM: func() { serve <- nil },
+	})
+
 	logger.Infof("Started peer with ID=[%s], network ID=[%s], address=[%s]", peerEndpoint.Id, networkID, peerEndpoint.Address)
 
 	
 	return <-serve
+}
+
+func handleSignals(handlers map[os.Signal]func()) {
+	var signals []os.Signal
+	for sig := range handlers {
+		signals = append(signals, sig)
+	}
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, signals...)
+
+	for sig := range signalChan {
+		logger.Infof("Received signal: %d (%s)", sig, sig)
+		handlers[sig]()
+	}
 }
 
 func localPolicy(policyObject proto.Message) policies.Policy {
@@ -809,4 +827,30 @@ func initGossipService(policyMgr policies.ChannelPolicyManagerGetter, peerServer
 		secureDialOpts,
 		bootstrap...,
 	)
+}
+
+func newOperationsSystem() *operations.System {
+	return operations.NewSystem(operations.Options{
+		Logger:        flogging.MustGetLogger("peer.operations"),
+		ListenAddress: viper.GetString("operations.listenAddress"),
+		Metrics: operations.MetricsOptions{
+			Provider: viper.GetString("operations.metrics.provider"),
+			Statsd: &operations.Statsd{
+				Network:       viper.GetString("operations.metrics.statsd.network"),
+				Address:       viper.GetString("operations.metrics.statsd.address"),
+				WriteInterval: viper.GetDuration("operations.metrics.statsd.writeInterval"),
+				Prefix:        viper.GetString("operations.metrics.statsd.prefix"),
+			},
+			Prometheus: &operations.Prometheus{
+				HandlerPath: viper.GetString("operations.metrics.prometheus.handlerPath"),
+			},
+		},
+		TLS: operations.TLS{
+			Enabled:            viper.GetBool("operations.tls.enabled"),
+			CertFile:           viper.GetString("operations.tls.cert.file"),
+			KeyFile:            viper.GetString("operations.tls.key.file"),
+			ClientCertRequired: viper.GetBool("operations.tls.clientAuthRequired"),
+			ClientCACertFiles:  viper.GetStringSlice("operations.tls.clientRootCAs.files"),
+		},
+	})
 }

@@ -61,26 +61,26 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 	}
 
 	
-	blk1MissingData := &ledger.MissingPrivateDataList{}
+	blk1MissingData := make(ledger.TxMissingPvtDataMap)
 
 	
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
-	blk1MissingData.Add("tx1", 1, "ns-2", "coll-1", true)
-	blk1MissingData.Add("tx1", 1, "ns-2", "coll-2", true)
+	blk1MissingData.Add(1, "ns-1", "coll-1", true)
+	blk1MissingData.Add(1, "ns-1", "coll-2", true)
+	blk1MissingData.Add(1, "ns-2", "coll-1", true)
+	blk1MissingData.Add(1, "ns-2", "coll-2", true)
 	
-	blk1MissingData.Add("tx2", 2, "ns-3", "coll-1", true)
+	blk1MissingData.Add(2, "ns-3", "coll-1", true)
 	
-	blk1MissingData.Add("tx4", 4, "ns-4", "coll-1", false)
-	blk1MissingData.Add("tx4", 4, "ns-4", "coll-2", false)
+	blk1MissingData.Add(4, "ns-4", "coll-1", false)
+	blk1MissingData.Add(4, "ns-4", "coll-2", false)
 
 	
-	blk2MissingData := &ledger.MissingPrivateDataList{}
+	blk2MissingData := make(ledger.TxMissingPvtDataMap)
 	
-	blk2MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
-	blk2MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+	blk2MissingData.Add(1, "ns-1", "coll-1", true)
+	blk2MissingData.Add(1, "ns-1", "coll-2", true)
 	
-	blk2MissingData.Add("tx3", 3, "ns-1", "coll-1", true)
+	blk2MissingData.Add(3, "ns-1", "coll-1", true)
 
 	
 	assert.NoError(store.Prepare(0, nil, nil))
@@ -189,26 +189,26 @@ func TestCommitPvtDataOfOldBlocks(t *testing.T) {
 	}
 
 	
-	blk1MissingData := &ledger.MissingPrivateDataList{}
+	blk1MissingData := make(ledger.TxMissingPvtDataMap)
 
 	
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
-	blk1MissingData.Add("tx1", 1, "ns-2", "coll-1", true)
-	blk1MissingData.Add("tx1", 1, "ns-2", "coll-2", true)
+	blk1MissingData.Add(1, "ns-1", "coll-1", true)
+	blk1MissingData.Add(1, "ns-1", "coll-2", true)
+	blk1MissingData.Add(1, "ns-2", "coll-1", true)
+	blk1MissingData.Add(1, "ns-2", "coll-2", true)
 	
-	blk1MissingData.Add("tx2", 2, "ns-1", "coll-1", true)
-	blk1MissingData.Add("tx2", 2, "ns-1", "coll-2", true)
-	blk1MissingData.Add("tx2", 2, "ns-3", "coll-1", true)
-	blk1MissingData.Add("tx2", 2, "ns-3", "coll-2", true)
+	blk1MissingData.Add(2, "ns-1", "coll-1", true)
+	blk1MissingData.Add(2, "ns-1", "coll-2", true)
+	blk1MissingData.Add(2, "ns-3", "coll-1", true)
+	blk1MissingData.Add(2, "ns-3", "coll-2", true)
 
 	
-	blk2MissingData := &ledger.MissingPrivateDataList{}
+	blk2MissingData := make(ledger.TxMissingPvtDataMap)
 	
-	blk2MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
-	blk2MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+	blk2MissingData.Add(1, "ns-1", "coll-1", true)
+	blk2MissingData.Add(1, "ns-1", "coll-2", true)
 	
-	blk2MissingData.Add("tx3", 3, "ns-1", "coll-1", true)
+	blk2MissingData.Add(3, "ns-1", "coll-1", true)
 
 	
 	assert.NoError(store.Prepare(0, nil, nil))
@@ -391,19 +391,19 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	store := env.TestStore
 
 	
-	blk1MissingData := &ledger.MissingPrivateDataList{}
+	blk1MissingData := make(ledger.TxMissingPvtDataMap)
 	
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+	blk1MissingData.Add(1, "ns-1", "coll-1", true)
+	blk1MissingData.Add(1, "ns-1", "coll-2", true)
 	
-	blk1MissingData.Add("tx4", 4, "ns-3", "coll-1", false)
-	blk1MissingData.Add("tx4", 4, "ns-3", "coll-2", false)
+	blk1MissingData.Add(4, "ns-3", "coll-1", false)
+	blk1MissingData.Add(4, "ns-3", "coll-2", false)
 
 	
-	blk2MissingData := &ledger.MissingPrivateDataList{}
+	blk2MissingData := make(ledger.TxMissingPvtDataMap)
 	
-	blk2MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
-	blk2MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+	blk2MissingData.Add(1, "ns-1", "coll-1", true)
+	blk2MissingData.Add(1, "ns-1", "coll-2", true)
 
 	
 	assert.NoError(store.Prepare(0, nil, nil))
@@ -527,13 +527,13 @@ func TestStorePurge(t *testing.T) {
 	assert.NoError(s.Commit())
 
 	
-	blk1MissingData := &ledger.MissingPrivateDataList{}
+	blk1MissingData := make(ledger.TxMissingPvtDataMap)
 	
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-2", true)
+	blk1MissingData.Add(1, "ns-1", "coll-1", true)
+	blk1MissingData.Add(1, "ns-1", "coll-2", true)
 	
-	blk1MissingData.Add("tx4", 4, "ns-3", "coll-1", false)
-	blk1MissingData.Add("tx4", 4, "ns-3", "coll-2", false)
+	blk1MissingData.Add(4, "ns-3", "coll-1", false)
+	blk1MissingData.Add(4, "ns-3", "coll-2", false)
 
 	
 	testDataForBlk1 := []*ledger.TxPvtData{
@@ -699,11 +699,11 @@ func testCollElgEnabled(t *testing.T) {
 	assert.NoError(store.Commit())
 
 	
-	blk1MissingData := &ledger.MissingPrivateDataList{}
-	blk1MissingData.Add("tx1", 1, "ns-1", "coll-1", true)
-	blk1MissingData.Add("tx1", 1, "ns-2", "coll-1", true)
-	blk1MissingData.Add("tx4", 4, "ns-1", "coll-2", false)
-	blk1MissingData.Add("tx4", 4, "ns-2", "coll-2", false)
+	blk1MissingData := make(ledger.TxMissingPvtDataMap)
+	blk1MissingData.Add(1, "ns-1", "coll-1", true)
+	blk1MissingData.Add(1, "ns-2", "coll-1", true)
+	blk1MissingData.Add(4, "ns-1", "coll-2", false)
+	blk1MissingData.Add(4, "ns-2", "coll-2", false)
 	testDataForBlk1 := []*ledger.TxPvtData{
 		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1"}),
 	}
@@ -711,10 +711,10 @@ func testCollElgEnabled(t *testing.T) {
 	assert.NoError(store.Commit())
 
 	
-	blk2MissingData := &ledger.MissingPrivateDataList{}
+	blk2MissingData := make(ledger.TxMissingPvtDataMap)
 	
-	blk2MissingData.Add("tx1", 1, "ns-1", "coll-2", false)
-	blk2MissingData.Add("tx1", 1, "ns-2", "coll-2", false)
+	blk2MissingData.Add(1, "ns-1", "coll-2", false)
+	blk2MissingData.Add(1, "ns-2", "coll-2", false)
 	testDataForBlk2 := []*ledger.TxPvtData{
 		produceSamplePvtdata(t, 3, []string{"ns-1:coll-1"}),
 	}

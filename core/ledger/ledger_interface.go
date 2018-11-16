@@ -226,11 +226,13 @@ type TxPvtData struct {
 }
 
 
+type TxPvtDataMap map[uint64]*TxPvtData
 
 
-type MissingPrivateData struct {
-	TxId       string
-	SeqInBlock uint64
+
+
+
+type MissingPvtData struct {
 	Namespace  string
 	Collection string
 	IsEligible bool
@@ -238,16 +240,14 @@ type MissingPrivateData struct {
 
 
 
-type MissingPrivateDataList struct {
-	List []*MissingPrivateData
-}
+type TxMissingPvtDataMap map[uint64][]*MissingPvtData
 
 
 
 type BlockAndPvtData struct {
-	Block        *common.Block
-	BlockPvtData map[uint64]*TxPvtData
-	Missing      *MissingPrivateDataList
+	Block          *common.Block
+	PvtData        TxPvtDataMap
+	MissingPvtData TxMissingPvtDataMap
 }
 
 
@@ -257,8 +257,8 @@ type BlockPvtData struct {
 }
 
 
-func (missing *MissingPrivateDataList) Add(txId string, txNum uint64, ns, coll string, isEligible bool) {
-	missing.List = append(missing.List, &MissingPrivateData{txId, txNum, ns, coll, isEligible})
+func (txMissingPvtData TxMissingPvtDataMap) Add(txNum uint64, ns, coll string, isEligible bool) {
+	txMissingPvtData[txNum] = append(txMissingPvtData[txNum], &MissingPvtData{ns, coll, isEligible})
 }
 
 

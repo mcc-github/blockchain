@@ -16,12 +16,12 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
+	lutil "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("ledgerstorage")
-var isMissingDataReconEnabled = false
 
 
 type Provider struct {
@@ -89,13 +89,6 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
 	blockNum := blockAndPvtdata.Block.Header.Number
-	missingDataList := blockAndPvtdata.Missing
-
-	if !isMissingDataReconEnabled {
-		
-		missingDataList = nil
-	}
-
 	s.rwlock.Lock()
 	defer s.rwlock.Unlock()
 
@@ -109,11 +102,10 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		
 		
 		logger.Debugf("Writing block [%d] to pvt block store", blockNum)
-		var pvtdata []*ledger.TxPvtData
-		for _, v := range blockAndPvtdata.BlockPvtData {
-			pvtdata = append(pvtdata, v)
-		}
-		if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtdata, missingDataList); err != nil {
+		
+		
+		validTxPvtData, validTxMissingPvtData := constructValidTxPvtDataAndMissingData(blockAndPvtdata)
+		if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, validTxPvtData, validTxMissingPvtData); err != nil {
 			return err
 		}
 		writtenToPvtStore = true
@@ -130,6 +122,35 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		return s.pvtdataStore.Commit()
 	}
 	return nil
+}
+
+func constructValidTxPvtDataAndMissingData(blockAndPvtData *ledger.BlockAndPvtData) ([]*ledger.TxPvtData,
+	ledger.TxMissingPvtDataMap) {
+
+	var validTxPvtData []*ledger.TxPvtData
+	validTxMissingPvtData := make(ledger.TxMissingPvtDataMap)
+
+	txsFilter := lutil.TxValidationFlags(blockAndPvtData.Block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	numTxs := uint64(len(blockAndPvtData.Block.Data.Data))
+
+	
+	for txNum := uint64(0); txNum < numTxs; txNum++ {
+		if txsFilter.IsInvalid(int(txNum)) {
+			continue
+		}
+
+		if pvtdata, ok := blockAndPvtData.PvtData[txNum]; ok {
+			validTxPvtData = append(validTxPvtData, pvtdata)
+		}
+
+		if missingPvtData, ok := blockAndPvtData.MissingPvtData[txNum]; ok {
+			for _, missing := range missingPvtData {
+				validTxMissingPvtData.Add(txNum, missing.Namespace,
+					missing.Collection, missing.IsEligible)
+			}
+		}
+	}
+	return validTxPvtData, validTxMissingPvtData
 }
 
 
@@ -156,7 +177,7 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
 	if pvtdata, err = s.getPvtDataByNumWithoutLock(blockNum, filter); err != nil {
 		return nil, err
 	}
-	return &ledger.BlockAndPvtData{Block: block, BlockPvtData: constructPvtdataMap(pvtdata)}, nil
+	return &ledger.BlockAndPvtData{Block: block, PvtData: constructPvtdataMap(pvtdata)}, nil
 }
 
 

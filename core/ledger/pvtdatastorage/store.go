@@ -55,7 +55,7 @@ type Store interface {
 	
 	
 	
-	Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missing *ledger.MissingPrivateDataList) error
+	Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error
 	
 	Commit() error
 	

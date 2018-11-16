@@ -136,3 +136,13 @@ type SignatureScheme interface {
 	
 	Verify(ipk IssuerPublicKey, signature, msg []byte, attributes []bccsp.IdemixAttribute, rhIndex int, revocationPublicKey *ecdsa.PublicKey, epoch int) error
 }
+
+
+
+type NymSignatureScheme interface {
+	
+	Sign(sk Big, Nym Ecp, RNym Big, ipk IssuerPublicKey, digest []byte) ([]byte, error)
+
+	
+	Verify(pk IssuerPublicKey, Nym Ecp, signature, digest []byte) error
+}

@@ -68,8 +68,11 @@ func (bg *BlockGenerator) NextTestBlock(numTx int, txSize int) *common.Block {
 
 func (bg *BlockGenerator) NextTestBlocks(numBlocks int) []*common.Block {
 	blocks := []*common.Block{}
+	numTx := 10
 	for i := 0; i < numBlocks; i++ {
-		blocks = append(blocks, bg.NextTestBlock(10, 100))
+		block := bg.NextTestBlock(numTx, 100)
+		block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = lutils.NewTxValidationFlagsSetValue(numTx, pb.TxValidationCode_VALID)
+		blocks = append(blocks, block)
 	}
 	return blocks
 }

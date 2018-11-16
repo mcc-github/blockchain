@@ -20,7 +20,10 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
+	lutil "github.com/mcc-github/blockchain/core/ledger/util"
+	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
+	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -57,6 +60,8 @@ func TestStore(t *testing.T) {
 	assert.Nil(t, pvtdata)
 
 	
+	
+	
 	pvtdata, err = store.GetPvtDataByNum(2, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(pvtdata))
@@ -72,12 +77,10 @@ func TestStore(t *testing.T) {
 
 	blockAndPvtdata, err := store.GetPvtDataAndBlockByNum(2, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, sampleData[2].Missing, blockAndPvtdata.Missing)
 	assert.True(t, proto.Equal(sampleData[2].Block, blockAndPvtdata.Block))
 
 	blockAndPvtdata, err = store.GetPvtDataAndBlockByNum(3, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, sampleData[3].Missing, blockAndPvtdata.Missing)
 	assert.True(t, proto.Equal(sampleData[3].Block, blockAndPvtdata.Block))
 
 	
@@ -87,12 +90,21 @@ func TestStore(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, sampleData[3].Block, blockAndPvtdata.Block)
 	
-	assert.Equal(t, 2, len(blockAndPvtdata.BlockPvtData))
+	assert.Equal(t, 2, len(blockAndPvtdata.PvtData))
 	
-	assert.Equal(t, 1, len(blockAndPvtdata.BlockPvtData[4].WriteSet.NsPvtRwset))
-	assert.Equal(t, 1, len(blockAndPvtdata.BlockPvtData[6].WriteSet.NsPvtRwset))
+	assert.Equal(t, 1, len(blockAndPvtdata.PvtData[4].WriteSet.NsPvtRwset))
+	assert.Equal(t, 1, len(blockAndPvtdata.PvtData[6].WriteSet.NsPvtRwset))
 	
-	assert.Nil(t, blockAndPvtdata.BlockPvtData[2])
+	assert.Nil(t, blockAndPvtdata.PvtData[2])
+
+	
+	
+	
+	expectedMissingDataInfo := make(ledger.MissingPvtDataInfo)
+	expectedMissingDataInfo.Add(5, 4, "ns-4", "coll-4")
+	missingDataInfo, err := store.GetMissingPvtDataInfoForMostRecentBlocks(1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMissingDataInfo, missingDataInfo)
 }
 
 func TestStoreWithExistingBlockchain(t *testing.T) {
@@ -142,7 +154,7 @@ func TestStoreWithExistingBlockchain(t *testing.T) {
 
 	
 	pvtdata := samplePvtData(t, []uint64{0})
-	assert.NoError(t, store.CommitWithPvtData(&ledger.BlockAndPvtData{Block: blockToAdd, BlockPvtData: pvtdata}))
+	assert.NoError(t, store.CommitWithPvtData(&ledger.BlockAndPvtData{Block: blockToAdd, PvtData: pvtdata}))
 	pvtdataBlockHt, err = store.pvtdataStore.LastCommittedBlockHeight()
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(10), pvtdataBlockHt)
@@ -167,7 +179,7 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	}
 	blokNumAtCrash := dataAtCrash.Block.Header.Number
 	var pvtdataAtCrash []*ledger.TxPvtData
-	for _, p := range dataAtCrash.BlockPvtData {
+	for _, p := range dataAtCrash.PvtData {
 		pvtdataAtCrash = append(pvtdataAtCrash, p)
 	}
 	
@@ -189,14 +201,14 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	pvtdata, err := store.GetPvtDataByNum(blokNumAtCrash, nil)
 	assert.NoError(t, err)
 	constructed := constructPvtdataMap(pvtdata)
-	for k, v := range dataAtCrash.BlockPvtData {
+	for k, v := range dataAtCrash.PvtData {
 		ov, ok := constructed[k]
 		assert.True(t, ok)
 		assert.Equal(t, v.SeqInBlock, ov.SeqInBlock)
 		assert.True(t, proto.Equal(v.WriteSet, ov.WriteSet))
 	}
 	for k, v := range constructed {
-		ov, ok := dataAtCrash.BlockPvtData[k]
+		ov, ok := dataAtCrash.PvtData[k]
 		assert.True(t, ok)
 		assert.Equal(t, v.SeqInBlock, ov.SeqInBlock)
 		assert.True(t, proto.Equal(v.WriteSet, ov.WriteSet))
@@ -222,7 +234,7 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 	}
 	blokNumAtCrash := dataAtCrash.Block.Header.Number
 	var pvtdataAtCrash []*ledger.TxPvtData
-	for _, p := range dataAtCrash.BlockPvtData {
+	for _, p := range dataAtCrash.PvtData {
 		pvtdataAtCrash = append(pvtdataAtCrash, p)
 	}
 
@@ -238,7 +250,7 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 	store.Init(btlPolicyForSampleData())
 	blkAndPvtdata, err := store.GetPvtDataAndBlockByNum(blokNumAtCrash, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, dataAtCrash.Missing, blkAndPvtdata.Missing)
+	assert.Equal(t, dataAtCrash.MissingPvtData, blkAndPvtdata.MissingPvtData)
 	assert.True(t, proto.Equal(dataAtCrash.Block, blkAndPvtdata.Block))
 }
 
@@ -318,10 +330,25 @@ func sampleDataWithPvtdataForSelectiveTx(t *testing.T) []*ledger.BlockAndPvtData
 	for i := 0; i < 10; i++ {
 		blockAndpvtdata = append(blockAndpvtdata, &ledger.BlockAndPvtData{Block: blocks[i]})
 	}
+
 	
-	blockAndpvtdata[2].BlockPvtData = samplePvtData(t, []uint64{3, 5})
+	blockAndpvtdata[2].PvtData = samplePvtData(t, []uint64{3, 5, 6})
+	txFilter := lutil.TxValidationFlags(blockAndpvtdata[2].Block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	txFilter.SetFlag(6, pb.TxValidationCode_INVALID_WRITESET)
+	blockAndpvtdata[2].Block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txFilter
+
 	
-	blockAndpvtdata[3].BlockPvtData = samplePvtData(t, []uint64{4, 6})
+	blockAndpvtdata[3].PvtData = samplePvtData(t, []uint64{4, 6})
+
+	
+	missingData := make(ledger.TxMissingPvtDataMap)
+	missingData.Add(4, "ns-4", "coll-4", true)
+	missingData.Add(5, "ns-5", "coll-5", true)
+	blockAndpvtdata[5].MissingPvtData = missingData
+	txFilter = lutil.TxValidationFlags(blockAndpvtdata[5].Block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	txFilter.SetFlag(5, pb.TxValidationCode_INVALID_WRITESET)
+	blockAndpvtdata[5].Block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txFilter
+
 	return blockAndpvtdata
 }
 
@@ -331,8 +358,8 @@ func sampleDataWithPvtdataForAllTxs(t *testing.T) []*ledger.BlockAndPvtData {
 	for i := 0; i < 10; i++ {
 		blockAndpvtdata = append(blockAndpvtdata,
 			&ledger.BlockAndPvtData{
-				Block:        blocks[i],
-				BlockPvtData: samplePvtData(t, []uint64{uint64(i), uint64(i + 1)}),
+				Block:   blocks[i],
+				PvtData: samplePvtData(t, []uint64{uint64(i), uint64(i + 1)}),
 			},
 		)
 	}
