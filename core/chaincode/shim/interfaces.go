@@ -28,9 +28,6 @@ type Chaincode interface {
 
 
 
-
-
-
 type ChaincodeStubInterface interface {
 	
 	

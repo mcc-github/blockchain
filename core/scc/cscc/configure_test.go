@@ -19,6 +19,7 @@ import (
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/genesis"
 	"github.com/mcc-github/blockchain/common/localmsp"
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/mocks/scc"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
@@ -234,6 +235,7 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 		mp,
 		platforms.NewRegistry(&golang.Platform{}),
 		peer.DefaultSupport,
+		&disabled.Provider{},
 	)
 
 	

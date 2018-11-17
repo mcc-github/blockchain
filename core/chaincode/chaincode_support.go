@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
@@ -54,6 +55,7 @@ type ChaincodeSupport struct {
 	SystemCCProvider sysccprovider.SystemChaincodeProvider
 	Lifecycle        Lifecycle
 	appConfig        ApplicationConfigRetriever
+	Metrics          *Metrics
 }
 
 
@@ -70,6 +72,7 @@ func NewChaincodeSupport(
 	SystemCCProvider sysccprovider.SystemChaincodeProvider,
 	platformRegistry *platforms.Registry,
 	appConfig ApplicationConfigRetriever,
+	metricsProvider metrics.Provider,
 ) *ChaincodeSupport {
 	cs := &ChaincodeSupport{
 		UserRunsCC:       userRunsCC,
@@ -80,6 +83,7 @@ func NewChaincodeSupport(
 		SystemCCProvider: SystemCCProvider,
 		Lifecycle:        lifecycle,
 		appConfig:        appConfig,
+		Metrics:          NewMetrics(metricsProvider),
 	}
 
 	
@@ -177,6 +181,7 @@ func (cs *ChaincodeSupport) HandleChaincodeStream(stream ccintf.ChaincodeStream)
 		UUIDGenerator:              UUIDGeneratorFunc(util.GenerateUUID),
 		LedgerGetter:               peer.Default,
 		AppConfig:                  cs.appConfig,
+		Metrics:                    cs.Metrics,
 	}
 
 	return handler.ProcessStream(stream)

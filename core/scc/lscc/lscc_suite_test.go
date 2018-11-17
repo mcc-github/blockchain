@@ -9,6 +9,7 @@ package lscc_test
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -35,6 +36,16 @@ type fileSystemSupport interface {
 
 type ccPackage interface {
 	ccprovider.CCPackage
+}
+
+
+type chaincodeStub interface {
+	shim.ChaincodeStubInterface
+}
+
+
+type stateQueryIterator interface {
+	shim.StateQueryIteratorInterface
 }
 
 func TestLscc(t *testing.T) {
