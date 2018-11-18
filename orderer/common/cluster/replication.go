@@ -7,13 +7,16 @@ SPDX-License-Identifier: Apache-2.0
 package cluster
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 	"time"
 
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/comm"
+	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/pkg/errors"
@@ -23,6 +26,201 @@ const (
 	
 	RetryTimeout = time.Second * 10
 )
+
+
+
+
+func PullerConfigFromTopLevelConfig(conf *localconfig.TopLevel, tlsKey, tlsCert []byte, signer crypto.LocalSigner) PullerConfig {
+	return PullerConfig{
+		Channel:             conf.General.SystemChannel,
+		MaxTotalBufferBytes: conf.General.Cluster.ReplicationBufferSize,
+		Timeout:             conf.General.Cluster.RPCTimeout,
+		TLSKey:              tlsKey,
+		TLSCert:             tlsCert,
+		Signer:              signer,
+	}
+}
+
+
+
+
+type LedgerWriter interface {
+	
+	Append(block *common.Block) error
+
+	
+	Height() uint64
+}
+
+
+
+
+type LedgerFactory interface {
+	
+	
+	GetOrCreate(chainID string) (LedgerWriter, error)
+
+	
+	Close()
+}
+
+
+
+
+type ChannelLister interface {
+	
+	Channels() []string
+	
+	Close()
+}
+
+
+type Replicator struct {
+	SystemChannel    string
+	ChannelLister    ChannelLister
+	Logger           *flogging.FabricLogger
+	Puller           *BlockPuller
+	BootBlock        *common.Block
+	AmIPartOfChannel selfMembershipPredicate
+	LedgerFactory    LedgerFactory
+}
+
+
+
+func (r *Replicator) IsReplicationNeeded() (bool, error) {
+	defer r.LedgerFactory.Close()
+	systemChannelLedger, err := r.LedgerFactory.GetOrCreate(r.SystemChannel)
+	if err != nil {
+		return false, err
+	}
+
+	lastBlockSeq := systemChannelLedger.Height() - 1
+	if r.BootBlock.Header.Number > lastBlockSeq {
+		return true, nil
+	}
+	return false, nil
+}
+
+
+func (r *Replicator) ReplicateChains() {
+	channels := r.discoverChannels()
+	channels2Pull := r.channelsToPull(channels)
+	r.Logger.Info("Found myself in", len(channels2Pull), "channels:", channels2Pull)
+	for _, channel := range channels2Pull {
+		r.PullChannel(channel)
+	}
+	
+	r.PullChannel(r.SystemChannel)
+	r.LedgerFactory.Close()
+}
+
+func (r *Replicator) discoverChannels() []string {
+	r.Logger.Debug("Entering")
+	defer r.Logger.Debug("Exiting")
+	channels := r.ChannelLister.Channels()
+	r.Logger.Info("Discovered", len(channels), "channels:", channels)
+	r.ChannelLister.Close()
+	return channels
+}
+
+
+
+func (r *Replicator) PullChannel(channel string) error {
+	r.Logger.Info("Pulling channel", channel)
+	puller := r.Puller.Clone()
+	defer puller.Close()
+	puller.Channel = channel
+
+	endpoint, latestHeight := latestHeightAndEndpoint(puller)
+	if endpoint == "" {
+		return errors.Errorf("failed obtaining the latest block for channel %s", channel)
+	}
+	r.Logger.Info("Latest block height for channel", channel, "is", latestHeight)
+	
+	
+	
+	if channel == r.SystemChannel && latestHeight-1 < r.BootBlock.Header.Number {
+		return errors.Errorf("latest height found among system channel(%s) orderers is %d, but the boot block's "+
+			"sequence is %d", r.SystemChannel, latestHeight, r.BootBlock.Header.Number)
+	}
+	return r.pullChannelBlocks(channel, puller, latestHeight)
+}
+
+func (r *Replicator) pullChannelBlocks(channel string, puller ChainPuller, latestHeight uint64) error {
+	ledger, err := r.LedgerFactory.GetOrCreate(channel)
+	if err != nil {
+		r.Logger.Panicf("Failed to create a ledger for channel %s: %v", channel, err)
+	}
+	
+	genesisBlock := puller.PullBlock(0)
+	r.appendBlock(genesisBlock, ledger)
+	actualPrevHash := genesisBlock.Header.Hash()
+
+	for seq := uint64(1); seq < latestHeight; seq++ {
+		block := puller.PullBlock(seq)
+		reportedPrevHash := block.Header.PreviousHash
+		if !bytes.Equal(reportedPrevHash, actualPrevHash) {
+			return errors.Errorf("block header mismatch on sequence %d, expected %x, got %x",
+				block.Header.Number, actualPrevHash, reportedPrevHash)
+		}
+		actualPrevHash = block.Header.Hash()
+		if channel == r.SystemChannel && block.Header.Number == r.BootBlock.Header.Number {
+			r.compareBootBlockWithSystemChannelLastConfigBlock(block)
+			r.appendBlock(block, ledger)
+			
+			return nil
+		}
+		r.appendBlock(block, ledger)
+	}
+	return nil
+}
+
+func (r *Replicator) appendBlock(block *common.Block, ledger LedgerWriter) {
+	if err := ledger.Append(block); err != nil {
+		r.Logger.Panicf("Failed to write block %d: %v", block.Header.Number, err)
+	}
+}
+
+func (r *Replicator) compareBootBlockWithSystemChannelLastConfigBlock(block *common.Block) {
+	
+	block.Header.DataHash = block.Data.Hash()
+
+	bootBlockHash := r.BootBlock.Header.Hash()
+	retrievedBlockHash := block.Header.Hash()
+	if bytes.Equal(bootBlockHash, retrievedBlockHash) {
+		return
+	}
+	r.Logger.Panicf("Block header mismatch on last system channel block, expected %s, got %s",
+		hex.EncodeToString(bootBlockHash), hex.EncodeToString(retrievedBlockHash))
+}
+
+func (r *Replicator) channelsToPull(channels []string) []string {
+	r.Logger.Info("Will now pull channels:", channels)
+	var channelsToPull []string
+	for _, channel := range channels {
+		r.Logger.Info("Pulling chain for", channel)
+		puller := r.Puller.Clone()
+		puller.Channel = channel
+		
+		
+		bufferSize := puller.MaxTotalBufferBytes
+		puller.MaxTotalBufferBytes = 1
+		err := Participant(puller, r.AmIPartOfChannel)
+		puller.Close()
+		
+		puller.MaxTotalBufferBytes = bufferSize
+		if err == NotInChannelError {
+			r.Logger.Info("I do not belong to channel", channel, ", skipping chain retrieval")
+			continue
+		}
+		if err != nil {
+			r.Logger.Panicf("Failed classifying whether I belong to channel %s: %v, skipping chain retrieval", channel, err)
+			continue
+		}
+		channelsToPull = append(channelsToPull, channel)
+	}
+	return channelsToPull
+}
 
 
 type PullerConfig struct {
@@ -123,13 +321,15 @@ func Participant(puller ChainPuller, analyzeLastConfBlock selfMembershipPredicat
 	if endpoint == "" {
 		return errors.New("no available orderer")
 	}
-
 	lastBlock := puller.PullBlock(latestHeight - 1)
 	lastConfNumber, err := lastConfigFromBlock(lastBlock)
 	if err != nil {
 		return err
 	}
-
+	
+	
+	
+	puller.Close()
 	lastConfigBlock := puller.PullBlock(lastConfNumber)
 	return analyzeLastConfBlock(lastConfigBlock)
 }

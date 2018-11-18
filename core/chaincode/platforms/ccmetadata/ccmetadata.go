@@ -7,7 +7,7 @@ import (
 )
 
 
-var logger = flogging.MustGetLogger("chaincode-metadata")
+var logger = flogging.MustGetLogger("chaincode.platform.metadata")
 
 
 

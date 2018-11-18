@@ -31,7 +31,7 @@ import (
 	cutil "github.com/mcc-github/blockchain/core/container/util"
 )
 
-var logger = flogging.MustGetLogger("util")
+var logger = flogging.MustGetLogger("chaincode.platform.util")
 
 
 func ComputeHash(contents []byte, hash []byte) []byte {

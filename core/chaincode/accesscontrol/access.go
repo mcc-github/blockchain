@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-var logger = flogging.MustGetLogger("accessControl")
+var logger = flogging.MustGetLogger("chaincode.accesscontrol")
 
 
 

@@ -20,12 +20,429 @@ import (
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/cluster/mocks"
+	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
+
+func TestIsReplicationNeeded(t *testing.T) {
+	for _, testCase := range []struct {
+		name                string
+		bootBlock           *common.Block
+		systemChannelHeight uint64
+		systemChannelError  error
+		expectedError       string
+		replicationNeeded   bool
+	}{
+		{
+			name:                "no replication needed",
+			systemChannelHeight: 100,
+			bootBlock:           &common.Block{Header: &common.BlockHeader{Number: 99}},
+		},
+		{
+			name:                "replication is needed",
+			systemChannelHeight: 99,
+			bootBlock:           &common.Block{Header: &common.BlockHeader{Number: 99}},
+			replicationNeeded:   true,
+		},
+		{
+			name:               "IO error",
+			systemChannelError: errors.New("IO error"),
+			expectedError:      "IO error",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			ledgerWriter := &mocks.LedgerWriter{}
+			ledgerWriter.On("Height").Return(testCase.systemChannelHeight)
+
+			ledgerFactory := &mocks.LedgerFactory{}
+			ledgerFactory.On("Close")
+			ledgerFactory.On("GetOrCreate", "system").Return(ledgerWriter, testCase.systemChannelError)
+
+			r := cluster.Replicator{
+				Logger:        flogging.MustGetLogger("test"),
+				BootBlock:     testCase.bootBlock,
+				SystemChannel: "system",
+				LedgerFactory: ledgerFactory,
+			}
+
+			ok, err := r.IsReplicationNeeded()
+			if testCase.expectedError != "" {
+				assert.EqualError(t, err, testCase.expectedError)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, testCase.replicationNeeded, ok)
+			}
+			
+			ledgerFactory.AssertCalled(t, "Close")
+		})
+	}
+}
+
+func TestReplicateChainsFailures(t *testing.T) {
+	for _, testCase := range []struct {
+		name                    string
+		blocks                  []*common.Block
+		expectedError           string
+		latestBlockSeqInOrderer uint64
+		ledgerFactoryError      error
+		appendBlockError        error
+		expectedPanic           string
+		mutateBlocks            func([]*common.Block)
+	}{
+		{
+			name:          "no block received",
+			expectedError: "failed obtaining the latest block for channel system",
+		},
+		{
+			name: "latest block seq is less than boot block seq",
+			expectedError: "latest height found among system channel(system) orderers is 19," +
+				" but the boot block's sequence is 21",
+			latestBlockSeqInOrderer: 18,
+		},
+		{
+			name: "hash chain mismatch",
+			expectedError: "block header mismatch on sequence 11, " +
+				"expected 9cd61b7e9a5ea2d128cc877e5304e7205888175a8032d40b97db7412dca41d9e, got 010203",
+			latestBlockSeqInOrderer: 21,
+			mutateBlocks: func(systemChannelBlocks []*common.Block) {
+				systemChannelBlocks[len(systemChannelBlocks)/2].Header.PreviousHash = []byte{1, 2, 3}
+			},
+		},
+		{
+			name: "last pulled block doesn't match the boot block",
+			expectedPanic: "Block header mismatch on last system channel block," +
+				" expected 8ec93b2ef5ffdc302f0c0e24611be04ad2b17b099a1aeafd7cfb76a95923f146," +
+				" got e428decfc78f8e4c97b26da9c16f9d0b73f886dafa80477a0dd9bac7eb14fe7a",
+			latestBlockSeqInOrderer: 21,
+			mutateBlocks: func(systemChannelBlocks []*common.Block) {
+				systemChannelBlocks[21].Header.DataHash = nil
+			},
+		},
+		{
+			name:                    "failure in creating ledger",
+			latestBlockSeqInOrderer: 21,
+			ledgerFactoryError:      errors.New("IO error"),
+			expectedPanic:           "Failed to create a ledger for channel system: IO error",
+		},
+		{
+			name:                    "failure in appending a block to the ledger",
+			latestBlockSeqInOrderer: 21,
+			appendBlockError:        errors.New("IO error"),
+			expectedPanic:           "Failed to write block 0: IO error",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			systemChannelBlocks := createBlockChain(0, 21)
+			if testCase.mutateBlocks != nil {
+				testCase.mutateBlocks(systemChannelBlocks)
+			}
+
+			lw := &mocks.LedgerWriter{}
+			lw.On("Append", mock.Anything).Return(testCase.appendBlockError)
+
+			lf := &mocks.LedgerFactory{}
+			lf.On("GetOrCreate", "system").Return(lw, testCase.ledgerFactoryError)
+
+			osn := newClusterNode(t)
+			defer osn.stop()
+
+			dialer := newCountingDialer()
+			bp := newBlockPuller(dialer, osn.srv.Address())
+			bp.FetchTimeout = time.Millisecond * 100
+
+			r := cluster.Replicator{
+				Logger:        flogging.MustGetLogger("test"),
+				BootBlock:     systemChannelBlocks[21],
+				SystemChannel: "system",
+				LedgerFactory: lf,
+				Puller:        bp,
+			}
+
+			osn.addExpectProbeAssert()
+			osn.enqueueResponse(testCase.latestBlockSeqInOrderer)
+			osn.addExpectProbeAssert()
+			osn.enqueueResponse(testCase.latestBlockSeqInOrderer)
+			osn.addExpectPullAssert(0)
+			for _, block := range systemChannelBlocks {
+				osn.blockResponses <- &orderer.DeliverResponse{
+					Type: &orderer.DeliverResponse_Block{Block: block},
+				}
+			}
+
+			if testCase.expectedPanic == "" {
+				err := r.PullChannel("system")
+				assert.EqualError(t, err, testCase.expectedError)
+			} else {
+				assert.PanicsWithValue(t, testCase.expectedPanic, func() {
+					r.PullChannel("system")
+				})
+			}
+
+			bp.Close()
+			dialer.assertAllConnectionsClosed(t)
+		})
+	}
+}
+
+func TestPullerConfigFromTopLevelConfig(t *testing.T) {
+	signer := &crypto.LocalSigner{}
+	expected := cluster.PullerConfig{
+		Channel:             "system",
+		MaxTotalBufferBytes: 100,
+		Signer:              signer,
+		TLSCert:             []byte{3, 2, 1},
+		TLSKey:              []byte{1, 2, 3},
+		Timeout:             time.Hour,
+	}
+
+	topLevelConfig := &localconfig.TopLevel{
+		General: localconfig.General{
+			SystemChannel: "system",
+			Cluster: localconfig.Cluster{
+				ReplicationBufferSize: 100,
+				RPCTimeout:            time.Hour,
+			},
+		},
+	}
+
+	config := cluster.PullerConfigFromTopLevelConfig(topLevelConfig, []byte{1, 2, 3}, []byte{3, 2, 1}, signer)
+	assert.Equal(t, expected, config)
+}
+
+func TestReplicateChainsChannelClassificationFailure(t *testing.T) {
+	
+	
+
+	block30WithConfigBlockOf21 := common.NewBlock(30, nil)
+	block30WithConfigBlockOf21.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = utils.MarshalOrPanic(&common.Metadata{
+		Value: utils.MarshalOrPanic(&common.LastConfig{Index: 21}),
+	})
+
+	osn := newClusterNode(t)
+	defer osn.stop()
+	osn.blockResponses = make(chan *orderer.DeliverResponse, 1000)
+
+	dialer := newCountingDialer()
+	bp := newBlockPuller(dialer, osn.srv.Address())
+	bp.FetchTimeout = time.Hour
+
+	channelLister := &mocks.ChannelLister{}
+	channelLister.On("Channels").Return([]string{"A"})
+	channelLister.On("Close")
+
+	
+	osn.addExpectProbeAssert()
+	osn.enqueueResponse(30)
+
+	
+	osn.addExpectProbeAssert()
+	osn.enqueueResponse(30)
+	osn.addExpectPullAssert(30)
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{Block: block30WithConfigBlockOf21},
+	}
+	
+	
+	
+	osn.blockResponses <- nil
+	
+	osn.addExpectProbeAssert()
+	osn.enqueueResponse(30)
+	
+	osn.enqueueResponse(21)
+	osn.addExpectPullAssert(21)
+
+	r := cluster.Replicator{
+		AmIPartOfChannel: func(configBlock *common.Block) error {
+			return errors.New("oops")
+		},
+		Logger:        flogging.MustGetLogger("test"),
+		SystemChannel: "system",
+		ChannelLister: channelLister,
+		Puller:        bp,
+	}
+
+	assert.PanicsWithValue(t, "Failed classifying whether I belong to channel A: oops, skipping chain retrieval", func() {
+		r.ReplicateChains()
+	})
+
+	bp.Close()
+	dialer.assertAllConnectionsClosed(t)
+}
+
+func TestReplicateChainsGreenPath(t *testing.T) {
+	
+	
+	
+
+	systemChannelBlocks := createBlockChain(0, 21)
+	block30WithConfigBlockOf21 := common.NewBlock(30, nil)
+	block30WithConfigBlockOf21.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = utils.MarshalOrPanic(&common.Metadata{
+		Value: utils.MarshalOrPanic(&common.LastConfig{Index: 21}),
+	})
+
+	osn := newClusterNode(t)
+	defer osn.stop()
+	osn.blockResponses = make(chan *orderer.DeliverResponse, 1000)
+
+	dialer := newCountingDialer()
+	bp := newBlockPuller(dialer, osn.srv.Address())
+	bp.FetchTimeout = time.Hour
+
+	channelLister := &mocks.ChannelLister{}
+	channelLister.On("Channels").Return([]string{"A", "B"})
+	channelLister.On("Close")
+
+	amIPartOfChannelMock := &mock.Mock{}
+	
+	amIPartOfChannelMock.On("func2").Return(nil).Once()
+	
+	amIPartOfChannelMock.On("func2").Return(cluster.NotInChannelError).Once()
+
+	
+	blocksCommittedToLedger := make(chan *common.Block, 22+31)
+
+	lw := &mocks.LedgerWriter{}
+	lw.On("Append", mock.Anything).Return(nil).Run(func(arg mock.Arguments) {
+		blocksCommittedToLedger <- arg.Get(0).(*common.Block)
+	})
+
+	lf := &mocks.LedgerFactory{}
+	lf.On("Close")
+	lf.On("GetOrCreate", "A").Return(lw, nil)
+	lf.On("GetOrCreate", "B").Return(lw, nil)
+	lf.On("GetOrCreate", "system").Return(lw, nil)
+
+	r := cluster.Replicator{
+		LedgerFactory: lf,
+		AmIPartOfChannel: func(configBlock *common.Block) error {
+			return amIPartOfChannelMock.Called().Error(0)
+		},
+		Logger:        flogging.MustGetLogger("test"),
+		SystemChannel: "system",
+		ChannelLister: channelLister,
+		Puller:        bp,
+		BootBlock:     systemChannelBlocks[21],
+	}
+
+	for _, channel := range []string{"A", "B"} {
+		channel := channel
+		
+		
+		
+
+		
+		osn.seekAssertions <- func(info *orderer.SeekInfo, actualChannel string) {
+			
+			assert.NotNil(osn.t, info.GetStart().GetNewest())
+			assert.Equal(t, channel, actualChannel)
+		}
+
+		
+		
+		osn.enqueueResponse(30)
+
+		
+		osn.addExpectProbeAssert()
+		osn.enqueueResponse(30)
+
+		
+		osn.addExpectPullAssert(30)
+		osn.blockResponses <- &orderer.DeliverResponse{
+			Type: &orderer.DeliverResponse_Block{Block: block30WithConfigBlockOf21},
+		}
+		
+		osn.blockResponses <- nil
+		
+		osn.addExpectProbeAssert()
+		osn.enqueueResponse(30)
+		
+		osn.enqueueResponse(21)
+		osn.addExpectPullAssert(21)
+		
+		osn.blockResponses <- nil
+	}
+
+	
+	
+
+	
+	osn.seekAssertions <- func(info *orderer.SeekInfo, actualChannel string) {
+		
+		assert.NotNil(osn.t, info.GetStart().GetNewest())
+		assert.Equal(t, "A", actualChannel)
+	}
+	osn.enqueueResponse(30)
+	
+	osn.enqueueResponse(30)
+	osn.addExpectProbeAssert()
+	osn.addExpectPullAssert(0)
+	
+	for _, block := range createBlockChain(0, 30) {
+		osn.blockResponses <- &orderer.DeliverResponse{
+			Type: &orderer.DeliverResponse_Block{Block: block},
+		}
+	}
+	
+	
+	osn.blockResponses <- nil
+
+	
+	
+	osn.seekAssertions <- func(info *orderer.SeekInfo, actualChannel string) {
+		
+		assert.NotNil(osn.t, info.GetStart().GetNewest())
+		assert.Equal(t, "system", actualChannel)
+	}
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{Block: systemChannelBlocks[21]},
+	}
+	osn.addExpectProbeAssert()
+	osn.enqueueResponse(21)
+	osn.addExpectPullAssert(0)
+	for _, block := range systemChannelBlocks {
+		osn.blockResponses <- &orderer.DeliverResponse{
+			Type: &orderer.DeliverResponse_Block{Block: block},
+		}
+	}
+
+	
+	
+	
+	r.ReplicateChains()
+
+	
+	
+	
+	close(blocksCommittedToLedger)
+	assert.Len(t, blocksCommittedToLedger, cap(blocksCommittedToLedger))
+	
+	var expectedSequence uint64
+	for block := range blocksCommittedToLedger {
+		assert.Equal(t, expectedSequence, block.Header.Number)
+		expectedSequence++
+		if expectedSequence == 31 {
+			break
+		}
+	}
+
+	
+	expectedSequence = uint64(0)
+	for block := range blocksCommittedToLedger {
+		assert.Equal(t, expectedSequence, block.Header.Number)
+		expectedSequence++
+	}
+
+	bp.Close()
+	dialer.assertAllConnectionsClosed(t)
+	lf.AssertNumberOfCalls(t, "Close", 1)
+}
 
 func TestParticipant(t *testing.T) {
 	for _, testCase := range []struct {
@@ -108,6 +525,7 @@ func TestParticipant(t *testing.T) {
 			puller.On("HeightsByEndpoints").Return(testCase.heightsByEndpointsReturns)
 			puller.On("PullBlock", testCase.latestBlockSeq).Return(testCase.latestBlock)
 			puller.On("PullBlock", testCase.latestConfigBlockSeq).Return(testCase.latestConfigBlock)
+			puller.On("Close")
 
 			err := cluster.Participant(puller, predicate)
 			if testCase.expectedError != "" {

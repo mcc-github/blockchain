@@ -24,7 +24,7 @@ import (
 	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
-var logger = flogging.MustGetLogger("java-platform")
+var logger = flogging.MustGetLogger("chaincode.platform.java")
 
 
 type Platform struct {
