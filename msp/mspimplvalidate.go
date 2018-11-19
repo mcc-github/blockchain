@@ -269,19 +269,3 @@ func getSubjectKeyIdentifierFromCert(cert *x509.Certificate) ([]byte, error) {
 
 	return nil, errors.New("subjectKeyIdentifier not found in certificate")
 }
-
-
-
-
-func isCACert(cert *x509.Certificate) bool {
-	_, err := getSubjectKeyIdentifierFromCert(cert)
-	if err != nil {
-		return false
-	}
-
-	if !cert.IsCA {
-		return false
-	}
-
-	return true
-}

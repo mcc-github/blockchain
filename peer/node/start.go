@@ -20,7 +20,6 @@ import (
 	ccdef "github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/deliver"
-	"github.com/mcc-github/blockchain/common/diag"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/grpclogging"
 	"github.com/mcc-github/blockchain/common/grpcmetrics"
@@ -378,11 +377,10 @@ func serve(args []string) error {
 		}()
 	}
 
-	go handleSignals(map[os.Signal]func(){
-		syscall.SIGUSR1: func() { diag.LogGoRoutines(logger.Named("diag")) },
+	go handleSignals(addPlatformSignals(map[os.Signal]func(){
 		syscall.SIGINT:  func() { serve <- nil },
 		syscall.SIGTERM: func() { serve <- nil },
-	})
+	}))
 
 	logger.Infof("Started peer with ID=[%s], network ID=[%s], address=[%s]", peerEndpoint.Id, networkID, peerEndpoint.Address)
 

@@ -55,7 +55,8 @@ type ChaincodeSupport struct {
 	SystemCCProvider sysccprovider.SystemChaincodeProvider
 	Lifecycle        Lifecycle
 	appConfig        ApplicationConfigRetriever
-	Metrics          *Metrics
+	HandlerMetrics   *HandlerMetrics
+	LaunchMetrics    *LaunchMetrics
 }
 
 
@@ -83,7 +84,8 @@ func NewChaincodeSupport(
 		SystemCCProvider: SystemCCProvider,
 		Lifecycle:        lifecycle,
 		appConfig:        appConfig,
-		Metrics:          NewMetrics(metricsProvider),
+		HandlerMetrics:   NewHandlerMetrics(metricsProvider),
+		LaunchMetrics:    NewLaunchMetrics(metricsProvider),
 	}
 
 	
@@ -109,6 +111,7 @@ func NewChaincodeSupport(
 		Registry:        cs.HandlerRegistry,
 		PackageProvider: packageProvider,
 		StartupTimeout:  config.StartupTimeout,
+		Metrics:         cs.LaunchMetrics,
 	}
 
 	return cs
@@ -181,7 +184,7 @@ func (cs *ChaincodeSupport) HandleChaincodeStream(stream ccintf.ChaincodeStream)
 		UUIDGenerator:              UUIDGeneratorFunc(util.GenerateUUID),
 		LedgerGetter:               peer.Default,
 		AppConfig:                  cs.appConfig,
-		Metrics:                    cs.Metrics,
+		Metrics:                    cs.HandlerMetrics,
 	}
 
 	return handler.ProcessStream(stream)

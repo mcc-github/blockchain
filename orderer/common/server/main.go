@@ -21,7 +21,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto"
-	"github.com/mcc-github/blockchain/common/diag"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/grpclogging"
 	"github.com/mcc-github/blockchain/common/grpcmetrics"
@@ -132,10 +131,9 @@ func Start(cmd string, conf *localconfig.TopLevel) {
 	switch cmd {
 	case start.FullCommand(): 
 		logger.Infof("Starting %s", metadata.GetVersionInfo())
-		go handleSignals(map[os.Signal]func(){
+		go handleSignals(addPlatformSignals(map[os.Signal]func(){
 			syscall.SIGTERM: func() { grpcServer.Stop() },
-			syscall.SIGUSR1: func() { diag.LogGoRoutines(logger.Named("diag")) },
-		})
+		}))
 		initializeProfilingService(conf)
 		ab.RegisterAtomicBroadcastServer(grpcServer.Server(), server)
 		logger.Info("Beginning to serve requests")
