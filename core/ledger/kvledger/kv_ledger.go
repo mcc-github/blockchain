@@ -349,11 +349,12 @@ func (l *kvLedger) CommitPvtData(pvtData []*ledger.BlockPvtData) ([]*ledger.Pvtd
 	}
 
 	
-	
-	
-	
-	
+	err = l.txtmgmt.RemoveStaleAndCommitPvtDataOfOldBlocks(validPvtData)
+	if err != nil {
+		return nil, err
+	}
 
+	
 	if err := l.blockStore.ResetLastUpdatedOldBlocksList(); err != nil {
 		return nil, err
 	}

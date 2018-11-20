@@ -56,6 +56,14 @@ type HashedCompositeKey struct {
 }
 
 
+type PvtKVWrite struct {
+	Key      string
+	IsDelete bool
+	Value    []byte
+	Version  *version.Height
+}
+
+
 
 type UpdateBatch struct {
 	PubUpdates  *PubUpdateBatch
@@ -192,8 +200,11 @@ func (h HashedUpdateBatch) ToCompositeKeyMap() map[HashedCompositeKey]*statedb.V
 }
 
 
-func (p PvtUpdateBatch) ToCompositeKeyMap() map[PvtdataCompositeKey]*statedb.VersionedValue {
-	m := make(map[PvtdataCompositeKey]*statedb.VersionedValue)
+type PvtdataCompositeKeyMap map[PvtdataCompositeKey]*statedb.VersionedValue
+
+
+func (p PvtUpdateBatch) ToCompositeKeyMap() PvtdataCompositeKeyMap {
+	m := make(PvtdataCompositeKeyMap)
 	for ns, nsBatch := range p.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {

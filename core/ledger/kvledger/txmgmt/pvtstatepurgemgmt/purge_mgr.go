@@ -15,6 +15,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
+	"github.com/mcc-github/blockchain/core/ledger/util"
 )
 
 
@@ -28,6 +29,8 @@ type PurgeMgr interface {
 		pvtUpdates *privacyenabledstate.PvtUpdateBatch,
 		hashedUpdates *privacyenabledstate.HashedUpdateBatch) error
 	
+	UpdateBookkeepingForPvtDataOfOldBlocks(pvtUpdates *privacyenabledstate.PvtUpdateBatch) error
+	
 	BlockCommitDone() error
 }
 
@@ -37,7 +40,7 @@ type keyAndVersion struct {
 	purgeKeyOnly    bool
 }
 
-type expiryInfoMap map[*privacyenabledstate.HashedCompositeKey]*keyAndVersion
+type expiryInfoMap map[privacyenabledstate.HashedCompositeKey]*keyAndVersion
 
 type workingset struct {
 	toPurge             expiryInfoMap
@@ -84,6 +87,28 @@ func (p *purgeMgr) PrepareForExpiringKeys(expiringAtBlk uint64) {
 func (p *purgeMgr) WaitForPrepareToFinish() {
 	p.lock.Lock()
 	p.lock.Unlock()
+}
+
+func (p *purgeMgr) UpdateBookkeepingForPvtDataOfOldBlocks(pvtUpdates *privacyenabledstate.PvtUpdateBatch) error {
+	builder := newExpiryScheduleBuilder(p.btlPolicy)
+	pvtUpdateCompositeKeyMap := pvtUpdates.ToCompositeKeyMap()
+	for k, vv := range pvtUpdateCompositeKeyMap {
+		builder.add(k.Namespace, k.CollectionName, k.Key, util.ComputeStringHash(k.Key), vv)
+	}
+
+	var updatedList []*expiryInfo
+	for _, toAdd := range builder.getExpiryInfo() {
+		toUpdate, err := p.expKeeper.retrieveByExpiryKey(toAdd.expiryInfoKey)
+		if err != nil {
+			return err
+		}
+		
+		
+		
+		toUpdate.pvtdataKeys.addAll(toAdd.pvtdataKeys)
+		updatedList = append(updatedList, toUpdate)
+	}
+	return p.expKeeper.updateBookkeeping(updatedList, nil)
 }
 
 
@@ -216,18 +241,18 @@ func (p *purgeMgr) preloadCommittedVersionsInCache(expInfoMap expiryInfoMap) {
 	}
 	var hashedKeys []*privacyenabledstate.HashedCompositeKey
 	for k := range expInfoMap {
-		hashedKeys = append(hashedKeys, k)
+		hashedKeys = append(hashedKeys, &k)
 	}
 	p.db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedKeys)
 }
 
 func transformToExpiryInfoMap(expiryInfo []*expiryInfo) expiryInfoMap {
-	var expinfoMap expiryInfoMap = make(map[*privacyenabledstate.HashedCompositeKey]*keyAndVersion)
+	expinfoMap := make(expiryInfoMap)
 	for _, expinfo := range expiryInfo {
 		for ns, colls := range expinfo.pvtdataKeys.Map {
 			for coll, keysAndHashes := range colls.Map {
 				for _, keyAndHash := range keysAndHashes.List {
-					compositeKey := &privacyenabledstate.HashedCompositeKey{Namespace: ns, CollectionName: coll, KeyHash: string(keyAndHash.Hash)}
+					compositeKey := privacyenabledstate.HashedCompositeKey{Namespace: ns, CollectionName: coll, KeyHash: string(keyAndHash.Hash)}
 					expinfoMap[compositeKey] = &keyAndVersion{key: keyAndHash.Key, committingBlock: expinfo.expiryInfoKey.committingBlk}
 				}
 			}

@@ -6,8 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 package lockbasedtxmgr
 
 import (
+	"bytes"
 	"sync"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
@@ -18,7 +20,9 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/valimpl"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
+	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 )
 
@@ -34,6 +38,7 @@ type LockBasedTxMgr struct {
 	stateListeners  []ledger.StateListener
 	ccInfoProvider  ledger.DeployedChaincodeInfoProvider
 	commitRWLock    sync.RWMutex
+	oldBlockCommit  sync.Mutex
 	current         *current
 }
 
@@ -108,6 +113,253 @@ func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAnd
 	return nil
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	
+	
+	
+	uniquePvtData, err := constructUniquePvtData(blocksPvtData)
+	if err != nil {
+		return err
+	}
+
+	
+	
+	
+	
+	
+	txmgr.oldBlockCommit.Lock()
+	defer txmgr.oldBlockCommit.Unlock()
+
+	
+	
+	if err := uniquePvtData.findAndRemoveStalePvtData(txmgr.db); err != nil {
+		return err
+	}
+
+	
+	batch := uniquePvtData.transformToUpdateBatch()
+
+	
+	
+	
+	
+	
+	txmgr.pvtdataPurgeMgr.UpdateBookkeepingForPvtDataOfOldBlocks(batch.PvtUpdates)
+	nextBlockNumToBeCommitted, err := txmgr.getNextBlockNumberToBeCommitted()
+	if err != nil {
+		return err
+	}
+	txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(nextBlockNumToBeCommitted)
+
+	
+	if err := txmgr.db.ApplyPrivacyAwareUpdates(batch, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+type uniquePvtDataMap map[privacyenabledstate.HashedCompositeKey]*privacyenabledstate.PvtKVWrite
+
+func constructUniquePvtData(blocksPvtData map[uint64][]*ledger.TxPvtData) (uniquePvtDataMap, error) {
+	uniquePvtData := make(uniquePvtDataMap)
+	
+	
+	for blkNum, blockPvtData := range blocksPvtData {
+		if err := uniquePvtData.updateUsingBlockPvtData(blockPvtData, blkNum); err != nil {
+			return nil, err
+		}
+	} 
+	return uniquePvtData, nil
+}
+
+func (uniquePvtData uniquePvtDataMap) updateUsingBlockPvtData(blockPvtData []*ledger.TxPvtData, blkNum uint64) error {
+	for _, txPvtData := range blockPvtData {
+		ver := version.NewHeight(blkNum, txPvtData.SeqInBlock)
+		if err := uniquePvtData.updateUsingTxPvtData(txPvtData, ver); err != nil {
+			return err
+		}
+	} 
+	return nil
+}
+func (uniquePvtData uniquePvtDataMap) updateUsingTxPvtData(txPvtData *ledger.TxPvtData, ver *version.Height) error {
+	for _, nsPvtData := range txPvtData.WriteSet.NsPvtRwset {
+		if err := uniquePvtData.updateUsingNsPvtData(nsPvtData, ver); err != nil {
+			return err
+		}
+	} 
+	return nil
+}
+func (uniquePvtData uniquePvtDataMap) updateUsingNsPvtData(nsPvtData *rwset.NsPvtReadWriteSet, ver *version.Height) error {
+	for _, collPvtData := range nsPvtData.CollectionPvtRwset {
+		if err := uniquePvtData.updateUsingCollPvtData(collPvtData, nsPvtData.Namespace, ver); err != nil {
+			return err
+		}
+	} 
+	return nil
+}
+
+func (uniquePvtData uniquePvtDataMap) updateUsingCollPvtData(collPvtData *rwset.CollectionPvtReadWriteSet,
+	ns string, ver *version.Height) error {
+
+	kvRWSet := &kvrwset.KVRWSet{}
+	if err := proto.Unmarshal(collPvtData.Rwset, kvRWSet); err != nil {
+		return err
+	}
+
+	hashedCompositeKey := privacyenabledstate.HashedCompositeKey{
+		Namespace:      ns,
+		CollectionName: collPvtData.CollectionName,
+	}
+
+	for _, kvWrite := range kvRWSet.Writes { 
+		hashedCompositeKey.KeyHash = string(util.ComputeStringHash(kvWrite.Key))
+		uniquePvtData.updateUsingPvtWrite(kvWrite, hashedCompositeKey, ver)
+	} 
+
+	return nil
+}
+
+func (uniquePvtData uniquePvtDataMap) updateUsingPvtWrite(pvtWrite *kvrwset.KVWrite,
+	hashedCompositeKey privacyenabledstate.HashedCompositeKey, ver *version.Height) {
+
+	pvtData, ok := uniquePvtData[hashedCompositeKey]
+	if !ok || pvtData.Version.Compare(ver) < 0 {
+		uniquePvtData[hashedCompositeKey] =
+			&privacyenabledstate.PvtKVWrite{
+				Key:      pvtWrite.Key,
+				IsDelete: pvtWrite.IsDelete,
+				Value:    pvtWrite.Value,
+				Version:  ver,
+			}
+	}
+}
+
+func (uniquePvtData uniquePvtDataMap) findAndRemoveStalePvtData(db privacyenabledstate.DB) error {
+	
+	if err := uniquePvtData.loadCommittedVersionIntoCache(db); err != nil {
+		return err
+	}
+
+	
+	for hashedCompositeKey, pvtWrite := range uniquePvtData {
+		isStale, err := checkIfPvtWriteIsStale(&hashedCompositeKey, pvtWrite, db)
+		if err != nil {
+			return err
+		}
+		if isStale {
+			delete(uniquePvtData, hashedCompositeKey)
+		}
+	}
+	return nil
+}
+
+func (uniquePvtData uniquePvtDataMap) loadCommittedVersionIntoCache(db privacyenabledstate.DB) error {
+	
+	
+	
+	
+	
+	
+	
+	var hashedCompositeKeys []*privacyenabledstate.HashedCompositeKey
+	for hashedCompositeKey := range uniquePvtData {
+		hashedCompositeKeys = append(hashedCompositeKeys, &hashedCompositeKey)
+	}
+
+	err := db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedCompositeKeys)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func checkIfPvtWriteIsStale(hashedKey *privacyenabledstate.HashedCompositeKey,
+	kvWrite *privacyenabledstate.PvtKVWrite, db privacyenabledstate.DB) (bool, error) {
+
+	ns := hashedKey.Namespace
+	coll := hashedKey.CollectionName
+	keyHashBytes := []byte(hashedKey.KeyHash)
+	committedVersion, err := db.GetKeyHashVersion(ns, coll, keyHashBytes)
+	if err != nil {
+		return true, err
+	}
+
+	
+	
+	
+	if committedVersion == nil && kvWrite.IsDelete {
+		return false, nil
+	}
+
+	
+	if version.AreSame(committedVersion, kvWrite.Version) {
+		return false, nil
+	}
+
+	
+	
+	
+	
+	
+	
+	vv, err := db.GetValueHash(ns, coll, keyHashBytes)
+	if err != nil {
+		return true, err
+	}
+	if bytes.Equal(vv.Value, util.ComputeHash(kvWrite.Value)) {
+		
+		
+		kvWrite.Version = vv.Version 
+		
+		return false, nil
+	}
+	return true, nil
+}
+
+
+func (txmgr *LockBasedTxMgr) getNextBlockNumberToBeCommitted() (uint64, error) {
+	lastCommittedBlk, err := txmgr.db.GetLatestSavePoint()
+	if err != nil {
+		return 0, err
+	}
+
+	return lastCommittedBlk.BlockNum + 1, nil
+}
+
+func (uniquePvtData uniquePvtDataMap) transformToUpdateBatch() *privacyenabledstate.UpdateBatch {
+	batch := privacyenabledstate.NewUpdateBatch()
+	for hashedCompositeKey, pvtWrite := range uniquePvtData {
+		ns := hashedCompositeKey.Namespace
+		coll := hashedCompositeKey.CollectionName
+		if pvtWrite.IsDelete {
+			batch.PvtUpdates.Delete(ns, coll, pvtWrite.Key, pvtWrite.Version)
+		} else {
+			batch.PvtUpdates.Put(ns, coll, pvtWrite.Key, pvtWrite.Value, pvtWrite.Version)
+		}
+	}
+	return batch
+}
+
 func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
 	for _, listener := range txmgr.stateListeners {
 		stateUpdatesForListener := extractStateUpdates(txmgr.current.batch, listener.InterestedInNamespaces())
@@ -154,14 +406,23 @@ func (txmgr *LockBasedTxMgr) Commit() error {
 	
 	
 	
+	
+	
+	
+	
+	txmgr.oldBlockCommit.Lock()
+	defer txmgr.oldBlockCommit.Unlock()
+
+	
+	
+	
 	if !txmgr.pvtdataPurgeMgr.usedOnce {
 		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum())
 		txmgr.pvtdataPurgeMgr.usedOnce = true
 	}
 	defer func() {
-		txmgr.clearCache()
 		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum() + 1)
-		logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
+		logger.Debugf("launched the background routine for preparing keys to purge with the next block")
 		txmgr.reset()
 	}()
 
@@ -175,14 +436,19 @@ func (txmgr *LockBasedTxMgr) Commit() error {
 		return err
 	}
 
-	txmgr.commitRWLock.Lock()
-	defer txmgr.commitRWLock.Unlock()
-	logger.Debugf("Write lock acquired for committing updates to state database")
 	commitHeight := version.NewHeight(txmgr.current.blockNum(), txmgr.current.maxTxNumber())
+	txmgr.commitRWLock.Lock()
+	logger.Debugf("Write lock acquired for committing updates to state database")
 	if err := txmgr.db.ApplyPrivacyAwareUpdates(txmgr.current.batch, commitHeight); err != nil {
+		txmgr.commitRWLock.Unlock()
 		return err
 	}
-	logger.Debugf("Updates committed to state database")
+	txmgr.commitRWLock.Unlock()
+	
+	
+	
+	txmgr.clearCache()
+	logger.Debugf("Updates committed to state database and the write lock is released")
 
 	
 	if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {

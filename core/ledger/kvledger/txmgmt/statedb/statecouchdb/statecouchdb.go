@@ -146,11 +146,17 @@ func (vdb *VersionedDB) GetDBType() string {
 
 
 
+
+
 func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
 	nsKeysMap := map[string][]string{}
-	committedDataCache := newVersionCache()
+	committedDataCache := vdb.committedDataCache
 	for _, compositeKey := range keys {
 		ns, key := compositeKey.Namespace, compositeKey.Key
+		if _, isFound := committedDataCache.getVersion(ns, key); isFound {
+			
+			continue
+		}
 		committedDataCache.setVerAndRev(ns, key, nil, "")
 		logger.Debugf("Load into version cache: %s~%s", ns, key)
 		nsKeysMap[ns] = append(nsKeysMap[ns], key)
@@ -483,6 +489,14 @@ func (vdb *VersionedDB) ensureFullCommitAndRecordSavepoint(height *version.Heigh
 	if err := vdb.ensureFullCommit(dbs); err != nil {
 		return err
 	}
+
+	
+	
+	
+	if height == nil {
+		return nil
+	}
+
 	
 	savepointCouchDoc, err := encodeSavepoint(height)
 	if err != nil {

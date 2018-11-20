@@ -185,7 +185,13 @@ func (vdb *versionedDB) ApplyUpdates(batch *statedb.UpdateBatch, height *version
 			}
 		}
 	}
-	dbBatch.Put(savePointKey, height.ToBytes())
+	
+	
+	
+	
+	if height != nil {
+		dbBatch.Put(savePointKey, height.ToBytes())
+	}
 	
 	if err := vdb.db.WriteBatch(dbBatch, true); err != nil {
 		return err
