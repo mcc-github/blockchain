@@ -16,11 +16,13 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
@@ -47,6 +49,7 @@ type DockerVM struct {
 	getClientFnc getClient
 	PeerID       string
 	NetworkID    string
+	BuildMetrics *BuildMetrics
 }
 
 
@@ -82,31 +85,34 @@ type dockerClient interface {
 
 
 type Provider struct {
-	PeerID    string
-	NetworkID string
+	PeerID       string
+	NetworkID    string
+	BuildMetrics *BuildMetrics
 }
 
 
-func NewProvider(peerID, networkID string) *Provider {
+func NewProvider(peerID, networkID string, metricsProvider metrics.Provider) *Provider {
 	return &Provider{
-		PeerID:    peerID,
-		NetworkID: networkID,
+		PeerID:       peerID,
+		NetworkID:    networkID,
+		BuildMetrics: NewBuildMetrics(metricsProvider),
 	}
 }
 
 
 func (p *Provider) NewVM() container.VM {
-	return NewDockerVM(p.PeerID, p.NetworkID)
+	return NewDockerVM(p.PeerID, p.NetworkID, p.BuildMetrics)
 }
 
 
-func NewDockerVM(peerID, networkID string) *DockerVM {
-	vm := DockerVM{
-		PeerID:    peerID,
-		NetworkID: networkID,
+func NewDockerVM(peerID, networkID string, buildMetrics *BuildMetrics) *DockerVM {
+	vm := &DockerVM{
+		PeerID:       peerID,
+		NetworkID:    networkID,
+		getClientFnc: getDockerClient,
+		BuildMetrics: buildMetrics,
 	}
-	vm.getClientFnc = getDockerClient
-	return &vm
+	return vm
 }
 
 func getDockerClient() (dockerClient, error) {
@@ -201,7 +207,15 @@ func (vm *DockerVM) deployImage(client dockerClient, ccid ccintf.CCID,
 		OutputStream: outputbuf,
 	}
 
-	if err := client.BuildImage(opts); err != nil {
+	startTime := time.Now()
+	err = client.BuildImage(opts)
+
+	vm.BuildMetrics.ChaincodeContainerBuildDuration.With(
+		"chaincode", ccid.Name+":"+ccid.Version,
+		"success", strconv.FormatBool(err == nil),
+	).Observe(time.Since(startTime).Seconds())
+
+	if err != nil {
 		dockerLogger.Errorf("Error building images: %s", err)
 		dockerLogger.Errorf("Image Output:\n********************\n%s\n********************", outputbuf.String())
 		return err
