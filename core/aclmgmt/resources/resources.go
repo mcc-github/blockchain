@@ -43,4 +43,9 @@ const (
 	
 	Event_Block         = "event/Block"
 	Event_FilteredBlock = "event/FilteredBlock"
+
+	
+	Token_Issue    = "token/Issue"
+	Token_Transfer = "token/Transfer"
+	Token_List     = "token/List"
 )

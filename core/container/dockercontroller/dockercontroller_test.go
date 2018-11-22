@@ -81,12 +81,8 @@ func TestGetDockerHostConfig(t *testing.T) {
 
 func Test_Start(t *testing.T) {
 	gt := NewGomegaWithT(t)
-	fakeChaincodeContainerBuildDuration := &metricsfakes.Histogram{}
-	fakeChaincodeContainerBuildDuration.WithReturns(fakeChaincodeContainerBuildDuration)
 	dvm := DockerVM{
-		BuildMetrics: &BuildMetrics{
-			ChaincodeContainerBuildDuration: fakeChaincodeContainerBuildDuration,
-		},
+		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
 	}
 	ccid := ccintf.CCID{
 		Name:    "simple",
@@ -120,8 +116,10 @@ func Test_Start(t *testing.T) {
 
 	
 	noSuchImgErr = true
-	err = dvm.Start(ccid, args, env, files, nil)
+	buildErr = true
+	err = dvm.Start(ccid, args, env, files, &mockBuilder{buildFunc: func() (io.Reader, error) { return &bytes.Buffer{}, nil }})
 	gt.Expect(err).To(HaveOccurred())
+	buildErr = false
 
 	chaincodePath := "github.com/mcc-github/blockchain/examples/chaincode/go/example01/cmd"
 	spec := &pb.ChaincodeSpec{
@@ -152,15 +150,6 @@ func Test_Start(t *testing.T) {
 	startErr = true
 	err = dvm.Start(ccid, args, env, files, bldr)
 	gt.Expect(err).To(HaveOccurred())
-
-	gt.Expect(fakeChaincodeContainerBuildDuration.WithCallCount()).To(Equal(1))
-	labelValues := fakeChaincodeContainerBuildDuration.WithArgsForCall(0)
-	gt.Expect(labelValues).To(Equal([]string{
-		"chaincode", "simple:1.0",
-		"success", "true",
-	}))
-	gt.Expect(fakeChaincodeContainerBuildDuration.ObserveArgsForCall(0)).NotTo(BeZero())
-	gt.Expect(fakeChaincodeContainerBuildDuration.ObserveArgsForCall(0)).To(BeNumerically("<", 1.0))
 	startErr = false
 
 	
@@ -188,6 +177,42 @@ func Test_Start(t *testing.T) {
 
 	err = dvm.Start(ccid, args, env, files, nil)
 	gt.Expect(err).NotTo(HaveOccurred())
+}
+
+func Test_BuildMetric(t *testing.T) {
+	ccid := ccintf.CCID{Name: "simple", Version: "1.0"}
+	client := &mockClient{}
+
+	tests := []struct {
+		desc           string
+		buildErr       bool
+		expectedLabels []string
+	}{
+		{desc: "success", buildErr: false, expectedLabels: []string{"chaincode", "simple:1.0", "success", "true"}},
+		{desc: "failure", buildErr: true, expectedLabels: []string{"chaincode", "simple:1.0", "success", "false"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			gt := NewGomegaWithT(t)
+			fakeChaincodeImageBuildDuration := &metricsfakes.Histogram{}
+			fakeChaincodeImageBuildDuration.WithReturns(fakeChaincodeImageBuildDuration)
+			dvm := DockerVM{
+				BuildMetrics: &BuildMetrics{
+					ChaincodeImageBuildDuration: fakeChaincodeImageBuildDuration,
+				},
+			}
+
+			buildErr = tt.buildErr
+			dvm.deployImage(client, ccid, &bytes.Buffer{})
+
+			gt.Expect(fakeChaincodeImageBuildDuration.WithCallCount()).To(Equal(1))
+			gt.Expect(fakeChaincodeImageBuildDuration.WithArgsForCall(0)).To(Equal(tt.expectedLabels))
+			gt.Expect(fakeChaincodeImageBuildDuration.ObserveArgsForCall(0)).NotTo(BeZero())
+			gt.Expect(fakeChaincodeImageBuildDuration.ObserveArgsForCall(0)).To(BeNumerically("<", 1.0))
+		})
+	}
+
+	buildErr = false
 }
 
 func Test_Stop(t *testing.T) {

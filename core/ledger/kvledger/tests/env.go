@@ -12,9 +12,13 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
+	"github.com/mcc-github/blockchain/msp"
+	"github.com/mcc-github/blockchain/msp/mgmt"
+	"github.com/mcc-github/blockchain/protos/common"
 
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/util"
+	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/peer"
@@ -130,13 +134,37 @@ func setupConfigs(conf config) {
 }
 
 func initLedgerMgmt() {
+	identityDeserializerFactory := func(chainID string) msp.IdentityDeserializer {
+		return mgmt.GetManagerForChain(chainID)
+	}
+	membershipInfoProvider := privdata.NewMembershipInfoProvider(createSelfSignedData(), identityDeserializerFactory)
+
 	ledgermgmt.InitializeExistingTestEnvWithInitializer(
 		&ledgermgmt.Initializer{
 			CustomTxProcessors:            peer.ConfigTxProcessors,
 			DeployedChaincodeInfoProvider: &lscc.DeployedCCInfoProvider{},
+			MembershipInfoProvider:        membershipInfoProvider,
 			MetricsProvider:               &disabled.Provider{},
 		},
 	)
+}
+
+func createSelfSignedData() common.SignedData {
+	sID := mgmt.GetLocalSigningIdentityOrPanic()
+	msg := make([]byte, 32)
+	sig, err := sID.Sign(msg)
+	if err != nil {
+		logger.Panicf("Failed creating self signed data because message signing failed: %v", err)
+	}
+	peerIdentity, err := sID.Serialize()
+	if err != nil {
+		logger.Panicf("Failed creating self signed data because peer identity couldn't be serialized: %v", err)
+	}
+	return common.SignedData{
+		Data:      msg,
+		Signature: sig,
+		Identity:  peerIdentity,
+	}
 }
 
 func closeLedgerMgmt() {

@@ -76,10 +76,7 @@ func (provider *Provider) Initialize(initializer *ledger.Initializer) error {
 		make(map[string]collElgListener),
 	}
 	stateListeners := initializer.StateListeners
-	
-	
-	
-	
+	stateListeners = append(stateListeners, collElgNotifier)
 	stateListeners = append(stateListeners, configHistoryMgr)
 
 	provider.initializer = initializer

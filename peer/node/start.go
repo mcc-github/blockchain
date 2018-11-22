@@ -28,6 +28,7 @@ import (
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/viperutil"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
+	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/admin"
 	"github.com/mcc-github/blockchain/core/cclifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode"
@@ -77,8 +78,10 @@ import (
 	common2 "github.com/mcc-github/blockchain/protos/common"
 	discprotos "github.com/mcc-github/blockchain/protos/discovery"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/token/server"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -307,6 +310,12 @@ func serve(args []string) error {
 		return err
 	}
 	defer service.GetGossipService().Stop()
+
+	
+	err = registerProverService(peerServer, aclProvider, signingIdentity)
+	if err != nil {
+		return err
+	}
 
 	
 
@@ -856,4 +865,34 @@ func newOperationsSystem() *operations.System {
 			ClientCACertFiles:  viper.GetStringSlice("operations.tls.clientRootCAs.files"),
 		},
 	})
+}
+
+func registerProverService(peerServer *comm.GRPCServer, aclProvider aclmgmt.ACLProvider, signingIdentity msp.SigningIdentity) error {
+	policyChecker := &server.PolicyBasedAccessControl{
+		ACLProvider: aclProvider,
+		ACLResources: &server.ACLResources{
+			IssueTokens:    resources.Token_Issue,
+			TransferTokens: resources.Token_Transfer,
+			ListTokens:     resources.Token_List,
+		},
+	}
+
+	responseMarshaler, err := server.NewResponseMarshaler(signingIdentity)
+	if err != nil {
+		logger.Errorf("Failed to create prover service: %s", err)
+		return err
+	}
+
+	prover := &server.Prover{
+		CapabilityChecker: &server.TokenCapabilityChecker{
+			PeerOps: peer.Default,
+		},
+		Marshaler:     responseMarshaler,
+		PolicyChecker: policyChecker,
+		TMSManager: &server.Manager{
+			LedgerManager: &server.PeerLedgerManager{},
+		},
+	}
+	token.RegisterProverServer(peerServer.Server(), prover)
+	return nil
 }

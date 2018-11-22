@@ -30,9 +30,26 @@ type Marshaler interface {
 
 
 type Prover struct {
-	Marshaler     Marshaler
-	PolicyChecker PolicyChecker
-	TMSManager    TMSManager
+	CapabilityChecker CapabilityChecker
+	Marshaler         Marshaler
+	PolicyChecker     PolicyChecker
+	TMSManager        TMSManager
+}
+
+
+func NewProver(policyChecker PolicyChecker, signingIdentity SignerIdentity) (*Prover, error) {
+	responseMarshaler, err := NewResponseMarshaler(signingIdentity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Prover{
+		Marshaler:     responseMarshaler,
+		PolicyChecker: policyChecker,
+		TMSManager: &Manager{
+			LedgerManager: &PeerLedgerManager{},
+		},
+	}, nil
 }
 
 func (s *Prover) ProcessCommand(ctx context.Context, sc *token.SignedCommand) (*token.SignedCommandResponse, error) {
@@ -44,6 +61,16 @@ func (s *Prover) ProcessCommand(ctx context.Context, sc *token.SignedCommand) (*
 	err = s.ValidateHeader(command.Header)
 	if err != nil {
 		return s.MarshalErrorResponse(sc.Command, err)
+	}
+
+	
+	channelId := command.Header.ChannelId
+	enabled, err := s.CapabilityChecker.FabToken(channelId)
+	if err != nil {
+		return s.MarshalErrorResponse(sc.Command, err)
+	}
+	if !enabled {
+		return s.MarshalErrorResponse(sc.Command, errors.Errorf("FabToken capability not enabled for channel %s", channelId))
 	}
 
 	err = s.PolicyChecker.Check(sc, command)

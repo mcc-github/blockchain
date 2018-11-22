@@ -182,7 +182,7 @@ func GetDurationOrDefault(key string, defVal time.Duration) time.Duration {
 }
 
 
-func SetDuration(key string, val time.Duration) {
+func SetVal(key string, val interface{}) {
 	viperLock.Lock()
 	defer viperLock.Unlock()
 	viper.Set(key, val)

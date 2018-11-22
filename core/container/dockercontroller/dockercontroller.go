@@ -27,6 +27,7 @@ import (
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
 
@@ -106,13 +107,12 @@ func (p *Provider) NewVM() container.VM {
 
 
 func NewDockerVM(peerID, networkID string, buildMetrics *BuildMetrics) *DockerVM {
-	vm := &DockerVM{
+	return &DockerVM{
 		PeerID:       peerID,
 		NetworkID:    networkID,
 		getClientFnc: getDockerClient,
 		BuildMetrics: buildMetrics,
 	}
-	return vm
 }
 
 func getDockerClient() (dockerClient, error) {
@@ -123,18 +123,9 @@ func getDockerHostConfig() *docker.HostConfig {
 	if hostConfig != nil {
 		return hostConfig
 	}
-	dockerKey := func(key string) string {
-		return "vm.docker.hostConfig." + key
-	}
-	getInt64 := func(key string) int64 {
-		defer func() {
-			if err := recover(); err != nil {
-				dockerLogger.Warningf("load vm.docker.hostConfig.%s failed, error: %v", key, err)
-			}
-		}()
-		n := viper.GetInt(dockerKey(key))
-		return int64(n)
-	}
+
+	dockerKey := func(key string) string { return "vm.docker.hostConfig." + key }
+	getInt64 := func(key string) int64 { return int64(viper.GetInt(dockerKey(key))) }
 
 	var logConfig docker.LogConfig
 	err := viper.UnmarshalKey(dockerKey("LogConfig"), &logConfig)
@@ -147,7 +138,7 @@ func getDockerHostConfig() *docker.HostConfig {
 	}
 	dockerLogger.Debugf("docker container hostconfig NetworkMode: %s", networkMode)
 
-	hostConfig = &docker.HostConfig{
+	return &docker.HostConfig{
 		CapAdd:  viper.GetStringSlice(dockerKey("CapAdd")),
 		CapDrop: viper.GetStringSlice(dockerKey("CapDrop")),
 
@@ -175,30 +166,35 @@ func getDockerHostConfig() *docker.HostConfig {
 		CPUPeriod:        getInt64("CpuPeriod"),
 		BlkioWeight:      getInt64("BlkioWeight"),
 	}
-
-	return hostConfig
 }
 
-func (vm *DockerVM) createContainer(client dockerClient,
-	imageID string, containerID string, args []string,
-	env []string, attachStdout bool) error {
-	config := docker.Config{Cmd: args, Image: imageID, Env: env, AttachStdout: attachStdout, AttachStderr: attachStdout}
-	copts := docker.CreateContainerOptions{Name: containerID, Config: &config, HostConfig: getDockerHostConfig()}
-	dockerLogger.Debugf("Create container: %s", containerID)
-	_, err := client.CreateContainer(copts)
+func (vm *DockerVM) createContainer(client dockerClient, imageID, containerID string, args, env []string, attachStdout bool) error {
+	logger := dockerLogger.With("imageID", imageID, "containerID", containerID)
+	logger.Debugw("create container")
+	_, err := client.CreateContainer(docker.CreateContainerOptions{
+		Name: containerID,
+		Config: &docker.Config{
+			Cmd:          args,
+			Image:        imageID,
+			Env:          env,
+			AttachStdout: attachStdout,
+			AttachStderr: attachStdout,
+		},
+		HostConfig: getDockerHostConfig(),
+	})
 	if err != nil {
 		return err
 	}
-	dockerLogger.Debugf("Created container: %s", imageID)
+	logger.Debugw("created container")
 	return nil
 }
 
-func (vm *DockerVM) deployImage(client dockerClient, ccid ccintf.CCID,
-	args []string, env []string, reader io.Reader) error {
+func (vm *DockerVM) deployImage(client dockerClient, ccid ccintf.CCID, reader io.Reader) error {
 	id, err := vm.GetVMNameForDocker(ccid)
 	if err != nil {
 		return err
 	}
+
 	outputbuf := bytes.NewBuffer(nil)
 	opts := docker.BuildImageOptions{
 		Name:         id,
@@ -210,145 +206,65 @@ func (vm *DockerVM) deployImage(client dockerClient, ccid ccintf.CCID,
 	startTime := time.Now()
 	err = client.BuildImage(opts)
 
-	vm.BuildMetrics.ChaincodeContainerBuildDuration.With(
+	vm.BuildMetrics.ChaincodeImageBuildDuration.With(
 		"chaincode", ccid.Name+":"+ccid.Version,
 		"success", strconv.FormatBool(err == nil),
 	).Observe(time.Since(startTime).Seconds())
 
 	if err != nil {
-		dockerLogger.Errorf("Error building images: %s", err)
-		dockerLogger.Errorf("Image Output:\n********************\n%s\n********************", outputbuf.String())
+		dockerLogger.Errorf("Error building image: %s", err)
+		dockerLogger.Errorf("Build Output:\n********************\n%s\n********************", outputbuf.String())
 		return err
 	}
 
 	dockerLogger.Debugf("Created image: %s", id)
-
 	return nil
 }
 
 
-func (vm *DockerVM) Start(ccid ccintf.CCID,
-	args []string, env []string, filesToUpload map[string][]byte, builder container.Builder) error {
+func (vm *DockerVM) Start(ccid ccintf.CCID, args, env []string, filesToUpload map[string][]byte, builder container.Builder) error {
 	imageName, err := vm.GetVMNameForDocker(ccid)
 	if err != nil {
 		return err
 	}
 
+	attachStdout := viper.GetBool("vm.docker.attachStdout")
+	containerName := vm.GetVMName(ccid)
+	logger := dockerLogger.With("imageName", imageName, "containerName", containerName)
+
 	client, err := vm.getClientFnc()
 	if err != nil {
-		dockerLogger.Debugf("start - cannot create client %s", err)
+		logger.Debugf("failed to get docker client", "error", err)
 		return err
 	}
 
-	containerName := vm.GetVMName(ccid)
-
-	attachStdout := viper.GetBool("vm.docker.attachStdout")
-
-	
-	dockerLogger.Debugf("Cleanup container %s", containerName)
 	vm.stopInternal(client, containerName, 0, false, false)
 
-	dockerLogger.Debugf("Start container %s", containerName)
 	err = vm.createContainer(client, imageName, containerName, args, env, attachStdout)
-	if err != nil {
-		
-		if err == docker.ErrNoSuchImage {
-			if builder != nil {
-				dockerLogger.Debugf("start-could not find image <%s> (container id <%s>), because of <%s>..."+
-					"attempt to recreate image", imageName, containerName, err)
+	if err == docker.ErrNoSuchImage {
+		reader, err := builder.Build()
+		if err != nil {
+			return errors.Wrapf(err, "failed to generate Dockerfile to build %s", containerName)
+		}
 
-				reader, err1 := builder.Build()
-				if err1 != nil {
-					dockerLogger.Errorf("Error creating image builder for image <%s> (container id <%s>), "+
-						"because of <%s>", imageName, containerName, err1)
-				}
-
-				if err1 = vm.deployImage(client, ccid, args, env, reader); err1 != nil {
-					return err1
-				}
-
-				dockerLogger.Debug("start-recreated image successfully")
-				if err1 = vm.createContainer(client, imageName, containerName, args, env, attachStdout); err1 != nil {
-					dockerLogger.Errorf("start-could not recreate container post recreate image: %s", err1)
-					return err1
-				}
-			} else {
-				dockerLogger.Errorf("start-could not find image <%s>, because of %s", imageName, err)
-				return err
-			}
-		} else {
-			dockerLogger.Errorf("start-could not recreate container <%s>, because of %s", containerName, err)
+		err = vm.deployImage(client, ccid, reader)
+		if err != nil {
 			return err
 		}
+
+		err = vm.createContainer(client, imageName, containerName, args, env, attachStdout)
+		if err != nil {
+			logger.Errorf("failed to create container: %s", err)
+			return err
+		}
+	} else if err != nil {
+		logger.Errorf("create container failed: %s", err)
+		return err
 	}
 
+	
 	if attachStdout {
-		
-		
-		attached := make(chan struct{})
-		r, w := io.Pipe()
-
-		go func() {
-			
-			
-			
-			
-			err := client.AttachToContainer(docker.AttachToContainerOptions{
-				Container:    containerName,
-				OutputStream: w,
-				ErrorStream:  w,
-				Logs:         true,
-				Stdout:       true,
-				Stderr:       true,
-				Stream:       true,
-				Success:      attached,
-			})
-
-			
-			
-			_ = w.CloseWithError(err)
-		}()
-
-		go func() {
-			
-			select {
-			case <-attached:
-				
-			case <-time.After(10 * time.Second):
-				dockerLogger.Errorf("Timeout while attaching to IO channel in container %s", containerName)
-				return
-			}
-
-			
-			
-			
-			attached <- struct{}{}
-
-			
-			
-			is := bufio.NewReader(r)
-
-			
-			containerLogger := flogging.MustGetLogger("peer.chaincode." + containerName)
-
-			for {
-				
-				
-				line, err2 := is.ReadString('\n')
-				if err2 != nil {
-					switch err2 {
-					case io.EOF:
-						dockerLogger.Infof("Container %s has closed its IO channel", containerName)
-					default:
-						dockerLogger.Errorf("Error reading container output: %s", err2)
-					}
-
-					return
-				}
-
-				containerLogger.Info(line)
-			}
-		}()
+		go vm.streamOutput(client, containerName)
 	}
 
 	
@@ -365,18 +281,17 @@ func (vm *DockerVM) Start(ccid ccintf.CCID,
 		}
 
 		
-		if err = tw.Close(); err != nil {
+		if err := tw.Close(); err != nil {
 			return fmt.Errorf("Error writing files to upload to Docker instance into a temporary tar blob: %s", err)
 		}
 
 		gw.Close()
 
-		err = client.UploadToContainer(containerName, docker.UploadToContainerOptions{
+		err := client.UploadToContainer(containerName, docker.UploadToContainerOptions{
 			InputStream:          bytes.NewReader(payload.Bytes()),
 			Path:                 "/",
 			NoOverwriteDirNonDir: false,
 		})
-
 		if err != nil {
 			return fmt.Errorf("Error uploading files to the container instance %s: %s", containerName, err)
 		}
@@ -394,60 +309,108 @@ func (vm *DockerVM) Start(ccid ccintf.CCID,
 }
 
 
-func (vm *DockerVM) Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error {
-	id := vm.GetVMName(ccid)
+func (vm *DockerVM) streamOutput(client dockerClient, containerName string) {
+	
+	
+	attached := make(chan struct{})
+	r, w := io.Pipe()
 
+	go func() {
+		
+		
+		
+		
+		err := client.AttachToContainer(docker.AttachToContainerOptions{
+			Container:    containerName,
+			OutputStream: w,
+			ErrorStream:  w,
+			Logs:         true,
+			Stdout:       true,
+			Stderr:       true,
+			Stream:       true,
+			Success:      attached,
+		})
+
+		
+		
+		_ = w.CloseWithError(err)
+	}()
+
+	go func() {
+		
+		select {
+		case <-attached: 
+			close(attached) 
+
+		case <-time.After(10 * time.Second):
+			dockerLogger.Errorf("Timeout while attaching to IO channel in container %s", containerName)
+			return
+		}
+
+		
+		containerLogger := flogging.MustGetLogger("peer.chaincode." + containerName)
+
+		is := bufio.NewReader(r)
+		for {
+			
+			
+			line, err := is.ReadString('\n')
+			switch err {
+			case nil:
+				containerLogger.Info(line)
+			case io.EOF:
+				dockerLogger.Infof("Container %s has closed its IO channel", containerName)
+			default:
+				dockerLogger.Errorf("Error reading container output: %s", err)
+			}
+		}
+	}()
+}
+
+
+func (vm *DockerVM) Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error {
 	client, err := vm.getClientFnc()
 	if err != nil {
 		dockerLogger.Debugf("stop - cannot create client %s", err)
 		return err
 	}
-	id = strings.Replace(id, ":", "_", -1)
+	id := strings.Replace(vm.GetVMName(ccid), ":", "_", -1)
 
-	err = vm.stopInternal(client, id, timeout, dontkill, dontremove)
-
-	return err
+	return vm.stopInternal(client, id, timeout, dontkill, dontremove)
 }
 
 
 
 func (vm *DockerVM) HealthCheck(ctx context.Context) error {
-	errMsg := "failed to ping Docker daemon [%s]"
 	client, err := vm.getClientFnc()
 	if err != nil {
-		return fmt.Errorf(errMsg, err)
+		return errors.Wrap(err, "failed to connect to Docker daemon")
 	}
-	pingErr := client.PingWithContext(ctx)
-	if pingErr != nil {
-		return fmt.Errorf(errMsg, pingErr)
+	if err := client.PingWithContext(ctx); err != nil {
+		return errors.Wrap(err, "failed to ping to Docker daemon")
 	}
 	return nil
 }
 
-func (vm *DockerVM) stopInternal(client dockerClient,
-	id string, timeout uint, dontkill bool, dontremove bool) error {
+func (vm *DockerVM) stopInternal(client dockerClient, id string, timeout uint, dontkill, dontremove bool) error {
+	logger := dockerLogger.With("id", id)
+
+	logger.Debugw("stopping container")
 	err := client.StopContainer(id, timeout)
-	if err != nil {
-		dockerLogger.Debugf("Stop container %s(%s)", id, err)
-	} else {
-		dockerLogger.Debugf("Stopped container %s", id)
-	}
+	dockerLogger.Debugw("stop container result", "error", err)
+
 	if !dontkill {
+		logger.Debugw("killing container")
 		err = client.KillContainer(docker.KillContainerOptions{ID: id})
-		if err != nil {
-			dockerLogger.Debugf("Kill container %s (%s)", id, err)
-		} else {
-			dockerLogger.Debugf("Killed container %s", id)
-		}
+		logger.Debugw("kill container result", "error", err)
 	}
+
 	if !dontremove {
+		logger.Debugw("removing container")
 		err = client.RemoveContainer(docker.RemoveContainerOptions{ID: id, Force: true})
-		if err != nil {
-			dockerLogger.Debugf("Remove container %s (%s)", id, err)
-		} else {
-			dockerLogger.Debugf("Removed container %s", id)
-		}
+		logger.Debugw("remove container result", "error", err)
 	}
+
 	return err
 }
 
@@ -474,7 +437,7 @@ func (vm *DockerVM) GetVMNameForDocker(ccid ccintf.CCID) (string, error) {
 	
 	if !imageRegExp.MatchString(imageName) {
 		dockerLogger.Errorf("Error constructing Docker VM Name. '%s' breaks Docker's repository naming rules", name)
-		return imageName, fmt.Errorf("Error constructing Docker VM Name. '%s' breaks Docker's repository naming rules", imageName)
+		return "", fmt.Errorf("Error constructing Docker VM Name. '%s' breaks Docker's repository naming rules", imageName)
 	}
 
 	return imageName, nil

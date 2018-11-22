@@ -34,7 +34,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/peer"
 	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
@@ -117,8 +116,8 @@ func TestLeaderElectionWithDeliverClient(t *testing.T) {
 	
 	
 
-	viper.Set("peer.gossip.useLeaderElection", true)
-	viper.Set("peer.gossip.orgLeader", false)
+	util.SetVal("peer.gossip.useLeaderElection", true)
+	util.SetVal("peer.gossip.orgLeader", false)
 	n := 10
 	gossips := startPeers(t, n, 20100)
 
@@ -175,8 +174,8 @@ func TestWithStaticDeliverClientLeader(t *testing.T) {
 	
 	
 
-	viper.Set("peer.gossip.useLeaderElection", false)
-	viper.Set("peer.gossip.orgLeader", true)
+	util.SetVal("peer.gossip.useLeaderElection", false)
+	util.SetVal("peer.gossip.orgLeader", true)
 
 	n := 2
 	gossips := startPeers(t, n, 20200)
@@ -229,8 +228,8 @@ func TestWithStaticDeliverClientLeader(t *testing.T) {
 }
 
 func TestWithStaticDeliverClientNotLeader(t *testing.T) {
-	viper.Set("peer.gossip.useLeaderElection", false)
-	viper.Set("peer.gossip.orgLeader", false)
+	util.SetVal("peer.gossip.useLeaderElection", false)
+	util.SetVal("peer.gossip.orgLeader", false)
 
 	n := 2
 	gossips := startPeers(t, n, 20300)
@@ -269,8 +268,8 @@ func TestWithStaticDeliverClientNotLeader(t *testing.T) {
 }
 
 func TestWithStaticDeliverClientBothStaticAndLeaderElection(t *testing.T) {
-	viper.Set("peer.gossip.useLeaderElection", true)
-	viper.Set("peer.gossip.orgLeader", true)
+	util.SetVal("peer.gossip.useLeaderElection", true)
+	util.SetVal("peer.gossip.orgLeader", true)
 
 	n := 2
 	gossips := startPeers(t, n, 20400)

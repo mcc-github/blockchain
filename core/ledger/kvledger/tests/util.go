@@ -8,6 +8,7 @@ package tests
 
 import (
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/cauthdsl"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/flogging"
 	lutils "github.com/mcc-github/blockchain/core/ledger/util"
@@ -39,10 +40,32 @@ func convertToCollConfigProtoBytes(collConfs []*collConf) ([]byte, error) {
 	var protoConfArray []*common.CollectionConfig
 	for _, c := range collConfs {
 		protoConf := &common.CollectionConfig{Payload: &common.CollectionConfig_StaticCollectionConfig{
-			StaticCollectionConfig: &common.StaticCollectionConfig{Name: c.name, BlockToLive: c.btl}}}
+			StaticCollectionConfig: &common.StaticCollectionConfig{
+				Name:             c.name,
+				BlockToLive:      c.btl,
+				MemberOrgsPolicy: getAccessPolicy([]string{"peer0", "peer1"})}}}
 		protoConfArray = append(protoConfArray, protoConf)
 	}
 	return proto.Marshal(&common.CollectionConfigPackage{Config: protoConfArray})
+}
+
+func getAccessPolicy(signers []string) *common.CollectionPolicyConfig {
+	var data [][]byte
+	for _, signer := range signers {
+		data = append(data, []byte(signer))
+	}
+	policyEnvelope := cauthdsl.Envelope(cauthdsl.Or(cauthdsl.SignedBy(0), cauthdsl.SignedBy(1)), data)
+	return createCollectionPolicyConfig(policyEnvelope)
+}
+
+func createCollectionPolicyConfig(accessPolicy *common.SignaturePolicyEnvelope) *common.CollectionPolicyConfig {
+	cpcSp := &common.CollectionPolicyConfig_SignaturePolicy{
+		SignaturePolicy: accessPolicy,
+	}
+	cpc := &common.CollectionPolicyConfig{
+		Payload: cpcSp,
+	}
+	return cpc
 }
 
 func convertFromCollConfigProto(collConfPkg *common.CollectionConfigPackage) []*collConf {

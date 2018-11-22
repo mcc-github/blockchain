@@ -31,12 +31,12 @@ var maxConnectionAttempts = 120
 
 
 func SetAliveTimeInterval(interval time.Duration) {
-	util.SetDuration("peer.gossip.aliveTimeInterval", interval)
+	util.SetVal("peer.gossip.aliveTimeInterval", interval)
 }
 
 
 func SetAliveExpirationTimeout(timeout time.Duration) {
-	util.SetDuration("peer.gossip.aliveExpirationTimeout", timeout)
+	util.SetVal("peer.gossip.aliveExpirationTimeout", timeout)
 	aliveExpirationCheckInterval = time.Duration(timeout / 10)
 }
 
@@ -47,7 +47,7 @@ func SetAliveExpirationCheckInterval(interval time.Duration) {
 
 
 func SetReconnectInterval(interval time.Duration) {
-	util.SetDuration("peer.gossip.reconnectInterval", interval)
+	util.SetVal("peer.gossip.reconnectInterval", interval)
 }
 
 

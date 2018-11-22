@@ -16,6 +16,16 @@ import (
 
 
 func TestV11(t *testing.T) {
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	t.Skip()
 	fsPath := defaultConfig["peer.fileSystemPath"].(string)
 	
 	testutil.CopyDir("testdata/v11/sample_ledgers/ledgersData", fsPath)
