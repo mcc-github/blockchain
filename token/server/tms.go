@@ -34,6 +34,10 @@ type Transactor interface {
 
 	
 	ListTokens() (*token.UnspentTokens, error)
+
+	
+	
+	RequestApprove(request *token.ApproveRequest) (*token.TokenTransaction, error)
 }
 
 

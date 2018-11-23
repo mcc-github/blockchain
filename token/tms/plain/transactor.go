@@ -227,6 +227,10 @@ func (t *Transactor) ListTokens() (*token.UnspentTokens, error) {
 
 }
 
+func (t *Transactor) RequestApprove(request *token.ApproveRequest) (*token.TokenTransaction, error) {
+	panic("implement me!")
+}
+
 
 func (t *Transactor) isSpent(outputID string) (bool, error) {
 	key, err := createInputKey(outputID)
