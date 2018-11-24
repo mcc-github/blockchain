@@ -20,11 +20,6 @@ import (
 var logger = flogging.MustGetLogger("orderer.common.broadcast")
 
 
-type Handler interface {
-	
-	Handle(srv ab.AtomicBroadcast_BroadcastServer) error
-}
-
 
 type ChannelSupportRegistrar interface {
 	
@@ -32,6 +27,7 @@ type ChannelSupportRegistrar interface {
 	
 	BroadcastChannelSupport(msg *cb.Envelope) (*cb.ChannelHeader, bool, ChannelSupport, error)
 }
+
 
 
 type ChannelSupport interface {
@@ -57,19 +53,19 @@ type Consenter interface {
 	WaitReady() error
 }
 
-type handlerImpl struct {
+type Handler struct {
 	sm ChannelSupportRegistrar
 }
 
 
-func NewHandlerImpl(sm ChannelSupportRegistrar) Handler {
-	return &handlerImpl{
+func NewHandlerImpl(sm ChannelSupportRegistrar) *Handler {
+	return &Handler{
 		sm: sm,
 	}
 }
 
 
-func (bh *handlerImpl) Handle(srv ab.AtomicBroadcast_BroadcastServer) error {
+func (bh *Handler) Handle(srv ab.AtomicBroadcast_BroadcastServer) error {
 	addr := util.ExtractRemoteAddress(srv.Context())
 	logger.Debugf("Starting new broadcast loop for %s", addr)
 	for {

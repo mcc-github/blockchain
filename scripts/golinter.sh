@@ -38,6 +38,7 @@ fi
 echo "Checking for golang.org/x/net/context"
 context_whitelist=(
     "^github.com/mcc-github/blockchain/protos(:|/.*:)"
+    "^github.com/mcc-github/blockchain/orderer/common/broadcast/mock:"
     "^github.com/mcc-github/blockchain/common/grpclogging/fakes:"
     "^github.com/mcc-github/blockchain/common/grpclogging/testpb:"
     "^github.com/mcc-github/blockchain/common/grpcmetrics/fakes:"
