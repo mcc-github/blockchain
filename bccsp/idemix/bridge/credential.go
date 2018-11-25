@@ -8,12 +8,11 @@ package bridge
 import (
 	"bytes"
 
-	"github.com/mcc-github/blockchain-amcl/amcl"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-amcl/amcl"
 	"github.com/mcc-github/blockchain-amcl/amcl/FP256BN"
 	"github.com/mcc-github/blockchain/bccsp"
-	"github.com/mcc-github/blockchain/bccsp/idemix"
+	"github.com/mcc-github/blockchain/bccsp/idemix/handlers"
 	cryptolib "github.com/mcc-github/blockchain/idemix"
 	"github.com/pkg/errors"
 )
@@ -29,7 +28,7 @@ type Credential struct {
 
 
 
-func (c *Credential) Sign(key idemix.IssuerSecretKey, credentialRequest []byte, attributes []bccsp.IdemixAttribute) (res []byte, err error) {
+func (c *Credential) Sign(key handlers.IssuerSecretKey, credentialRequest []byte, attributes []bccsp.IdemixAttribute) (res []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			res = nil
@@ -45,7 +44,7 @@ func (c *Credential) Sign(key idemix.IssuerSecretKey, credentialRequest []byte, 
 	cr := &cryptolib.CredRequest{}
 	err = proto.Unmarshal(credentialRequest, cr)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed unmarshalling credential request")
 	}
 
 	attrValues := make([]*FP256BN.BIG, len(attributes))
@@ -62,7 +61,7 @@ func (c *Credential) Sign(key idemix.IssuerSecretKey, credentialRequest []byte, 
 
 	cred, err := cryptolib.NewCredential(iisk.SK, cr, attrValues, c.NewRand())
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, "failed creating new credential")
 	}
 
 	return proto.Marshal(cred)
@@ -72,7 +71,7 @@ func (c *Credential) Sign(key idemix.IssuerSecretKey, credentialRequest []byte, 
 
 
 
-func (*Credential) Verify(sk idemix.Big, ipk idemix.IssuerPublicKey, credential []byte, attributes []bccsp.IdemixAttribute) (err error) {
+func (*Credential) Verify(sk handlers.Big, ipk handlers.IssuerPublicKey, credential []byte, attributes []bccsp.IdemixAttribute) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = errors.Errorf("failure [%s]", r)

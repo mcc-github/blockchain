@@ -7,9 +7,9 @@ package bridge
 
 import (
 	"github.com/mcc-github/blockchain-amcl/amcl"
+	"github.com/mcc-github/blockchain/bccsp/idemix/handlers"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/bccsp/idemix"
 	cryptolib "github.com/mcc-github/blockchain/idemix"
 	"github.com/pkg/errors"
 )
@@ -22,7 +22,7 @@ type NymSignatureScheme struct {
 
 
 
-func (n *NymSignatureScheme) Sign(sk idemix.Big, Nym idemix.Ecp, RNym idemix.Big, ipk idemix.IssuerPublicKey, digest []byte) (res []byte, err error) {
+func (n *NymSignatureScheme) Sign(sk handlers.Big, Nym handlers.Ecp, RNym handlers.Big, ipk handlers.IssuerPublicKey, digest []byte) (res []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			res = nil
@@ -55,7 +55,7 @@ func (n *NymSignatureScheme) Sign(sk idemix.Big, Nym idemix.Ecp, RNym idemix.Big
 		digest,
 		n.NewRand())
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, "failed creating new nym signature")
 	}
 
 	return proto.Marshal(sig)
@@ -63,7 +63,7 @@ func (n *NymSignatureScheme) Sign(sk idemix.Big, Nym idemix.Ecp, RNym idemix.Big
 
 
 
-func (*NymSignatureScheme) Verify(ipk idemix.IssuerPublicKey, Nym idemix.Ecp, signature, digest []byte) (err error) {
+func (*NymSignatureScheme) Verify(ipk handlers.IssuerPublicKey, Nym handlers.Ecp, signature, digest []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = errors.Errorf("failure [%s]", r)

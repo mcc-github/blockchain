@@ -25,6 +25,9 @@ type Ecp struct {
 }
 
 func (o *Ecp) Bytes() ([]byte, error) {
+	
+	
+	
 	res := make([]byte, 2*idemix.FieldBytes+1)
 	o.E.ToBytes(res, false)
 

@@ -12,18 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-
-
-
-
-
-
-
-
-
-
-
-
 func TestPlain(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Plain Suite")
