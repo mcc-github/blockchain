@@ -147,14 +147,18 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		SnapDir: path.Join(c.EtcdRaftConfig.SnapDir, support.ChainID()),
 	}
 
-	rpc := &cluster.RPC{Channel: support.ChainID(), Comm: c.Communication}
+	rpc := &cluster.RPC{
+		Channel:             support.ChainID(),
+		Comm:                c.Communication,
+		DestinationToStream: make(map[uint64]orderer.Cluster_SubmitClient),
+	}
 	return NewChain(support, opts, c.Communication, rpc, bp, nil)
 }
 
 func raftMetadata(blockMetadata *common.Metadata, configMetadata *etcdraft.Metadata) (*etcdraft.RaftMetadata, error) {
 	m := &etcdraft.RaftMetadata{
 		Consenters:      map[uint64]*etcdraft.Consenter{},
-		NextConsenterID: 1,
+		NextConsenterId: 1,
 	}
 	if blockMetadata != nil && len(blockMetadata.Value) != 0 { 
 		if err := proto.Unmarshal(blockMetadata.Value, m); err != nil {
@@ -165,8 +169,8 @@ func raftMetadata(blockMetadata *common.Metadata, configMetadata *etcdraft.Metad
 
 	
 	for _, consenter := range configMetadata.Consenters {
-		m.Consenters[m.NextConsenterID] = consenter
-		m.NextConsenterID++
+		m.Consenters[m.NextConsenterId] = consenter
+		m.NextConsenterId++
 	}
 
 	return m, nil

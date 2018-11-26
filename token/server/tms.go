@@ -38,6 +38,11 @@ type Transactor interface {
 	
 	
 	RequestApprove(request *token.ApproveRequest) (*token.TokenTransaction, error)
+
+	
+	
+	
+	RequestTransferFrom(request *token.TransferRequest) (*token.TokenTransaction, error)
 }
 
 

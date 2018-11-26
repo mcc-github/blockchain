@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package bridge
 
 import (
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain-amcl/amcl/FP256BN"
 	"github.com/mcc-github/blockchain/idemix"
 )
@@ -25,11 +26,5 @@ type Ecp struct {
 }
 
 func (o *Ecp) Bytes() ([]byte, error) {
-	
-	
-	
-	res := make([]byte, 2*idemix.FieldBytes+1)
-	o.E.ToBytes(res, false)
-
-	return res, nil
+	return proto.Marshal(idemix.EcpToProto(o.E))
 }

@@ -16,6 +16,10 @@ type IssuerPublicKey interface {
 
 	
 	Bytes() ([]byte, error)
+
+	
+	
+	Hash() []byte
 }
 
 
@@ -32,6 +36,10 @@ type IssuerSecretKey interface {
 type Issuer interface {
 	
 	NewKey(AttributeNames []string) (IssuerSecretKey, error)
+
+	
+	
+	NewPublicKeyFromBytes(raw []byte, attributes []string) (IssuerPublicKey, error)
 }
 
 
@@ -52,7 +60,13 @@ type User interface {
 	NewKey() (Big, error)
 
 	
+	NewKeyFromBytes(raw []byte) (Big, error)
+
+	
 	MakeNym(sk Big, key IssuerPublicKey) (Ecp, Big, error)
+
+	
+	NewPublicNymFromBytes(raw []byte) (Ecp, error)
 }
 
 

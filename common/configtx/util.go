@@ -9,6 +9,7 @@ package configtx
 import (
 	"github.com/golang/protobuf/proto"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/utils"
 )
 
 
@@ -85,4 +86,18 @@ func UnmarshalConfigEnvelopeOrPanic(data []byte) *cb.ConfigEnvelope {
 		panic(err)
 	}
 	return result
+}
+
+
+func UnmarshalConfigUpdateFromPayload(payload *cb.Payload) (*cb.ConfigUpdate, error) {
+	configEnv, err := UnmarshalConfigEnvelope(payload.Data)
+	if err != nil {
+		return nil, err
+	}
+	configUpdateEnv, err := utils.EnvelopeToConfigUpdate(configEnv.LastUpdate)
+	if err != nil {
+		return nil, err
+	}
+
+	return UnmarshalConfigUpdate(configUpdateEnv.ConfigUpdate)
 }

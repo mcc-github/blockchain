@@ -5,7 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 */
 package bccsp
 
-import "crypto"
+import (
+	"crypto"
+)
 
 
 type RevocationAlgorithm int32
@@ -46,6 +48,24 @@ func (o *IdemixIssuerKeyGenOpts) Ephemeral() bool {
 }
 
 
+type IdemixIssuerPublicKeyImportOpts struct {
+	Temporary bool
+	
+	AttributeNames []string
+}
+
+
+func (*IdemixIssuerPublicKeyImportOpts) Algorithm() string {
+	return IDEMIX
+}
+
+
+
+func (o *IdemixIssuerPublicKeyImportOpts) Ephemeral() bool {
+	return o.Temporary
+}
+
+
 type IdemixUserSecretKeyGenOpts struct {
 	Temporary bool
 }
@@ -58,6 +78,22 @@ func (*IdemixUserSecretKeyGenOpts) Algorithm() string {
 
 
 func (o *IdemixUserSecretKeyGenOpts) Ephemeral() bool {
+	return o.Temporary
+}
+
+
+type IdemixUserSecretKeyImportOpts struct {
+	Temporary bool
+}
+
+
+func (*IdemixUserSecretKeyImportOpts) Algorithm() string {
+	return IDEMIX
+}
+
+
+
+func (o *IdemixUserSecretKeyImportOpts) Ephemeral() bool {
 	return o.Temporary
 }
 
@@ -85,6 +121,23 @@ func (o *IdemixNymKeyDerivationOpts) Ephemeral() bool {
 
 func (o *IdemixNymKeyDerivationOpts) IssuerPublicKey() Key {
 	return o.IssuerPK
+}
+
+
+type IdemixNymPublicKeyImportOpts struct {
+	
+	Temporary bool
+}
+
+
+func (*IdemixNymPublicKeyImportOpts) Algorithm() string {
+	return IDEMIX
+}
+
+
+
+func (o *IdemixNymPublicKeyImportOpts) Ephemeral() bool {
+	return o.Temporary
 }
 
 
@@ -211,6 +264,22 @@ func (*IdemixRevocationKeyGenOpts) Algorithm() string {
 
 
 func (o *IdemixRevocationKeyGenOpts) Ephemeral() bool {
+	return o.Temporary
+}
+
+
+type IdemixRevocationPublicKeyImportOpts struct {
+	Temporary bool
+}
+
+
+func (*IdemixRevocationPublicKeyImportOpts) Algorithm() string {
+	return IDEMIX
+}
+
+
+
+func (o *IdemixRevocationPublicKeyImportOpts) Ephemeral() bool {
 	return o.Temporary
 }
 
