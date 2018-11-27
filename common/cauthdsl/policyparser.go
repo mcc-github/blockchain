@@ -146,10 +146,10 @@ func secondPass(args ...interface{}) (interface{}, error) {
 	}
 
 	
-	var n int = len(args) - 1
+	var n int = len(args) - 2
 
 	
-	if t > n {
+	if t < 0 || t > n+1 {
 		return nil, fmt.Errorf("Invalid t-out-of-n predicate, t %d, n %d", t, n)
 	}
 

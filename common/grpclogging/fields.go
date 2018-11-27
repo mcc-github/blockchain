@@ -32,3 +32,14 @@ func ProtoMessage(key string, val interface{}) zapcore.Field {
 	}
 	return zap.Any(key, val)
 }
+
+func Error(err error) zapcore.Field {
+	if err == nil {
+		return zap.Skip()
+	}
+
+	
+	
+	
+	return zap.Error(struct{ error }{err})
+}

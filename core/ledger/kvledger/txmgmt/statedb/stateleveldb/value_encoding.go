@@ -14,6 +14,7 @@ import (
 )
 
 
+
 func encodeValue(v *statedb.VersionedValue) ([]byte, error) {
 	vvMsg := &msgs.VersionedValueProto{
 		VersionBytes: v.Version.ToBytes(),
@@ -27,6 +28,8 @@ func encodeValue(v *statedb.VersionedValue) ([]byte, error) {
 	encodedValue = append([]byte{0}, encodedValue...)
 	return encodedValue, nil
 }
+
+
 
 func decodeValue(encodedValue []byte) (*statedb.VersionedValue, error) {
 	if oldFormatEncoding(encodedValue) {
@@ -72,6 +75,12 @@ func decodeValueOldFormat(encodedValue []byte) ([]byte, *version.Height) {
 	return value, height
 }
 
+
+
 func oldFormatEncoding(encodedValue []byte) bool {
-	return encodedValue[0] != byte(0)
+	return encodedValue[0] != byte(0) ||
+		(encodedValue[0]|encodedValue[1]) == byte(0) 
+	
+	
+	
 }

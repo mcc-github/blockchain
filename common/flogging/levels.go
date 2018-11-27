@@ -8,8 +8,19 @@ package flogging
 
 import (
 	"fmt"
+	"math"
 
 	"go.uber.org/zap/zapcore"
+)
+
+const (
+	
+	
+	DisabledLevel = zapcore.Level(math.MinInt8)
+
+	
+	
+	PayloadLevel = zapcore.Level(zapcore.DebugLevel - 1)
 )
 
 
@@ -24,6 +35,8 @@ func NameToLevel(level string) zapcore.Level {
 
 func nameToLevel(level string) (zapcore.Level, error) {
 	switch level {
+	case "PAYLOAD", "payload":
+		return PayloadLevel, nil
 	case "DEBUG", "debug":
 		return zapcore.DebugLevel, nil
 	case "INFO", "info":
@@ -45,7 +58,7 @@ func nameToLevel(level string) (zapcore.Level, error) {
 		return zapcore.ErrorLevel, nil 
 
 	default:
-		return zapcore.Level(-99), fmt.Errorf("invalid log level: %s", level)
+		return DisabledLevel, fmt.Errorf("invalid log level: %s", level)
 	}
 }
 
