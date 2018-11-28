@@ -11,18 +11,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
-	"github.com/Shopify/sarama/mocks"
-	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
+	lmock "github.com/mcc-github/blockchain/orderer/consensus/kafka/mock"
 	mockblockcutter "github.com/mcc-github/blockchain/orderer/mocks/common/blockcutter"
 	mockmultichannel "github.com/mcc-github/blockchain/orderer/mocks/common/multichannel"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/utils"
+
+	"github.com/Shopify/sarama"
+	"github.com/Shopify/sarama/mocks"
+	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -3400,7 +3402,7 @@ func TestDeliverSession(t *testing.T) {
 		defer env.broker2.Close()
 
 		
-		consenter := New(mockLocalConfig.Kafka)
+		consenter, _ := New(mockLocalConfig.Kafka, &lmock.MetricsProvider{})
 
 		
 		metadata := &cb.Metadata{Value: utils.MarshalOrPanic(&ab.KafkaMetadata{LastOffsetPersisted: env.height})}
@@ -3489,7 +3491,7 @@ func TestDeliverSession(t *testing.T) {
 		defer env.broker0.Close()
 
 		
-		consenter := New(mockLocalConfig.Kafka)
+		consenter, _ := New(mockLocalConfig.Kafka, &lmock.MetricsProvider{})
 
 		
 		metadata := &cb.Metadata{Value: utils.MarshalOrPanic(&ab.KafkaMetadata{LastOffsetPersisted: env.height})}
@@ -3551,7 +3553,7 @@ func TestDeliverSession(t *testing.T) {
 		defer env.broker0.Close()
 
 		
-		consenter := New(mockLocalConfig.Kafka)
+		consenter, _ := New(mockLocalConfig.Kafka, &lmock.MetricsProvider{})
 
 		
 		metadata := &cb.Metadata{Value: utils.MarshalOrPanic(&ab.KafkaMetadata{LastOffsetPersisted: env.height})}

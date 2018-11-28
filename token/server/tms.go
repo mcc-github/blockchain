@@ -43,6 +43,9 @@ type Transactor interface {
 	
 	
 	RequestTransferFrom(request *token.TransferRequest) (*token.TokenTransaction, error)
+
+	
+	Done()
 }
 
 

@@ -31,15 +31,16 @@ var logger = flogging.MustGetLogger("lockbasedtxmgr")
 
 
 type LockBasedTxMgr struct {
-	ledgerid        string
-	db              privacyenabledstate.DB
-	pvtdataPurgeMgr *pvtdataPurgeMgr
-	validator       validator.Validator
-	stateListeners  []ledger.StateListener
-	ccInfoProvider  ledger.DeployedChaincodeInfoProvider
-	commitRWLock    sync.RWMutex
-	oldBlockCommit  sync.Mutex
-	current         *current
+	ledgerid              string
+	db                    privacyenabledstate.DB
+	pvtdataPurgeMgr       *pvtdataPurgeMgr
+	validator             validator.Validator
+	stateListeners        []ledger.StateListener
+	ccInfoProvider        ledger.DeployedChaincodeInfoProvider
+	commitRWLock          sync.RWMutex
+	oldBlockCommit        sync.Mutex
+	current               *current
+	lastCommittedBlockNum uint64
 }
 
 type current struct {
@@ -60,7 +61,12 @@ func (c *current) maxTxNumber() uint64 {
 func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, ccInfoProvider ledger.DeployedChaincodeInfoProvider) (*LockBasedTxMgr, error) {
 	db.Open()
-	txmgr := &LockBasedTxMgr{ledgerid: ledgerid, db: db, stateListeners: stateListeners, ccInfoProvider: ccInfoProvider}
+	txmgr := &LockBasedTxMgr{
+		ledgerid:       ledgerid,
+		db:             db,
+		stateListeners: stateListeners,
+		ccInfoProvider: ccInfoProvider,
+	}
 	pvtstatePurgeMgr, err := pvtstatepurgemgmt.InstantiatePurgeMgr(ledgerid, db, btlPolicy, bookkeepingProvider)
 	if err != nil {
 		return nil, err
@@ -164,12 +170,13 @@ func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtDat
 	
 	
 	
-	txmgr.pvtdataPurgeMgr.UpdateBookkeepingForPvtDataOfOldBlocks(batch.PvtUpdates)
-	nextBlockNumToBeCommitted, err := txmgr.getNextBlockNumberToBeCommitted()
-	if err != nil {
+	if err := txmgr.pvtdataPurgeMgr.UpdateBookkeepingForPvtDataOfOldBlocks(batch.PvtUpdates); err != nil {
 		return err
 	}
-	txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(nextBlockNumToBeCommitted)
+
+	if txmgr.lastCommittedBlockNum > 0 {
+		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.lastCommittedBlockNum + 1)
+	}
 
 	
 	if err := txmgr.db.ApplyPrivacyAwareUpdates(batch, nil); err != nil {
@@ -336,16 +343,6 @@ func checkIfPvtWriteIsStale(hashedKey *privacyenabledstate.HashedCompositeKey,
 	return true, nil
 }
 
-
-func (txmgr *LockBasedTxMgr) getNextBlockNumberToBeCommitted() (uint64, error) {
-	lastCommittedBlk, err := txmgr.db.GetLatestSavePoint()
-	if err != nil {
-		return 0, err
-	}
-
-	return lastCommittedBlk.BlockNum + 1, nil
-}
-
 func (uniquePvtData uniquePvtDataMap) transformToUpdateBatch() *privacyenabledstate.UpdateBatch {
 	batch := privacyenabledstate.NewUpdateBatch()
 	for hashedCompositeKey, pvtWrite := range uniquePvtData {
@@ -457,6 +454,7 @@ func (txmgr *LockBasedTxMgr) Commit() error {
 	
 	
 	txmgr.updateStateListeners()
+	txmgr.lastCommittedBlockNum = txmgr.current.blockNum()
 	return nil
 }
 

@@ -18,10 +18,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-
-
-
-
 type TimeFunc func() time.Time
 
 type ProverPeer struct {

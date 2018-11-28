@@ -42,3 +42,8 @@ func (p *MemoryLedger) SetState(namespace string, key string, value []byte) erro
 func (p *MemoryLedger) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ledger.ResultsIterator, error) {
 	return nil, nil
 }
+
+
+func (p *MemoryLedger) Done() {
+	
+}

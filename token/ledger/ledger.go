@@ -28,6 +28,9 @@ type LedgerReader interface {
 	
 	
 	GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ledger.ResultsIterator, error)
+
+	
+	Done()
 }
 
 

@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/deliver"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/orderer/common/broadcast"
 	localconfig "github.com/mcc-github/blockchain/orderer/common/localconfig"
@@ -72,10 +72,13 @@ func (rs *responseSender) SendBlockResponse(block *cb.Block) error {
 }
 
 
-func NewServer(r *multichannel.Registrar, _ crypto.LocalSigner, debug *localconfig.Debug, timeWindow time.Duration, mutualTLS bool) ab.AtomicBroadcastServer {
+func NewServer(r *multichannel.Registrar, metricsProvider metrics.Provider, debug *localconfig.Debug, timeWindow time.Duration, mutualTLS bool) ab.AtomicBroadcastServer {
 	s := &server{
-		dh:        deliver.NewHandler(deliverSupport{Registrar: r}, timeWindow, mutualTLS),
-		bh:        broadcast.NewHandlerImpl(broadcastSupport{Registrar: r}),
+		dh: deliver.NewHandler(deliverSupport{Registrar: r}, timeWindow, mutualTLS),
+		bh: &broadcast.Handler{
+			SupportRegistrar: broadcastSupport{Registrar: r},
+			Metrics:          broadcast.NewMetrics(metricsProvider),
+		},
 		debug:     debug,
 		Registrar: r,
 	}

@@ -31,6 +31,10 @@ type Chaincode struct {
 
 
 
+
+
+
+
 func DeployChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
 	if len(peers) == 0 {
 		peers = n.PeersWithChannel(channel)

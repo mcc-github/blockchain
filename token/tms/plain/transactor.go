@@ -296,6 +296,13 @@ func (t *Transactor) RequestTransferFrom(request *token.TransferRequest) (*token
 }
 
 
+func (t *Transactor) Done() {
+	if t.Ledger != nil {
+		t.Ledger.Done()
+	}
+}
+
+
 func (t *Transactor) isSpent(outputID string) (bool, error) {
 	key, err := createInputKey(outputID)
 	if err != nil {
