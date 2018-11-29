@@ -232,8 +232,8 @@ func (s *Store) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap m
 }
 
 
-func (s *Store) GetLastUpdatedOldBlocksList() ([]uint64, error) {
-	return s.pvtdataStore.GetLastUpdatedOldBlocksList()
+func (s *Store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error) {
+	return s.pvtdataStore.GetLastUpdatedOldBlocksPvtData()
 }
 
 

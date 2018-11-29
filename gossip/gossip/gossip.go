@@ -131,6 +131,7 @@ type Config struct {
 
 	TLSCerts *common.TLSCertificates 
 
-	InternalEndpoint string 
-	ExternalEndpoint string 
+	InternalEndpoint         string        
+	ExternalEndpoint         string        
+	TimeForMembershipTracker time.Duration 
 }

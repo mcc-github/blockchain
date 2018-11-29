@@ -19,11 +19,14 @@ package validator
 import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 )
 
 
 type Validator interface {
-	ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) (*privacyenabledstate.UpdateBatch, error)
+	ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) (
+		*privacyenabledstate.UpdateBatch, []*txmgr.TxStatInfo, error,
+	)
 }
 
 

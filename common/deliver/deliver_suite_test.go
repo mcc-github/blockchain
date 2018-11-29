@@ -9,9 +9,16 @@ package deliver_test
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/deliver"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+
+type filteredResponseSender interface {
+	deliver.ResponseSender
+	deliver.Filtered
+}
 
 func TestDeliver(t *testing.T) {
 	RegisterFailHandler(Fail)

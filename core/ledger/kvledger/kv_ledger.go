@@ -104,6 +104,16 @@ func (l *kvLedger) initBlockStore(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 func (l *kvLedger) recoverDBs() error {
 	logger.Debugf("Entering recoverDB()")
+	if err := l.syncStateAndHistoryDBWithBlockstore(); err != nil {
+		return err
+	}
+	if err := l.syncStateDBWithPvtdatastore(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (l *kvLedger) syncStateAndHistoryDBWithBlockstore() error {
 	
 	info, _ := l.blockStore.GetBlockchainInfo()
 	if info.Height == 0 {
@@ -144,6 +154,29 @@ func (l *kvLedger) recoverDBs() error {
 	
 	return l.recommitLostBlocks(recoverers[1].firstBlockNum, lastAvailableBlockNum,
 		recoverers[0].recoverable, recoverers[1].recoverable)
+}
+
+func (l *kvLedger) syncStateDBWithPvtdatastore() error {
+	
+	
+	
+	
+	
+	
+	
+	
+	blocksPvtData, err := l.blockStore.GetLastUpdatedOldBlocksPvtData()
+	if err != nil {
+		return err
+	}
+	if err := l.txtmgmt.RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtData); err != nil {
+		return err
+	}
+	if err := l.blockStore.ResetLastUpdatedOldBlocksList(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 
@@ -266,7 +299,7 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 
 	startBlockProcessing := time.Now()
 	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, blockNo)
-	err = l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
+	txstatsInfo, err := l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
 	if err != nil {
 		return err
 	}
@@ -310,6 +343,7 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		elapsedBlockProcessing,
 		elapsedCommitBlockStorage,
 		elapsedCommitState,
+		txstatsInfo,
 	)
 	return nil
 }
@@ -319,11 +353,13 @@ func (l *kvLedger) updateBlockStats(
 	blockProcessingTime time.Duration,
 	blockstorageCommitTime time.Duration,
 	statedbCommitTime time.Duration,
+	txstatsInfo []*txmgr.TxStatInfo,
 ) {
 	l.stats.updateBlockchainHeight(blockNum + 1)
 	l.stats.updateBlockProcessingTime(blockProcessingTime)
 	l.stats.updateBlockstorageCommitTime(blockstorageCommitTime)
 	l.stats.updateStatedbCommitTime(statedbCommitTime)
+	l.stats.updateTransactionsStats(txstatsInfo)
 }
 
 

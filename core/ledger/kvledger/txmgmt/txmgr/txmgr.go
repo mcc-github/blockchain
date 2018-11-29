@@ -19,13 +19,15 @@ package txmgr
 import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
+	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 
 type TxMgr interface {
 	NewQueryExecutor(txid string) (ledger.QueryExecutor, error)
 	NewTxSimulator(txid string) (ledger.TxSimulator, error)
-	ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) error
+	ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) ([]*TxStatInfo, error)
 	RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error
 	GetLastSavepoint() (*version.Height, error)
 	ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error)
@@ -33,6 +35,14 @@ type TxMgr interface {
 	Commit() error
 	Rollback()
 	Shutdown()
+}
+
+
+type TxStatInfo struct {
+	ValidationCode peer.TxValidationCode
+	TxType         common.HeaderType
+	ChaincodeID    *peer.ChaincodeID
+	NumCollections int
 }
 
 

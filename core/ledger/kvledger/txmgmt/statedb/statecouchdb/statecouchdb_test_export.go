@@ -8,6 +8,7 @@ package statecouchdb
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/stretchr/testify/assert"
 )
@@ -22,7 +23,7 @@ type TestVDBEnv struct {
 func NewTestVDBEnv(t testing.TB) *TestVDBEnv {
 	t.Logf("Creating new TestVDBEnv")
 
-	dbProvider, _ := NewVersionedDBProvider()
+	dbProvider, _ := NewVersionedDBProvider(&disabled.Provider{})
 	testVDBEnv := &TestVDBEnv{t, dbProvider}
 	
 	return testVDBEnv

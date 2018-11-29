@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
@@ -37,11 +38,11 @@ type CommonStorageDBProvider struct {
 }
 
 
-func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider) (DBProvider, error) {
+func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider, metricsProvider metrics.Provider) (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
 	var err error
 	if ledgerconfig.IsCouchDBEnabled() {
-		if vdbProvider, err = statecouchdb.NewVersionedDBProvider(); err != nil {
+		if vdbProvider, err = statecouchdb.NewVersionedDBProvider(metricsProvider); err != nil {
 			return nil, err
 		}
 	} else {

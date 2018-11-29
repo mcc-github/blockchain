@@ -13,6 +13,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/deliver"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -60,11 +61,18 @@ type filteredBlockResponseSender struct {
 	peer.Deliver_DeliverFilteredServer
 }
 
+
 func (fbrs *filteredBlockResponseSender) SendStatusResponse(status common.Status) error {
 	response := &peer.DeliverResponse{
 		Type: &peer.DeliverResponse_Status{Status: status},
 	}
 	return fbrs.Send(response)
+}
+
+
+
+func (fbrs *filteredBlockResponseSender) IsFiltered() bool {
+	return true
 }
 
 
@@ -121,15 +129,16 @@ func (s *server) Deliver(srv peer.Deliver_DeliverServer) (err error) {
 
 
 
-func NewDeliverEventsServer(mutualTLS bool, policyCheckerProvider PolicyCheckerProvider, chainManager deliver.ChainManager) peer.DeliverServer {
+func NewDeliverEventsServer(mutualTLS bool, policyCheckerProvider PolicyCheckerProvider, chainManager deliver.ChainManager, metricsProvider metrics.Provider) peer.DeliverServer {
 	timeWindow := viper.GetDuration("peer.authentication.timewindow")
 	if timeWindow == 0 {
 		defaultTimeWindow := 15 * time.Minute
 		logger.Warningf("`peer.authentication.timewindow` not set; defaulting to %s", defaultTimeWindow)
 		timeWindow = defaultTimeWindow
 	}
+	metrics := deliver.NewMetrics(metricsProvider)
 	return &server{
-		dh:                    deliver.NewHandler(chainManager, timeWindow, mutualTLS),
+		dh:                    deliver.NewHandler(chainManager, timeWindow, mutualTLS, metrics),
 		policyCheckerProvider: policyCheckerProvider,
 	}
 }

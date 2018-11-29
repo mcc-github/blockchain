@@ -298,18 +298,28 @@ func TestCommitPvtDataOfOldBlocks(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(expectedMissingPvtDataInfo, missingPvtDataInfo)
 
-	expectedBlockList := []uint64{1, 2}
-	blockList, err := store.GetLastUpdatedOldBlocksList()
+	
+	
+	blksPvtData, err := store.GetLastUpdatedOldBlocksPvtData()
 	assert.NoError(err)
-	assert.Equal(expectedBlockList, blockList)
+
+	expectedLastupdatedPvtdata := make(map[uint64][]*ledger.TxPvtData)
+	expectedLastupdatedPvtdata[1] = []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 1, []string{"ns-1:coll-1", "ns-2:coll-1"}),
+		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-2:coll-1", "ns-2:coll-2", "ns-3:coll-1"}),
+		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
+	}
+	expectedLastupdatedPvtdata[2] = []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 3, []string{"ns-1:coll-1"}),
+	}
+	assert.Equal(expectedLastupdatedPvtdata, blksPvtData)
 
 	err = store.ResetLastUpdatedOldBlocksList()
 	assert.NoError(err)
 
-	expectedBlockList = []uint64(nil)
-	blockList, err = store.GetLastUpdatedOldBlocksList()
+	blksPvtData, err = store.GetLastUpdatedOldBlocksPvtData()
 	assert.NoError(err)
-	assert.Nil(blockList)
+	assert.Nil(blksPvtData)
 
 	
 	assert.NoError(store.Prepare(3, nil, nil))

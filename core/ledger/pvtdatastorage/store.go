@@ -73,7 +73,7 @@ type Store interface {
 	
 	CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error
 	
-	GetLastUpdatedOldBlocksList() ([]uint64, error)
+	GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error)
 	
 	ResetLastUpdatedOldBlocksList() error
 	

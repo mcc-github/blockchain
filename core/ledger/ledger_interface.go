@@ -253,7 +253,7 @@ type BlockAndPvtData struct {
 
 type BlockPvtData struct {
 	BlockNum  uint64
-	WriteSets map[uint64]*TxPvtData
+	WriteSets TxPvtDataMap
 }
 
 

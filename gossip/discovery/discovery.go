@@ -79,8 +79,8 @@ type NetworkMember struct {
 }
 
 
-func (n *NetworkMember) String() string {
-	return fmt.Sprintf("Endpoint: %s, InternalEndpoint: %s, PKI-ID: %v, Metadata: %v", n.Endpoint, n.InternalEndpoint, n.PKIid, n.Metadata)
+func (n NetworkMember) String() string {
+	return fmt.Sprintf("Endpoint: %s, InternalEndpoint: %s, PKI-ID: %s, Metadata: %x", n.Endpoint, n.InternalEndpoint, n.PKIid, n.Metadata)
 }
 
 
@@ -105,7 +105,6 @@ type identifier func() (*PeerIdentification, error)
 
 
 type Discovery interface {
-
 	
 	Lookup(PKIID common.PKIidType) *NetworkMember
 

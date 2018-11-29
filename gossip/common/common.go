@@ -6,7 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 package common
 
-import "bytes"
+import (
+	"bytes"
+	"encoding/hex"
+)
 
 func init() {
 	
@@ -19,6 +22,13 @@ func init() {
 
 
 type PKIidType []byte
+
+func (p PKIidType) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return hex.EncodeToString(p)
+}
 
 
 

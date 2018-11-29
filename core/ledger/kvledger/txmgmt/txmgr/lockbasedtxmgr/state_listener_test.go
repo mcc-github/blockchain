@@ -127,7 +127,7 @@ func TestStateListenerQueryExecutor(t *testing.T) {
 	block := testutil.ConstructBlock(t, 1, nil, [][]byte{simResBytes}, false)
 
 	
-	err = txMgr.ValidateAndPrepare(&ledger.BlockAndPvtData{Block: block}, false)
+	_, err = txMgr.ValidateAndPrepare(&ledger.BlockAndPvtData{Block: block}, false)
 	assert.NoError(t, err)
 
 	
