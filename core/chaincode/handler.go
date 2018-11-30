@@ -1142,6 +1142,10 @@ func (h *Handler) Execute(txParams *ccprovider.TransactionParams, cccid *ccprovi
 		
 	case <-time.After(timeout):
 		err = errors.New("timeout expired while executing transaction")
+		ccName := cccid.Name + ":" + cccid.Version
+		h.Metrics.ExecuteTimeouts.With(
+			"chaincode", ccName,
+		).Add(1)
 	}
 
 	return ccresp, err
