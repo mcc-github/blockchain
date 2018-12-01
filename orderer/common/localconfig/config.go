@@ -187,9 +187,8 @@ type Operations struct {
 
 
 type Metrics struct {
-	Provider   string
-	Statsd     Statsd
-	Prometheus Prometheus
+	Provider string
+	Statsd   Statsd
 }
 
 
@@ -198,11 +197,6 @@ type Statsd struct {
 	Address       string
 	WriteInterval time.Duration
 	Prefix        string
-}
-
-
-type Prometheus struct {
-	HandlerPath string
 }
 
 

@@ -4,140 +4,148 @@ Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package blockcutter
+package blockcutter_test
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
-	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter/mock"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/stretchr/testify/assert"
 )
 
+var _ = Describe("Blockcutter", func() {
+	var (
+		bc                blockcutter.Receiver
+		fakeConfig        *mock.OrdererConfig
+		fakeConfigFetcher *mock.OrdererConfigFetcher
+	)
 
-type ordererConfigFetcher interface {
-	OrdererConfigFetcher
-}
+	BeforeEach(func() {
+		fakeConfig = &mock.OrdererConfig{}
+		fakeConfigFetcher = &mock.OrdererConfigFetcher{}
+		fakeConfigFetcher.OrdererConfigReturns(fakeConfig, true)
 
-
-type ordererConfig interface {
-	channelconfig.Orderer
-}
-
-func init() {
-	flogging.ActivateSpec("orderer.common.blockcutter=DEBUG")
-}
-
-var tx = &cb.Envelope{Payload: []byte("GOOD")}
-var txLarge = &cb.Envelope{Payload: []byte("GOOD"), Signature: make([]byte, 1000)}
-
-func TestNormalBatch(t *testing.T) {
-	maxMessageCount := uint32(2)
-	absoluteMaxBytes := uint32(1000)
-	preferredMaxBytes := uint32(100)
-	mockConfig := &mock.OrdererConfig{}
-	mockConfig.BatchSizeReturns(&ab.BatchSize{
-		MaxMessageCount:   maxMessageCount,
-		AbsoluteMaxBytes:  absoluteMaxBytes,
-		PreferredMaxBytes: preferredMaxBytes,
+		bc = blockcutter.NewReceiverImpl(fakeConfigFetcher)
 	})
 
-	mockConfigFetcher := &mock.OrdererConfigFetcher{}
-	mockConfigFetcher.OrdererConfigReturns(mockConfig, true)
+	Describe("Ordered", func() {
+		var (
+			message *cb.Envelope
+		)
 
-	r := NewReceiverImpl(mockConfigFetcher)
+		BeforeEach(func() {
+			fakeConfig.BatchSizeReturns(&ab.BatchSize{
+				MaxMessageCount:   2,
+				PreferredMaxBytes: 100,
+			})
 
-	batches, pending := r.Ordered(tx)
-	assert.Nil(t, batches, "Should not have created batch")
-	assert.True(t, pending, "Should have message pending in the receiver")
+			message = &cb.Envelope{Payload: []byte("Twenty Bytes of Data"), Signature: []byte("Twenty Bytes of Data")}
+		})
 
-	batches, pending = r.Ordered(tx)
-	assert.NotNil(t, batches, "Should have created batch")
-	assert.False(t, pending, "Should not have message pending in the receiver")
-}
+		It("adds the message to the pending batches", func() {
+			batches, pending := bc.Ordered(message)
+			Expect(batches).To(BeEmpty())
+			Expect(pending).To(BeTrue())
+		})
 
-func TestBatchSizePreferredMaxBytesOverflow(t *testing.T) {
-	txBytes := messageSizeBytes(tx)
+		Context("when enough batches to fill the max message count are enqueued", func() {
+			It("cuts the batch", func() {
+				batches, pending := bc.Ordered(message)
+				Expect(batches).To(BeEmpty())
+				Expect(pending).To(BeTrue())
+				batches, pending = bc.Ordered(message)
+				Expect(len(batches)).To(Equal(1))
+				Expect(len(batches[0])).To(Equal(2))
+				Expect(pending).To(BeFalse())
+			})
+		})
 
-	
-	preferredMaxBytes := txBytes*10 - 1
+		Context("when the message does not exceed max message count or preferred size", func() {
+			BeforeEach(func() {
+				fakeConfig.BatchSizeReturns(&ab.BatchSize{
+					MaxMessageCount:   3,
+					PreferredMaxBytes: 100,
+				})
+			})
 
-	
-	maxMessageCount := uint32(20)
+			It("adds the message to the pending batches", func() {
+				batches, pending := bc.Ordered(message)
+				Expect(batches).To(BeEmpty())
+				Expect(pending).To(BeTrue())
+				batches, pending = bc.Ordered(message)
+				Expect(batches).To(BeEmpty())
+				Expect(pending).To(BeTrue())
+			})
+		})
 
-	mockConfig := &mock.OrdererConfig{}
-	mockConfig.BatchSizeReturns(&ab.BatchSize{
-		MaxMessageCount:   maxMessageCount,
-		AbsoluteMaxBytes:  preferredMaxBytes * 2,
-		PreferredMaxBytes: preferredMaxBytes,
+		Context("when the message is larger than the preferred max bytes", func() {
+			BeforeEach(func() {
+				fakeConfig.BatchSizeReturns(&ab.BatchSize{
+					MaxMessageCount:   3,
+					PreferredMaxBytes: 30,
+				})
+			})
+
+			It("cuts the batch immediately", func() {
+				batches, pending := bc.Ordered(message)
+				Expect(len(batches)).To(Equal(1))
+				Expect(pending).To(BeFalse())
+			})
+		})
+
+		Context("when the message causes the batch to exceed the preferred max bytes", func() {
+			BeforeEach(func() {
+				fakeConfig.BatchSizeReturns(&ab.BatchSize{
+					MaxMessageCount:   3,
+					PreferredMaxBytes: 50,
+				})
+			})
+
+			It("cuts the previous batch immediately, enqueueing the second", func() {
+				batches, pending := bc.Ordered(message)
+				Expect(batches).To(BeEmpty())
+				Expect(pending).To(BeTrue())
+
+				batches, pending = bc.Ordered(message)
+				Expect(len(batches)).To(Equal(1))
+				Expect(len(batches[0])).To(Equal(1))
+				Expect(pending).To(BeTrue())
+			})
+
+			Context("when the new message is larger than the preferred max bytes", func() {
+				var (
+					bigMessage *cb.Envelope
+				)
+
+				BeforeEach(func() {
+					bigMessage = &cb.Envelope{Payload: make([]byte, 1000)}
+				})
+
+				It("cuts both the previous batch and the next batch immediately", func() {
+					batches, pending := bc.Ordered(message)
+					Expect(batches).To(BeEmpty())
+					Expect(pending).To(BeTrue())
+
+					batches, pending = bc.Ordered(bigMessage)
+					Expect(len(batches)).To(Equal(2))
+					Expect(len(batches[0])).To(Equal(1))
+					Expect(len(batches[1])).To(Equal(1))
+					Expect(pending).To(BeFalse())
+				})
+			})
+		})
+
+		Context("when the orderer config cannot be retrieved", func() {
+			BeforeEach(func() {
+				fakeConfigFetcher.OrdererConfigReturns(nil, false)
+			})
+
+			It("panics", func() {
+				Expect(func() { bc.Ordered(message) }).To(Panic())
+			})
+		})
 	})
-
-	mockConfigFetcher := &mock.OrdererConfigFetcher{}
-	mockConfigFetcher.OrdererConfigReturns(mockConfig, true)
-
-	r := NewReceiverImpl(mockConfigFetcher)
-
-	
-	for i := 0; i < 9; i++ {
-		batches, pending := r.Ordered(tx)
-		assert.Nil(t, batches, "Should not have created batch")
-		assert.True(t, pending, "Should have enqueued message into batch")
-	}
-
-	
-	batches, pending := r.Ordered(tx)
-	assert.NotNil(t, batches, "Should have created batch")
-	assert.True(t, pending, "Should still have message pending")
-	assert.Len(t, batches, 1, "Should have created one batch")
-	assert.Len(t, batches[0], 9, "Should have had nine normal tx in the batch")
-
-	
-	messageBatch := r.Cut()
-	assert.NotNil(t, batches, "Should have created batch")
-	assert.Len(t, messageBatch, 1, "Should have had one tx in the batch")
-}
-
-func TestBatchSizePreferredMaxBytesOverflowNoPending(t *testing.T) {
-	goodTxLargeBytes := messageSizeBytes(txLarge)
-
-	
-	preferredMaxBytes := goodTxLargeBytes - 1
-
-	
-	maxMessageCount := uint32(20)
-
-	mockConfig := &mock.OrdererConfig{}
-	mockConfig.BatchSizeReturns(&ab.BatchSize{
-		MaxMessageCount:   maxMessageCount,
-		AbsoluteMaxBytes:  preferredMaxBytes * 3,
-		PreferredMaxBytes: preferredMaxBytes,
-	})
-
-	mockConfigFetcher := &mock.OrdererConfigFetcher{}
-	mockConfigFetcher.OrdererConfigReturns(mockConfig, true)
-
-	r := NewReceiverImpl(mockConfigFetcher)
-
-	
-	batches, pending := r.Ordered(tx)
-	assert.Nil(t, batches, "Should not have created batch")
-	assert.True(t, pending, "Should have enqueued message into batch")
-
-	
-	batches, pending = r.Ordered(txLarge)
-	assert.NotNil(t, batches, "Should have created batch")
-	assert.False(t, pending, "Should not have pending messages in receiver")
-	assert.Len(t, batches, 2, "Should have created two batches")
-	for i, batch := range batches {
-		assert.Len(t, batch, 1, "Should have had one normal tx in batch %d", i)
-	}
-}
-
-func TestPanicOnMissingConfig(t *testing.T) {
-	mockConfigFetcher := &mock.OrdererConfigFetcher{}
-	r := NewReceiverImpl(mockConfigFetcher)
-	assert.Panics(t, func() { r.Ordered(tx) })
-}
+})

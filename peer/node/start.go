@@ -312,10 +312,11 @@ func serve(args []string) error {
 	defer service.GetGossipService().Stop()
 
 	
-	err = registerProverService(peerServer, aclProvider, signingIdentity)
-	if err != nil {
-		return err
-	}
+	
+	
+	
+	
+	
 
 	
 
@@ -878,9 +879,6 @@ func newOperationsSystem() *operations.System {
 				Address:       viper.GetString("operations.metrics.statsd.address"),
 				WriteInterval: viper.GetDuration("operations.metrics.statsd.writeInterval"),
 				Prefix:        viper.GetString("operations.metrics.statsd.prefix"),
-			},
-			Prometheus: &operations.Prometheus{
-				HandlerPath: viper.GetString("operations.metrics.prometheus.handlerPath"),
 			},
 		},
 		TLS: operations.TLS{

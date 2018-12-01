@@ -19,6 +19,7 @@ import (
 	"code.cloudfoundry.org/clock/fakeclock"
 	"github.com/coreos/etcd/raft"
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/flogging"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
@@ -43,6 +44,10 @@ const (
 	ELECTION_TICK       = 2
 	HEARTBEAT_TICK      = 1
 )
+
+func init() {
+	factory.InitFactories(nil)
+}
 
 
 
@@ -1537,6 +1542,93 @@ var _ = Describe("Chain", func() {
 						Eventually(c.support.WriteBlockCallCount, defaultTimeout).Should(Equal(3))
 					})
 				})
+
+				It("stop leader and continue reconfiguration failing over to new leader", func() {
+					
+					
+					
+					
+					
+					
+					
+					
+					
+
+					c4 := newChain(timeout, channelID, dataDir, 4, &raftprotos.RaftMetadata{
+						Consenters: map[uint64]*raftprotos.Consenter{},
+					})
+					c4.init()
+
+					By("adding new node to the network")
+					Expect(c4.support.WriteBlockCallCount()).Should(Equal(0))
+					Expect(c4.support.WriteConfigBlockCallCount()).Should(Equal(0))
+
+					configEnv := newConfigEnv(channelID, common.HeaderType_CONFIG, newConfigUpdateEnv(channelID, addConsenterConfigValue()))
+					c1.cutter.CutNext = true
+					configBlock := &common.Block{
+						Header: &common.BlockHeader{},
+						Data:   &common.BlockData{Data: [][]byte{marshalOrPanic(configEnv)}}}
+
+					c1.support.CreateNextBlockReturns(configBlock)
+
+					c1.support.WriteConfigBlockStub = func(_ *common.Block, _ []byte) {
+						
+						network.disconnect(1)
+						
+						network.elect(2)
+					}
+
+					
+					c2.support.BlockReturns(configBlock)
+
+					By("sending config transaction")
+					err := c1.Configure(configEnv, 0)
+					Expect(err).ToNot(HaveOccurred())
+
+					
+					network.exec(
+						func(c *chain) {
+							Eventually(c.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
+						})
+
+					network.addChain(c4)
+					c4.Start()
+					
+					
+					
+					
+					Eventually(func() <-chan uint64 {
+						c2.clock.Increment(interval)
+						return c4.observe
+					}, LongEventualTimeout).Should(Receive(Equal(uint64(2))))
+
+					Eventually(c4.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(1))
+					Eventually(c4.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
+
+					By("submitting new transaction to follower")
+					c2.cutter.CutNext = true
+					c2.support.CreateNextBlockReturns(normalBlock)
+					err = c4.Order(env, 0)
+					Expect(err).ToNot(HaveOccurred())
+
+					c2.clock.Increment(interval)
+
+					
+					Eventually(c2.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
+					Eventually(c3.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
+					Eventually(c4.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
+
+					
+					Consistently(c1.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(1))
+
+					network.connect(1)
+
+					c2.clock.Increment(interval)
+					
+					
+					Eventually(c1.observe, LongEventualTimeout).Should(Receive(Equal(uint64(2))))
+					Eventually(c1.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
+				})
 			})
 		})
 
@@ -2226,7 +2318,9 @@ func (n *network) elect(id uint64) (tick int) {
 	
 	t := 1000 * time.Millisecond
 
+	n.connLock.RLock()
 	c := n.chains[id]
+	n.connLock.RUnlock()
 
 	var elected bool
 	for !elected {
