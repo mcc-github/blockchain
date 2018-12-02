@@ -95,14 +95,12 @@ const (
 )
 
 var chaincodeDevMode bool
-var orderingEndpoint string
 
 func startCmd() *cobra.Command {
 	
 	flags := nodeStartCmd.Flags()
 	flags.BoolVarP(&chaincodeDevMode, "peer-chaincodedev", "", false,
 		"Whether peer in chaincode development mode")
-	flags.StringVarP(&orderingEndpoint, "orderer", "o", "orderer:7050", "Ordering service endpoint")
 
 	return nodeStartCmd
 }
