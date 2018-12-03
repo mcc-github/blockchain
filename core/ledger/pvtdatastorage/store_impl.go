@@ -238,9 +238,30 @@ func (s *store) Commit() error {
 
 
 
+
+
+
+
+
 func (s *store) Rollback() error {
 	if !s.batchPending {
 		return &ErrIllegalCall{"No pending batch to rollback"}
+	}
+	blkNum := s.nextBlockNum()
+	batch := leveldbhelper.NewUpdateBatch()
+	itr := s.db.GetIterator(datakeyRange(blkNum))
+	for itr.Next() {
+		batch.Delete(itr.Key())
+	}
+	itr.Release()
+	itr = s.db.GetIterator(eligibleMissingdatakeyRange(blkNum))
+	for itr.Next() {
+		batch.Delete(itr.Key())
+	}
+	itr.Release()
+	batch.Delete(pendingCommitKey)
+	if err := s.db.WriteBatch(batch, true); err != nil {
+		return err
 	}
 	s.batchPending = false
 	return nil

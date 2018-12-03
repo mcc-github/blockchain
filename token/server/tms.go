@@ -15,6 +15,10 @@ import (
 type Issuer interface {
 	
 	RequestImport(tokensToIssue []*token.TokenToIssue) (*token.TokenTransaction, error)
+
+	
+	
+	RequestExpectation(request *token.ExpectationRequest) (*token.TokenTransaction, error)
 }
 
 
@@ -43,6 +47,10 @@ type Transactor interface {
 	
 	
 	RequestTransferFrom(request *token.TransferRequest) (*token.TokenTransaction, error)
+
+	
+	
+	RequestExpectation(request *token.ExpectationRequest) (*token.TokenTransaction, error)
 
 	
 	Done()

@@ -9,7 +9,9 @@ package privdata
 import (
 	"strings"
 
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
+	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 
@@ -47,6 +49,10 @@ type CollectionAccessPolicy interface {
 	
 	
 	MemberOrgs() []string
+
+	
+	
+	IsMemberOnlyRead() bool
 }
 
 
@@ -68,6 +74,15 @@ type Filter func(common.SignedData) bool
 
 
 
+
+
+
+
+
+
+
+
+
 type CollectionStore interface {
 	
 	
@@ -84,7 +99,11 @@ type CollectionStore interface {
 	RetrieveCollectionConfigPackage(common.CollectionCriteria) (*common.CollectionConfigPackage, error)
 
 	
-	RetrieveCollectionPersistenceConfigs(cc common.CollectionCriteria) (CollectionPersistenceConfigs, error)
+	RetrieveCollectionPersistenceConfigs(common.CollectionCriteria) (CollectionPersistenceConfigs, error)
+
+	
+	
+	HasReadAccess(common.CollectionCriteria, *pb.SignedProposal, ledger.QueryExecutor) (bool, error)
 
 	CollectionFilter
 }

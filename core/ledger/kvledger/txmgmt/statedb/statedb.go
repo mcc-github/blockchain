@@ -66,7 +66,7 @@ type VersionedDB interface {
 	ValidateKeyValue(key string, value []byte) error
 	
 	
-	BytesKeySuppoted() bool
+	BytesKeySupported() bool
 	
 	Open() error
 	

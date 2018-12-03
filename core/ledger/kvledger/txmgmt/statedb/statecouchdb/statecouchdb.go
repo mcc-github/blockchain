@@ -219,7 +219,7 @@ func (vdb *VersionedDB) ValidateKeyValue(key string, value []byte) error {
 }
 
 
-func (vdb *VersionedDB) BytesKeySuppoted() bool {
+func (vdb *VersionedDB) BytesKeySupported() bool {
 	return false
 }
 

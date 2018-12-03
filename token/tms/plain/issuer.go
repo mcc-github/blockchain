@@ -36,3 +36,9 @@ func (i *Issuer) RequestImport(tokensToIssue []*token.TokenToIssue) (*token.Toke
 		},
 	}, nil
 }
+
+
+
+func (i *Issuer) RequestExpectation(request *token.ExpectationRequest) (*token.TokenTransaction, error) {
+	panic("not implemented yet")
+}

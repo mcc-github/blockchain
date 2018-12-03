@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
+	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 )
@@ -21,12 +22,20 @@ type TransactionContext struct {
 	ResponseNotifier     chan *pb.ChaincodeMessage
 	TXSimulator          ledger.TxSimulator
 	HistoryQueryExecutor ledger.HistoryQueryExecutor
+	CollectionStore      privdata.CollectionStore
 
 	
 	queryMutex          sync.Mutex
 	queryIteratorMap    map[string]commonledger.ResultsIterator
 	pendingQueryResults map[string]*PendingQueryResult
 	totalReturnCount    map[string]*int32
+
+	
+	
+	
+	
+	
+	AllowedCollectionAccess map[string]bool
 }
 
 func (t *TransactionContext) InitializeQueryContext(queryID string, iter commonledger.ResultsIterator) {

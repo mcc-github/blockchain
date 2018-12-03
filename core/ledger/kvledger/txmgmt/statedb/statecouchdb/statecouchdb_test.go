@@ -153,7 +153,7 @@ func TestUtilityFunctions(t *testing.T) {
 	assert.NoError(t, err)
 
 	
-	byteKeySupported := db.BytesKeySuppoted()
+	byteKeySupported := db.BytesKeySupported()
 	assert.False(t, byteKeySupported)
 
 	

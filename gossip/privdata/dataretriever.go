@@ -22,7 +22,7 @@ import (
 type StorageDataRetriever interface {
 	
 	
-	CollectionRWSet(dig []*gossip2.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, error)
+	CollectionRWSet(dig []*gossip2.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, bool, error)
 }
 
 
@@ -60,11 +60,11 @@ func NewDataRetriever(store DataStore) StorageDataRetriever {
 
 
 
-func (dr *dataRetriever) CollectionRWSet(digests []*gossip2.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, error) {
+func (dr *dataRetriever) CollectionRWSet(digests []*gossip2.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, bool, error) {
 	height, err := dr.store.LedgerHeight()
 	if err != nil {
 		
-		return nil, fmt.Errorf("wasn't able to read ledger height, due to %s", err)
+		return nil, false, fmt.Errorf("wasn't able to read ledger height, due to %s", err)
 	}
 	if height <= blockNum {
 		logger.Debug("Current ledger height ", height, "is below requested block sequence number",
@@ -94,10 +94,11 @@ func (dr *dataRetriever) CollectionRWSet(digests []*gossip2.PvtDataDigest, block
 			}] = pvtRWSet
 		}
 
-		return results, nil
+		return results, false, nil
 	}
 	
-	return dr.fromLedger(digests, blockNum)
+	results, err := dr.fromLedger(digests, blockNum)
+	return results, true, err
 }
 
 func (dr *dataRetriever) fromLedger(digests []*gossip2.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, error) {

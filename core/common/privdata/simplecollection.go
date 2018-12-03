@@ -61,6 +61,10 @@ func (sc *SimpleCollection) AccessFilter() Filter {
 	}
 }
 
+func (sc *SimpleCollection) IsMemberOnlyRead() bool {
+	return sc.conf.MemberOnlyRead
+}
+
 
 
 func (sc *SimpleCollection) Setup(collectionConfig *common.StaticCollectionConfig, deserializer msp.IdentityDeserializer) error {

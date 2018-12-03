@@ -401,7 +401,7 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 	if err != nil {
 		return errors.Wrapf(err, "[channel %s] failed opening transient store", bundle.ConfigtxValidator().ChainID())
 	}
-	csStoreSupport := &collectionSupport{
+	csStoreSupport := &CollectionSupport{
 		PeerLedger: ledger,
 	}
 	simpleCollectionStore := privdata.NewSimpleCollectionStore(csStoreSupport)
@@ -703,15 +703,24 @@ func NewPeerServer(listenAddress string, serverConfig comm.ServerConfig) (*comm.
 	return peerServer, nil
 }
 
-type collectionSupport struct {
+
+
+
+
+
+
+
+
+
+type CollectionSupport struct {
 	ledger.PeerLedger
 }
 
-func (cs *collectionSupport) GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, error) {
+func (cs *CollectionSupport) GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, error) {
 	return cs.NewQueryExecutor()
 }
 
-func (*collectionSupport) GetIdentityDeserializer(chainID string) msp.IdentityDeserializer {
+func (*CollectionSupport) GetIdentityDeserializer(chainID string) msp.IdentityDeserializer {
 	return mspmgmt.GetManagerForChain(chainID)
 }
 

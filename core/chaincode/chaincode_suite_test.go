@@ -11,6 +11,7 @@ import (
 
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/chaincode"
+	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
 	. "github.com/onsi/ginkgo"
@@ -139,4 +140,9 @@ type registry interface {
 
 type applicationConfigRetriever interface {
 	chaincode.ApplicationConfigRetriever
+}
+
+
+type collectionStore interface {
+	privdata.CollectionStore
 }

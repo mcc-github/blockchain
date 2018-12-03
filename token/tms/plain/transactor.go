@@ -296,6 +296,12 @@ func (t *Transactor) RequestTransferFrom(request *token.TransferRequest) (*token
 }
 
 
+
+func (t *Transactor) RequestExpectation(request *token.ExpectationRequest) (*token.TokenTransaction, error) {
+	panic("not implemented yet")
+}
+
+
 func (t *Transactor) Done() {
 	if t.Ledger != nil {
 		t.Ledger.Done()
