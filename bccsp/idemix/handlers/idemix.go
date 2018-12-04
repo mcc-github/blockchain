@@ -74,10 +74,10 @@ type User interface {
 type CredRequest interface {
 	
 	
-	Sign(sk Big, ipk IssuerPublicKey) ([]byte, error)
+	Sign(sk Big, ipk IssuerPublicKey, nonce []byte) ([]byte, error)
 
 	
-	Verify(credRequest []byte, ipk IssuerPublicKey) error
+	Verify(credRequest []byte, ipk IssuerPublicKey, nonce []byte) error
 }
 
 

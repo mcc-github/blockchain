@@ -55,7 +55,7 @@ type Committer interface {
 	
 	
 	
-	CommitPvtData(blockPvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error)
+	CommitPvtDataOfOldBlocks(blockPvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error)
 
 	
 	GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error)

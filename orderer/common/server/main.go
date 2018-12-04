@@ -19,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -41,7 +40,6 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/metadata"
 	"github.com/mcc-github/blockchain/orderer/common/multichannel"
-	"github.com/mcc-github/blockchain/orderer/common/performance"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
 	"github.com/mcc-github/blockchain/orderer/consensus/kafka"
@@ -91,9 +89,28 @@ func Main() {
 
 
 func Start(cmd string, conf *localconfig.TopLevel) {
-	genesisBlock := extractGenesisBlock(conf)
-	clusterType := isClusterType(genesisBlock)
+	bootstrapBlock := extractBootstrapBlock(conf)
+	clusterType := isClusterType(bootstrapBlock)
 	signer := localmsp.NewSigner()
+
+	lf, _ := createLedgerFactory(conf)
+
+	clusterDialer := &cluster.PredicateDialer{}
+	clusterConfig := initializeClusterConfig(conf)
+	clusterDialer.SetConfig(clusterConfig)
+
+	
+	if clusterType && conf.General.GenesisMethod == "file" {
+		r := &replicationInitiator{
+			logger:         logger,
+			secOpts:        clusterConfig.SecOpts,
+			bootstrapBlock: bootstrapBlock,
+			conf:           conf,
+			lf:             &ledgerFactory{lf},
+			signer:         signer,
+		}
+		r.replicateIfNeeded()
+	}
 
 	opsSystem := newOperationsSystem(conf.Operations)
 	err := opsSystem.Start()
@@ -111,10 +128,6 @@ func Start(cmd string, conf *localconfig.TopLevel) {
 		ClientRootCAs:         serverConfig.SecOpts.ClientRootCAs,
 	}
 
-	clusterDialer := &cluster.PredicateDialer{}
-	clusterConfig := initializeClusterConfig(conf)
-	clusterDialer.SetConfig(clusterConfig)
-
 	tlsCallback := func(bundle *channelconfig.Bundle) {
 		
 		if grpcServer.MutualTLSRequired() || clusterType {
@@ -126,26 +139,18 @@ func Start(cmd string, conf *localconfig.TopLevel) {
 		}
 	}
 
-	manager := initializeMultichannelRegistrar(clusterType, clusterDialer, serverConfig, grpcServer, conf, signer, metricsProvider, tlsCallback)
+	manager := initializeMultichannelRegistrar(bootstrapBlock, clusterDialer, serverConfig, grpcServer, conf, signer, metricsProvider, lf, tlsCallback)
 	mutualTLS := serverConfig.SecOpts.UseTLS && serverConfig.SecOpts.RequireClientCert
 	server := NewServer(manager, metricsProvider, &conf.Debug, conf.General.Authentication.TimeWindow, mutualTLS)
 
-	switch cmd {
-	case start.FullCommand(): 
-		logger.Infof("Starting %s", metadata.GetVersionInfo())
-		go handleSignals(addPlatformSignals(map[os.Signal]func(){
-			syscall.SIGTERM: func() { grpcServer.Stop() },
-		}))
-		initializeProfilingService(conf)
-		ab.RegisterAtomicBroadcastServer(grpcServer.Server(), server)
-		logger.Info("Beginning to serve requests")
-		grpcServer.Start()
-	case benchmark.FullCommand(): 
-		logger.Info("Starting orderer in benchmark mode")
-		benchmarkServer := performance.GetBenchmarkServer()
-		benchmarkServer.RegisterService(server)
-		benchmarkServer.Start()
-	}
+	logger.Infof("Starting %s", metadata.GetVersionInfo())
+	go handleSignals(addPlatformSignals(map[os.Signal]func(){
+		syscall.SIGTERM: func() { grpcServer.Stop() },
+	}))
+	initializeProfilingService(conf)
+	ab.RegisterAtomicBroadcastServer(grpcServer.Server(), server)
+	logger.Info("Beginning to serve requests")
+	grpcServer.Start()
 }
 
 func initializeLogging() {
@@ -317,20 +322,20 @@ func grpcLeveler(ctx context.Context, fullMethod string) zapcore.Level {
 	}
 }
 
-func extractGenesisBlock(conf *localconfig.TopLevel) *cb.Block {
-	var genesisBlock *cb.Block
+func extractBootstrapBlock(conf *localconfig.TopLevel) *cb.Block {
+	var bootstrapBlock *cb.Block
 
 	
 	switch conf.General.GenesisMethod {
 	case "provisional":
-		genesisBlock = encoder.New(genesisconfig.Load(conf.General.GenesisProfile)).GenesisBlockForChannel(conf.General.SystemChannel)
+		bootstrapBlock = encoder.New(genesisconfig.Load(conf.General.GenesisProfile)).GenesisBlockForChannel(conf.General.SystemChannel)
 	case "file":
-		genesisBlock = file.New(conf.General.GenesisFile).GenesisBlock()
+		bootstrapBlock = file.New(conf.General.GenesisFile).GenesisBlock()
 	default:
 		logger.Panic("Unknown genesis method:", conf.General.GenesisMethod)
 	}
 
-	return genesisBlock
+	return bootstrapBlock
 }
 
 func initializeBootstrapChannel(genesisBlock *cb.Block, lf blockledger.Factory) {
@@ -348,24 +353,8 @@ func initializeBootstrapChannel(genesisBlock *cb.Block, lf blockledger.Factory) 
 	}
 }
 
-func isClusterType(genesisBlock *cb.Block) bool {
-	if genesisBlock.Data == nil || len(genesisBlock.Data.Data) == 0 {
-		logger.Fatalf("Empty genesis block")
-	}
-	env := &cb.Envelope{}
-	if err := proto.Unmarshal(genesisBlock.Data.Data[0], env); err != nil {
-		logger.Fatalf("Failed to unmarshal the genesis block's envelope: %v", err)
-	}
-	bundle, err := channelconfig.NewBundleFromEnvelope(env)
-	if err != nil {
-		logger.Fatalf("Failed creating bundle from the genesis block: %v", err)
-	}
-	ordConf, exists := bundle.OrdererConfig()
-	if !exists {
-		logger.Fatalf("Orderer config doesn't exist in bundle derived from genesis block")
-	}
-	_, exists = clusterTypes[ordConf.ConsensusType()]
-	return exists
+func isClusterType(_ *cb.Block) bool {
+	return false
 }
 
 func initializeGrpcServer(conf *localconfig.TopLevel, serverConfig comm.ServerConfig) *comm.GRPCServer {
@@ -391,16 +380,16 @@ func initializeLocalMsp(conf *localconfig.TopLevel) {
 	}
 }
 
-func initializeMultichannelRegistrar(isClusterType bool,
+func initializeMultichannelRegistrar(bootstrapBlock *cb.Block,
 	clusterDialer *cluster.PredicateDialer,
 	srvConf comm.ServerConfig,
 	srv *comm.GRPCServer,
 	conf *localconfig.TopLevel,
 	signer crypto.LocalSigner,
 	metricsProvider metrics.Provider,
+	lf blockledger.Factory,
 	callbacks ...func(bundle *channelconfig.Bundle)) *multichannel.Registrar {
-	lf, _ := createLedgerFactory(conf)
-	genesisBlock := extractGenesisBlock(conf)
+	genesisBlock := extractBootstrapBlock(conf)
 	
 	if len(lf.ChainIDs()) == 0 {
 		initializeBootstrapChannel(genesisBlock, lf)
@@ -418,7 +407,7 @@ func initializeMultichannelRegistrar(isClusterType bool,
 	
 	
 	go kafkaMetrics.PollGoMetricsUntilStop(time.Minute, nil)
-	if isClusterType {
+	if isClusterType(bootstrapBlock) {
 		raftConsenter := etcdraft.New(clusterDialer, conf, srvConf, srv, registrar)
 		consenters["etcdraft"] = raftConsenter
 	}

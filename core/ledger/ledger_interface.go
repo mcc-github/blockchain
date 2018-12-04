@@ -91,7 +91,7 @@ type PeerLedger interface {
 	
 	
 	
-	CommitPvtData(blockPvtData []*BlockPvtData) ([]*PvtdataHashMismatch, error)
+	CommitPvtDataOfOldBlocks(blockPvtData []*BlockPvtData) ([]*PvtdataHashMismatch, error)
 	
 	GetMissingPvtDataTracker() (MissingPvtDataTracker, error)
 }

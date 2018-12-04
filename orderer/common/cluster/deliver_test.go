@@ -412,9 +412,14 @@ func TestBlockPullerClone(t *testing.T) {
 	
 	osn1.enqueueResponse(100)
 	osn1.enqueueResponse(1)
+	
+	
+	
+	osn1.blockResponses <- nil
 
 	dialer := newCountingDialer()
 	bp := newBlockPuller(dialer, osn1.srv.Address())
+	bp.FetchTimeout = time.Millisecond * 100
 	
 	bp.MaxTotalBufferBytes = 1
 	
@@ -431,8 +436,6 @@ func TestBlockPullerClone(t *testing.T) {
 	
 	bp.Close()
 	dialer.assertAllConnectionsClosed(t)
-	
-	osn1.enqueueResponse(200)
 
 	
 	

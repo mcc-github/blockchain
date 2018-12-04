@@ -164,6 +164,10 @@ func TestUtilityFunctions(t *testing.T) {
 	err = db.ValidateKeyValue(string([]byte{0xff, 0xfe, 0xfd}), []byte("Some random bytes"))
 	assert.Error(t, err, "ValidateKey should have thrown an error for an invalid utf-8 string")
 
+	
+	assert.EqualError(t, db.ValidateKeyValue("", []byte("validValue")),
+		"invalid key. Empty string is not supported as a key by couchdb")
+
 	reservedFields := []string{"~version", "_id", "_test"}
 
 	

@@ -402,8 +402,7 @@ func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, e
 	return l.configHistoryRetriever, nil
 }
 
-
-func (l *kvLedger) CommitPvtData(pvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error) {
+func (l *kvLedger) CommitPvtDataOfOldBlocks(pvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error) {
 	validPvtData, hashMismatches, err := ConstructValidAndInvalidPvtData(pvtData, l.blockStore)
 	if err != nil {
 		return nil, err

@@ -15,7 +15,9 @@ type RevocationAlgorithm int32
 const (
 	
 	IDEMIX = "IDEMIX"
+)
 
+const (
 	
 	AlgNoRevocation RevocationAlgorithm = iota
 )
@@ -147,6 +149,9 @@ type IdemixCredentialRequestSignerOpts struct {
 	Attributes []int
 	
 	IssuerPK Key
+	
+	
+	IssuerNonce []byte
 	
 	H crypto.Hash
 }

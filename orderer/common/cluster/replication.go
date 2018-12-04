@@ -110,7 +110,9 @@ func (r *Replicator) ReplicateChains() {
 		r.PullChannel(channel)
 	}
 	
-	r.PullChannel(r.SystemChannel)
+	if err := r.PullChannel(r.SystemChannel); err != nil {
+		r.Logger.Panicf("Failed pulling system channel: %v", err)
+	}
 	r.LedgerFactory.Close()
 }
 
@@ -209,7 +211,7 @@ func (r *Replicator) channelsToPull(channels []string) []string {
 		puller.Close()
 		
 		puller.MaxTotalBufferBytes = bufferSize
-		if err == NotInChannelError {
+		if err == ErrNotInChannel {
 			r.Logger.Info("I do not belong to channel", channel, ", skipping chain retrieval")
 			continue
 		}
@@ -306,7 +308,7 @@ type ChainInspector struct {
 }
 
 
-var NotInChannelError = errors.New("not in the channel")
+var ErrNotInChannel = errors.New("not in the channel")
 
 
 type selfMembershipPredicate func(configBlock *common.Block) error
@@ -351,6 +353,11 @@ func lastConfigFromBlock(block *common.Block) (uint64, error) {
 		return 0, errors.New("no metadata in block")
 	}
 	return utils.GetLastConfigIndexFromBlock(block)
+}
+
+
+func (ci *ChainInspector) Close() {
+	ci.Puller.Close()
 }
 
 

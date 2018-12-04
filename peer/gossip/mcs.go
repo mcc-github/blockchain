@@ -37,7 +37,7 @@ var mcsLogger = flogging.MustGetLogger("peer.gossip.mcs")
 
 
 
-type mspMessageCryptoService struct {
+type MSPMessageCryptoService struct {
 	channelPolicyManagerGetter policies.ChannelPolicyManagerGetter
 	localSigner                crypto.LocalSigner
 	deserializer               mgmt.DeserializersManager
@@ -49,14 +49,14 @@ type mspMessageCryptoService struct {
 
 
 
-func NewMCS(channelPolicyManagerGetter policies.ChannelPolicyManagerGetter, localSigner crypto.LocalSigner, deserializer mgmt.DeserializersManager) *mspMessageCryptoService {
-	return &mspMessageCryptoService{channelPolicyManagerGetter: channelPolicyManagerGetter, localSigner: localSigner, deserializer: deserializer}
+func NewMCS(channelPolicyManagerGetter policies.ChannelPolicyManagerGetter, localSigner crypto.LocalSigner, deserializer mgmt.DeserializersManager) *MSPMessageCryptoService {
+	return &MSPMessageCryptoService{channelPolicyManagerGetter: channelPolicyManagerGetter, localSigner: localSigner, deserializer: deserializer}
 }
 
 
 
 
-func (s *mspMessageCryptoService) ValidateIdentity(peerIdentity api.PeerIdentityType) error {
+func (s *MSPMessageCryptoService) ValidateIdentity(peerIdentity api.PeerIdentityType) error {
 	
 	
 	
@@ -71,7 +71,7 @@ func (s *mspMessageCryptoService) ValidateIdentity(peerIdentity api.PeerIdentity
 
 
 
-func (s *mspMessageCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityType) common.PKIidType {
+func (s *MSPMessageCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityType) common.PKIidType {
 	
 	if len(peerIdentity) == 0 {
 		mcsLogger.Error("Invalid Peer Identity. It must be different from nil.")
@@ -107,7 +107,7 @@ func (s *mspMessageCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityTy
 
 
 
-func (s *mspMessageCryptoService) VerifyBlock(chainID common.ChainID, seqNum uint64, signedBlock []byte) error {
+func (s *MSPMessageCryptoService) VerifyBlock(chainID common.ChainID, seqNum uint64, signedBlock []byte) error {
 	
 	block, err := utils.GetBlockFromBlockBytes(signedBlock)
 	if err != nil {
@@ -187,14 +187,14 @@ func (s *mspMessageCryptoService) VerifyBlock(chainID common.ChainID, seqNum uin
 
 
 
-func (s *mspMessageCryptoService) Sign(msg []byte) ([]byte, error) {
+func (s *MSPMessageCryptoService) Sign(msg []byte) ([]byte, error) {
 	return s.localSigner.Sign(msg)
 }
 
 
 
 
-func (s *mspMessageCryptoService) Verify(peerIdentity api.PeerIdentityType, signature, message []byte) error {
+func (s *MSPMessageCryptoService) Verify(peerIdentity api.PeerIdentityType, signature, message []byte) error {
 	identity, chainID, err := s.getValidatedIdentity(peerIdentity)
 	if err != nil {
 		mcsLogger.Errorf("Failed getting validated identity from peer identity [%s]", err)
@@ -220,7 +220,7 @@ func (s *mspMessageCryptoService) Verify(peerIdentity api.PeerIdentityType, sign
 
 
 
-func (s *mspMessageCryptoService) VerifyByChannel(chainID common.ChainID, peerIdentity api.PeerIdentityType, signature, message []byte) error {
+func (s *MSPMessageCryptoService) VerifyByChannel(chainID common.ChainID, peerIdentity api.PeerIdentityType, signature, message []byte) error {
 	
 	if len(peerIdentity) == 0 {
 		return errors.New("Invalid Peer Identity. It must be different from nil.")
@@ -246,7 +246,7 @@ func (s *mspMessageCryptoService) VerifyByChannel(chainID common.ChainID, peerId
 	)
 }
 
-func (s *mspMessageCryptoService) Expiration(peerIdentity api.PeerIdentityType) (time.Time, error) {
+func (s *MSPMessageCryptoService) Expiration(peerIdentity api.PeerIdentityType) (time.Time, error) {
 	id, _, err := s.getValidatedIdentity(peerIdentity)
 	if err != nil {
 		return time.Time{}, errors.Wrap(err, "Unable to extract msp.Identity from peer Identity")
@@ -255,7 +255,7 @@ func (s *mspMessageCryptoService) Expiration(peerIdentity api.PeerIdentityType) 
 
 }
 
-func (s *mspMessageCryptoService) getValidatedIdentity(peerIdentity api.PeerIdentityType) (msp.Identity, common.ChainID, error) {
+func (s *MSPMessageCryptoService) getValidatedIdentity(peerIdentity api.PeerIdentityType) (msp.Identity, common.ChainID, error) {
 	
 	if len(peerIdentity) == 0 {
 		return nil, nil, errors.New("Invalid Peer Identity. It must be different from nil.")
