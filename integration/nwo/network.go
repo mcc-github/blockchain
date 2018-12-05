@@ -868,6 +868,7 @@ func (n *Network) BrokerGroupRunner() ifrit.Runner {
 
 func (n *Network) OrdererRunner(o *Orderer) *ginkgomon.Runner {
 	cmd := exec.Command(n.Components.Orderer())
+	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, fmt.Sprintf("FABRIC_CFG_PATH=%s", n.OrdererDir(o)))
 
 	config := ginkgomon.Config{

@@ -402,7 +402,7 @@ func getDeployLSCCSpec(chainID string, cds *pb.ChaincodeDeploymentSpec, ccp *com
 }
 
 
-func deploy(chainID string, cccid *ccprovider.CCContext, spec *pb.ChaincodeSpec, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (b []byte, err error) {
+func deploy(chainID string, cccid *ccprovider.CCContext, spec *pb.ChaincodeSpec, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (resp *pb.Response, err error) {
 	
 	cdDeploymentSpec, err := getDeploymentSpec(spec)
 	if err != nil {
@@ -412,7 +412,7 @@ func deploy(chainID string, cccid *ccprovider.CCContext, spec *pb.ChaincodeSpec,
 }
 
 func deployWithCollectionConfigs(chainID string, cccid *ccprovider.CCContext, spec *pb.ChaincodeSpec,
-	collectionConfigPkg *common.CollectionConfigPackage, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (b []byte, err error) {
+	collectionConfigPkg *common.CollectionConfigPackage, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (resp *pb.Response, err error) {
 	
 	cdDeploymentSpec, err := getDeploymentSpec(spec)
 	if err != nil {
@@ -422,7 +422,7 @@ func deployWithCollectionConfigs(chainID string, cccid *ccprovider.CCContext, sp
 }
 
 func deploy2(chainID string, cccid *ccprovider.CCContext, chaincodeDeploymentSpec *pb.ChaincodeDeploymentSpec,
-	collectionConfigPkg *common.CollectionConfigPackage, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (b []byte, err error) {
+	collectionConfigPkg *common.CollectionConfigPackage, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (resp *pb.Response, err error) {
 	cis, err := getDeployLSCCSpec(chainID, chaincodeDeploymentSpec, collectionConfigPkg)
 	if err != nil {
 		return nil, fmt.Errorf("Error creating lscc spec : %s\n", err)
@@ -468,12 +468,11 @@ func deploy2(chainID string, cccid *ccprovider.CCContext, chaincodeDeploymentSpe
 		return nil, fmt.Errorf("Error deploying chaincode (1): %s", err)
 	}
 
-	var resp *pb.Response
 	if resp, _, err = chaincodeSupport.ExecuteLegacyInit(txParams, cccid, chaincodeDeploymentSpec); err != nil {
 		return nil, fmt.Errorf("Error deploying chaincode(2): %s", err)
 	}
 
-	return resp.Payload, nil
+	return resp, nil
 }
 
 
@@ -965,6 +964,70 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 	}
 }
 
+func TestChaincodeInit(t *testing.T) {
+	chainID := util.GetTestChainID()
+
+	_, chaincodeSupport, cleanup, err := initPeer(chainID)
+	if err != nil {
+		t.Fail()
+		t.Logf("Error creating peer: %s", err)
+	}
+
+	defer cleanup()
+
+	url := "github.com/mcc-github/blockchain/core/chaincode/testdata/chaincode/init_private_data"
+	cID := &pb.ChaincodeID{Name: "init_pvtdata", Path: url, Version: "0"}
+
+	f := "init"
+	args := util.ToChaincodeArgs(f)
+
+	spec := &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+
+	cccid := &ccprovider.CCContext{
+		Name:    "tmap",
+		Version: "0",
+	}
+
+	defer chaincodeSupport.Stop(&ccprovider.ChaincodeContainerInfo{
+		Name:          cID.Name,
+		Version:       cID.Version,
+		Path:          cID.Path,
+		Type:          "GOLANG",
+		ContainerType: "DOCKER",
+	})
+
+	var nextBlockNumber uint64 = 1
+	_, err = deploy(chainID, cccid, spec, nextBlockNumber, chaincodeSupport)
+	assert.Contains(t, err.Error(), "private data APIs are not allowed in chaincode Init")
+
+	url = "github.com/mcc-github/blockchain/core/chaincode/testdata/chaincode/init_public_data"
+	cID = &pb.ChaincodeID{Name: "init_public_data", Path: url, Version: "0"}
+
+	f = "init"
+	args = util.ToChaincodeArgs(f)
+
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+
+	cccid = &ccprovider.CCContext{
+		Name:    "tmap",
+		Version: "0",
+	}
+
+	defer chaincodeSupport.Stop(&ccprovider.ChaincodeContainerInfo{
+		Name:          cID.Name,
+		Version:       cID.Version,
+		Path:          cID.Path,
+		Type:          "GOLANG",
+		ContainerType: "DOCKER",
+	})
+
+	resp, err := deploy(chainID, cccid, spec, nextBlockNumber, chaincodeSupport)
+	assert.NoError(t, err)
+	
+	
+	assert.Equal(t, int32(shim.OK), resp.Status)
+}
+
 
 func TestQueries(t *testing.T) {
 	
@@ -1431,7 +1494,7 @@ func setupTestConfig() {
 	}
 }
 
-func deployChaincode(ctx context.Context, name string, version string, chaincodeType pb.ChaincodeSpec_Type, path string, args [][]byte, creator []byte, channel string, nextBlockNumber uint64, chaincodeSupport *ChaincodeSupport) ([]byte, *ccprovider.CCContext, error) {
+func deployChaincode(ctx context.Context, name string, version string, chaincodeType pb.ChaincodeSpec_Type, path string, args [][]byte, creator []byte, channel string, nextBlockNumber uint64, chaincodeSupport *ChaincodeSupport) (*pb.Response, *ccprovider.CCContext, error) {
 	chaincodeSpec := &pb.ChaincodeSpec{
 		ChaincodeId: &pb.ChaincodeID{
 			Name:    name,

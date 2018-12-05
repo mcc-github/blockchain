@@ -284,7 +284,7 @@ var _ = Describe("Idemix Bridge", func() {
 
 			It("failure unmarshalling invalid raw", func() {
 				key, err := User.NewPublicNymFromBytes([]byte{0, 1, 2, 3})
-				Expect(err.Error()).To(BeEquivalentTo("proto: idemix.ECP: illegal tag 0 (wire type 0)"))
+				Expect(err.Error()).To(BeEquivalentTo("failure [%!s(<nil>)]"))
 				Expect(key).To(BeNil())
 			})
 
@@ -849,7 +849,13 @@ var _ = Describe("Idemix Bridge", func() {
 			})
 
 			It("invalid credential", func() {
-				credential[4] = 0
+				
+				if credential[4] == 0 {
+					credential[4] = 1
+				} else {
+					credential[4] = 0
+				}
+
 				
 				valid, err := CredentialVerifier.Verify(
 					UserKey,
