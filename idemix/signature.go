@@ -12,8 +12,11 @@ import (
 
 	"github.com/mcc-github/blockchain-amcl/amcl"
 	"github.com/mcc-github/blockchain-amcl/amcl/FP256BN"
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/pkg/errors"
 )
+
+var idemixLogger = flogging.MustGetLogger("idemix")
 
 
 const signLabel = "sign"
@@ -370,7 +373,32 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 	proofData = proofData[:2*FieldBytes]
 	index = appendBytesBig(proofData, index, c)
 	index = appendBytesBig(proofData, index, Nonce)
+
 	if *ProofC != *HashModOrder(proofData) {
+		
+		idemixLogger.Debugf("Signature Verification : \n"+
+			"	[t1:%v]\n,"+
+			"	[t2:%v]\n,"+
+			"	[t3:%v]\n,"+
+			"	[APrime:%v]\n,"+
+			"	[ABar:%v]\n,"+
+			"	[BPrime:%v]\n,"+
+			"	[Nym:%v]\n,"+
+			"	[nonRevokedProofBytes:%v]\n,"+
+			"	[ipk.Hash:%v]\n,"+
+			"	[Disclosure:%v]\n,"+
+			"	[msg:%v]\n,",
+			EcpToBytes(t1),
+			EcpToBytes(t2),
+			EcpToBytes(t3),
+			EcpToBytes(APrime),
+			EcpToBytes(ABar),
+			EcpToBytes(BPrime),
+			EcpToBytes(Nym),
+			nonRevokedProofBytes,
+			ipk.Hash,
+			Disclosure,
+			msg)
 		return errors.Errorf("signature invalid: zero-knowledge proof is invalid")
 	}
 

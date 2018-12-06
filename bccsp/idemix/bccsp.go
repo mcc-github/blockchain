@@ -18,7 +18,7 @@ import (
 )
 
 type csp struct {
-	bccsp.BCCSP
+	*sw.CSP
 }
 
 func New(keyStore bccsp.KeyStore) (*csp, error) {
@@ -27,7 +27,7 @@ func New(keyStore bccsp.KeyStore) (*csp, error) {
 		return nil, errors.Wrap(err, "failed instantiating base bccsp")
 	}
 
-	csp := &csp{BCCSP: base}
+	csp := &csp{CSP: base}
 
 	
 	base.AddWrapper(reflect.TypeOf(&bccsp.IdemixIssuerKeyGenOpts{}), &handlers.IssuerKeyGen{Issuer: &bridge.Issuer{NewRand: bridge.NewRandOrPanic}})
@@ -80,6 +80,59 @@ func New(keyStore bccsp.KeyStore) (*csp, error) {
 	base.AddWrapper(reflect.TypeOf(&bccsp.IdemixRevocationPublicKeyImportOpts{}), &handlers.RevocationPublicKeyImporter{})
 
 	return csp, nil
+}
+
+
+
+
+
+
+
+
+func (csp *csp) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
+	
+	if k == nil {
+		return nil, errors.New("Invalid Key. It must not be nil.")
+	}
+	
+
+	keyType := reflect.TypeOf(k)
+	signer, found := csp.Signers[keyType]
+	if !found {
+		return nil, errors.Errorf("Unsupported 'SignKey' provided [%s]", keyType)
+	}
+
+	signature, err = signer.Sign(k, digest, opts)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Failed signing with opts [%v]", opts)
+	}
+
+	return
+}
+
+
+
+func (csp *csp) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
+	
+	if k == nil {
+		return false, errors.New("Invalid Key. It must not be nil.")
+	}
+	if len(signature) == 0 {
+		return false, errors.New("Invalid signature. Cannot be empty.")
+	}
+	
+
+	verifier, found := csp.Verifiers[reflect.TypeOf(k)]
+	if !found {
+		return false, errors.Errorf("Unsupported 'VerifyKey' provided [%v]", k)
+	}
+
+	valid, err = verifier.Verify(k, signature, digest, opts)
+	if err != nil {
+		return false, errors.Wrapf(err, "Failed verifing with opts [%v]", opts)
+	}
+
+	return
 }
 
 type userSecreKeySignerMultiplexer struct {

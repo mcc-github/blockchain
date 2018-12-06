@@ -24,13 +24,6 @@ const (
 
 
 
-
-func IdemixEmptyDigest() []byte {
-	return []byte("idemix-empty-digest")
-}
-
-
-
 type IdemixIssuerKeyGenOpts struct {
 	
 	Temporary bool
