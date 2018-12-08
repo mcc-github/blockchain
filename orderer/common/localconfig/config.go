@@ -35,6 +35,7 @@ type TopLevel struct {
 	Debug      Debug
 	Consensus  interface{}
 	Operations Operations
+	Metrics    Metrics
 }
 
 
@@ -181,7 +182,6 @@ type Debug struct {
 
 type Operations struct {
 	ListenAddress string
-	Metrics       Metrics
 	TLS           TLS
 }
 
@@ -265,9 +265,9 @@ var Defaults = TopLevel{
 	},
 	Operations: Operations{
 		ListenAddress: "127.0.0.1:0",
-		Metrics: Metrics{
-			Provider: "disabled",
-		},
+	},
+	Metrics: Metrics{
+		Provider: "disabled",
 	},
 }
 
