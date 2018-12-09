@@ -1265,6 +1265,12 @@ func TestRichQuery(t *testing.T) {
 	assert.Equal(t, 4, len(queryResult))
 
 	
+	assert.Equal(t, attachment2.AttachmentBytes, queryResult[0].Attachments[0].AttachmentBytes)
+	assert.Equal(t, attachment3.AttachmentBytes, queryResult[1].Attachments[0].AttachmentBytes)
+	assert.Equal(t, attachment4.AttachmentBytes, queryResult[2].Attachments[0].AttachmentBytes)
+	assert.Equal(t, attachment5.AttachmentBytes, queryResult[3].Attachments[0].AttachmentBytes)
+
+	
 	queryString = `{"selector":{"owner":{"$eq":"tom"}}}`
 
 	queryResult, _, err = db.QueryDocuments(queryString)

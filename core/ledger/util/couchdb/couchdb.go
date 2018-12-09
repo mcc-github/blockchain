@@ -99,10 +99,10 @@ type QueryResponse struct {
 
 
 type DocMetadata struct {
-	ID              string          `json:"_id"`
-	Rev             string          `json:"_rev"`
-	Version         string          `json:"~version"`
-	AttachmentsInfo json.RawMessage `json:"_attachments"`
+	ID              string                     `json:"_id"`
+	Rev             string                     `json:"_rev"`
+	Version         string                     `json:"~version"`
+	AttachmentsInfo map[string]*AttachmentInfo `json:"_attachments"`
 }
 
 
@@ -159,9 +159,9 @@ type CreateIndexResponse struct {
 
 type AttachmentInfo struct {
 	Name            string
-	ContentType     string
+	ContentType     string `json:"content_type"`
 	Length          uint64
-	AttachmentBytes []byte
+	AttachmentBytes []byte `json:"data"`
 }
 
 
@@ -881,6 +881,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit int32
 	queryParms.Set("limit", strconv.FormatInt(int64(limit+1), 10))
 	queryParms.Add("include_docs", "true")
 	queryParms.Add("inclusive_end", "false") 
+	queryParms.Add("attachments", "true")    
 
 	
 	if startKey != "" {
@@ -958,12 +959,14 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit int32
 
 			logger.Debugf("[%s] Adding JSON document and attachments for id: %s", dbclient.DBName, docMetadata.ID)
 
-			couchDoc, _, err := dbclient.ReadDoc(docMetadata.ID)
-			if err != nil {
-				return nil, "", err
+			attachments := []*AttachmentInfo{}
+			for attachmentName, attachment := range docMetadata.AttachmentsInfo {
+				attachment.Name = attachmentName
+
+				attachments = append(attachments, attachment)
 			}
 
-			var addDocument = &QueryResult{docMetadata.ID, couchDoc.JSONValue, couchDoc.Attachments}
+			var addDocument = &QueryResult{docMetadata.ID, row.Doc, attachments}
 			results = append(results, addDocument)
 
 		} else {
@@ -1075,6 +1078,8 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, str
 			return nil, "", errors.Wrap(err3, "error unmarshalling json data")
 		}
 
+		
+		
 		if docMetadata.AttachmentsInfo != nil {
 
 			logger.Debugf("[%s] Adding JSON docment and attachments for id: %s", dbclient.DBName, docMetadata.ID)
