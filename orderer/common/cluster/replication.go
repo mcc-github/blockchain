@@ -30,9 +30,9 @@ const (
 
 
 
-func PullerConfigFromTopLevelConfig(conf *localconfig.TopLevel, tlsKey, tlsCert []byte, signer crypto.LocalSigner) PullerConfig {
+func PullerConfigFromTopLevelConfig(systemChannel string, conf *localconfig.TopLevel, tlsKey, tlsCert []byte, signer crypto.LocalSigner) PullerConfig {
 	return PullerConfig{
-		Channel:             conf.General.SystemChannel,
+		Channel:             systemChannel,
 		MaxTotalBufferBytes: conf.General.Cluster.ReplicationBufferSize,
 		Timeout:             conf.General.Cluster.RPCTimeout,
 		TLSKey:              tlsKey,
@@ -59,9 +59,6 @@ type LedgerFactory interface {
 	
 	
 	GetOrCreate(chainID string) (LedgerWriter, error)
-
-	
-	Close()
 }
 
 
@@ -88,13 +85,21 @@ type Replicator struct {
 
 
 func (r *Replicator) IsReplicationNeeded() (bool, error) {
-	defer r.LedgerFactory.Close()
 	systemChannelLedger, err := r.LedgerFactory.GetOrCreate(r.SystemChannel)
 	if err != nil {
 		return false, err
 	}
 
-	lastBlockSeq := systemChannelLedger.Height() - 1
+	height := systemChannelLedger.Height()
+	var lastBlockSeq uint64
+	
+	
+	if height == 0 {
+		lastBlockSeq = 0
+	} else {
+		lastBlockSeq = height - 1
+	}
+
 	if r.BootBlock.Header.Number > lastBlockSeq {
 		return true, nil
 	}
@@ -113,7 +118,6 @@ func (r *Replicator) ReplicateChains() {
 	if err := r.PullChannel(r.SystemChannel); err != nil {
 		r.Logger.Panicf("Failed pulling system channel: %v", err)
 	}
-	r.LedgerFactory.Close()
 }
 
 func (r *Replicator) discoverChannels() []string {

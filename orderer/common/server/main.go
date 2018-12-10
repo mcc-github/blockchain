@@ -415,14 +415,6 @@ func initializeMultichannelRegistrar(bootstrapBlock *cb.Block,
 	return registrar
 }
 
-
-type logFunc func(keyvals ...interface{}) error
-
-
-func (l logFunc) Log(keyvals ...interface{}) error {
-	return l(keyvals...)
-}
-
 func newOperationsSystem(ops localconfig.Operations, metrics localconfig.Metrics) *operations.System {
 	return operations.NewSystem(operations.Options{
 		Logger:        flogging.MustGetLogger("orderer.operations"),
