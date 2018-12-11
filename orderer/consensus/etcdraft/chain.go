@@ -743,6 +743,13 @@ func (c *Chain) apply(ents []raftpb.Entry) {
 				
 				c.configChangeInProgress = false
 			}
+
+			if cc.Type == raftpb.ConfChangeRemoveNode && cc.NodeID == c.raftID {
+				c.logger.Infof("Current node removed from replica set for channel %s", c.channelID)
+				
+				
+				go c.Halt()
+			}
 		}
 
 		if ents[i].Index > c.appliedIndex {
