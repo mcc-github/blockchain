@@ -23,6 +23,7 @@ import (
 
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/gossip/common"
+	"github.com/mcc-github/blockchain/gossip/gossip/msgstore"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/spf13/viper"
@@ -69,22 +70,24 @@ func (*dummyReceivedMessage) Ack(err error) {
 }
 
 type dummyCommModule struct {
-	msgsReceived uint32
-	msgsSent     uint32
-	id           string
-	presumeDead  chan common.PKIidType
-	detectedDead chan string
-	streams      map[string]proto.Gossip_GossipStreamClient
-	conns        map[string]*grpc.ClientConn
-	lock         *sync.RWMutex
-	incMsgs      chan proto.ReceivedMessage
-	lastSeqs     map[string]uint64
-	shouldGossip bool
-	mock         *mock.Mock
+	validatedMessages chan *proto.SignedGossipMessage
+	msgsReceived      uint32
+	msgsSent          uint32
+	id                string
+	presumeDead       chan common.PKIidType
+	detectedDead      chan string
+	streams           map[string]proto.Gossip_GossipStreamClient
+	conns             map[string]*grpc.ClientConn
+	lock              *sync.RWMutex
+	incMsgs           chan proto.ReceivedMessage
+	lastSeqs          map[string]uint64
+	shouldGossip      bool
+	mock              *mock.Mock
 }
 
 type gossipInstance struct {
-	comm *dummyCommModule
+	msgInterceptor func(*proto.SignedGossipMessage)
+	comm           *dummyCommModule
 	Discovery
 	gRGCserv      *grpc.Server
 	lsnr          net.Listener
@@ -95,7 +98,20 @@ type gossipInstance struct {
 }
 
 func (comm *dummyCommModule) ValidateAliveMsg(am *proto.SignedGossipMessage) bool {
+	comm.lock.RLock()
+	c := comm.validatedMessages
+	comm.lock.RUnlock()
+
+	if c != nil {
+		c <- am
+	}
 	return true
+}
+
+func (comm *dummyCommModule) recordValidation(validatedMessages chan *proto.SignedGossipMessage) {
+	comm.lock.Lock()
+	defer comm.lock.Unlock()
+	comm.validatedMessages = validatedMessages
 }
 
 func (comm *dummyCommModule) SignMessage(am *proto.GossipMessage, internalEndpoint string) *proto.Envelope {
@@ -251,6 +267,7 @@ func (g *gossipInstance) GossipStream(stream proto.Gossip_GossipStreamServer) er
 			lgr.Warning("Failed deserializing GossipMessage from envelope:", err)
 			continue
 		}
+		g.msgInterceptor(gMsg)
 
 		lgr.Debug(g.Discovery.Self().Endpoint, "Got message:", gMsg)
 		g.comm.incMsgs <- &dummyReceivedMessage{
@@ -332,6 +349,10 @@ func createDiscoveryInstanceWithNoGossipWithDisclosurePolicy(port int, id string
 }
 
 func createDiscoveryInstanceThatGossips(port int, id string, bootstrapPeers []string, shouldGossip bool, pol DisclosurePolicy) *gossipInstance {
+	return createDiscoveryInstanceThatGossipsWithInterceptors(port, id, bootstrapPeers, shouldGossip, pol, func(_ *proto.SignedGossipMessage) {})
+}
+
+func createDiscoveryInstanceThatGossipsWithInterceptors(port int, id string, bootstrapPeers []string, shouldGossip bool, pol DisclosurePolicy, f func(*proto.SignedGossipMessage)) *gossipInstance {
 	comm := &dummyCommModule{
 		conns:        make(map[string]*grpc.ClientConn),
 		streams:      make(map[string]proto.Gossip_GossipStreamClient),
@@ -366,7 +387,7 @@ func createDiscoveryInstanceThatGossips(port int, id string, bootstrapPeers []st
 		})
 	}
 
-	gossInst := &gossipInstance{comm: comm, gRGCserv: s, Discovery: discSvc, lsnr: ll, shouldGossip: shouldGossip, port: port}
+	gossInst := &gossipInstance{comm: comm, gRGCserv: s, Discovery: discSvc, lsnr: ll, shouldGossip: shouldGossip, port: port, msgInterceptor: f}
 
 	proto.RegisterGossipServer(s, gossInst)
 	go s.Serve(ll)
@@ -493,6 +514,196 @@ func TestConnect(t *testing.T) {
 	am, _ = mr2.GetMemReq().SelfInformation.ToGossipMessage()
 	assert.Nil(t, am.SecretEnvelope)
 	stopInstances(t, instances)
+}
+
+func TestValidation(t *testing.T) {
+	t.Parallel()
+
+	
+	
+	
+	
+	
+	
+
+	wrapReceivedMessage := func(msg *proto.SignedGossipMessage) proto.ReceivedMessage {
+		return &dummyReceivedMessage{
+			msg: msg,
+			info: &proto.ConnectionInfo{
+				ID: common.PKIidType("testID"),
+			},
+		}
+	}
+
+	requestMessagesReceived := make(chan *proto.SignedGossipMessage, 100)
+	responseMessagesReceived := make(chan *proto.SignedGossipMessage, 100)
+	aliveMessagesReceived := make(chan *proto.SignedGossipMessage, 5000)
+
+	var membershipRequest atomic.Value
+	var membershipResponseWithAlivePeers atomic.Value
+	var membershipResponseWithDeadPeers atomic.Value
+
+	recordMembershipRequest := func(req *proto.SignedGossipMessage) {
+		msg, _ := req.GetMemReq().SelfInformation.ToGossipMessage()
+		membershipRequest.Store(req)
+		requestMessagesReceived <- msg
+	}
+
+	recordMembershipResponse := func(res *proto.SignedGossipMessage) {
+		memRes := res.GetMemRes()
+		if len(memRes.GetAlive()) > 0 {
+			membershipResponseWithAlivePeers.Store(res)
+		}
+		if len(memRes.GetDead()) > 0 {
+			membershipResponseWithDeadPeers.Store(res)
+		}
+		responseMessagesReceived <- res
+	}
+
+	interceptor := func(msg *proto.SignedGossipMessage) {
+		if memReq := msg.GetMemReq(); memReq != nil {
+			recordMembershipRequest(msg)
+			return
+		}
+
+		if memRes := msg.GetMemRes(); memRes != nil {
+			recordMembershipResponse(msg)
+			return
+		}
+		
+		aliveMessagesReceived <- msg
+	}
+
+	
+	
+	
+	
+	p1 := createDiscoveryInstanceThatGossipsWithInterceptors(4675, "p1", []string{bootPeer(4677)}, true, noopPolicy, interceptor)
+	p2 := createDiscoveryInstance(4676, "p2", []string{bootPeer(4675)})
+	p3 := createDiscoveryInstance(4677, "p3", nil)
+	instances := []*gossipInstance{p1, p2, p3}
+
+	assertMembership(t, instances, 2)
+
+	instances = []*gossipInstance{p1, p2}
+	
+	p3.Stop()
+	assertMembership(t, instances, 1)
+	
+	
+	p1.InitiateSync(1)
+
+	
+	waitUntilOrFail(t, func() bool {
+		return membershipResponseWithDeadPeers.Load() != nil
+	})
+
+	p1.Stop()
+	p2.Stop()
+
+	close(aliveMessagesReceived)
+	t.Log("Recorded", len(aliveMessagesReceived), "alive messages")
+	t.Log("Recorded", len(requestMessagesReceived), "request messages")
+	t.Log("Recorded", len(responseMessagesReceived), "response messages")
+
+	
+	assert.NotNil(t, membershipResponseWithAlivePeers.Load())
+	assert.NotNil(t, membershipRequest.Load())
+
+	t.Run("alive message", func(t *testing.T) {
+		t.Parallel()
+		
+		p4 := createDiscoveryInstance(4678, "p1", nil)
+		defer p4.Stop()
+		
+		validatedMessages := make(chan *proto.SignedGossipMessage, 5000)
+		p4.comm.recordValidation(validatedMessages)
+		tmpMsgs := make(chan *proto.SignedGossipMessage, 5000)
+		
+		for msg := range aliveMessagesReceived {
+			p4.comm.incMsgs <- wrapReceivedMessage(msg)
+			tmpMsgs <- msg
+		}
+
+		
+		policy := proto.NewGossipMessageComparator(0)
+		msgStore := msgstore.NewMessageStore(policy, func(_ interface{}) {})
+		close(tmpMsgs)
+		for msg := range tmpMsgs {
+			if msgStore.Add(msg) {
+				
+				expectedMessage := <-validatedMessages
+				assert.Equal(t, expectedMessage, msg)
+			}
+		}
+		
+		assert.Empty(t, validatedMessages)
+	})
+
+	req := membershipRequest.Load().(*proto.SignedGossipMessage)
+	res := membershipResponseWithDeadPeers.Load().(*proto.SignedGossipMessage)
+	
+	assert.Len(t, res.GetMemRes().GetAlive(), 2)
+	assert.Len(t, res.GetMemRes().GetDead(), 1)
+
+	for _, testCase := range []struct {
+		name                  string
+		expectedAliveMessages int
+		port                  int
+		message               *proto.SignedGossipMessage
+		shouldBeReValidated   bool
+	}{
+		{
+			name:                  "membership request",
+			expectedAliveMessages: 1,
+			message:               req,
+			port:                  4679,
+			shouldBeReValidated:   true,
+		},
+		{
+			name:                  "membership response",
+			expectedAliveMessages: 3,
+			message:               res,
+			port:                  4680,
+		},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			p := createDiscoveryInstance(testCase.port, "p", nil)
+			defer p.Stop()
+			
+			validatedMessages := make(chan *proto.SignedGossipMessage, testCase.expectedAliveMessages)
+			p.comm.recordValidation(validatedMessages)
+
+			p.comm.incMsgs <- wrapReceivedMessage(testCase.message)
+			
+			for i := 0; i < testCase.expectedAliveMessages; i++ {
+				validatedMsg := <-validatedMessages
+				
+				p.comm.incMsgs <- wrapReceivedMessage(validatedMsg)
+			}
+			
+			for i := 0; i < testCase.expectedAliveMessages; i++ {
+				<-validatedMessages
+			}
+			
+			assert.Empty(t, validatedMessages)
+
+			if !testCase.shouldBeReValidated {
+				
+				
+				
+				close(validatedMessages)
+			}
+			p.comm.incMsgs <- wrapReceivedMessage(testCase.message)
+			p.comm.incMsgs <- wrapReceivedMessage(testCase.message)
+			
+			waitUntilOrFail(t, func() bool {
+				return len(p.comm.incMsgs) == 0
+			})
+		})
+	}
 }
 
 func TestUpdate(t *testing.T) {

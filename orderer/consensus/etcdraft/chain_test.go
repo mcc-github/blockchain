@@ -201,7 +201,7 @@ var _ = Describe("Chain", func() {
 		Context("when no Raft leader is elected", func() {
 			It("fails to order envelope", func() {
 				err := chain.Order(env, 0)
-				Expect(err).To(MatchError("no Raft leader"))
+				Expect(err).To(MatchError("node bootstrapping has not finished"))
 			})
 		})
 
@@ -683,6 +683,7 @@ var _ = Describe("Chain", func() {
 						err := c.Order(env, uint64(0))
 						Expect(err).NotTo(HaveOccurred())
 						Eventually(c.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(3))
+
 					})
 
 					It("only replays blocks after Applied index", func() {
@@ -750,7 +751,7 @@ var _ = Describe("Chain", func() {
 						m *raftprotos.RaftMetadata
 
 						ledgerLock sync.Mutex
-						ledger     []*common.Block
+						ledger     map[uint64]*common.Block
 					)
 
 					countFiles := func() int {
@@ -766,6 +767,12 @@ var _ = Describe("Chain", func() {
 						close(cutter.Block)
 						cutter.CutNext = true
 
+						ledgerLock.Lock()
+						ledger = map[uint64]*common.Block{
+							0: getSeedBlock(), 
+						}
+						ledgerLock.Unlock()
+
 						support.WriteBlockStub = func(b *common.Block, meta []byte) {
 							bytes, err := proto.Marshal(&common.Metadata{Value: meta})
 							Expect(err).NotTo(HaveOccurred())
@@ -773,7 +780,7 @@ var _ = Describe("Chain", func() {
 
 							ledgerLock.Lock()
 							defer ledgerLock.Unlock()
-							ledger = append(ledger, b)
+							ledger[b.Header.Number] = b
 						}
 
 						support.HeightStub = func() uint64 {
@@ -841,7 +848,7 @@ var _ = Describe("Chain", func() {
 						}
 
 						err := c.WaitReady()
-						Expect(err).To((MatchError("chain is not started")))
+						Expect(err).To(MatchError("chain is not started"))
 
 						c.Start()
 						defer c.Halt()
@@ -1407,8 +1414,6 @@ var _ = Describe("Chain", func() {
 					err = c4.Order(env, 0)
 					Expect(err).ToNot(HaveOccurred())
 
-					c1.clock.Increment(interval)
-
 					network.exec(func(c *chain) {
 						Eventually(c.support.WriteBlockCallCount, defaultTimeout).Should(Equal(2))
 					})
@@ -1553,7 +1558,7 @@ var _ = Describe("Chain", func() {
 					Eventually(c4.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
 
 					
-					Consistently(c1.support.WriteBlockCallCount, defaultTimeout).Should(Equal(1))
+					Consistently(c1.support.WriteBlockCallCount).Should(Equal(1))
 
 					network.connect(1)
 
@@ -1562,6 +1567,86 @@ var _ = Describe("Chain", func() {
 					
 					Eventually(c1.observe, LongEventualTimeout).Should(Receive(Equal(uint64(2))))
 					Eventually(c1.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
+				})
+
+				It("stop cluster quorum and continue reconfiguration after the restart", func() {
+					
+					
+					
+
+					c4 := newChain(timeout, channelID, dataDir, 4, &raftprotos.RaftMetadata{
+						Consenters: map[uint64]*raftprotos.Consenter{},
+					})
+					c4.init()
+
+					By("adding new node to the network")
+					Expect(c4.support.WriteBlockCallCount()).Should(Equal(0))
+					Expect(c4.support.WriteConfigBlockCallCount()).Should(Equal(0))
+
+					configEnv := newConfigEnv(channelID, common.HeaderType_CONFIG, newConfigUpdateEnv(channelID, addConsenterConfigValue()))
+					c1.cutter.CutNext = true
+
+					stub1 := c1.support.WriteConfigBlockStub
+					c1.support.WriteConfigBlockStub = func(block *common.Block, metadata []byte) {
+						stub1(block, metadata)
+						network.disconnect(1)
+					}
+
+					stub2 := c2.support.WriteConfigBlockStub
+					c2.support.WriteConfigBlockStub = func(block *common.Block, metadata []byte) {
+						stub2(block, metadata)
+						network.disconnect(2)
+					}
+
+					stub3 := c3.support.WriteConfigBlockStub
+					c3.support.WriteConfigBlockStub = func(block *common.Block, metadata []byte) {
+						stub3(block, metadata)
+						network.disconnect(3)
+					}
+
+					By("sending config transaction")
+					err := c1.Configure(configEnv, 0)
+					Expect(err).ToNot(HaveOccurred())
+
+					
+					network.exec(
+						func(c *chain) {
+							Eventually(c.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
+						})
+
+					network.addChain(c4)
+
+					By("reconnecting nodes back")
+					for i := uint64(1); i < 4; i++ {
+						network.connect(i)
+					}
+
+					c4.Start()
+
+					By("re-elect node 2 to be a leader")
+					network.elect(2)
+
+					By("confirm new node observed a leader node")
+					Eventually(func() <-chan uint64 {
+						c2.clock.Increment(interval)
+						return c4.observe
+					}, LongEventualTimeout).Should(Receive(Equal(uint64(2))))
+
+					Eventually(c4.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(1))
+					Eventually(c4.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
+
+					By("submitting new transaction to follower")
+					c2.cutter.CutNext = true
+					err = c4.Order(env, 0)
+					Expect(err).ToNot(HaveOccurred())
+
+					c2.clock.Increment(interval)
+
+					
+					Eventually(c1.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
+					Eventually(c2.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
+					Eventually(c3.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
+					Eventually(c4.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
 				})
 
 				It("ensures that despite leader failure cluster continue to process configuration to remove the leader", func() {
@@ -1604,7 +1689,7 @@ var _ = Describe("Chain", func() {
 					Eventually(c2.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
 					Eventually(c3.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
 					
-					Consistently(c1.support.WriteBlockCallCount, defaultTimeout).Should(Equal(1))
+					Consistently(c1.support.WriteBlockCallCount).Should(Equal(1))
 				})
 
 				It("removes leader from replica set", func() {
@@ -1644,7 +1729,7 @@ var _ = Describe("Chain", func() {
 					Eventually(c2.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
 					Eventually(c3.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
 					
-					Consistently(c1.support.WriteBlockCallCount, defaultTimeout).Should(Equal(1))
+					Consistently(c1.support.WriteBlockCallCount).Should(Equal(1))
 
 					By("trying to submit to new node, expected to fail")
 					c1.cutter.CutNext = true
@@ -1652,9 +1737,9 @@ var _ = Describe("Chain", func() {
 					Expect(err).To(HaveOccurred())
 
 					
-					Consistently(c2.support.WriteBlockCallCount, defaultTimeout).Should(Equal(2))
-					Consistently(c3.support.WriteBlockCallCount, defaultTimeout).Should(Equal(2))
-					Consistently(c1.support.WriteBlockCallCount, defaultTimeout).Should(Equal(1))
+					Consistently(c2.support.WriteBlockCallCount).Should(Equal(2))
+					Consistently(c3.support.WriteBlockCallCount).Should(Equal(2))
+					Consistently(c1.support.WriteBlockCallCount).Should(Equal(1))
 				})
 			})
 		})
@@ -1717,6 +1802,33 @@ var _ = Describe("Chain", func() {
 				network.exec(
 					func(c *chain) {
 						Eventually(func() int { return c.support.WriteBlockCallCount() }, LongEventualTimeout).Should(Equal(2))
+					})
+			})
+
+			It("leader retransmits lost messages", func() {
+				
+
+				c1.cutter.CutNext = true
+
+				stepCnt := c1.rpc.StepCallCount()
+				network.disconnect(1) 
+
+				err := c1.Order(env, 0)
+				Expect(err).ToNot(HaveOccurred())
+
+				network.exec(
+					func(c *chain) {
+						Consistently(func() int { return c.support.WriteBlockCallCount() }).Should(Equal(0))
+					})
+
+				
+				Eventually(c1.rpc.StepCallCount).Should(Equal(stepCnt + 2))
+				network.connect(1) 
+
+				c1.clock.Increment(interval) 
+				network.exec(
+					func(c *chain) {
+						Eventually(func() int { return c.support.WriteBlockCallCount() }, LongEventualTimeout).Should(Equal(1))
 					})
 			})
 
@@ -2184,8 +2296,9 @@ type chain struct {
 	puller       *mocks.FakeBlockPuller
 
 	
-	ledger     map[uint64]*common.Block
-	ledgerLock sync.RWMutex
+	ledger       map[uint64]*common.Block
+	ledgerHeight uint64
+	ledgerLock   sync.RWMutex
 
 	observe   chan uint64
 	unstarted chan struct{}
@@ -2249,6 +2362,7 @@ func newChain(timeout time.Duration, channel string, dataDir string, id uint64, 
 		ledger: map[uint64]*common.Block{
 			0: getSeedBlock(), 
 		},
+		ledgerHeight: 1,
 	}
 
 	
@@ -2260,6 +2374,9 @@ func newChain(timeout time.Duration, channel string, dataDir string, id uint64, 
 		c.ledgerLock.Lock()
 		defer c.ledgerLock.Unlock()
 		c.ledger[b.Header.Number] = b
+		if c.ledgerHeight < b.Header.Number+1 {
+			c.ledgerHeight = b.Header.Number + 1
+		}
 	}
 
 	c.support.WriteBlockStub = appendBlockToLedger
@@ -2269,7 +2386,7 @@ func newChain(timeout time.Duration, channel string, dataDir string, id uint64, 
 	c.support.HeightStub = func() uint64 {
 		c.ledgerLock.RLock()
 		defer c.ledgerLock.RUnlock()
-		return uint64(len(c.ledger))
+		return c.ledgerHeight
 	}
 
 	
@@ -2412,7 +2529,7 @@ func (n *network) start(ids ...uint64) {
 				_, err := n.chains[id].storage.Entries(1, 1, 1)
 				return err
 			}).ShouldNot(HaveOccurred())
-
+			Eventually(n.chains[id].WaitReady).ShouldNot(HaveOccurred())
 			wg.Done()
 		}(i)
 	}
@@ -2474,7 +2591,7 @@ func (n *network) elect(id uint64) (tick int) {
 	
 	
 	
-	t := 1000 * time.Millisecond
+	t := 50 * time.Millisecond
 
 	n.connLock.RLock()
 	c := n.chains[id]
@@ -2495,7 +2612,7 @@ func (n *network) elect(id uint64) (tick int) {
 				
 				
 				
-				Eventually(c.observe).Should(Receive(Equal(id)))
+				Eventually(c.observe, LongEventualTimeout).Should(Receive(Equal(id)))
 			} else {
 				
 				
@@ -2529,6 +2646,8 @@ func (n *network) elect(id uint64) (tick int) {
 }
 
 func (n *network) disconnect(i uint64) {
+	n.connLock.Lock()
+	defer n.connLock.Unlock()
 	close(n.connectivity[i])
 }
 

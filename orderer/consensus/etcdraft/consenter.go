@@ -22,6 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/multichannel"
 	"github.com/mcc-github/blockchain/orderer/consensus"
+	"github.com/mcc-github/blockchain/orderer/consensus/inactive"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
@@ -96,7 +97,7 @@ func (c *Consenter) detectSelfID(consenters map[uint64]*etcdraft.Consenter) (uin
 	}
 
 	c.Logger.Error("Could not find", string(c.Cert), "among", serverCertificates)
-	return 0, errors.Errorf("failed to detect own Raft ID because no matching certificate found")
+	return 0, cluster.ErrNotInChannel
 }
 
 
@@ -123,7 +124,7 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 
 	id, err := c.detectSelfID(raftMetadata.Consenters)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return &inactive.Chain{Err: errors.Errorf("channel %s is not serviced by me", support.ChainID())}, nil
 	}
 
 	bp, err := newBlockPuller(support, c.Dialer, c.OrdererConfig.General.Cluster)

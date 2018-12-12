@@ -310,11 +310,10 @@ func serve(args []string) error {
 	defer service.GetGossipService().Stop()
 
 	
-	
-	
-	
-	
-	
+	err = registerProverService(peerServer, aclProvider, signingIdentity)
+	if err != nil {
+		return err
+	}
 
 	
 

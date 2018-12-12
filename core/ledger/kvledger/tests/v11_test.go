@@ -16,16 +16,6 @@ import (
 
 
 func TestV11(t *testing.T) {
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	t.Skip()
 	fsPath := defaultConfig["peer.fileSystemPath"].(string)
 	
 	testutil.CopyDir("testdata/v11/sample_ledgers/ledgersData", fsPath)
@@ -134,17 +124,17 @@ func (d *v11SampleDataHelper) sampleVal(val, ledgerid string) string {
 
 func (d *v11SampleDataHelper) sampleCollConf1(ledgerid, ccName string) []*collConf {
 	return []*collConf{
-		{name: "coll1"},
-		{name: ledgerid},
-		{name: ccName},
+		{name: "coll1", members: []string{"org1", "org2"}},
+		{name: ledgerid, members: []string{"org1", "org2"}},
+		{name: ccName, members: []string{"org1", "org2"}},
 	}
 }
 
 func (d *v11SampleDataHelper) sampleCollConf2(ledgerid string, ccName string) []*collConf {
 	return []*collConf{
-		{name: "coll1"},
-		{name: "coll2"},
-		{name: ledgerid},
-		{name: ccName},
+		{name: "coll1", members: []string{"org1", "org2"}},
+		{name: "coll2", members: []string{"org1", "org2"}},
+		{name: ledgerid, members: []string{"org1", "org2"}},
+		{name: ccName, members: []string{"org1", "org2"}},
 	}
 }

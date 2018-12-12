@@ -263,7 +263,7 @@ func ConfigEnvelopeFromBlock(block *common.Block) (*common.Envelope, error) {
 
 	envelope, err := utils.ExtractEnvelope(block, 0)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to extract envelop from the block")
+		return nil, errors.Wrapf(err, "failed to extract envelope from the block")
 	}
 
 	channelHeader, err := utils.ChannelHeader(envelope)
@@ -307,7 +307,7 @@ func ConsensusMetadataFromConfigBlock(block *common.Block) (*etcdraft.Metadata, 
 
 	payload, err := utils.ExtractPayload(configEnvelope)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed extract payload from config envelope")
+		return nil, errors.Wrap(err, "failed to extract payload from config envelope")
 	}
 	
 	configUpdate, err := configtx.UnmarshalConfigUpdateFromPayload(payload)
@@ -372,4 +372,56 @@ func (conCert ConsenterCertificate) IsConsenterOfChannel(configBlock *common.Blo
 		}
 	}
 	return cluster.ErrNotInChannel
+}
+
+
+func SliceOfConsentersIDs(consenters map[uint64]*etcdraft.Consenter) []uint64 {
+	result := make([]uint64, 0)
+	for id := range consenters {
+		result = append(result, id)
+	}
+
+	return result
+}
+
+
+
+func NodeExists(id uint64, nodes []uint64) bool {
+	for _, nodeID := range nodes {
+		if nodeID == id {
+			return true
+		}
+	}
+	return false
+}
+
+
+
+func ConfChange(raftMetadata *etcdraft.RaftMetadata, confState *raftpb.ConfState) raftpb.ConfChange {
+	raftConfChange := raftpb.ConfChange{}
+
+	raftConfChange.ID = raftMetadata.ConfChangeCounts
+	
+	if len(confState.Nodes) < len(raftMetadata.Consenters) {
+		
+		raftConfChange.Type = raftpb.ConfChangeAddNode
+		for consenterID := range raftMetadata.Consenters {
+			if NodeExists(consenterID, confState.Nodes) {
+				continue
+			}
+			raftConfChange.NodeID = consenterID
+		}
+	} else {
+		
+		raftConfChange.Type = raftpb.ConfChangeRemoveNode
+		consentersIDs := SliceOfConsentersIDs(raftMetadata.Consenters)
+		for _, nodeID := range confState.Nodes {
+			if NodeExists(nodeID, consentersIDs) {
+				continue
+			}
+			raftConfChange.NodeID = nodeID
+		}
+	}
+
+	return raftConfChange
 }

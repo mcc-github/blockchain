@@ -381,8 +381,32 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 				logger.Infof("Find chaincode upgrade transaction for chaincode %s on channel %s with new version %s", upgradeCC.ChaincodeName, upgradeCC.ChainID, upgradeCC.ChaincodeVersion)
 				txsUpgradedChaincode = upgradeCC
 			}
+		} else if common.HeaderType(chdr.Type) == common.HeaderType_TOKEN_TRANSACTION {
+
+			txID = chdr.TxId
+			if !v.Support.Capabilities().FabToken() {
+				logger.Errorf("FabToken capability is not enabled. Unsupported transaction type [%s] in block [%d] transaction [%d]",
+					common.HeaderType(chdr.Type), block.Header.Number, tIdx)
+				results <- &blockValidationResult{
+					tIdx:           tIdx,
+					validationCode: peer.TxValidationCode_UNKNOWN_TX_TYPE,
+				}
+				return
+			}
+
 			
 			
+			erroneousResultEntry := v.checkTxIdDupsLedger(tIdx, chdr, v.Support.Ledger())
+			if erroneousResultEntry != nil {
+				results <- erroneousResultEntry
+				return
+			}
+
+			
+			txsChaincodeName = &sysccprovider.ChaincodeInstance{
+				ChainID:          channel,
+				ChaincodeName:    "Token",
+				ChaincodeVersion: ""}
 		} else if common.HeaderType(chdr.Type) == common.HeaderType_CONFIG {
 			configEnvelope, err := configtx.UnmarshalConfigEnvelope(payload.Data)
 			if err != nil {
