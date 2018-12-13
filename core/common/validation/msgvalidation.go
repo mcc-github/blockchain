@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package validation
@@ -26,6 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/pkg/errors"
 )
@@ -218,10 +209,12 @@ func validateChannelHeader(cHdr *common.ChannelHeader) error {
 	}
 
 	
-	if common.HeaderType(cHdr.Type) != common.HeaderType_ENDORSER_TRANSACTION &&
-		common.HeaderType(cHdr.Type) != common.HeaderType_CONFIG_UPDATE &&
-		common.HeaderType(cHdr.Type) != common.HeaderType_CONFIG &&
-		common.HeaderType(cHdr.Type) != common.HeaderType_TOKEN_TRANSACTION {
+	switch common.HeaderType(cHdr.Type) {
+	case common.HeaderType_ENDORSER_TRANSACTION:
+	case common.HeaderType_CONFIG_UPDATE:
+	case common.HeaderType_CONFIG:
+	case common.HeaderType_TOKEN_TRANSACTION:
+	default:
 		return errors.Errorf("invalid header type %s", common.HeaderType(cHdr.Type))
 	}
 
@@ -371,6 +364,23 @@ func validateEndorserTransaction(data []byte, hdr *common.Header) error {
 }
 
 
+func validateTokenTransaction(data []byte) error {
+	
+	if data == nil {
+		return errors.New("nil payload data")
+	}
+
+	
+	tx := &token.TokenTransaction{}
+	if err := proto.Unmarshal(data, tx); err != nil {
+		return errors.Wrap(err, "error unmarshaling the token Transaction")
+	}
+
+	
+	return nil
+}
+
+
 func ValidateTransaction(e *common.Envelope, c channelconfig.ApplicationCapabilities) (*common.Payload, pb.TxValidationCode) {
 	putilsLogger.Debugf("ValidateTransactionEnvelope starts for envelope %p", e)
 
@@ -456,6 +466,11 @@ func ValidateTransaction(e *common.Envelope, c channelconfig.ApplicationCapabili
 			return nil, pb.TxValidationCode_BAD_PROPOSAL_TXID
 		}
 
+		err = validateTokenTransaction(payload.Data)
+		if err != nil {
+			putilsLogger.Errorf("validateTokenTransaction returns err %s", err)
+			return payload, pb.TxValidationCode_BAD_PAYLOAD
+		}
 		return payload, pb.TxValidationCode_VALID
 	default:
 		return nil, pb.TxValidationCode_UNSUPPORTED_TX_PAYLOAD

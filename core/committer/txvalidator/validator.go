@@ -385,7 +385,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 
 			txID = chdr.TxId
 			if !v.Support.Capabilities().FabToken() {
-				logger.Errorf("FabToken capability is not enabled. Unsupported transaction type [%s] in block [%d] transaction [%d]",
+				logger.Debugf("Unsupported transaction type [%s] in block number [%d] transaction index [%d]: FabToken capability is not enabled",
 					common.HeaderType(chdr.Type), block.Header.Number, tIdx)
 				results <- &blockValidationResult{
 					tIdx:           tIdx,
@@ -401,12 +401,6 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 				results <- erroneousResultEntry
 				return
 			}
-
-			
-			txsChaincodeName = &sysccprovider.ChaincodeInstance{
-				ChainID:          channel,
-				ChaincodeName:    "Token",
-				ChaincodeVersion: ""}
 		} else if common.HeaderType(chdr.Type) == common.HeaderType_CONFIG {
 			configEnvelope, err := configtx.UnmarshalConfigEnvelope(payload.Data)
 			if err != nil {
@@ -471,7 +465,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 
 
 
-func (v *TxValidator) checkTxIdDupsLedger(tIdx int, chdr *common.ChannelHeader, ldgr ledger.PeerLedger) (errorTuple *blockValidationResult) {
+func (v *TxValidator) checkTxIdDupsLedger(tIdx int, chdr *common.ChannelHeader, ldgr ledger.PeerLedger) *blockValidationResult {
 
 	
 	txID := chdr.TxId
@@ -479,30 +473,27 @@ func (v *TxValidator) checkTxIdDupsLedger(tIdx int, chdr *common.ChannelHeader, 
 	
 	_, err := ldgr.GetTransactionByID(txID)
 
-	
-	
-	if err == nil {
+	switch err.(type) {
+	case nil:
+		
 		logger.Error("Duplicate transaction found, ", txID, ", skipping")
 		return &blockValidationResult{
 			tIdx:           tIdx,
 			validationCode: peer.TxValidationCode_DUPLICATE_TXID,
 		}
-	}
-
-	
-	
-	if _, isNotFoundInIndexErrType := err.(ledger.NotFoundInIndexErr); !isNotFoundInIndexErrType {
-		logger.Errorf("Ledger failure while attempting to detect duplicate status for "+
-			"txid %s, err '%s'. Aborting", txID, err)
+	case ledger.NotFoundInIndexErr:
+		
+		
+		return nil
+	default:
+		
+		
+		logger.Errorf("Ledger failure while attempting to detect duplicate status for txid %s: %s", txID, err)
 		return &blockValidationResult{
 			tIdx: tIdx,
 			err:  err,
 		}
 	}
-
-	
-	
-	return nil
 }
 
 
