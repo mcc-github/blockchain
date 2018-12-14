@@ -24,6 +24,7 @@ import (
 	"github.com/mcc-github/blockchain/common/grpclogging"
 	"github.com/mcc-github/blockchain/common/grpcmetrics"
 	"github.com/mcc-github/blockchain/common/localmsp"
+	"github.com/mcc-github/blockchain/common/metadata"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/viperutil"
@@ -885,6 +886,7 @@ func newOperationsSystem() *operations.System {
 			ClientCertRequired: viper.GetBool("operations.tls.clientAuthRequired"),
 			ClientCACertFiles:  viper.GetStringSlice("operations.tls.clientRootCAs.files"),
 		},
+		Version: metadata.Version,
 	})
 }
 
