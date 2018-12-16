@@ -7,26 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package chaincode
 
 import (
-	"context"
 	"sync"
 
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/ledger"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
-)
-
-type key string
-
-const (
-	
-	
-	TXSimulatorKey key = "txsimulatorkey"
-
-	
-	
-	HistoryQueryExecutorKey key = "historyqueryexecutorkey"
 )
 
 
@@ -77,20 +63,6 @@ func (c *TransactionContexts) Create(txParams *ccprovider.TransactionParams) (*T
 	c.contexts[ctxID] = txctx
 
 	return txctx, nil
-}
-
-func getTxSimulator(ctx context.Context) ledger.TxSimulator {
-	if txsim, ok := ctx.Value(TXSimulatorKey).(ledger.TxSimulator); ok {
-		return txsim
-	}
-	return nil
-}
-
-func getHistoryQueryExecutor(ctx context.Context) ledger.HistoryQueryExecutor {
-	if historyQueryExecutor, ok := ctx.Value(HistoryQueryExecutorKey).(ledger.HistoryQueryExecutor); ok {
-		return historyQueryExecutor
-	}
-	return nil
 }
 
 
