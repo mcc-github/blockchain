@@ -1,9 +1,9 @@
 
+
 package mocks
 
+import common "github.com/mcc-github/blockchain/gossip/privdata/common"
 import mock "github.com/stretchr/testify/mock"
-
-import privdata_common "github.com/mcc-github/blockchain/gossip/privdata/common"
 
 
 type ReconciliationFetcher struct {
@@ -11,20 +11,20 @@ type ReconciliationFetcher struct {
 }
 
 
-func (_m *ReconciliationFetcher) FetchReconciledItems(dig2collectionConfig privdata_common.Dig2CollectionConfig) (*privdata_common.FetchedPvtDataContainer, error) {
+func (_m *ReconciliationFetcher) FetchReconciledItems(dig2collectionConfig common.Dig2CollectionConfig) (*common.FetchedPvtDataContainer, error) {
 	ret := _m.Called(dig2collectionConfig)
 
-	var r0 *privdata_common.FetchedPvtDataContainer
-	if rf, ok := ret.Get(0).(func(privdata_common.Dig2CollectionConfig) *privdata_common.FetchedPvtDataContainer); ok {
+	var r0 *common.FetchedPvtDataContainer
+	if rf, ok := ret.Get(0).(func(common.Dig2CollectionConfig) *common.FetchedPvtDataContainer); ok {
 		r0 = rf(dig2collectionConfig)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*privdata_common.FetchedPvtDataContainer)
+			r0 = ret.Get(0).(*common.FetchedPvtDataContainer)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(privdata_common.Dig2CollectionConfig) error); ok {
+	if rf, ok := ret.Get(1).(func(common.Dig2CollectionConfig) error); ok {
 		r1 = rf(dig2collectionConfig)
 	} else {
 		r1 = ret.Error(1)

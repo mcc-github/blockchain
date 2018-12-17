@@ -1,10 +1,9 @@
 
+
 package mocks
 
-import (
-	"github.com/mcc-github/blockchain/core/transientstore"
-	"github.com/stretchr/testify/mock"
-)
+import mock "github.com/stretchr/testify/mock"
+import transientstore "github.com/mcc-github/blockchain/core/transientstore"
 
 
 type RWSetScanner struct {
