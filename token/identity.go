@@ -22,6 +22,4 @@ type SigningIdentity interface {
 	Identity 
 
 	Sign(msg []byte) ([]byte, error)
-
-	GetPublicVersion() Identity
 }

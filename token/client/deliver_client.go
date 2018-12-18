@@ -18,6 +18,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	tk "github.com/mcc-github/blockchain/token"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -100,7 +101,7 @@ func (d *deliverClient) Certificate() *tls.Certificate {
 }
 
 
-func CreateDeliverEnvelope(channelId string, creator []byte, signer SignerIdentity, cert *tls.Certificate) (*common.Envelope, error) {
+func CreateDeliverEnvelope(channelId string, creator []byte, signingIdentity tk.SigningIdentity, cert *tls.Certificate) (*common.Envelope, error) {
 	var tlsCertHash []byte
 	var err error
 	
@@ -143,7 +144,7 @@ func CreateDeliverEnvelope(channelId string, creator []byte, signer SignerIdenti
 		return nil, errors.Wrap(err, "error marshaling SeekInfo")
 	}
 
-	envelope, err := CreateEnvelope(raw, header, signer)
+	envelope, err := CreateEnvelope(raw, header, signingIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +161,7 @@ func DeliverSend(df DeliverFiltered, address string, envelope *common.Envelope) 
 	return nil
 }
 
-func DeliverReceive(df DeliverFiltered, address string, txid string, eventCh chan TxEvent) error {
+func DeliverReceive(df DeliverFiltered, address string, txid string, eventCh chan<- TxEvent) error {
 	event := TxEvent{
 		Txid:       txid,
 		Committed:  false,
@@ -213,7 +214,7 @@ read:
 
 
 
-func DeliverWaitForResponse(ctx context.Context, eventCh chan TxEvent, txid string) (bool, error) {
+func DeliverWaitForResponse(ctx context.Context, eventCh <-chan TxEvent, txid string) (bool, error) {
 	select {
 	case event, _ := <-eventCh:
 		if txid == event.Txid {
