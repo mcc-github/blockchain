@@ -27,7 +27,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	putils "github.com/mcc-github/blockchain/protos/utils"
-	logging "github.com/op/go-logging"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -422,21 +421,6 @@ func TestTxStatsInfo(t *testing.T) {
 	}
 	t.Logf("txStatsInfo=%s\n", spew.Sdump(txStatsInfo))
 	assert.Equal(t, expectedTxStatInfo, txStatsInfo)
-}
-
-
-func memoryRecordN(b *logging.MemoryBackend, n int) *logging.Record {
-	node := b.Head()
-	for i := 0; i < n; i++ {
-		if node == nil {
-			break
-		}
-		node = node.Next()
-	}
-	if node == nil {
-		return nil
-	}
-	return node.Record
 }
 
 func testutilSampleTxSimulationResults(t *testing.T, key string) *ledger.TxSimulationResults {

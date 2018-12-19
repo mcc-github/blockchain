@@ -9,13 +9,10 @@ package transaction
 import (
 	"fmt"
 
-	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
-
-var logger = flogging.MustGetLogger("fabtoken-processor")
 
 
 

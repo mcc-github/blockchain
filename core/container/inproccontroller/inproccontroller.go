@@ -88,7 +88,6 @@ func (r *Registry) Register(ccid *ccintf.CCID, cc shim.Chaincode) error {
 
 
 type InprocVM struct {
-	id       string
 	registry *Registry
 }
 

@@ -26,9 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const (
-	binaryTestFileName = "kvrwsetV1ProtoBytes"
-)
+const binaryTestFileName = "kvrwsetV1ProtoBytes"
 
 
 
@@ -47,10 +45,10 @@ func TestKVRWSetV1BackwardCompatible(t *testing.T) {
 
 
 
-func testPrepareBinaryFileSampleKVRWSetV1(t *testing.T) {
+func PrepareBinaryFileSampleKVRWSetV1(t *testing.T) {
 	b, err := proto.Marshal(constructSampleKVRWSet())
 	assert.NoError(t, err)
-	assert.NoError(t, ioutil.WriteFile(binaryTestFileName, b, 0775))
+	assert.NoError(t, ioutil.WriteFile(binaryTestFileName, b, 0644))
 }
 
 func constructSampleKVRWSet() *kvrwset.KVRWSet {

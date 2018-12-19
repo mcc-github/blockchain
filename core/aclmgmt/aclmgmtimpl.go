@@ -6,12 +6,6 @@ SPDX-License-Identifier: Apache-2.0
 
 package aclmgmt
 
-import (
-	"github.com/mcc-github/blockchain/common/flogging"
-)
-
-var aclMgmtLogger = flogging.MustGetLogger("aclmgmt")
-
 
 
 

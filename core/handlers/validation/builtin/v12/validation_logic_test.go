@@ -32,7 +32,7 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	cutils "github.com/mcc-github/blockchain/core/container/util"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
 	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/v12/mocks"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	corepeer "github.com/mcc-github/blockchain/core/peer"
@@ -40,7 +40,7 @@ import (
 	"github.com/mcc-github/blockchain/core/scc/lscc"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	mspproto "github.com/mcc-github/blockchain/protos/msp"
@@ -1966,15 +1966,6 @@ func TestValidateRWSetAndCollectionForUpgrade(t *testing.T) {
 	
 	err = testValidateCollection(t, v, []*common.CollectionConfig{coll1, coll2, coll3}, cdRWSet, lsccFunc, ac, chid)
 	assert.EqualError(t, err, "the BlockToLive in the following existing collections must not be modified: [mycollection2]")
-}
-
-func NewMockProvider() *scc.MocksccProviderImpl {
-	return (&scc.MocksccProviderFactory{
-		ApplicationConfigBool: true,
-		ApplicationConfigRv: &mc.MockApplication{
-			CapabilitiesRv: &mc.MockApplicationCapabilities{},
-		},
-	}).NewSystemChaincodeProvider().(*scc.MocksccProviderImpl)
 }
 
 func TestMain(m *testing.M) {

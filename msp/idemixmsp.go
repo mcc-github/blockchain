@@ -52,11 +52,6 @@ const (
 
 const rhIndex = 3
 
-
-
-
-var discloseFlags = []byte{1, 1, 0, 0}
-
 type idemixmsp struct {
 	csp          bccsp.BCCSP
 	version      MSPVersion

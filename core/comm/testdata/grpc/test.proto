@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 syntax = "proto3";
 
-option go_package = "github.com/mcc-github/blockchain/core/comm/testdata/grpc";
+option go_package = "github.com/mcc-github/blockchain/core/comm/testpb";
 
 message Empty {}
 

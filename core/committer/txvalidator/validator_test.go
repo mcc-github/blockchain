@@ -27,7 +27,7 @@ import (
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/mocks"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/testdata"
 	ccp "github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	"github.com/mcc-github/blockchain/core/handlers/validation/builtin"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -37,7 +37,7 @@ import (
 	mocks2 "github.com/mcc-github/blockchain/discovery/support/mocks"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
 	mb "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/peer"
@@ -53,13 +53,6 @@ import (
 func signedByAnyMember(ids []string) []byte {
 	p := cauthdsl.SignedByAnyMember(ids)
 	return utils.MarshalOrPanic(p)
-}
-
-func setupLedgerAndValidator(t *testing.T) (ledger.PeerLedger, txvalidator.Validator) {
-	plugin := &mocks.Plugin{}
-	plugin.On("Init", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	plugin.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	return setupLedgerAndValidatorExplicit(t, &mockconfig.MockApplicationCapabilities{}, plugin)
 }
 
 func preV12Capabilities() *mockconfig.MockApplicationCapabilities {

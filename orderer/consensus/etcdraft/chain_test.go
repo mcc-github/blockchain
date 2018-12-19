@@ -1671,14 +1671,17 @@ var _ = Describe("Chain", func() {
 					err := c1.Configure(configEnv, 0)
 					Expect(err).ToNot(HaveOccurred())
 
+					Eventually(c1.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
 					
-					network.exec(
-						func(c *chain) {
-							Eventually(c.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
-						})
+					
+					
+					
 
 					
 					network.elect(2)
+
+					Eventually(c2.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
+					Eventually(c3.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
 
 					By("submitting new transaction to follower")
 					c2.cutter.CutNext = true
@@ -1716,7 +1719,10 @@ var _ = Describe("Chain", func() {
 							Eventually(c.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
 						})
 
-					By("by making sure remaining two nodes will elect new leader")
+					
+					Eventually(c1.Errored, LongEventualTimeout).Should(BeClosed())
+
+					By("making sure remaining two nodes will elect new leader")
 
 					
 					network.elect(2)
@@ -2290,7 +2296,6 @@ type chain struct {
 	configurator *mocks.Configurator
 	rpc          *mocks.FakeRPC
 	storage      *raft.MemoryStorage
-	walDir       string
 	clock        *fakeclock.FakeClock
 	opts         etcdraft.Options
 	puller       *mocks.FakeBlockPuller

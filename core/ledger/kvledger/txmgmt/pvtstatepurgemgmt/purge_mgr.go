@@ -108,7 +108,48 @@ func (p *purgeMgr) UpdateBookkeepingForPvtDataOfOldBlocks(pvtUpdates *privacyena
 		toUpdate.pvtdataKeys.addAll(toAdd.pvtdataKeys)
 		updatedList = append(updatedList, toUpdate)
 	}
+
+	
+	
+	
+	
+	
+	p.addMissingPvtDataToWorkingSet(pvtUpdateCompositeKeyMap)
+
 	return p.expKeeper.updateBookkeeping(updatedList, nil)
+}
+
+func (p *purgeMgr) addMissingPvtDataToWorkingSet(pvtKeys privacyenabledstate.PvtdataCompositeKeyMap) {
+	if p.workingset == nil || len(p.workingset.toPurge) == 0 {
+		return
+	}
+
+	for k := range pvtKeys {
+		hashedCompositeKey := privacyenabledstate.HashedCompositeKey{
+			Namespace:      k.Namespace,
+			CollectionName: k.CollectionName,
+			KeyHash:        string(util.ComputeStringHash(k.Key))}
+
+		toPurgeKey, ok := p.workingset.toPurge[hashedCompositeKey]
+		if !ok {
+			
+			
+			continue
+		}
+
+		
+		
+		
+		
+		
+		
+		
+		if toPurgeKey.purgeKeyOnly {
+			delete(p.workingset.toPurge, hashedCompositeKey)
+		} else {
+			toPurgeKey.key = k.Key
+		}
+	}
 }
 
 

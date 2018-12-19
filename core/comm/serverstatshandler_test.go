@@ -15,7 +15,7 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/metrics/metricsfakes"
 	"github.com/mcc-github/blockchain/core/comm"
-	testpb "github.com/mcc-github/blockchain/core/comm/testdata/grpc"
+	"github.com/mcc-github/blockchain/core/comm/testpb"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/stats"

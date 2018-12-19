@@ -32,16 +32,15 @@ var logger = flogging.MustGetLogger("lockbasedtxmgr")
 
 
 type LockBasedTxMgr struct {
-	ledgerid              string
-	db                    privacyenabledstate.DB
-	pvtdataPurgeMgr       *pvtdataPurgeMgr
-	validator             validator.Validator
-	stateListeners        []ledger.StateListener
-	ccInfoProvider        ledger.DeployedChaincodeInfoProvider
-	commitRWLock          sync.RWMutex
-	oldBlockCommit        sync.Mutex
-	current               *current
-	lastCommittedBlockNum uint64
+	ledgerid        string
+	db              privacyenabledstate.DB
+	pvtdataPurgeMgr *pvtdataPurgeMgr
+	validator       validator.Validator
+	stateListeners  []ledger.StateListener
+	ccInfoProvider  ledger.DeployedChaincodeInfoProvider
+	commitRWLock    sync.RWMutex
+	oldBlockCommit  sync.Mutex
+	current         *current
 }
 
 type current struct {
@@ -105,9 +104,23 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) (
 	[]*txmgr.TxStatInfo, error,
 ) {
-	block := blockAndPvtdata.Block
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
 	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
+	txmgr.oldBlockCommit.Lock()
+	defer txmgr.oldBlockCommit.Unlock()
+	logger.Debug("lock acquired on oldBlockCommit for validating read set version against the committed version")
+
+	block := blockAndPvtdata.Block
 	logger.Debugf("Validating new block with num trans = [%d]", len(block.Data.Data))
 	batch, txstatsInfo, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
 	if err != nil {
@@ -146,6 +159,25 @@ func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtDat
 	
 	
 	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	logger.Debug("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
+	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
+	txmgr.oldBlockCommit.Lock()
+	defer txmgr.oldBlockCommit.Unlock()
+	logger.Debug("lock acquired on oldBlockCommit for committing pvtData of old blocks to state database")
+
+	
+	
+	
+	logger.Debug("Constructing unique pvtData by removing duplicate entries")
 	uniquePvtData, err := constructUniquePvtData(blocksPvtData)
 	if len(uniquePvtData) == 0 || err != nil {
 		return err
@@ -153,14 +185,7 @@ func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtDat
 
 	
 	
-	
-	
-	
-	txmgr.oldBlockCommit.Lock()
-	defer txmgr.oldBlockCommit.Unlock()
-
-	
-	
+	logger.Debug("Finding and removing stale pvtData")
 	if err := uniquePvtData.findAndRemoveStalePvtData(txmgr.db); err != nil {
 		return err
 	}
@@ -173,15 +198,14 @@ func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtDat
 	
 	
 	
+	
+	logger.Debug("Updating bookkeeping info in the purge manager")
 	if err := txmgr.pvtdataPurgeMgr.UpdateBookkeepingForPvtDataOfOldBlocks(batch.PvtUpdates); err != nil {
 		return err
 	}
 
-	if txmgr.lastCommittedBlockNum > 0 {
-		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.lastCommittedBlockNum + 1)
-	}
-
 	
+	logger.Debug("Committing updates to state database")
 	if err := txmgr.db.ApplyPrivacyAwareUpdates(batch, nil); err != nil {
 		return err
 	}
@@ -284,10 +308,6 @@ func (uniquePvtData uniquePvtDataMap) findAndRemoveStalePvtData(db privacyenable
 }
 
 func (uniquePvtData uniquePvtDataMap) loadCommittedVersionIntoCache(db privacyenabledstate.DB) error {
-	
-	
-	
-	
 	
 	
 	
@@ -414,6 +434,7 @@ func (txmgr *LockBasedTxMgr) Commit() error {
 	
 	txmgr.oldBlockCommit.Lock()
 	defer txmgr.oldBlockCommit.Unlock()
+	logger.Debug("lock acquired on oldBlockCommit for committing regular updates to state database")
 
 	
 	
@@ -459,7 +480,6 @@ func (txmgr *LockBasedTxMgr) Commit() error {
 	
 	
 	txmgr.updateStateListeners()
-	txmgr.lastCommittedBlockNum = txmgr.current.blockNum()
 	return nil
 }
 

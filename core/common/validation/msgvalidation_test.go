@@ -14,7 +14,6 @@ import (
 	"github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/msp"
-	"github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/token"
@@ -62,15 +61,6 @@ func createTestProposalAndSignedProposal(channel string) (*peer.Proposal, *peer.
 		return nil, nil, fmt.Errorf("GetSignedProposal failed, err %s", err)
 	}
 	return prop, sProp, nil
-}
-
-func setupMSPManagerNoMSPs(channel string) error {
-	err := mgmt.GetManagerForChain(channel).Setup(nil)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func protoMarshal(t *testing.T, m proto.Message) []byte {

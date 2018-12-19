@@ -23,7 +23,7 @@ import (
 
 	"github.com/mcc-github/blockchain/core/admin"
 	"github.com/mcc-github/blockchain/core/comm"
-	testpb "github.com/mcc-github/blockchain/core/comm/testdata/grpc"
+	"github.com/mcc-github/blockchain/core/comm/testpb"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/msp"
 	common2 "github.com/mcc-github/blockchain/peer/common"

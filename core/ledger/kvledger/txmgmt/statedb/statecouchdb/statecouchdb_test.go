@@ -9,6 +9,7 @@ package statecouchdb
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -689,6 +690,75 @@ func TestPaginatedQueryValidation(t *testing.T) {
 
 	err = validateQueryMetadata(queryOptions)
 	assert.Error(t, err, "An should have been thrown for an invalid options")
+}
+
+func TestLSCCStateCache(t *testing.T) {
+	env := NewTestVDBEnv(t)
+	defer env.Cleanup()
+
+	db, err := env.DBProvider.GetDBHandle("testinit")
+	assert.NoError(t, err)
+	db.Open()
+	defer db.Close()
+
+	
+	
+	
+	batch := statedb.NewUpdateBatch()
+	batch.Put("lscc", "key1", []byte("value1"), version.NewHeight(1, 1))
+	batch.Put("lscc", "key2", []byte("value2"), version.NewHeight(1, 1))
+
+	savePoint := version.NewHeight(1, 1)
+	db.ApplyUpdates(batch, savePoint)
+
+	
+	assert.Nil(t, db.(*VersionedDB).lsccStateCache.getState("key1"))
+	assert.Nil(t, db.(*VersionedDB).lsccStateCache.getState("key2"))
+
+	
+	valueFromDB, err := db.GetState("lscc", "key1")
+	assert.NoError(t, err)
+	valueFromCache := db.(*VersionedDB).lsccStateCache.getState("key1")
+	assert.Equal(t, valueFromCache, valueFromDB)
+
+	
+	
+	batch = statedb.NewUpdateBatch()
+	batch.Put("lscc", "key1", []byte("new-value1"), version.NewHeight(1, 2))
+	savePoint = version.NewHeight(1, 2)
+	db.ApplyUpdates(batch, savePoint)
+
+	valueFromCache = db.(*VersionedDB).lsccStateCache.getState("key1")
+	expectedValue := &statedb.VersionedValue{Value: []byte("new-value1"), Version: version.NewHeight(1, 2)}
+	assert.Equal(t, expectedValue, valueFromCache)
+
+	
+	
+	
+	batch = statedb.NewUpdateBatch()
+	for i := 0; i < lsccCacheSize; i++ {
+		batch.Put("lscc", "key"+strconv.Itoa(i), []byte("value"+strconv.Itoa(i)), version.NewHeight(1, 3))
+	}
+	savePoint = version.NewHeight(1, 3)
+	db.ApplyUpdates(batch, savePoint)
+
+	for i := 0; i < lsccCacheSize; i++ {
+		_, err := db.GetState("lscc", "key"+strconv.Itoa(i))
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, true, db.(*VersionedDB).lsccStateCache.isCacheFull())
+
+	batch = statedb.NewUpdateBatch()
+	batch.Put("lscc", "key50", []byte("value1"), version.NewHeight(1, 4))
+	savePoint = version.NewHeight(1, 4)
+	db.ApplyUpdates(batch, savePoint)
+
+	
+	valueFromDB, err = db.GetState("lscc", "key50")
+	assert.NoError(t, err)
+	valueFromCache = db.(*VersionedDB).lsccStateCache.getState("key50")
+	assert.Equal(t, valueFromCache, valueFromDB)
+	assert.Equal(t, true, db.(*VersionedDB).lsccStateCache.isCacheFull())
 }
 
 func TestApplyUpdatesWithNilHeight(t *testing.T) {

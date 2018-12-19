@@ -24,8 +24,7 @@ import (
 var logger = flogging.MustGetLogger("statecouchdb")
 
 
-
-const querySkip = 0
+const lsccCacheSize = 50
 
 
 type VersionedDBProvider struct {
@@ -77,6 +76,56 @@ type VersionedDB struct {
 	committedDataCache *versionsCache                    
 	verCacheLock       sync.RWMutex
 	mux                sync.RWMutex
+	lsccStateCache     *lsccStateCache
+}
+
+type lsccStateCache struct {
+	cache   map[string]*statedb.VersionedValue
+	rwMutex sync.RWMutex
+}
+
+func (l *lsccStateCache) getState(key string) *statedb.VersionedValue {
+	l.rwMutex.RLock()
+	defer l.rwMutex.RUnlock()
+
+	if versionedValue, ok := l.cache[key]; ok {
+		logger.Debugf("key:[%s] found in the lsccStateCache", key)
+		return versionedValue
+	}
+	return nil
+}
+
+func (l *lsccStateCache) updateState(key string, value *statedb.VersionedValue) {
+	l.rwMutex.Lock()
+	defer l.rwMutex.Unlock()
+
+	if _, ok := l.cache[key]; ok {
+		logger.Debugf("key:[%s] is updated in lsccStateCache", key)
+		l.cache[key] = value
+	}
+}
+
+func (l *lsccStateCache) setState(key string, value *statedb.VersionedValue) {
+	l.rwMutex.Lock()
+	defer l.rwMutex.Unlock()
+
+	if l.isCacheFull() {
+		l.evictARandomEntry()
+	}
+
+	logger.Debugf("key:[%s] is stoed in lsccStateCache", key)
+	l.cache[key] = value
+}
+
+func (l *lsccStateCache) isCacheFull() bool {
+	return len(l.cache) == lsccCacheSize
+}
+
+func (l *lsccStateCache) evictARandomEntry() {
+	for key := range l.cache {
+		delete(l.cache, key)
+		return
+	}
 }
 
 
@@ -90,8 +139,16 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 		return nil, err
 	}
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
-	return &VersionedDB{couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
-		committedDataCache: newVersionCache(), mux: sync.RWMutex{}}, nil
+	return &VersionedDB{
+		couchInstance:      couchInstance,
+		metadataDB:         metadataDB,
+		chainName:          chainName,
+		namespaceDBs:       namespaceDBMap,
+		committedDataCache: newVersionCache(),
+		lsccStateCache: &lsccStateCache{
+			cache: make(map[string]*statedb.VersionedValue),
+		},
+	}, nil
 }
 
 
@@ -134,6 +191,7 @@ func (vdb *VersionedDB) ProcessIndexesForChaincodeDeploy(namespace string, fileE
 	}
 	return nil
 }
+
 
 func (vdb *VersionedDB) GetDBType() string {
 	return "couchdb"
@@ -216,6 +274,12 @@ func (vdb *VersionedDB) BytesKeySupported() bool {
 
 func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
+	if namespace == "lscc" {
+		if value := vdb.lsccStateCache.getState(key); value != nil {
+			return value, nil
+		}
+	}
+
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
 		return nil, err
@@ -231,6 +295,11 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	if err != nil {
 		return nil, err
 	}
+
+	if namespace == "lscc" {
+		vdb.lsccStateCache.setState(key, kv.VersionedValue)
+	}
+
 	return kv.VersionedValue, nil
 }
 
@@ -256,7 +325,6 @@ func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey str
 
 const optionBookmark = "bookmark"
 const optionLimit = "limit"
-const returnCount = "count"
 
 
 
@@ -461,6 +529,12 @@ func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *versi
 		logger.Errorf("Error during recordSavepoint: %s", err.Error())
 		return err
 	}
+
+	lsccUpdates := updates.GetUpdates("lscc")
+	for key, value := range lsccUpdates {
+		vdb.lsccStateCache.updateState(key, value)
+	}
+
 	return nil
 }
 

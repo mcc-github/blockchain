@@ -26,9 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const (
-	binaryTestFileName = "rwsetV1ProtoBytes"
-)
+const binaryTestFileName = "rwsetV1ProtoBytes"
 
 
 
@@ -47,10 +45,10 @@ func TestRWSetV1BackwardCompatible(t *testing.T) {
 
 
 
-func testPrepareBinaryFileSampleRWSetV1(t *testing.T) {
+func PrepareBinaryFileSampleRWSetV1(t *testing.T) {
 	b, err := proto.Marshal(constructSampleRWSet())
 	assert.NoError(t, err)
-	assert.NoError(t, ioutil.WriteFile(binaryTestFileName, b, 0775))
+	assert.NoError(t, ioutil.WriteFile(binaryTestFileName, b, 0644))
 }
 
 func constructSampleRWSet() *rwset.TxReadWriteSet {

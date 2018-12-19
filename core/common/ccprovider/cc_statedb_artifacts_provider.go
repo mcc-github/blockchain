@@ -18,10 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 )
 
-const (
-	ccPackageStatedbDir = "META-INF/statedb/"
-)
-
 
 type TarFileEntry struct {
 	FileHeader  *tar.Header

@@ -286,18 +286,21 @@ func (s *store) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPv
 	dataEntries := constructDataEntriesFromBlocksPvtData(blocksPvtData)
 
 	
+	logger.Debugf("Constructing pvtdatastore entries for pvtData of [%d] old blocks", len(blocksPvtData))
 	updateEntries, err := s.constructUpdateEntriesFromDataEntries(dataEntries)
 	if err != nil {
 		return err
 	}
 
 	
+	logger.Debug("Constructing update batch from pvtdatastore entries")
 	batch, err := constructUpdateBatchFromUpdateEntries(updateEntries)
 	if err != nil {
 		return err
 	}
 
 	
+	logger.Debug("Committing the update batch to pvtdatastore")
 	if err := s.commitBatch(batch); err != nil {
 		return err
 	}

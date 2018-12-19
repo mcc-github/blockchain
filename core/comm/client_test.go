@@ -20,7 +20,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/core/comm"
-	testpb "github.com/mcc-github/blockchain/core/comm/testdata/grpc"
+	"github.com/mcc-github/blockchain/core/comm/testpb"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"

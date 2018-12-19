@@ -25,7 +25,7 @@ import (
 
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/core/comm"
-	testpb "github.com/mcc-github/blockchain/core/comm/testdata/grpc"
+	"github.com/mcc-github/blockchain/core/comm/testpb"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

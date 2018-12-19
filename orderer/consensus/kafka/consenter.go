@@ -50,7 +50,6 @@ type consenterImpl struct {
 	retryOptionsVal localconfig.Retry
 	kafkaVersionVal sarama.KafkaVersion
 	topicDetailVal  *sarama.TopicDetail
-	metricsProvider metrics.Provider
 }
 
 
@@ -83,9 +82,4 @@ func (consenter *consenterImpl) retryOptions() localconfig.Retry {
 
 func (consenter *consenterImpl) topicDetail() *sarama.TopicDetail {
 	return consenter.topicDetailVal
-}
-
-
-type closeable interface {
-	close() error
 }

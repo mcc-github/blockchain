@@ -139,7 +139,6 @@ var _ = Describe("Server", func() {
 			resp, err := echoServiceClient.Echo(ctx, &testpb.Message{Message: "hi"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp).To(Equal(&testpb.Message{Message: "hi", Sequence: 1}))
-			endTime := time.Now()
 
 			var logMessages []string
 			for _, entry := range observed.AllUntimed() {
@@ -150,6 +149,7 @@ var _ = Describe("Server", func() {
 				"sending unary response", 
 				"unary call completed",
 			))
+			endTime := time.Now()
 
 			for _, entry := range observed.AllUntimed() {
 				keyNames := map[string]struct{}{}
@@ -335,11 +335,11 @@ var _ = Describe("Server", func() {
 			})
 
 			It("uses the levels returned by the levelers", func() {
-				Expect(leveler.CallCount()).To(Equal(1))
+				Eventually(leveler.CallCount).Should(Equal(1))
 				Expect(observed.FilterMessage("unary call completed").AllUntimed()).To(HaveLen(1))
 				Expect(observed.FilterMessage("unary call completed").AllUntimed()[0].Level).To(Equal(zapcore.ErrorLevel))
 
-				Expect(payloadLeveler.CallCount()).To(Equal(1))
+				Eventually(payloadLeveler.CallCount).Should(Equal(1))
 				Expect(observed.FilterMessage("received unary request").AllUntimed()).To(HaveLen(1))
 				Expect(observed.FilterMessage("received unary request").AllUntimed()[0].Level).To(Equal(zapcore.WarnLevel))
 				Expect(observed.FilterMessage("sending unary response").AllUntimed()).To(HaveLen(1))
@@ -347,12 +347,12 @@ var _ = Describe("Server", func() {
 			})
 
 			It("provides the decorated context and full method name to the levelers", func() {
-				Expect(leveler.CallCount()).To(Equal(1))
+				Eventually(leveler.CallCount).Should(Equal(1))
 				ctx, fullMethod := leveler.ArgsForCall(0)
 				Expect(grpclogging.ZapFields(ctx)).NotTo(BeEmpty())
 				Expect(fullMethod).To(Equal("/testpb.EchoService/Echo"))
 
-				Expect(payloadLeveler.CallCount()).To(Equal(1))
+				Eventually(payloadLeveler.CallCount).Should(Equal(1))
 				ctx, fullMethod = payloadLeveler.ArgsForCall(0)
 				Expect(grpclogging.ZapFields(ctx)).NotTo(BeEmpty())
 				Expect(fullMethod).To(Equal("/testpb.EchoService/Echo"))
@@ -377,7 +377,6 @@ var _ = Describe("Server", func() {
 
 			err = streamClient.CloseSend()
 			Expect(err).NotTo(HaveOccurred())
-			endTime := time.Now()
 
 			Eventually(observed.AllUntimed).Should(HaveLen(3))
 			var logMessages []string
@@ -389,6 +388,7 @@ var _ = Describe("Server", func() {
 				"sending stream message",  
 				"streaming call completed",
 			))
+			endTime := time.Now()
 
 			for _, entry := range observed.AllUntimed() {
 				keyNames := map[string]struct{}{}
@@ -645,11 +645,11 @@ var _ = Describe("Server", func() {
 			})
 
 			It("uses the levels returned by the levelers", func() {
-				Expect(leveler.CallCount()).To(Equal(1))
+				Eventually(leveler.CallCount).Should(Equal(1))
 				Expect(observed.FilterMessage("streaming call completed").AllUntimed()).To(HaveLen(1))
 				Expect(observed.FilterMessage("streaming call completed").AllUntimed()[0].Level).To(Equal(zapcore.ErrorLevel))
 
-				Expect(payloadLeveler.CallCount()).To(Equal(1))
+				Eventually(payloadLeveler.CallCount).Should(Equal(1))
 				Expect(observed.FilterMessage("received stream message").AllUntimed()).To(HaveLen(1))
 				Expect(observed.FilterMessage("received stream message").AllUntimed()[0].Level).To(Equal(zapcore.WarnLevel))
 				Expect(observed.FilterMessage("sending stream message").AllUntimed()).To(HaveLen(1))
@@ -657,12 +657,12 @@ var _ = Describe("Server", func() {
 			})
 
 			It("provides the decorated context and full method name to the levelers", func() {
-				Expect(leveler.CallCount()).To(Equal(1))
+				Eventually(leveler.CallCount).Should(Equal(1))
 				ctx, fullMethod := leveler.ArgsForCall(0)
 				Expect(grpclogging.ZapFields(ctx)).NotTo(BeEmpty())
 				Expect(fullMethod).To(Equal("/testpb.EchoService/EchoStream"))
 
-				Expect(payloadLeveler.CallCount()).To(Equal(1))
+				Eventually(payloadLeveler.CallCount).Should(Equal(1))
 				ctx, fullMethod = payloadLeveler.ArgsForCall(0)
 				Expect(grpclogging.ZapFields(ctx)).NotTo(BeEmpty())
 				Expect(fullMethod).To(Equal("/testpb.EchoService/EchoStream"))

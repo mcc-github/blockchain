@@ -48,12 +48,15 @@ func findValidAndInvalidBlockPvtData(blockPvtData *ledger.BlockPvtData, blockSto
 	var invalidPvtData []*ledger.PvtdataHashMismatch
 	for _, txPvtData := range blockPvtData.WriteSets {
 		
+		logger.Debugf("Retrieving rwset of blockNum:[%d], txNum:[%d]", blockPvtData.BlockNum, txPvtData.SeqInBlock)
 		txRWSet, err := retrieveRwsetForTx(blockPvtData.BlockNum, txPvtData.SeqInBlock, blockStore)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		
+		logger.Debugf("Constructing valid and invalid pvtData using rwset of blockNum:[%d], txNum:[%d]",
+			blockPvtData.BlockNum, txPvtData.SeqInBlock)
 		validData, invalidData := findValidAndInvalidTxPvtData(txPvtData, txRWSet, blockPvtData.BlockNum)
 
 		

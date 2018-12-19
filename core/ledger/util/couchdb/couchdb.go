@@ -39,9 +39,7 @@ const retryWaitTime = 125
 
 
 type DBOperationResponse struct {
-	Ok  bool
-	id  string
-	rev string
+	Ok bool
 }
 
 

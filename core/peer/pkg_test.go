@@ -21,7 +21,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/core/comm"
-	testpb "github.com/mcc-github/blockchain/core/comm/testdata/grpc"
+	"github.com/mcc-github/blockchain/core/comm/testpb"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/msp"

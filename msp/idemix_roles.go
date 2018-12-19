@@ -40,22 +40,8 @@ func getRoleMaskFromIdemixRoles(roles []Role) int {
 }
 
 
-func getRoleMaskFromMSPRoles(roles []*m.MSPRole) int {
-	mask := 0
-	for _, role := range roles {
-		mask = mask | getIdemixRoleFromMSPRole(role)
-	}
-	return mask
-}
-
-
 func GetRoleMaskFromIdemixRole(role Role) int {
 	return getRoleMaskFromIdemixRoles([]Role{role})
-}
-
-
-func getRoleMaskFromMSPRole(role *m.MSPRole) int {
-	return getRoleMaskFromMSPRoles([]*m.MSPRole{role})
 }
 
 
