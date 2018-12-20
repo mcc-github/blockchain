@@ -145,17 +145,17 @@ vm:
       Memory: 2147483648
 
 chaincode:
-  builder: $(DOCKER_NS)/blockchain-ccenv:$(ARCH)-$(PROJECT_VERSION)
+  builder: $(DOCKER_NS)/blockchain-ccenv:$(PROJECT_VERSION)
   pull: false
   golang:
-    runtime: $(BASE_DOCKER_NS)/blockchain-baseos:$(ARCH)-$(BASE_VERSION)
+    runtime: $(BASE_DOCKER_NS)/blockchain-baseos:$(PROJECT_VERSION)
     dynamicLink: false
   car:
-    runtime: $(BASE_DOCKER_NS)/blockchain-baseos:$(ARCH)-$(BASE_VERSION)
+    runtime: $(BASE_DOCKER_NS)/blockchain-baseos:$(PROJECT_VERSION)
   java:
-    runtime: $(DOCKER_NS)/blockchain-javaenv:$(ARCH)-$(PROJECT_VERSION)
+    runtime: $(DOCKER_NS)/blockchain-javaenv:latest
   node:
-      runtime: $(BASE_DOCKER_NS)/blockchain-baseimage:$(ARCH)-$(BASE_VERSION)
+    runtime: $(DOCKER_NS)/blockchain-nodeenv:latest
   startuptimeout: 300s
   executetimeout: 30s
   mode: net

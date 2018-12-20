@@ -178,14 +178,18 @@ func invokeEmptyStream(address string, dialOptions []grpc.DialOption) (*testpb.E
 		}
 	}()
 
-	if err := stream.Send(new(testpb.Empty)); err != nil {
-		return nil, err
+	
+	
+	
+	
+	err = stream.Send(&testpb.Empty{})
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("stream send failed: %s", err)
 	}
 
 	stream.CloseSend()
 	<-waitc
 	return msg, streamErr
-
 }
 
 const (

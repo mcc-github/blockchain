@@ -22,8 +22,7 @@ import (
 )
 
 
-
-func GetConfigBlock(n *Network, peer *Peer, orderer *Orderer, channel string) *common.Config {
+func GetConfigBlock(n *Network, peer *Peer, orderer *Orderer, channel string) *common.Block {
 	tempDir, err := ioutil.TempDir("", "getConfigBlock")
 	Expect(err).NotTo(HaveOccurred())
 	defer os.RemoveAll(tempDir)
@@ -42,7 +41,12 @@ func GetConfigBlock(n *Network, peer *Peer, orderer *Orderer, channel string) *c
 
 	
 	configBlock := UnmarshalBlockFromFile(output)
+	return configBlock
+}
 
+
+func GetConfig(n *Network, peer *Peer, orderer *Orderer, channel string) *common.Config {
+	configBlock := GetConfigBlock(n, peer, orderer, channel)
 	
 	envelope, err := utils.GetEnvelopeFromBlock(configBlock.Data.Data[0])
 	Expect(err).NotTo(HaveOccurred())

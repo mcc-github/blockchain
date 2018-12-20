@@ -7,9 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package nwo
 
 import (
-	"fmt"
 	"os"
-	"runtime"
 
 	"github.com/mcc-github/blockchain/integration/helpers"
 	"github.com/mcc-github/blockchain/integration/runner"
@@ -17,12 +15,14 @@ import (
 	"github.com/onsi/gomega/gexec"
 )
 
+const CCEnvDefaultImage = "mcc-github/blockchain-ccenv:latest"
+
 type Components struct {
 	Paths map[string]string
 }
 
 var RequiredImages = []string{
-	fmt.Sprintf("mcc-github/blockchain-ccenv:%s-latest", runtime.GOARCH),
+	CCEnvDefaultImage,
 	runner.CouchDBDefaultImage,
 	runner.KafkaDefaultImage,
 	runner.ZooKeeperDefaultImage,

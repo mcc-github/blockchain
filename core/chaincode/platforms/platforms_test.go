@@ -117,9 +117,8 @@ var _ = Describe("Platforms", func() {
 LABEL org.mcc-github.blockchain.chaincode.id.name="cc-name" \
       org.mcc-github.blockchain.chaincode.id.version="cc-version" \
       org.mcc-github.blockchain.chaincode.type="fakeType" \
-      org.mcc-github.blockchain.version="%s" \
-      org.mcc-github.blockchain.base.version="%s"
-ENV CORE_CHAINCODE_BUILDLEVEL=%s`, metadata.Version, metadata.BaseVersion, metadata.Version)
+      org.mcc-github.blockchain.version="%s"
+ENV CORE_CHAINCODE_BUILDLEVEL=%s`, metadata.Version, metadata.Version)
 			Expect(df).To(Equal(expectedDockerfile))
 		})
 

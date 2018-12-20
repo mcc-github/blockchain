@@ -122,8 +122,8 @@ func TestGetDeploymentPayload(t *testing.T) {
 
 func TestGenerateDockerfile(t *testing.T) {
 	str, _ := platform.GenerateDockerfile()
-	if !strings.Contains(str, "/blockchain-baseimage:") {
-		t.Fatalf("should have generated a docker file using the blockchain-baseimage, but got %s", str)
+	if !strings.Contains(str, "/blockchain-nodeenv:") {
+		t.Fatalf("should have generated a docker file using the blockchain-nodeenv, but got %s", str)
 	}
 
 	if !strings.Contains(str, "ADD binpackage.tar /usr/local/src") {
