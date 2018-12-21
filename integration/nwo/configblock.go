@@ -7,14 +7,19 @@ SPDX-License-Identifier: Apache-2.0
 package nwo
 
 import (
+	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/tools/configtxlator/update"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	"github.com/mcc-github/blockchain/protos/common"
+	protosorderer "github.com/mcc-github/blockchain/protos/orderer"
+	ectdraft_protos "github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/protos/utils"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -29,7 +34,7 @@ func GetConfigBlock(n *Network, peer *Peer, orderer *Orderer, channel string) *c
 
 	
 	output := filepath.Join(tempDir, "config_block.pb")
-	sess, err := n.PeerAdminSession(peer, commands.ChannelFetch{
+	sess, err := n.OrdererAdminSession(orderer, peer, commands.ChannelFetch{
 		ChannelID:  channel,
 		Block:      "config",
 		Orderer:    n.OrdererAddress(orderer, ListenPort),
@@ -150,14 +155,24 @@ func UpdateOrdererConfig(n *Network, orderer *Orderer, channel string, current, 
 	
 	currentBlockNumber := CurrentConfigBlockNumber(n, submitter, orderer, channel)
 
-	sess, err := n.PeerAdminSession(submitter, commands.ChannelUpdate{
-		ChannelID: channel,
-		Orderer:   n.OrdererAddress(orderer, ListenPort),
-		File:      updateFile,
-	})
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-	Expect(sess.Err).To(gbytes.Say("Successfully submitted channel update"))
+	Eventually(func() string {
+		sess, err := n.OrdererAdminSession(orderer, submitter, commands.ChannelUpdate{
+			ChannelID: channel,
+			Orderer:   n.OrdererAddress(orderer, ListenPort),
+			File:      updateFile,
+		})
+		if err != nil {
+			return err.Error()
+		}
+		sess.Wait(n.EventuallyTimeout)
+		if sess.ExitCode() != 0 {
+			return fmt.Sprintf("exit code is %d", sess.ExitCode())
+		}
+		if strings.Contains(string(sess.Err.Contents()), "Successfully submitted channel update") {
+			return ""
+		}
+		return fmt.Sprintf("channel update output: %s", string(sess.Err.Contents()))
+	}, n.EventuallyTimeout).Should(BeEmpty())
 
 	
 	ccb := func() uint64 { return CurrentConfigBlockNumber(n, submitter, orderer, channel) }
@@ -174,7 +189,7 @@ func CurrentConfigBlockNumber(n *Network, peer *Peer, orderer *Orderer, channel 
 
 	
 	output := filepath.Join(tempDir, "config_block.pb")
-	sess, err := n.PeerAdminSession(peer, commands.ChannelFetch{
+	sess, err := n.OrdererAdminSession(orderer, peer, commands.ChannelFetch{
 		ChannelID:  channel,
 		Block:      "config",
 		Orderer:    n.OrdererAddress(orderer, ListenPort),
@@ -198,4 +213,64 @@ func UnmarshalBlockFromFile(blockFile string) *common.Block {
 	Expect(err).NotTo(HaveOccurred())
 
 	return block
+}
+
+
+func AddConsenter(n *Network, peer *Peer, orderer *Orderer, channel string, consenter ectdraft_protos.Consenter) {
+	UpdateEtcdRaftMetadata(n, peer, orderer, channel, func(metadata *ectdraft_protos.Metadata) {
+		metadata.Consenters = append(metadata.Consenters, &consenter)
+	})
+}
+
+
+func RemoveConsenter(n *Network, peer *Peer, orderer *Orderer, channel string, certificate []byte) {
+	UpdateEtcdRaftMetadata(n, peer, orderer, channel, func(metadata *ectdraft_protos.Metadata) {
+		var newConsenters []*ectdraft_protos.Consenter
+		for _, consenter := range metadata.Consenters {
+			if bytes.Equal(consenter.ClientTlsCert, certificate) || bytes.Equal(consenter.ServerTlsCert, certificate) {
+				continue
+			}
+			newConsenters = append(newConsenters, consenter)
+		}
+
+		metadata.Consenters = newConsenters
+	})
+}
+
+
+type ConsensusMetadataMutator func([]byte) []byte
+
+
+func UpdateConsensusMetadata(network *Network, peer *Peer, orderer *Orderer, channel string, mutateMetadata ConsensusMetadataMutator) {
+	config := GetConfig(network, peer, orderer, channel)
+	updatedConfig := proto.Clone(config).(*common.Config)
+
+	consensusTypeConfigValue := updatedConfig.ChannelGroup.Groups["Orderer"].Values["ConsensusType"]
+	consensusTypeValue := &protosorderer.ConsensusType{}
+	err := proto.Unmarshal(consensusTypeConfigValue.Value, consensusTypeValue)
+	Expect(err).NotTo(HaveOccurred())
+
+	consensusTypeValue.Metadata = mutateMetadata(consensusTypeValue.Metadata)
+
+	updatedConfig.ChannelGroup.Groups["Orderer"].Values["ConsensusType"] = &common.ConfigValue{
+		ModPolicy: "Admins",
+		Value:     utils.MarshalOrPanic(consensusTypeValue),
+	}
+
+	UpdateOrdererConfig(network, orderer, channel, config, updatedConfig, peer, orderer)
+}
+
+
+func UpdateEtcdRaftMetadata(network *Network, peer *Peer, orderer *Orderer, channel string, f func(md *ectdraft_protos.Metadata)) {
+	UpdateConsensusMetadata(network, peer, orderer, channel, func(originalMetadata []byte) []byte {
+		metadata := &ectdraft_protos.Metadata{}
+		err := proto.Unmarshal(originalMetadata, metadata)
+		Expect(err).NotTo(HaveOccurred())
+
+		f(metadata)
+
+		newMetadata, err := proto.Marshal(metadata)
+		Expect(err).NotTo(HaveOccurred())
+		return newMetadata
+	})
 }

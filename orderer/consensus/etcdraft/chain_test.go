@@ -1586,22 +1586,21 @@ var _ = Describe("Chain", func() {
 					configEnv := newConfigEnv(channelID, common.HeaderType_CONFIG, newConfigUpdateEnv(channelID, addConsenterConfigValue()))
 					c1.cutter.CutNext = true
 
-					stub1 := c1.support.WriteConfigBlockStub
-					c1.support.WriteConfigBlockStub = func(block *common.Block, metadata []byte) {
-						stub1(block, metadata)
-						network.disconnect(1)
-					}
+					step := c1.rpc.StepStub
+					count := c1.rpc.StepCallCount() 
+					c1.rpc.StepStub = func(dest uint64, msg *orderer.StepRequest) (*orderer.StepResponse, error) {
+						
+						
+						
+						if c1.rpc.StepCallCount() == count+4 {
+							defer func() {
+								network.disconnect(1)
+								network.disconnect(2)
+								network.disconnect(3)
+							}()
+						}
 
-					stub2 := c2.support.WriteConfigBlockStub
-					c2.support.WriteConfigBlockStub = func(block *common.Block, metadata []byte) {
-						stub2(block, metadata)
-						network.disconnect(2)
-					}
-
-					stub3 := c3.support.WriteConfigBlockStub
-					c3.support.WriteConfigBlockStub = func(block *common.Block, metadata []byte) {
-						stub3(block, metadata)
-						network.disconnect(3)
+						return step(dest, msg)
 					}
 
 					By("sending config transaction")
@@ -1816,7 +1815,6 @@ var _ = Describe("Chain", func() {
 
 				c1.cutter.CutNext = true
 
-				stepCnt := c1.rpc.StepCallCount()
 				network.disconnect(1) 
 
 				err := c1.Order(env, 0)
@@ -1827,8 +1825,6 @@ var _ = Describe("Chain", func() {
 						Consistently(func() int { return c.support.WriteBlockCallCount() }).Should(Equal(0))
 					})
 
-				
-				Eventually(c1.rpc.StepCallCount).Should(Equal(stepCnt + 2))
 				network.connect(1) 
 
 				c1.clock.Increment(interval) 
@@ -2596,7 +2592,7 @@ func (n *network) elect(id uint64) (tick int) {
 	
 	
 	
-	t := 50 * time.Millisecond
+	t := 10 * time.Millisecond
 
 	n.connLock.RLock()
 	c := n.chains[id]

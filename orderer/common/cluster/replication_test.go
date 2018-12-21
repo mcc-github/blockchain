@@ -96,6 +96,7 @@ func TestReplicateChainsFailures(t *testing.T) {
 		appendBlockError        error
 		expectedPanic           string
 		mutateBlocks            func([]*common.Block)
+		channelsReturns         []cluster.ChannelGenesisBlock
 	}{
 		{
 			name: "no block received",
@@ -149,6 +150,40 @@ func TestReplicateChainsFailures(t *testing.T) {
 				"failed obtaining the latest block for channel system",
 			isProbeResponseDelayed: true,
 		},
+		{
+			name:                    "failure obtaining a ledger for a non participating channel",
+			latestBlockSeqInOrderer: 21,
+			channelsReturns: []cluster.ChannelGenesisBlock{
+				{ChannelName: "channelWeAreNotPartOf"},
+			},
+			ledgerFactoryError: errors.New("IO error"),
+			expectedPanic:      "Failed to create a ledger for channel channelWeAreNotPartOf: IO error",
+		},
+		{
+			name:                    "pulled genesis block is malformed",
+			latestBlockSeqInOrderer: 21,
+			channelsReturns: []cluster.ChannelGenesisBlock{
+				{ChannelName: "channelWeAreNotPartOf", GenesisBlock: &common.Block{Header: &common.BlockHeader{}}},
+			},
+			expectedPanic: "Failed converting channel creation block for channel channelWeAreNotPartOf to genesis" +
+				" block: block data is nil",
+		},
+		{
+			name:                    "pulled genesis block is malformed - bad payload",
+			latestBlockSeqInOrderer: 21,
+			channelsReturns: []cluster.ChannelGenesisBlock{
+				{ChannelName: "channelWeAreNotPartOf", GenesisBlock: &common.Block{
+					Header: &common.BlockHeader{},
+					Data: &common.BlockData{
+						Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
+							Payload: []byte{1, 2, 3},
+						})},
+					},
+				}},
+			},
+			expectedPanic: "Failed converting channel creation block for channel channelWeAreNotPartOf" +
+				" to genesis block: no payload in envelope: proto: common.Payload: illegal tag 0 (wire type 1)",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			systemChannelBlocks := createBlockChain(0, 21)
@@ -162,6 +197,7 @@ func TestReplicateChainsFailures(t *testing.T) {
 
 			lf := &mocks.LedgerFactory{}
 			lf.On("GetOrCreate", "system").Return(lw, testCase.ledgerFactoryError)
+			lf.On("GetOrCreate", "channelWeAreNotPartOf").Return(lw, testCase.ledgerFactoryError)
 
 			osn := newClusterNode(t)
 			defer osn.stop()
@@ -171,16 +207,23 @@ func TestReplicateChainsFailures(t *testing.T) {
 			bp.FetchTimeout = time.Millisecond * 100
 
 			cl := &mocks.ChannelLister{}
-			cl.On("Channels").Return(nil)
+			cl.On("Channels").Return(testCase.channelsReturns)
 			cl.On("Close")
 
 			r := cluster.Replicator{
+				AmIPartOfChannel: func(configBlock *common.Block) error {
+					return cluster.ErrNotInChannel
+				},
 				Logger:        flogging.MustGetLogger("test"),
 				BootBlock:     systemChannelBlocks[21],
 				SystemChannel: "system",
 				LedgerFactory: lf,
 				Puller:        bp,
 				ChannelLister: cl,
+			}
+
+			if len(testCase.channelsReturns) > 0 {
+				simulateNonParticipantChannelPull(osn)
 			}
 
 			if !testCase.isProbeResponseDelayed {
@@ -248,7 +291,7 @@ func TestReplicateChainsChannelClassificationFailure(t *testing.T) {
 	bp.FetchTimeout = time.Hour
 
 	channelLister := &mocks.ChannelLister{}
-	channelLister.On("Channels").Return([]string{"A"})
+	channelLister.On("Channels").Return([]cluster.ChannelGenesisBlock{{ChannelName: "A"}})
 	channelLister.On("Close")
 
 	
@@ -316,17 +359,20 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	bp.FetchTimeout = time.Hour
 
 	channelLister := &mocks.ChannelLister{}
-	channelLister.On("Channels").Return([]string{"A", "B"})
+	channelLister.On("Channels").Return([]cluster.ChannelGenesisBlock{
+		{ChannelName: "A"}, {ChannelName: "B", GenesisBlock: fakeGB},
+	})
 	channelLister.On("Close")
 
 	amIPartOfChannelMock := &mock.Mock{}
 	
-	amIPartOfChannelMock.On("func5").Return(nil).Once()
+	amIPartOfChannelMock.On("func7").Return(nil).Once()
 	
-	amIPartOfChannelMock.On("func5").Return(cluster.ErrNotInChannel).Once()
+	amIPartOfChannelMock.On("func7").Return(cluster.ErrNotInChannel).Once()
 
 	
 	blocksCommittedToLedgerA := make(chan *common.Block, 31)
+	blocksCommittedToLedgerB := make(chan *common.Block, 1)
 	blocksCommittedToSystemLedger := make(chan *common.Block, 22)
 	
 	
@@ -344,6 +390,14 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 		return uint64(len(blocksCommittedToLedgerA))
 	})
 
+	lwB := &mocks.LedgerWriter{}
+	lwB.On("Height").Return(func() uint64 {
+		return uint64(len(blocksCommittedToLedgerB))
+	})
+	lwB.On("Append", mock.Anything).Return(nil).Run(func(arg mock.Arguments) {
+		blocksCommittedToLedgerB <- arg.Get(0).(*common.Block)
+	})
+
 	lwSystem := &mocks.LedgerWriter{}
 	lwSystem.On("Append", mock.Anything).Return(nil).Run(func(arg mock.Arguments) {
 		blocksCommittedToSystemLedger <- arg.Get(0).(*common.Block)
@@ -355,6 +409,7 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	lf := &mocks.LedgerFactory{}
 	lf.On("Close")
 	lf.On("GetOrCreate", "A").Return(lwA, nil)
+	lf.On("GetOrCreate", "B").Return(lwB, nil)
 	lf.On("GetOrCreate", "system").Return(lwSystem, nil)
 
 	r := cluster.Replicator{
@@ -1043,9 +1098,9 @@ func TestChannels(t *testing.T) {
 				assignHashes(systemChain)
 			},
 			assertion: func(t *testing.T, ci *cluster.ChainInspector) {
-				actual := ci.Channels()
+				actual := cluster.GenesisBlocks(ci.Channels())
 				
-				assert.Contains(t, [][]string{{"mychannel", "mychannel2"}, {"mychannel2", "mychannel"}}, actual)
+				assert.Contains(t, [][]string{{"mychannel", "mychannel2"}, {"mychannel2", "mychannel"}}, actual.Names())
 			},
 		},
 		{
@@ -1061,9 +1116,9 @@ func TestChannels(t *testing.T) {
 				assignHashes(systemChain)
 			},
 			assertion: func(t *testing.T, ci *cluster.ChainInspector) {
-				actual := ci.Channels()
+				actual := cluster.GenesisBlocks(ci.Channels())
 				
-				assert.Contains(t, [][]string{{"mychannel", "bar"}, {"bar", "mychannel"}}, actual)
+				assert.Contains(t, [][]string{{"mychannel", "bar"}, {"bar", "mychannel"}}, actual.Names())
 			},
 		},
 		{
@@ -1138,6 +1193,106 @@ func TestChannels(t *testing.T) {
 			defer puller.AssertNumberOfCalls(t, "Close", 1)
 			defer ci.Close()
 			testCase.assertion(t, ci)
+		})
+	}
+}
+
+var fakeGB = &common.Block{
+	Header: &common.BlockHeader{},
+	Metadata: &common.BlockMetadata{
+		Metadata: [][]byte{{}, {}, {}, {}},
+	},
+	Data: &common.BlockData{
+		Data: [][]byte{
+			utils.MarshalOrPanic(&common.Envelope{
+				Payload: utils.MarshalOrPanic(&common.Envelope{
+					Payload: utils.MarshalOrPanic(&common.Config{
+						Sequence: 1,
+					}),
+				}),
+			}),
+		},
+	},
+}
+
+func simulateNonParticipantChannelPull(osn *deliverServer) {
+	lastBlock := common.NewBlock(1, nil)
+	lastBlock.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = utils.MarshalOrPanic(&common.Metadata{
+		Value: utils.MarshalOrPanic(&common.LastConfig{Index: 0}),
+	})
+
+	
+	
+	osn.addExpectProbeAssert()
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{Block: lastBlock},
+	}
+	osn.addExpectProbeAssert()
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{Block: lastBlock},
+	}
+	osn.addExpectPullAssert(1)
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{Block: lastBlock},
+	}
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{Block: lastBlock},
+	}
+	
+	osn.blockResponses <- nil
+
+	
+	
+	osn.addExpectProbeAssert()
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{Block: fakeGB},
+	}
+	osn.addExpectPullAssert(0)
+	
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{Block: fakeGB},
+	}
+
+	osn.blockResponses <- nil
+}
+
+func TestChannelCreationBlockToGenesisBlock(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		expectedErr string
+		block       *common.Block
+	}{
+		{
+			name:        "nil block",
+			expectedErr: "nil block",
+		},
+		{
+			name:        "no data",
+			expectedErr: "block data is nil",
+			block:       &common.Block{},
+		},
+		{
+			name:        "no block data",
+			expectedErr: "envelope index out of bounds",
+			block: &common.Block{
+				Data: &common.BlockData{},
+			},
+		},
+		{
+			name: "bad block data",
+			expectedErr: "block data does not carry an envelope at index 0:" +
+				" error unmarshaling Envelope: proto: common.Envelope:" +
+				" illegal tag 0 (wire type 1)",
+			block: &common.Block{
+				Data: &common.BlockData{
+					Data: [][]byte{{1, 2, 3}},
+				},
+			},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := cluster.ChannelCreationBlockToGenesisBlock(testCase.block)
+			assert.EqualError(t, err, testCase.expectedErr)
 		})
 	}
 }
