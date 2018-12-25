@@ -204,7 +204,9 @@ func TestReplicateChainsFailures(t *testing.T) {
 
 			dialer := newCountingDialer()
 			bp := newBlockPuller(dialer, osn.srv.Address())
-			bp.FetchTimeout = time.Millisecond * 100
+			
+			
+			bp.FetchTimeout = time.Hour
 
 			cl := &mocks.ChannelLister{}
 			cl.On("Channels").Return(testCase.channelsReturns)
@@ -229,6 +231,9 @@ func TestReplicateChainsFailures(t *testing.T) {
 			if !testCase.isProbeResponseDelayed {
 				osn.enqueueResponse(testCase.latestBlockSeqInOrderer)
 				osn.enqueueResponse(testCase.latestBlockSeqInOrderer)
+			} else {
+				
+				osn.blockResponses <- nil
 			}
 			osn.addExpectProbeAssert()
 			osn.addExpectProbeAssert()
@@ -240,6 +245,9 @@ func TestReplicateChainsFailures(t *testing.T) {
 						Type: &orderer.DeliverResponse_Block{Block: block},
 					}
 				}
+			} else {
+				
+				osn.blockResponses <- nil
 			}
 
 			assert.PanicsWithValue(t, testCase.expectedPanic, r.ReplicateChains)
@@ -741,7 +749,7 @@ func TestBlockPullerFromConfigBlockGreenPath(t *testing.T) {
 		MaxTotalBufferBytes: 1,
 		Channel:             "mychannel",
 		Signer:              &crypto.LocalSigner{},
-		Timeout:             time.Second,
+		Timeout:             time.Hour,
 	}, validBlock)
 	assert.NoError(t, err)
 	defer bp.Close()
@@ -1220,7 +1228,6 @@ func simulateNonParticipantChannelPull(osn *deliverServer) {
 	lastBlock.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = utils.MarshalOrPanic(&common.Metadata{
 		Value: utils.MarshalOrPanic(&common.LastConfig{Index: 0}),
 	})
-
 	
 	
 	osn.addExpectProbeAssert()
@@ -1235,10 +1242,6 @@ func simulateNonParticipantChannelPull(osn *deliverServer) {
 	osn.blockResponses <- &orderer.DeliverResponse{
 		Type: &orderer.DeliverResponse_Block{Block: lastBlock},
 	}
-	osn.blockResponses <- &orderer.DeliverResponse{
-		Type: &orderer.DeliverResponse_Block{Block: lastBlock},
-	}
-	
 	osn.blockResponses <- nil
 
 	
