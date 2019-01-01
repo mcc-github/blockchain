@@ -1,4 +1,5 @@
 
+
 package mocks
 
 import common "github.com/mcc-github/blockchain/protos/common"
@@ -15,7 +16,7 @@ func (_m *ChainPuller) Close() {
 }
 
 
-func (_m *ChainPuller) HeightsByEndpoints() map[string]uint64 {
+func (_m *ChainPuller) HeightsByEndpoints() (map[string]uint64, error) {
 	ret := _m.Called()
 
 	var r0 map[string]uint64
@@ -27,7 +28,14 @@ func (_m *ChainPuller) HeightsByEndpoints() map[string]uint64 {
 		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 

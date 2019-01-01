@@ -97,12 +97,23 @@ func TestReplicateChainsFailures(t *testing.T) {
 		expectedPanic           string
 		mutateBlocks            func([]*common.Block)
 		channelsReturns         []cluster.ChannelGenesisBlock
+		badResponse             *orderer.DeliverResponse
 	}{
 		{
 			name: "no block received",
 			expectedPanic: "Failed pulling system channel: " +
 				"failed obtaining the latest block for channel system",
 			isProbeResponseDelayed: true,
+		},
+		{
+			name: "received service unavailable",
+			expectedPanic: "Failed pulling system channel: " +
+				"failed obtaining the latest block for channel system",
+			badResponse: &orderer.DeliverResponse{
+				Type: &orderer.DeliverResponse_Status{
+					Status: common.Status_SERVICE_UNAVAILABLE,
+				},
+			},
 		},
 		{
 			name: "latest block seq is less than boot block seq",
@@ -228,6 +239,10 @@ func TestReplicateChainsFailures(t *testing.T) {
 				simulateNonParticipantChannelPull(osn)
 			}
 
+			if testCase.badResponse != nil {
+				osn.blockResponses <- testCase.badResponse
+			}
+
 			if !testCase.isProbeResponseDelayed {
 				osn.enqueueResponse(testCase.latestBlockSeqInOrderer)
 				osn.enqueueResponse(testCase.latestBlockSeqInOrderer)
@@ -351,6 +366,9 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	
 	
 	
+	
+	
+	
 
 	systemChannelBlocks := createBlockChain(0, 21)
 	block30WithConfigBlockOf21 := common.NewBlock(30, nil)
@@ -368,19 +386,22 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 
 	channelLister := &mocks.ChannelLister{}
 	channelLister.On("Channels").Return([]cluster.ChannelGenesisBlock{
+		{ChannelName: "D", GenesisBlock: fakeGB}, {ChannelName: "C", GenesisBlock: fakeGB},
 		{ChannelName: "A"}, {ChannelName: "B", GenesisBlock: fakeGB},
 	})
 	channelLister.On("Close")
 
 	amIPartOfChannelMock := &mock.Mock{}
 	
-	amIPartOfChannelMock.On("func7").Return(nil).Once()
+	amIPartOfChannelMock.On("func11").Return(nil).Once()
 	
-	amIPartOfChannelMock.On("func7").Return(cluster.ErrNotInChannel).Once()
+	amIPartOfChannelMock.On("func11").Return(cluster.ErrNotInChannel).Once()
 
 	
 	blocksCommittedToLedgerA := make(chan *common.Block, 31)
 	blocksCommittedToLedgerB := make(chan *common.Block, 1)
+	blocksCommittedToLedgerC := make(chan *common.Block, 1)
+	blocksCommittedToLedgerD := make(chan *common.Block, 1)
 	blocksCommittedToSystemLedger := make(chan *common.Block, 22)
 	
 	
@@ -406,6 +427,22 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 		blocksCommittedToLedgerB <- arg.Get(0).(*common.Block)
 	})
 
+	lwC := &mocks.LedgerWriter{}
+	lwC.On("Height").Return(func() uint64 {
+		return uint64(len(blocksCommittedToLedgerC))
+	})
+	lwC.On("Append", mock.Anything).Return(nil).Run(func(arg mock.Arguments) {
+		blocksCommittedToLedgerC <- arg.Get(0).(*common.Block)
+	})
+
+	lwD := &mocks.LedgerWriter{}
+	lwD.On("Height").Return(func() uint64 {
+		return uint64(len(blocksCommittedToLedgerD))
+	})
+	lwD.On("Append", mock.Anything).Return(nil).Run(func(arg mock.Arguments) {
+		blocksCommittedToLedgerD <- arg.Get(0).(*common.Block)
+	})
+
 	lwSystem := &mocks.LedgerWriter{}
 	lwSystem.On("Append", mock.Anything).Return(nil).Run(func(arg mock.Arguments) {
 		blocksCommittedToSystemLedger <- arg.Get(0).(*common.Block)
@@ -418,6 +455,8 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	lf.On("Close")
 	lf.On("GetOrCreate", "A").Return(lwA, nil)
 	lf.On("GetOrCreate", "B").Return(lwB, nil)
+	lf.On("GetOrCreate", "C").Return(lwC, nil)
+	lf.On("GetOrCreate", "D").Return(lwD, nil)
 	lf.On("GetOrCreate", "system").Return(lwSystem, nil)
 
 	r := cluster.Replicator{
@@ -430,6 +469,33 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 		ChannelLister: channelLister,
 		Puller:        bp,
 		BootBlock:     systemChannelBlocks[21],
+	}
+
+	
+	
+	osn.seekAssertions <- func(info *orderer.SeekInfo, actualChannel string) {
+		
+		assert.NotNil(osn.t, info.GetStart().GetNewest())
+		assert.Equal(t, "D", actualChannel)
+	}
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Status{
+			Status: common.Status_SERVICE_UNAVAILABLE,
+		},
+	}
+
+	
+	
+	osn.seekAssertions <- func(info *orderer.SeekInfo, actualChannel string) {
+		
+		assert.NotNil(osn.t, info.GetStart().GetNewest())
+		assert.Equal(t, "C", actualChannel)
+	}
+
+	osn.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Status{
+			Status: common.Status_FORBIDDEN,
+		},
 	}
 
 	for _, channel := range []string{"A", "B"} {
@@ -525,6 +591,9 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	close(blocksCommittedToSystemLedger)
 	assert.Len(t, blocksCommittedToLedgerA, cap(blocksCommittedToLedgerA))
 	assert.Len(t, blocksCommittedToSystemLedger, cap(blocksCommittedToSystemLedger))
+	assert.Len(t, blocksCommittedToLedgerB, 1)
+	assert.Len(t, blocksCommittedToLedgerC, 1)
+	assert.Len(t, blocksCommittedToLedgerD, 1)
 	
 	var expectedSequence uint64
 	for block := range blocksCommittedToLedgerA {
@@ -545,22 +614,33 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 
 func TestParticipant(t *testing.T) {
 	for _, testCase := range []struct {
-		name                      string
-		heightsByEndpointsReturns map[string]uint64
-		latestBlockSeq            uint64
-		latestBlock               *common.Block
-		latestConfigBlockSeq      uint64
-		latestConfigBlock         *common.Block
-		expectedError             string
-		predicateReturns          error
+		name                  string
+		heightsByEndpoints    map[string]uint64
+		heightsByEndpointsErr error
+		latestBlockSeq        uint64
+		latestBlock           *common.Block
+		latestConfigBlockSeq  uint64
+		latestConfigBlock     *common.Block
+		expectedError         string
+		predicateReturns      error
 	}{
 		{
 			name:          "No available orderer",
 			expectedError: "no available orderer",
 		},
 		{
+			name:                  "Unauthorized for the channel",
+			expectedError:         cluster.ErrForbidden.Error(),
+			heightsByEndpointsErr: cluster.ErrForbidden,
+		},
+		{
+			name:                  "No OSN services the channel",
+			expectedError:         cluster.ErrServiceUnavailable.Error(),
+			heightsByEndpointsErr: cluster.ErrServiceUnavailable,
+		},
+		{
 			name: "Pulled block has no metadata",
-			heightsByEndpointsReturns: map[string]uint64{
+			heightsByEndpoints: map[string]uint64{
 				"orderer.example.com:7050": 100,
 			},
 			latestBlockSeq: uint64(99),
@@ -569,7 +649,7 @@ func TestParticipant(t *testing.T) {
 		},
 		{
 			name: "Pulled block has no last config sequence in metadata",
-			heightsByEndpointsReturns: map[string]uint64{
+			heightsByEndpoints: map[string]uint64{
 				"orderer.example.com:7050": 100,
 			},
 			latestBlockSeq: uint64(99),
@@ -582,7 +662,7 @@ func TestParticipant(t *testing.T) {
 		},
 		{
 			name: "Pulled block's metadata is malformed",
-			heightsByEndpointsReturns: map[string]uint64{
+			heightsByEndpoints: map[string]uint64{
 				"orderer.example.com:7050": 100,
 			},
 			latestBlockSeq: uint64(99),
@@ -596,7 +676,7 @@ func TestParticipant(t *testing.T) {
 		},
 		{
 			name: "Pulled block's metadata is valid and has a last config",
-			heightsByEndpointsReturns: map[string]uint64{
+			heightsByEndpoints: map[string]uint64{
 				"orderer.example.com:7050": 100,
 			},
 			latestBlockSeq: uint64(99),
@@ -621,7 +701,7 @@ func TestParticipant(t *testing.T) {
 				return testCase.predicateReturns
 			}
 			puller := &mocks.ChainPuller{}
-			puller.On("HeightsByEndpoints").Return(testCase.heightsByEndpointsReturns)
+			puller.On("HeightsByEndpoints").Return(testCase.heightsByEndpoints, testCase.heightsByEndpointsErr)
 			puller.On("PullBlock", testCase.latestBlockSeq).Return(testCase.latestBlock)
 			puller.On("PullBlock", testCase.latestConfigBlockSeq).Return(testCase.latestConfigBlock)
 			puller.On("Close")
