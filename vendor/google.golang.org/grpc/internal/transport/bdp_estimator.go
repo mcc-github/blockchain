@@ -10,7 +10,8 @@ import (
 const (
 	
 	
-	bdpLimit = (1 << 20) * 4
+	
+	bdpLimit = (1 << 20) * 16
 	
 	
 	alpha = 0.9

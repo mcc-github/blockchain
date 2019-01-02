@@ -17,6 +17,8 @@ import (
 
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type GRPCServer struct {
@@ -38,6 +40,8 @@ type GRPCServer struct {
 	clientRootCAs map[string]*x509.Certificate
 	
 	tlsConfig *tls.Config
+	
+	healthServer *health.Server
 }
 
 
@@ -155,6 +159,11 @@ func NewGRPCServerFromListener(listener net.Listener, serverConfig ServerConfig)
 
 	grpcServer.server = grpc.NewServer(serverOpts...)
 
+	if serverConfig.HealthCheckEnabled {
+		grpcServer.healthServer = health.NewServer()
+		healthpb.RegisterHealthServer(grpcServer.server, grpcServer.healthServer)
+	}
+
 	return grpcServer, nil
 }
 
@@ -199,6 +208,19 @@ func (gServer *GRPCServer) MutualTLSRequired() bool {
 
 
 func (gServer *GRPCServer) Start() error {
+	
+	if gServer.healthServer != nil {
+		for name := range gServer.server.GetServiceInfo() {
+			gServer.healthServer.SetServingStatus(
+				name,
+				healthpb.HealthCheckResponse_SERVING,
+			)
+		}
+		gServer.healthServer.SetServingStatus(
+			"",
+			healthpb.HealthCheckResponse_SERVING,
+		)
+	}
 	return gServer.server.Serve(gServer.listener)
 }
 

@@ -53,7 +53,7 @@ func goWithWait(target func()) *waitableGo {
 
 
 func TestHaltBeforeTimeout(t *testing.T) {
-	batchTimeout, _ := time.ParseDuration("1ms")
+	batchTimeout, _ := time.ParseDuration("10ms")
 	support := &mockmultichannel.ConsenterSupport{
 		Blocks:          make(chan *cb.Block),
 		BlockCutterVal:  mockblockcutter.NewReceiver(),

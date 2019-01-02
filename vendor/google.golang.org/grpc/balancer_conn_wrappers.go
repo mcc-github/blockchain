@@ -181,7 +181,7 @@ func (ccb *ccBalancerWrapper) NewSubConn(addrs []resolver.Address, opts balancer
 	if ccb.subConns == nil {
 		return nil, fmt.Errorf("grpc: ClientConn balancer wrapper was closed")
 	}
-	ac, err := ccb.cc.newAddrConn(addrs)
+	ac, err := ccb.cc.newAddrConn(addrs, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -213,8 +213,13 @@ func (ccb *ccBalancerWrapper) UpdateBalancerState(s connectivity.State, p balanc
 	if ccb.subConns == nil {
 		return
 	}
-	ccb.cc.csMgr.updateState(s)
+	
+	
+	
+	
+	
 	ccb.cc.blockingpicker.updatePicker(p)
+	ccb.cc.csMgr.updateState(s)
 }
 
 func (ccb *ccBalancerWrapper) ResolveNow(o resolver.ResolveNowOption) {
@@ -241,6 +246,7 @@ func (acbw *acBalancerWrapper) UpdateAddresses(addrs []resolver.Address) {
 	}
 	if !acbw.ac.tryUpdateAddrs(addrs) {
 		cc := acbw.ac.cc
+		opts := acbw.ac.scopts
 		acbw.ac.mu.Lock()
 		
 		
@@ -256,7 +262,7 @@ func (acbw *acBalancerWrapper) UpdateAddresses(addrs []resolver.Address) {
 			return
 		}
 
-		ac, err := cc.newAddrConn(addrs)
+		ac, err := cc.newAddrConn(addrs, opts)
 		if err != nil {
 			grpclog.Warningf("acBalancerWrapper: UpdateAddresses: failed to newAddrConn: %v", err)
 			return

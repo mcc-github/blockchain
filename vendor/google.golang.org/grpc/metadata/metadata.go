@@ -6,10 +6,9 @@
 package metadata 
 
 import (
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 )
 
 

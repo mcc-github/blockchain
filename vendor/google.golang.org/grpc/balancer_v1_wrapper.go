@@ -3,10 +3,10 @@
 package grpc
 
 import (
+	"context"
 	"strings"
 	"sync"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"

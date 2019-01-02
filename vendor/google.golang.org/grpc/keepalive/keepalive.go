@@ -1,6 +1,7 @@
 
 
 
+
 package keepalive
 
 import (
@@ -12,28 +13,41 @@ import (
 
 
 
+
 type ClientParameters struct {
+	
 	
 	Time time.Duration 
 	
 	
+	
 	Timeout time.Duration 
+	
+	
 	
 	PermitWithoutStream bool 
 }
 
 
+
 type ServerParameters struct {
+	
+	
 	
 	
 	MaxConnectionIdle time.Duration 
 	
 	
+	
+	
 	MaxConnectionAge time.Duration 
+	
 	
 	MaxConnectionAgeGrace time.Duration 
 	
+	
 	Time time.Duration 
+	
 	
 	
 	Timeout time.Duration 
@@ -41,9 +55,13 @@ type ServerParameters struct {
 
 
 
+
 type EnforcementPolicy struct {
 	
+	
 	MinTime time.Duration 
+	
+	
 	
 	PermitWithoutStream bool 
 }

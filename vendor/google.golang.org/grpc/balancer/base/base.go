@@ -29,8 +29,20 @@ type PickerBuilder interface {
 
 
 func NewBalancerBuilder(name string, pb PickerBuilder) balancer.Builder {
+	return NewBalancerBuilderWithConfig(name, pb, Config{})
+}
+
+
+type Config struct {
+	
+	HealthCheck bool
+}
+
+
+func NewBalancerBuilderWithConfig(name string, pb PickerBuilder, config Config) balancer.Builder {
 	return &baseBuilder{
 		name:          name,
 		pickerBuilder: pb,
+		config:        config,
 	}
 }

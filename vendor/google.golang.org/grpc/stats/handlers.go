@@ -3,9 +3,8 @@
 package stats
 
 import (
+	"context"
 	"net"
-
-	"golang.org/x/net/context"
 )
 
 

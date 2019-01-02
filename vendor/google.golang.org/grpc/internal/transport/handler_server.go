@@ -8,6 +8,7 @@
 package transport
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -18,7 +19,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -291,7 +291,7 @@ func (ht *serverHandlerTransport) WriteHeader(s *Stream, md metadata.MD) error {
 func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), traceCtx func(context.Context, string) context.Context) {
 	
 
-	ctx := contextFromRequest(ht.req)
+	ctx := ht.req.Context()
 	var cancel context.CancelFunc
 	if ht.timeoutSet {
 		ctx, cancel = context.WithTimeout(ctx, ht.timeout)

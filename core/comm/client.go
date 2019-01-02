@@ -60,6 +60,7 @@ func NewGRPCClient(config ClientConfig) (*GRPCClient, error) {
 	
 	if !config.AsyncConnect {
 		client.dialOpts = append(client.dialOpts, grpc.WithBlock())
+		client.dialOpts = append(client.dialOpts, grpc.FailOnNonTempDialError(true))
 	}
 	client.timeout = config.Timeout
 	

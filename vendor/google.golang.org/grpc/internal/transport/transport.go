@@ -6,6 +6,7 @@
 package transport
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -170,8 +170,12 @@ type Stream struct {
 	headerDone uint32        
 
 	
-	hdrMu   sync.Mutex
-	header  metadata.MD 
+	hdrMu sync.Mutex
+	
+	
+	
+	
+	header  metadata.MD
 	trailer metadata.MD 
 
 	noHeaders bool 
@@ -253,7 +257,16 @@ func (s *Stream) Done() <-chan struct{} {
 
 
 
+
+
+
+
 func (s *Stream) Header() (metadata.MD, error) {
+	if s.headerChan == nil && s.header != nil {
+		
+		
+		return s.header.Copy(), nil
+	}
 	err := s.waitOnHeader()
 	
 	select {
@@ -450,7 +463,11 @@ type ConnectOptions struct {
 	
 	PerRPCCredentials []credentials.PerRPCCredentials
 	
+	
 	TransportCredentials credentials.TransportCredentials
+	
+	
+	CredsBundle credentials.Bundle
 	
 	KeepaliveParams keepalive.ClientParameters
 	
@@ -478,8 +495,8 @@ type TargetInfo struct {
 
 
 
-func NewClientTransport(connectCtx, ctx context.Context, target TargetInfo, opts ConnectOptions, onSuccess func()) (ClientTransport, error) {
-	return newHTTP2Client(connectCtx, ctx, target, opts, onSuccess)
+func NewClientTransport(connectCtx, ctx context.Context, target TargetInfo, opts ConnectOptions, onSuccess func(), onGoAway func(GoAwayReason), onClose func()) (ClientTransport, error) {
+	return newHTTP2Client(connectCtx, ctx, target, opts, onSuccess, onGoAway, onClose)
 }
 
 
@@ -689,4 +706,15 @@ type channelzData struct {
 	msgRecv               int64
 	lastMsgSentTime       int64
 	lastMsgRecvTime       int64
+}
+
+
+func ContextErr(err error) error {
+	switch err {
+	case context.DeadlineExceeded:
+		return status.Error(codes.DeadlineExceeded, err.Error())
+	case context.Canceled:
+		return status.Error(codes.Canceled, err.Error())
+	}
+	return status.Errorf(codes.Internal, "Unexpected error from context packet: %v", err)
 }

@@ -5,13 +5,14 @@
 package balancer
 
 import (
+	"context"
 	"errors"
 	"net"
 	"strings"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/resolver"
 )
 
@@ -72,7 +73,15 @@ type SubConn interface {
 }
 
 
-type NewSubConnOptions struct{}
+type NewSubConnOptions struct {
+	
+	
+	
+	CredsBundle credentials.Bundle
+	
+	
+	HealthCheckEnabled bool
+}
 
 
 
@@ -110,6 +119,8 @@ type BuildOptions struct {
 	
 	DialCreds credentials.TransportCredentials
 	
+	CredsBundle credentials.Bundle
+	
 	
 	
 	Dialer func(context.Context, string) (net.Conn, error)
@@ -131,12 +142,17 @@ type PickOptions struct {
 	
 	
 	FullMethodName string
+	
+	
+	Header metadata.MD
 }
 
 
 type DoneInfo struct {
 	
 	Err error
+	
+	Trailer metadata.MD
 	
 	BytesSent bool
 	

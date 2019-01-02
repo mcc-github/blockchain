@@ -62,6 +62,8 @@ type ServerConfig struct {
 	Logger *flogging.FabricLogger
 	
 	MetricsProvider metrics.Provider
+	
+	HealthCheckEnabled bool
 }
 
 

@@ -3,11 +3,11 @@
 package grpc
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/internal"
@@ -39,10 +39,11 @@ type dialOptions struct {
 	balancerBuilder balancer.Builder
 	
 	resolverBuilder      resolver.Builder
-	waitForHandshake     bool
+	reqHandshake         envconfig.RequireHandshakeSetting
 	channelzParentID     int64
 	disableServiceConfig bool
 	disableRetry         bool
+	disableHealthCheck   bool
 }
 
 
@@ -76,9 +77,14 @@ func newFuncDialOption(f func(*dialOptions)) *funcDialOption {
 
 
 
+
+
+
+
+
 func WithWaitForHandshake() DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
-		o.waitForHandshake = true
+		o.reqHandshake = envconfig.RequireHandshakeOn
 	})
 }
 
@@ -271,6 +277,7 @@ func WithInsecure() DialOption {
 
 
 
+
 func WithTransportCredentials(creds credentials.TransportCredentials) DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
 		o.copts.TransportCredentials = creds
@@ -282,6 +289,17 @@ func WithTransportCredentials(creds credentials.TransportCredentials) DialOption
 func WithPerRPCCredentials(creds credentials.PerRPCCredentials) DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
 		o.copts.PerRPCCredentials = append(o.copts.PerRPCCredentials, creds)
+	})
+}
+
+
+
+
+
+
+func WithCredentialsBundle(b credentials.Bundle) DialOption {
+	return newFuncDialOption(func(o *dialOptions) {
+		o.copts.CredsBundle = b
 	})
 }
 
@@ -426,9 +444,18 @@ func WithMaxHeaderListSize(s uint32) DialOption {
 	})
 }
 
+
+
+
+func WithDisableHealthCheck() DialOption {
+	return newFuncDialOption(func(o *dialOptions) {
+		o.disableHealthCheck = true
+	})
+}
 func defaultDialOptions() dialOptions {
 	return dialOptions{
 		disableRetry: !envconfig.Retry,
+		reqHandshake: envconfig.RequireHandshake,
 		copts: transport.ConnectOptions{
 			WriteBufferSize: defaultWriteBufSize,
 			ReadBufferSize:  defaultReadBufSize,

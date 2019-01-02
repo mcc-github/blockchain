@@ -80,6 +80,15 @@ type ServiceConfig struct {
 	
 	
 	retryThrottling *retryThrottlingPolicy
+	
+	
+	healthCheckConfig *healthCheckConfig
+}
+
+
+type healthCheckConfig struct {
+	
+	ServiceName string
 }
 
 
@@ -210,9 +219,13 @@ type jsonSC struct {
 	LoadBalancingPolicy *string
 	MethodConfig        *[]jsonMC
 	RetryThrottling     *retryThrottlingPolicy
+	HealthCheckConfig   *healthCheckConfig
 }
 
 func parseServiceConfig(js string) (ServiceConfig, error) {
+	if len(js) == 0 {
+		return ServiceConfig{}, fmt.Errorf("no JSON service config provided")
+	}
 	var rsc jsonSC
 	err := json.Unmarshal([]byte(js), &rsc)
 	if err != nil {
@@ -220,9 +233,10 @@ func parseServiceConfig(js string) (ServiceConfig, error) {
 		return ServiceConfig{}, err
 	}
 	sc := ServiceConfig{
-		LB:              rsc.LoadBalancingPolicy,
-		Methods:         make(map[string]MethodConfig),
-		retryThrottling: rsc.RetryThrottling,
+		LB:                rsc.LoadBalancingPolicy,
+		Methods:           make(map[string]MethodConfig),
+		retryThrottling:   rsc.RetryThrottling,
+		healthCheckConfig: rsc.HealthCheckConfig,
 	}
 	if rsc.MethodConfig == nil {
 		return sc, nil

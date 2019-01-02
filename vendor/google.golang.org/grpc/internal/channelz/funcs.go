@@ -11,16 +11,22 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc/grpclog"
+)
+
+const (
+	defaultMaxTraceEntry int32 = 30
 )
 
 var (
 	db    dbWrapper
 	idGen idGenerator
 	
-	EntryPerPage = 50
-	curState     int32
+	EntryPerPage  = 50
+	curState      int32
+	maxTraceEntry = defaultMaxTraceEntry
 )
 
 
@@ -34,6 +40,22 @@ func TurnOn() {
 
 func IsOn() bool {
 	return atomic.CompareAndSwapInt32(&curState, 1, 1)
+}
+
+
+
+func SetMaxTraceEntry(i int32) {
+	atomic.StoreInt32(&maxTraceEntry, i)
+}
+
+
+func ResetMaxTraceEntryToDefault() {
+	atomic.StoreInt32(&maxTraceEntry, defaultMaxTraceEntry)
+}
+
+func getMaxTraceEntry() int {
+	i := atomic.LoadInt32(&maxTraceEntry)
+	return int(i)
 }
 
 
@@ -130,6 +152,7 @@ func RegisterChannel(c Channel, pid int64, ref string) int64 {
 		nestedChans: make(map[int64]string),
 		id:          id,
 		pid:         pid,
+		trace:       &channelTrace{createdTime: time.Now(), events: make([]*TraceEvent, 0, getMaxTraceEntry())},
 	}
 	if pid == 0 {
 		db.get().addChannel(id, cn, true, pid, ref)
@@ -154,6 +177,7 @@ func RegisterSubChannel(c Channel, pid int64, ref string) int64 {
 		sockets: make(map[int64]string),
 		id:      id,
 		pid:     pid,
+		trace:   &channelTrace{createdTime: time.Now(), events: make([]*TraceEvent, 0, getMaxTraceEntry())},
 	}
 	db.get().addSubChannel(id, sc, pid, ref)
 	return id
@@ -214,6 +238,24 @@ func RemoveEntry(id int64) {
 
 
 
+type TraceEventDesc struct {
+	Desc     string
+	Severity Severity
+	Parent   *TraceEventDesc
+}
+
+
+func AddTraceEvent(id int64, desc *TraceEventDesc) {
+	if getMaxTraceEntry() == 0 {
+		return
+	}
+	db.get().traceEvent(id, desc)
+}
+
+
+
+
+
 
 type channelMap struct {
 	mu               sync.RWMutex
@@ -235,6 +277,7 @@ func (c *channelMap) addServer(id int64, s *server) {
 func (c *channelMap) addChannel(id int64, cn *channel, isTopChannel bool, pid int64, ref string) {
 	c.mu.Lock()
 	cn.cm = c
+	cn.trace.cm = c
 	c.channels[id] = cn
 	if isTopChannel {
 		c.topLevelChannels[id] = struct{}{}
@@ -247,6 +290,7 @@ func (c *channelMap) addChannel(id int64, cn *channel, isTopChannel bool, pid in
 func (c *channelMap) addSubChannel(id int64, sc *subChannel, pid int64, ref string) {
 	c.mu.Lock()
 	sc.cm = c
+	sc.trace.cm = c
 	c.subChannels[id] = sc
 	c.findEntry(pid).addChild(id, sc)
 	c.mu.Unlock()
@@ -276,6 +320,15 @@ func (c *channelMap) removeEntry(id int64) {
 	c.mu.Lock()
 	c.findEntry(id).triggerDelete()
 	c.mu.Unlock()
+}
+
+
+func (c *channelMap) decrTraceRefCount(id int64) {
+	e := c.findEntry(id)
+	if v, ok := e.(tracedChannel); ok {
+		v.decrTraceRefCount()
+		e.deleteSelfIfReady()
+	}
 }
 
 
@@ -329,6 +382,39 @@ func (c *channelMap) deleteEntry(id int64) {
 		delete(c.servers, id)
 		return
 	}
+}
+
+func (c *channelMap) traceEvent(id int64, desc *TraceEventDesc) {
+	c.mu.Lock()
+	child := c.findEntry(id)
+	childTC, ok := child.(tracedChannel)
+	if !ok {
+		c.mu.Unlock()
+		return
+	}
+	childTC.getChannelTrace().append(&TraceEvent{Desc: desc.Desc, Severity: desc.Severity, Timestamp: time.Now()})
+	if desc.Parent != nil {
+		parent := c.findEntry(child.getParentID())
+		var chanType RefChannelType
+		switch child.(type) {
+		case *channel:
+			chanType = RefChannel
+		case *subChannel:
+			chanType = RefSubChannel
+		}
+		if parentTC, ok := parent.(tracedChannel); ok {
+			parentTC.getChannelTrace().append(&TraceEvent{
+				Desc:      desc.Parent.Desc,
+				Severity:  desc.Parent.Severity,
+				Timestamp: time.Now(),
+				RefID:     id,
+				RefName:   childTC.getRefName(),
+				RefType:   chanType,
+			})
+			childTC.incrTraceRefCount()
+		}
+	}
+	c.mu.Unlock()
 }
 
 type int64Slice []int64
@@ -392,6 +478,7 @@ func (c *channelMap) GetTopChannels(id int64) ([]*ChannelMetric, bool) {
 		t[i].ChannelData = cn.c.ChannelzMetric()
 		t[i].ID = cn.id
 		t[i].RefName = cn.refName
+		t[i].Trace = cn.trace.dumpData()
 	}
 	return t, end
 }
@@ -454,8 +541,8 @@ func (c *channelMap) GetServerSockets(id int64, startID int64) ([]*SocketMetric,
 	for k := range svrskts {
 		ids = append(ids, k)
 	}
-	sort.Sort((int64Slice(ids)))
-	idx := sort.Search(len(ids), func(i int) bool { return ids[i] >= id })
+	sort.Sort(int64Slice(ids))
+	idx := sort.Search(len(ids), func(i int) bool { return ids[i] >= startID })
 	count := 0
 	var end bool
 	for i, v := range ids[idx:] {
@@ -498,10 +585,14 @@ func (c *channelMap) GetChannel(id int64) *ChannelMetric {
 	}
 	cm.NestedChans = copyMap(cn.nestedChans)
 	cm.SubChans = copyMap(cn.subChans)
+	
+	
+	chanCopy := cn.c
 	c.mu.RUnlock()
-	cm.ChannelData = cn.c.ChannelzMetric()
+	cm.ChannelData = chanCopy.ChannelzMetric()
 	cm.ID = cn.id
 	cm.RefName = cn.refName
+	cm.Trace = cn.trace.dumpData()
 	return cm
 }
 
@@ -516,10 +607,14 @@ func (c *channelMap) GetSubChannel(id int64) *SubChannelMetric {
 		return nil
 	}
 	cm.Sockets = copyMap(sc.sockets)
+	
+	
+	chanCopy := sc.c
 	c.mu.RUnlock()
-	cm.ChannelData = sc.c.ChannelzMetric()
+	cm.ChannelData = chanCopy.ChannelzMetric()
 	cm.ID = sc.id
 	cm.RefName = sc.refName
+	cm.Trace = sc.trace.dumpData()
 	return cm
 }
 

@@ -3,7 +3,8 @@
 package base
 
 import (
-	"golang.org/x/net/context"
+	"context"
+
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/grpclog"
@@ -13,6 +14,7 @@ import (
 type baseBuilder struct {
 	name          string
 	pickerBuilder PickerBuilder
+	config        Config
 }
 
 func (bb *baseBuilder) Build(cc balancer.ClientConn, opt balancer.BuildOptions) balancer.Balancer {
@@ -27,6 +29,7 @@ func (bb *baseBuilder) Build(cc balancer.ClientConn, opt balancer.BuildOptions) 
 		
 		
 		picker: NewErrPicker(balancer.ErrNoSubConnAvailable),
+		config: bb.config,
 	}
 }
 
@@ -44,6 +47,7 @@ type baseBalancer struct {
 	subConns map[resolver.Address]balancer.SubConn
 	scStates map[balancer.SubConn]connectivity.State
 	picker   balancer.Picker
+	config   Config
 }
 
 func (b *baseBalancer) HandleResolvedAddrs(addrs []resolver.Address, err error) {
@@ -58,7 +62,7 @@ func (b *baseBalancer) HandleResolvedAddrs(addrs []resolver.Address, err error) 
 		addrsSet[a] = struct{}{}
 		if _, ok := b.subConns[a]; !ok {
 			
-			sc, err := b.cc.NewSubConn([]resolver.Address{a}, balancer.NewSubConnOptions{})
+			sc, err := b.cc.NewSubConn([]resolver.Address{a}, balancer.NewSubConnOptions{HealthCheckEnabled: b.config.HealthCheck})
 			if err != nil {
 				grpclog.Warningf("base.baseBalancer: failed to create new SubConn: %v", err)
 				continue

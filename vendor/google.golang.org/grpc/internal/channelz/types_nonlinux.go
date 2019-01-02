@@ -4,11 +4,13 @@
 
 package channelz
 
-import "google.golang.org/grpc/grpclog"
+import (
+	"sync"
 
-func init() {
-	grpclog.Infof("Channelz: socket options are not supported on non-linux os and appengine.")
-}
+	"google.golang.org/grpc/grpclog"
+)
+
+var once sync.Once
 
 
 
@@ -19,4 +21,8 @@ type SocketOptionData struct {
 
 
 
-func (s *SocketOptionData) Getsockopt(fd uintptr) {}
+func (s *SocketOptionData) Getsockopt(fd uintptr) {
+	once.Do(func() {
+		grpclog.Warningln("Channelz: socket options are not supported on non-linux os and appengine.")
+	})
+}

@@ -7,17 +7,19 @@ import (
 	"strings"
 
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/internal/channelz"
 	"google.golang.org/grpc/resolver"
 )
 
 
 
 type ccResolverWrapper struct {
-	cc       *ClientConn
-	resolver resolver.Resolver
-	addrCh   chan []resolver.Address
-	scCh     chan string
-	done     chan struct{}
+	cc                 *ClientConn
+	resolver           resolver.Resolver
+	addrCh             chan []resolver.Address
+	scCh               chan string
+	done               chan struct{}
+	lastAddressesCount int
 }
 
 
@@ -75,44 +77,6 @@ func newCCResolverWrapper(cc *ClientConn) (*ccResolverWrapper, error) {
 	return ccr, nil
 }
 
-func (ccr *ccResolverWrapper) start() {
-	go ccr.watcher()
-}
-
-
-
-
-func (ccr *ccResolverWrapper) watcher() {
-	for {
-		select {
-		case <-ccr.done:
-			return
-		default:
-		}
-
-		select {
-		case addrs := <-ccr.addrCh:
-			select {
-			case <-ccr.done:
-				return
-			default:
-			}
-			grpclog.Infof("ccResolverWrapper: sending new addresses to cc: %v", addrs)
-			ccr.cc.handleResolvedAddrs(addrs, nil)
-		case sc := <-ccr.scCh:
-			select {
-			case <-ccr.done:
-				return
-			default:
-			}
-			grpclog.Infof("ccResolverWrapper: got new service config: %v", sc)
-			ccr.cc.handleServiceConfig(sc)
-		case <-ccr.done:
-			return
-		}
-	}
-}
-
 func (ccr *ccResolverWrapper) resolveNow(o resolver.ResolveNowOption) {
 	ccr.resolver.ResolveNow(o)
 }
@@ -125,18 +89,51 @@ func (ccr *ccResolverWrapper) close() {
 
 func (ccr *ccResolverWrapper) NewAddress(addrs []resolver.Address) {
 	select {
-	case <-ccr.addrCh:
+	case <-ccr.done:
+		return
 	default:
 	}
-	ccr.addrCh <- addrs
+	grpclog.Infof("ccResolverWrapper: sending new addresses to cc: %v", addrs)
+	if channelz.IsOn() {
+		ccr.addChannelzTraceEvent(addrs)
+	}
+	ccr.cc.handleResolvedAddrs(addrs, nil)
 }
 
 
 
 func (ccr *ccResolverWrapper) NewServiceConfig(sc string) {
 	select {
-	case <-ccr.scCh:
+	case <-ccr.done:
+		return
 	default:
 	}
-	ccr.scCh <- sc
+	grpclog.Infof("ccResolverWrapper: got new service config: %v", sc)
+	ccr.cc.handleServiceConfig(sc)
+}
+
+func (ccr *ccResolverWrapper) addChannelzTraceEvent(addrs []resolver.Address) {
+	if len(addrs) == 0 && ccr.lastAddressesCount != 0 {
+		channelz.AddTraceEvent(ccr.cc.channelzID, &channelz.TraceEventDesc{
+			Desc:     "Resolver returns an empty address list",
+			Severity: channelz.CtWarning,
+		})
+	} else if len(addrs) != 0 && ccr.lastAddressesCount == 0 {
+		var s string
+		for i, a := range addrs {
+			if a.ServerName != "" {
+				s += a.Addr + "(" + a.ServerName + ")"
+			} else {
+				s += a.Addr
+			}
+			if i != len(addrs)-1 {
+				s += " "
+			}
+		}
+		channelz.AddTraceEvent(ccr.cc.channelzID, &channelz.TraceEventDesc{
+			Desc:     fmt.Sprintf("Resolver returns a non-empty address list (previous one was empty) %q", s),
+			Severity: channelz.CtINFO,
+		})
+	}
+	ccr.lastAddressesCount = len(addrs)
 }
