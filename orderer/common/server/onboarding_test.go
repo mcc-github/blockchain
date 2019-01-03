@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,11 +20,12 @@ import (
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
+	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/orderer/common/cluster/mocks"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
+	server_mocks "github.com/mcc-github/blockchain/orderer/common/server/mocks"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/utils"
@@ -117,15 +119,11 @@ func loadPEM(suffix string, t *testing.T) []byte {
 	return b
 }
 
-func TestReplicateIfNeeded(t *testing.T) {
+func TestReplicate(t *testing.T) {
 	t.Parallel()
 
-	caCert := loadPEM("ca.crt", t)
-	key := loadPEM("server.key", t)
-	cert := loadPEM("server.crt", t)
-
-	deliverServer := newServerNode(t, key, cert)
-	defer deliverServer.srv.Stop()
+	var bootBlock common.Block
+	var bootBlockWithCorruptedPayload common.Block
 
 	flogging.ActivateSpec("testReplicateIfNeeded=debug")
 
@@ -135,49 +133,57 @@ func TestReplicateIfNeeded(t *testing.T) {
 	blockBytes, err := ioutil.ReadFile(filepath.Join("testdata", "genesis.block"))
 	assert.NoError(t, err)
 
-	bootBlock := &common.Block{}
-	assert.NoError(t, proto.Unmarshal(blockBytes, bootBlock))
-	bootBlock.Header.Number = 10
-	injectOrdererEndpoint(t, bootBlock, deliverServer.srv.Address())
+	caCert := loadPEM("ca.crt", t)
+	key := loadPEM("server.key", t)
+	cert := loadPEM("server.crt", t)
 
-	copyBlock := func(block *common.Block, seq uint64) *common.Block {
-		res := &common.Block{}
-		proto.Unmarshal(utils.MarshalOrPanic(block), res)
-		res.Header.Number = seq
-		return res
-	}
+	prepareTestCase := func() *deliverServer {
+		deliverServer := newServerNode(t, key, cert)
 
-	bootBlockWithCorruptedPayload := copyBlock(bootBlock, 100)
-	env := &common.Envelope{}
-	proto.Unmarshal(bootBlockWithCorruptedPayload.Data.Data[0], env)
-	payload := &common.Payload{}
-	proto.Unmarshal(env.Payload, payload)
-	payload.Data = []byte{1, 2, 3}
+		assert.NoError(t, proto.Unmarshal(blockBytes, &bootBlock))
+		bootBlock.Header.Number = 10
+		injectOrdererEndpoint(t, &bootBlock, deliverServer.srv.Address())
 
-	deliverServer.blockResponses <- &orderer.DeliverResponse{
-		Type: &orderer.DeliverResponse_Block{Block: bootBlock},
-	}
-
-	blocks := make([]*common.Block, 11)
-	
-	
-	blocks[0] = &common.Block{Header: &common.BlockHeader{}}
-	for seq := uint64(1); seq <= uint64(10); seq++ {
-		block := copyBlock(bootBlock, seq)
-		block.Header.PreviousHash = blocks[seq-1].Header.Hash()
-		blocks[seq] = block
-		deliverServer.blockResponses <- &orderer.DeliverResponse{
-			Type: &orderer.DeliverResponse_Block{Block: block},
+		copyBlock := func(block *common.Block, seq uint64) common.Block {
+			res := common.Block{}
+			proto.Unmarshal(utils.MarshalOrPanic(block), &res)
+			res.Header.Number = seq
+			return res
 		}
-	}
-	
-	
-	close(deliverServer.blockResponses)
 
-	
-	
-	
-	bootBlock.Header.PreviousHash = blocks[9].Header.Hash()
+		bootBlockWithCorruptedPayload = copyBlock(&bootBlock, 100)
+		env := &common.Envelope{}
+		proto.Unmarshal(bootBlockWithCorruptedPayload.Data.Data[0], env)
+		payload := &common.Payload{}
+		proto.Unmarshal(env.Payload, payload)
+		payload.Data = []byte{1, 2, 3}
+
+		deliverServer.blockResponses <- &orderer.DeliverResponse{
+			Type: &orderer.DeliverResponse_Block{Block: &bootBlock},
+		}
+
+		blocks := make([]*common.Block, 11)
+		
+		
+		blocks[0] = &common.Block{Header: &common.BlockHeader{}}
+		for seq := uint64(1); seq <= uint64(10); seq++ {
+			block := copyBlock(&bootBlock, seq)
+			block.Header.PreviousHash = blocks[seq-1].Header.Hash()
+			blocks[seq] = &block
+			deliverServer.blockResponses <- &orderer.DeliverResponse{
+				Type: &orderer.DeliverResponse_Block{Block: &block},
+			}
+		}
+		
+		
+		close(deliverServer.blockResponses)
+
+		
+		
+		
+		bootBlock.Header.PreviousHash = blocks[9].Header.Hash()
+		return deliverServer
+	}
 
 	var hooksActivated bool
 
@@ -192,6 +198,7 @@ func TestReplicateIfNeeded(t *testing.T) {
 		signer             crypto.LocalSigner
 		zapHooks           []func(zapcore.Entry) error
 		shouldConnect      bool
+		replicateFunc      func(*replicationInitiator, *common.Block)
 	}{
 		{
 			name:               "Genesis block makes replication be skipped",
@@ -204,39 +211,51 @@ func TestReplicateIfNeeded(t *testing.T) {
 					return nil
 				},
 			},
+			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
+				ri.replicateIfNeeded(bootstrapBlock)
+			},
 		},
 		{
 			name:               "Block puller initialization failure panics",
 			systemLedgerHeight: 10,
 			panicValue:         "Failed creating puller config from bootstrap block: unable to decode TLS certificate PEM: ",
-			bootBlock:          bootBlockWithCorruptedPayload,
+			bootBlock:          &bootBlockWithCorruptedPayload,
 			conf:               &localconfig.TopLevel{},
 			secOpts:            &comm.SecureOptions{},
+			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
+				ri.replicateIfNeeded(bootstrapBlock)
+			},
 		},
 		{
-			name:               "Extraction of sytem channel name fails",
+			name:               "Extraction of system channel name fails",
 			systemLedgerHeight: 10,
 			panicValue:         "Failed extracting system channel name from bootstrap block: failed to retrieve channel id - block is empty",
 			bootBlock:          &common.Block{Header: &common.BlockHeader{Number: 100}},
 			conf:               &localconfig.TopLevel{},
 			secOpts:            &comm.SecureOptions{},
+			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
+				ri.replicateIfNeeded(bootstrapBlock)
+			},
 		},
 		{
 			name:               "Is Replication needed fails",
 			systemLedgerHeight: 10,
 			ledgerFactoryErr:   errors.New("I/O error"),
 			panicValue:         "Failed determining whether replication is needed: I/O error",
-			bootBlock:          bootBlock,
+			bootBlock:          &bootBlock,
 			conf:               &localconfig.TopLevel{},
 			secOpts: &comm.SecureOptions{
 				Certificate: cert,
 				Key:         key,
 			},
+			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
+				ri.replicateIfNeeded(bootstrapBlock)
+			},
 		},
 		{
 			name:               "Replication isn't needed",
 			systemLedgerHeight: 11,
-			bootBlock:          bootBlock,
+			bootBlock:          &bootBlock,
 			conf:               &localconfig.TopLevel{},
 			secOpts: &comm.SecureOptions{
 				Certificate: cert,
@@ -249,6 +268,9 @@ func TestReplicateIfNeeded(t *testing.T) {
 					return nil
 				},
 			},
+			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
+				ri.replicateIfNeeded(bootstrapBlock)
+			},
 		},
 		{
 			name: "Replication is needed, but pulling fails",
@@ -256,7 +278,7 @@ func TestReplicateIfNeeded(t *testing.T) {
 				"failed obtaining the latest block for channel testchainid",
 			shouldConnect:      true,
 			systemLedgerHeight: 10,
-			bootBlock:          bootBlock,
+			bootBlock:          &bootBlock,
 			conf: &localconfig.TopLevel{
 				General: localconfig.General{
 					SystemChannel: "system",
@@ -275,9 +297,83 @@ func TestReplicateIfNeeded(t *testing.T) {
 				UseTLS:        true,
 				ServerRootCAs: [][]byte{caCert},
 			},
+			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
+				ri.replicateIfNeeded(bootstrapBlock)
+			},
+		},
+		{
+			name:               "Explicit replication is requested, but the channel shouldn't be pulled",
+			shouldConnect:      true,
+			systemLedgerHeight: 10,
+			bootBlock:          &bootBlock,
+			conf: &localconfig.TopLevel{
+				General: localconfig.General{
+					SystemChannel: "system",
+					Cluster: localconfig.Cluster{
+						ReplicationPullTimeout:  time.Millisecond * 100,
+						DialTimeout:             time.Millisecond * 100,
+						RPCTimeout:              time.Millisecond * 100,
+						ReplicationRetryTimeout: time.Millisecond * 100,
+						ReplicationBufferSize:   1,
+					},
+				},
+			},
+			secOpts: &comm.SecureOptions{
+				Certificate:   cert,
+				Key:           key,
+				UseTLS:        true,
+				ServerRootCAs: [][]byte{caCert},
+			},
+			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
+				ri.ReplicateChains(bootstrapBlock, []string{"foo"})
+			},
+			zapHooks: []func(entry zapcore.Entry) error{
+				func(entry zapcore.Entry) error {
+					hooksActivated = true
+					possibleLogs := []string{
+						"Will now replicate chains [foo]",
+						"Channel testchainid shouldn't be pulled. Skipping it",
+					}
+					assert.Contains(t, possibleLogs, entry.Message)
+					return nil
+				},
+			},
+		},
+		{
+			name: "Explicit replication is requested, but the channel cannot be pulled",
+			panicValue: "Failed pulling system channel: " +
+				"failed obtaining the latest block for channel testchainid",
+			shouldConnect:      true,
+			systemLedgerHeight: 10,
+			bootBlock:          &bootBlock,
+			conf: &localconfig.TopLevel{
+				General: localconfig.General{
+					SystemChannel: "system",
+					Cluster: localconfig.Cluster{
+						ReplicationPullTimeout:  time.Millisecond * 100,
+						DialTimeout:             time.Millisecond * 100,
+						RPCTimeout:              time.Millisecond * 100,
+						ReplicationRetryTimeout: time.Millisecond * 100,
+						ReplicationBufferSize:   1,
+					},
+				},
+			},
+			secOpts: &comm.SecureOptions{
+				Certificate:   cert,
+				Key:           key,
+				UseTLS:        true,
+				ServerRootCAs: [][]byte{caCert},
+			},
+			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
+				ri.ReplicateChains(bootstrapBlock, []string{"testchainid"})
+			},
 		},
 	} {
+		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
+			deliverServer := prepareTestCase()
+			defer deliverServer.srv.Stop()
+
 			lw := &mocks.LedgerWriter{}
 			lw.On("Height").Return(testCase.systemLedgerHeight).Once()
 
@@ -290,13 +386,14 @@ func TestReplicateIfNeeded(t *testing.T) {
 				logger: flogging.MustGetLogger("testReplicateIfNeeded"),
 				signer: testCase.signer,
 
-				conf:           testCase.conf,
-				bootstrapBlock: testCase.bootBlock,
-				secOpts:        testCase.secOpts,
+				conf:    testCase.conf,
+				secOpts: testCase.secOpts,
 			}
 
 			if testCase.panicValue != "" {
-				assert.PanicsWithValue(t, testCase.panicValue, r.replicateIfNeeded)
+				assert.PanicsWithValue(t, testCase.panicValue, func() {
+					testCase.replicateFunc(r, testCase.bootBlock)
+				})
 				return
 			}
 
@@ -304,7 +401,7 @@ func TestReplicateIfNeeded(t *testing.T) {
 			r.logger = r.logger.WithOptions(zap.Hooks(testCase.zapHooks...))
 
 			
-			r.replicateIfNeeded()
+			testCase.replicateFunc(r, testCase.bootBlock)
 
 			
 			assert.True(t, hooksActivated)
@@ -316,6 +413,116 @@ func TestReplicateIfNeeded(t *testing.T) {
 			assert.Equal(t, testCase.shouldConnect, atomic.LoadInt32(&deliverServer.isConnected) == int32(1))
 		})
 	}
+}
+
+func TestInactiveChainReplicator(t *testing.T) {
+	for _, testCase := range []struct {
+		name                                 string
+		chainsTracked                        []string
+		ReplicateChainsExpectedInput1        []string
+		ReplicateChainsExpectedInput1Reverse []string
+		ReplicateChainsExpectedInput2        []string
+		ReplicateChainsOutput1               []string
+		ReplicateChainsOutput2               []string
+		chainsExpectedToBeReplicated         []string
+		ReplicateChainsExpectedCallCount     int
+		genesisBlock                         *common.Block
+	}{
+		{
+			name: "no chains tracked",
+		},
+		{
+			name:                                 "some chains tracked, but not all succeed replication",
+			chainsTracked:                        []string{"foo", "bar"},
+			ReplicateChainsExpectedInput1:        []string{"foo", "bar"},
+			ReplicateChainsExpectedInput1Reverse: []string{"bar", "foo"},
+			ReplicateChainsExpectedInput2:        []string{"bar"},
+			ReplicateChainsOutput1:               []string{"foo"},
+			ReplicateChainsOutput2:               []string{},
+			chainsExpectedToBeReplicated:         []string{"foo"},
+			ReplicateChainsExpectedCallCount:     2,
+			genesisBlock:                         &common.Block{},
+		},
+		{
+			name:                                 "some chains tracked, and all succeed replication but on 2nd pass",
+			chainsTracked:                        []string{"foo", "bar"},
+			ReplicateChainsExpectedInput1:        []string{"foo", "bar"},
+			ReplicateChainsExpectedInput1Reverse: []string{"bar", "foo"},
+			ReplicateChainsExpectedInput2:        []string{"bar"},
+			ReplicateChainsOutput1:               []string{"foo"},
+			ReplicateChainsOutput2:               []string{"bar"},
+			chainsExpectedToBeReplicated:         []string{"foo", "bar"},
+			ReplicateChainsExpectedCallCount:     2,
+			genesisBlock:                         &common.Block{},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			scheduler := make(chan time.Time)
+			replicator := &server_mocks.ChainReplicator{}
+			icr := &inactiveChainReplicator{
+				logger:                   flogging.MustGetLogger("test"),
+				replicator:               replicator,
+				chains2CreationCallbacks: make(map[string]chainCreation),
+				retrieveLastSysChannelConfigBlock: func() *common.Block {
+					return nil
+				},
+				quitChan:     make(chan struct{}),
+				scheduleChan: scheduler,
+			}
+
+			trackedChains := make(chan string, 10)
+			
+			for _, trackedChain := range testCase.chainsTracked {
+				trackedChain := trackedChain
+				icr.TrackChain(trackedChain, testCase.genesisBlock, func() {
+					trackedChains <- trackedChain
+				})
+			}
+
+			
+			input := testCase.ReplicateChainsExpectedInput1
+			output := testCase.ReplicateChainsOutput1
+			replicator.On("ReplicateChains", mock.Anything, input).Return(output).Once()
+			
+			input = testCase.ReplicateChainsExpectedInput1Reverse
+			replicator.On("ReplicateChains", mock.Anything, input).Return(output).Once()
+
+			
+			input = testCase.ReplicateChainsExpectedInput2
+			output = testCase.ReplicateChainsOutput2
+			replicator.On("ReplicateChains", mock.Anything, input).Return(output).Once()
+
+			var replicatorStopped sync.WaitGroup
+			replicatorStopped.Add(1)
+			go func() {
+				defer replicatorStopped.Done()
+				
+				scheduler <- time.Time{}
+				
+				scheduler <- time.Time{}
+				icr.stop()
+			}()
+			icr.run()
+			replicatorStopped.Wait()
+			close(trackedChains)
+
+			var replicatedChains []string
+			for chain := range trackedChains {
+				replicatedChains = append(replicatedChains, chain)
+			}
+			assert.Equal(t, testCase.chainsExpectedToBeReplicated, replicatedChains)
+			replicator.AssertNumberOfCalls(t, "ReplicateChains", testCase.ReplicateChainsExpectedCallCount)
+		})
+	}
+}
+
+func TestTrackChainNilGenesisBlock(t *testing.T) {
+	icr := &inactiveChainReplicator{
+		logger: flogging.MustGetLogger("test"),
+	}
+	assert.PanicsWithValue(t, "Called with a nil genesis block", func() {
+		icr.TrackChain("foo", nil, func() {})
+	})
 }
 
 func TestLedgerFactory(t *testing.T) {
@@ -341,4 +548,43 @@ func injectOrdererEndpoint(t *testing.T, block *common.Block, endpoint string) {
 	env.Payload = utils.MarshalOrPanic(payload)
 	block.Data.Data[0] = utils.MarshalOrPanic(env)
 	block.Header.DataHash = block.Data.Hash()
+}
+
+func TestExponentialDuration(t *testing.T) {
+	exp := exponentialDurationSeries(time.Millisecond*100, time.Second)
+	prev := exp()
+	for i := 0; i < 3; i++ {
+		n := exp()
+		assert.Equal(t, prev*2, n)
+		prev = n
+		assert.True(t, n < time.Second)
+	}
+
+	for i := 0; i < 10; i++ {
+		assert.Equal(t, time.Second, exp())
+	}
+}
+
+func TestMakeTickChannel(t *testing.T) {
+	sleepDurations := make(chan time.Duration, 100)
+	fakeSleep := func(d time.Duration) {
+		if d == time.Millisecond*16 {
+			return
+		}
+		
+		
+		sleepDurations <- d
+	}
+
+	exp := exponentialDurationSeries(time.Millisecond, time.Millisecond*16)
+	c := makeTickChannel(exp, fakeSleep)
+
+	for expectedSleepTime := time.Millisecond; expectedSleepTime <= time.Millisecond*8; expectedSleepTime *= 2 {
+		
+		<-c
+		
+		sleptTime := <-sleepDurations
+		assert.Equal(t, expectedSleepTime, sleptTime)
+	}
+
 }

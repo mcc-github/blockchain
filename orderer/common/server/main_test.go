@@ -20,15 +20,19 @@ import (
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
+	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
 	"github.com/mcc-github/blockchain/common/localmsp"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/metrics/prometheus"
+	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
+	"github.com/mcc-github/blockchain/orderer/common/multichannel"
+	"github.com/mcc-github/blockchain/orderer/consensus"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -267,7 +271,7 @@ func TestInitializeMultiChainManager(t *testing.T) {
 		initializeLocalMsp(conf)
 		lf, _ := createLedgerFactory(conf)
 		bootBlock := encoder.New(genesisconfig.Load(genesisconfig.SampleDevModeSoloProfile)).GenesisBlockForChannel("system")
-		initializeMultichannelRegistrar(bootBlock, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, conf, localmsp.NewSigner(), &disabled.Provider{}, lf)
+		initializeMultichannelRegistrar(bootBlock, &replicationInitiator{}, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, conf, localmsp.NewSigner(), &disabled.Provider{}, lf)
 	})
 }
 
@@ -330,7 +334,7 @@ func TestUpdateTrustedRoots(t *testing.T) {
 	}
 	lf, _ := createLedgerFactory(conf)
 	bootBlock := encoder.New(genesisconfig.Load(genesisconfig.SampleDevModeSoloProfile)).GenesisBlockForChannel("system")
-	initializeMultichannelRegistrar(bootBlock, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, genesisConfig(t), localmsp.NewSigner(), &disabled.Provider{}, lf, callback)
+	initializeMultichannelRegistrar(bootBlock, &replicationInitiator{}, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, genesisConfig(t), localmsp.NewSigner(), &disabled.Provider{}, lf, callback)
 	t.Logf("# app CAs: %d", len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
 	t.Logf("# orderer CAs: %d", len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
 	
@@ -367,7 +371,7 @@ func TestUpdateTrustedRoots(t *testing.T) {
 			updateClusterDialer(caSupport, predDialer, clusterConf.SecOpts.ServerRootCAs)
 		}
 	}
-	initializeMultichannelRegistrar(bootBlock, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, genesisConfig(t), localmsp.NewSigner(), &disabled.Provider{}, lf, callback)
+	initializeMultichannelRegistrar(bootBlock, &replicationInitiator{}, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, genesisConfig(t), localmsp.NewSigner(), &disabled.Provider{}, lf, callback)
 	t.Logf("# app CAs: %d", len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
 	t.Logf("# orderer CAs: %d", len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
 	
@@ -569,6 +573,34 @@ func TestConfigureClusterListener(t *testing.T) {
 			assert.Subset(t, testCase.expectedLogEntries, loggedMessages)
 		})
 	}
+}
+
+func TestInitializeEtcdraftConsenter(t *testing.T) {
+	consenters := make(map[string]consensus.Consenter)
+	rlf := ramledger.New(10)
+
+	conf := configtxgentest.Load(genesisconfig.SampleInsecureSoloProfile)
+	genesisBlock := encoder.New(conf).GenesisBlock()
+
+	ca, _ := tlsgen.NewCA()
+	crt, _ := ca.NewServerCertKeyPair("127.0.0.1")
+
+	srv, err := comm.NewGRPCServer("127.0.0.1:0", comm.ServerConfig{})
+	assert.NoError(t, err)
+
+	initializeEtcdraftConsenter(consenters,
+		&localconfig.TopLevel{},
+		rlf,
+		&cluster.PredicateDialer{},
+		genesisBlock, &replicationInitiator{},
+		comm.ServerConfig{
+			SecOpts: &comm.SecureOptions{
+				Certificate: crt.Cert,
+				Key:         crt.Key,
+				UseTLS:      true,
+			},
+		}, srv, &multichannel.Registrar{})
+	assert.NotNil(t, consenters["etcdraft"])
 }
 
 func genesisConfig(t *testing.T) *localconfig.TopLevel {

@@ -1373,16 +1373,6 @@ var _ = Describe("Chain", func() {
 				})
 
 				It("adding node to the cluster", func() {
-
-					c4 := newChain(timeout, channelID, dataDir, 4, &raftprotos.RaftMetadata{
-						Consenters: map[uint64]*raftprotos.Consenter{},
-					})
-					c4.init()
-
-					By("adding new node to the network")
-					Expect(c4.support.WriteBlockCallCount()).Should(Equal(0))
-					Expect(c4.support.WriteConfigBlockCallCount()).Should(Equal(0))
-
 					configEnv := newConfigEnv(channelID, common.HeaderType_CONFIG, newConfigUpdateEnv(channelID, addConsenterConfigValue()))
 					c1.cutter.CutNext = true
 
@@ -1393,6 +1383,19 @@ var _ = Describe("Chain", func() {
 					network.exec(func(c *chain) {
 						Eventually(c.support.WriteConfigBlockCallCount, defaultTimeout).Should(Equal(1))
 					})
+
+					_, raftmetabytes := c1.support.WriteConfigBlockArgsForCall(0)
+					meta := &common.Metadata{Value: raftmetabytes}
+					raftmeta, err := etcdraft.ReadRaftMetadata(meta, nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					c4 := newChain(timeout, channelID, dataDir, 4, raftmeta)
+					c4.init()
+
+					
+					
+					c4.support.WriteBlock(c1.support.WriteBlockArgsForCall(0))
+					c4.support.WriteConfigBlock(c1.support.WriteConfigBlockArgsForCall(0))
 
 					network.addChain(c4)
 					c4.Start()
@@ -1428,15 +1431,6 @@ var _ = Describe("Chain", func() {
 					
 					network.disconnect(2)
 
-					c4 := newChain(timeout, channelID, dataDir, 4, &raftprotos.RaftMetadata{
-						Consenters: map[uint64]*raftprotos.Consenter{},
-					})
-					c4.init()
-
-					By("adding new node to the network")
-					Eventually(c4.support.WriteBlockCallCount, defaultTimeout).Should(Equal(0))
-					Eventually(c4.support.WriteConfigBlockCallCount, defaultTimeout).Should(Equal(0))
-
 					configEnv := newConfigEnv(channelID, common.HeaderType_CONFIG, newConfigUpdateEnv(channelID, addConsenterConfigValue()))
 					c1.cutter.CutNext = true
 
@@ -1448,6 +1442,19 @@ var _ = Describe("Chain", func() {
 					
 					Eventually(c2.support.WriteConfigBlockCallCount, defaultTimeout).Should(Equal(0))
 					Eventually(c3.support.WriteConfigBlockCallCount, defaultTimeout).Should(Equal(1))
+
+					_, raftmetabytes := c1.support.WriteConfigBlockArgsForCall(0)
+					meta := &common.Metadata{Value: raftmetabytes}
+					raftmeta, err := etcdraft.ReadRaftMetadata(meta, nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					c4 := newChain(timeout, channelID, dataDir, 4, raftmeta)
+					c4.init()
+
+					
+					
+					c4.support.WriteBlock(c1.support.WriteBlockArgsForCall(0))
+					c4.support.WriteConfigBlock(c1.support.WriteConfigBlockArgsForCall(0))
 
 					network.addChain(c4)
 					c4.Start()
@@ -1502,15 +1509,6 @@ var _ = Describe("Chain", func() {
 					
 					
 
-					c4 := newChain(timeout, channelID, dataDir, 4, &raftprotos.RaftMetadata{
-						Consenters: map[uint64]*raftprotos.Consenter{},
-					})
-					c4.init()
-
-					By("adding new node to the network")
-					Expect(c4.support.WriteBlockCallCount()).Should(Equal(0))
-					Expect(c4.support.WriteConfigBlockCallCount()).Should(Equal(0))
-
 					configEnv := newConfigEnv(channelID, common.HeaderType_CONFIG, newConfigUpdateEnv(channelID, addConsenterConfigValue()))
 					c1.cutter.CutNext = true
 
@@ -1532,6 +1530,19 @@ var _ = Describe("Chain", func() {
 						func(c *chain) {
 							Eventually(c.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
 						})
+
+					_, raftmetabytes := c1.support.WriteConfigBlockArgsForCall(0)
+					meta := &common.Metadata{Value: raftmetabytes}
+					raftmeta, err := etcdraft.ReadRaftMetadata(meta, nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					c4 := newChain(timeout, channelID, dataDir, 4, raftmeta)
+					c4.init()
+
+					
+					
+					c4.support.WriteBlock(c1.support.WriteBlockArgsForCall(0))
+					c4.support.WriteConfigBlock(c1.support.WriteConfigBlockArgsForCall(0))
 
 					network.addChain(c4)
 					c4.Start()
@@ -1574,15 +1585,6 @@ var _ = Describe("Chain", func() {
 					
 					
 
-					c4 := newChain(timeout, channelID, dataDir, 4, &raftprotos.RaftMetadata{
-						Consenters: map[uint64]*raftprotos.Consenter{},
-					})
-					c4.init()
-
-					By("adding new node to the network")
-					Expect(c4.support.WriteBlockCallCount()).Should(Equal(0))
-					Expect(c4.support.WriteConfigBlockCallCount()).Should(Equal(0))
-
 					configEnv := newConfigEnv(channelID, common.HeaderType_CONFIG, newConfigUpdateEnv(channelID, addConsenterConfigValue()))
 					c1.cutter.CutNext = true
 
@@ -1612,6 +1614,19 @@ var _ = Describe("Chain", func() {
 						func(c *chain) {
 							Eventually(c.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
 						})
+
+					_, raftmetabytes := c1.support.WriteConfigBlockArgsForCall(0)
+					meta := &common.Metadata{Value: raftmetabytes}
+					raftmeta, err := etcdraft.ReadRaftMetadata(meta, nil)
+					Expect(err).NotTo(HaveOccurred())
+
+					c4 := newChain(timeout, channelID, dataDir, 4, raftmeta)
+					c4.init()
+
+					
+					
+					c4.support.WriteBlock(c1.support.WriteBlockArgsForCall(0))
+					c4.support.WriteConfigBlock(c1.support.WriteConfigBlockArgsForCall(0))
 
 					network.addChain(c4)
 

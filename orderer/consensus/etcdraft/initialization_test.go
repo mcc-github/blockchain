@@ -4,7 +4,7 @@ Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package etcdraft
+package etcdraft_test
 
 import (
 	"testing"
@@ -13,6 +13,8 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/multichannel"
+	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
+	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,11 +23,11 @@ func TestNewEtcdRaftConsenter(t *testing.T) {
 	assert.NoError(t, err)
 	defer srv.Stop()
 	dialer := &cluster.PredicateDialer{}
-	consenter := New(dialer, &localconfig.TopLevel{}, comm.ServerConfig{
+	consenter := etcdraft.New(dialer, &localconfig.TopLevel{}, comm.ServerConfig{
 		SecOpts: &comm.SecureOptions{
 			Certificate: []byte{1, 2, 3},
 		},
-	}, srv, &multichannel.Registrar{})
+	}, srv, &multichannel.Registrar{}, &mocks.InactiveChainRegistry{})
 
 	
 	assert.Equal(t, []byte{1, 2, 3}, consenter.Cert)

@@ -11,6 +11,7 @@ package multichannel
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/channelconfig"
@@ -104,7 +105,9 @@ type Registrar struct {
 	callbacks          []func(bundle *channelconfig.Bundle)
 }
 
-func getConfigTx(reader blockledger.Reader) *cb.Envelope {
+
+
+func ConfigBlock(reader blockledger.Reader) *cb.Block {
 	lastBlock := blockledger.GetBlock(reader, reader.Height()-1)
 	index, err := utils.GetLastConfigIndexFromBlock(lastBlock)
 	if err != nil {
@@ -115,7 +118,11 @@ func getConfigTx(reader blockledger.Reader) *cb.Envelope {
 		logger.Panicf("Config block does not exist")
 	}
 
-	return utils.ExtractEnvelopeOrPanic(configBlock, 0)
+	return configBlock
+}
+
+func configTx(reader blockledger.Reader) *cb.Envelope {
+	return utils.ExtractEnvelopeOrPanic(ConfigBlock(reader), 0)
 }
 
 
@@ -140,7 +147,7 @@ func (r *Registrar) Initialize(consenters map[string]consensus.Consenter) {
 		if err != nil {
 			logger.Panicf("Ledger factory reported chainID %s but could not retrieve it: %s", chainID, err)
 		}
-		configTx := getConfigTx(rl)
+		configTx := configTx(rl)
 		if configTx == nil {
 			logger.Panic("Programming error, configTx should never be nil here")
 		}
@@ -275,12 +282,30 @@ func (r *Registrar) newLedgerResources(configTx *cb.Envelope) *ledgerResources {
 	}
 }
 
+
+func (r *Registrar) CreateChain(chainName string) {
+	lf, err := r.ledgerFactory.GetOrCreate(chainName)
+	if err != nil {
+		logger.Panicf("Failed obtaining ledger factory for %s: %v", chainName, err)
+	}
+	chain := r.GetChain(chainName)
+	if chain != nil {
+		logger.Infof("A chain of type %v for channel %s already exists. "+
+			"Halting it.", reflect.TypeOf(chain.Chain), chainName)
+		chain.Halt()
+	}
+	r.newChain(configTx(lf))
+}
+
 func (r *Registrar) newChain(configtx *cb.Envelope) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	ledgerResources := r.newLedgerResources(configtx)
-	ledgerResources.Append(blockledger.CreateNextBlock(ledgerResources, []*cb.Envelope{configtx}))
+	
+	if ledgerResources.Height() == 0 {
+		ledgerResources.Append(blockledger.CreateNextBlock(ledgerResources, []*cb.Envelope{configtx}))
+	}
 
 	
 	newChains := make(map[string]*ChainSupport)
