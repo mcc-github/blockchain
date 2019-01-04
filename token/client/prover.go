@@ -8,24 +8,73 @@ package client
 
 import (
 	"context"
+	"crypto/rand"
 	"io"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/protos/token"
 	tk "github.com/mcc-github/blockchain/token"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 type TimeFunc func() time.Time
 
+
+
+
+type ProverPeerClient interface {
+	
+	CreateProverClient() (*grpc.ClientConn, token.ProverClient, error)
+}
+
+
+type ProverPeerClientImpl struct {
+	Address            string
+	ServerNameOverride string
+	GRPCClient         *comm.GRPCClient
+}
+
+
 type ProverPeer struct {
 	ChannelID        string
-	ProverClient     token.ProverClient
+	ProverPeerClient ProverPeerClient
 	RandomnessReader io.Reader
 	Time             TimeFunc
 }
+
+func NewProverPeer(config *ClientConfig) (*ProverPeer, error) {
+	
+	grpcClient, err := CreateGRPCClient(&config.ProverPeer)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ProverPeer{
+		ChannelID:        config.ChannelID,
+		RandomnessReader: rand.Reader,
+		Time:             time.Now,
+		ProverPeerClient: &ProverPeerClientImpl{
+			Address:            config.ProverPeer.Address,
+			ServerNameOverride: config.ProverPeer.ServerNameOverride,
+			GRPCClient:         grpcClient,
+		},
+	}, nil
+}
+
+func (pc *ProverPeerClientImpl) CreateProverClient() (*grpc.ClientConn, token.ProverClient, error) {
+	conn, err := pc.GRPCClient.NewConnection(pc.Address, pc.ServerNameOverride)
+	if err != nil {
+		return conn, nil, err
+	}
+	return conn, token.NewProverClient(conn), nil
+}
+
+
+
 
 func (prover *ProverPeer) RequestImport(tokensToIssue []*token.TokenToIssue, signingIdentity tk.SigningIdentity) ([]byte, error) {
 	ir := &token.ImportRequest{
@@ -34,17 +83,17 @@ func (prover *ProverPeer) RequestImport(tokensToIssue []*token.TokenToIssue, sig
 	payload := &token.Command_ImportRequest{ImportRequest: ir}
 
 	sc, err := prover.CreateSignedCommand(payload, signingIdentity)
-
 	if err != nil {
 		return nil, err
 	}
 
-	scr, err := prover.ProverClient.ProcessCommand(context.Background(), sc)
-	if err != nil {
-		return nil, err
-	}
-	return scr.Response, nil
+	return prover.SendCommand(context.Background(), sc)
 }
+
+
+
+
+
 
 func (prover *ProverPeer) RequestTransfer(
 	tokenIDs [][]byte,
@@ -61,12 +110,38 @@ func (prover *ProverPeer) RequestTransfer(
 	if err != nil {
 		return nil, err
 	}
-	scr, err := prover.ProverClient.ProcessCommand(context.Background(), sc)
+
+	return prover.SendCommand(context.Background(), sc)
+}
+
+
+func (prover *ProverPeer) SendCommand(ctx context.Context, sc *token.SignedCommand) ([]byte, error) {
+	conn, proverClient, err := prover.ProverPeerClient.CreateProverClient()
+	if conn != nil {
+		defer conn.Close()
+	}
+	if err != nil {
+		return nil, err
+	}
+	scr, err := proverClient.ProcessCommand(ctx, sc)
 	if err != nil {
 		return nil, err
 	}
 
-	return scr.Response, nil
+	commandResp := &token.CommandResponse{}
+	err = proto.Unmarshal(scr.Response, commandResp)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal command response")
+	}
+	if commandResp.GetErr() != nil {
+		return nil, errors.Errorf("error from prover: %s", commandResp.GetErr().GetMessage())
+	}
+
+	txBytes, err := proto.Marshal(commandResp.GetTokenTransaction())
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to marshal TokenTransaction")
+	}
+	return txBytes, nil
 }
 
 func (prover *ProverPeer) CreateSignedCommand(payload interface{}, signingIdentity tk.SigningIdentity) (*token.SignedCommand, error) {
@@ -92,12 +167,12 @@ func (prover *ProverPeer) CreateSignedCommand(payload interface{}, signingIdenti
 		return nil, err
 	}
 
-	header := &token.Header{Timestamp: ts,
+	command.Header = &token.Header{
+		Timestamp: ts,
 		Nonce:     nonce,
 		Creator:   creator,
 		ChannelId: prover.ChannelID,
 	}
-	command.Header = header
 
 	raw, err := proto.Marshal(command)
 	if err != nil {
