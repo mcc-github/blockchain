@@ -2384,6 +2384,7 @@ func newChain(timeout time.Duration, channel string, dataDir string, id uint64, 
 	
 	
 	appendBlockToLedger := func(b *common.Block, meta []byte) {
+		b = proto.Clone(b).(*common.Block)
 		bytes, err := proto.Marshal(&common.Metadata{Value: meta})
 		Expect(err).NotTo(HaveOccurred())
 		b.Metadata.Metadata[common.BlockMetadataIndex_ORDERER] = bytes
