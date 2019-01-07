@@ -1021,3 +1021,74 @@ func TestImpatientStreamFailure(t *testing.T) {
 	_, err = stream.Recv()
 	assert.Error(t, err)
 }
+
+func TestBlockPullerMaxRetriesExhausted(t *testing.T) {
+	
+	
+	
+	
+	
+	
+	
+	
+
+	osn := newClusterNode(t)
+	defer osn.stop()
+
+	
+	osn.enqueueResponse(3)
+	osn.addExpectProbeAssert()
+	
+	osn.addExpectPullAssert(1)
+	osn.enqueueResponse(1)
+	
+	osn.enqueueResponse(2)
+	osn.enqueueResponse(2)
+	
+	
+	
+	osn.blockResponses <- nil
+
+	for i := 0; i < 2; i++ {
+		
+		osn.addExpectProbeAssert()
+		
+		osn.enqueueResponse(3)
+		
+		
+		osn.addExpectPullAssert(3)
+		
+		osn.enqueueResponse(2)
+		
+		osn.blockResponses <- nil
+	}
+
+	dialer := newCountingDialer()
+	bp := newBlockPuller(dialer, osn.srv.Address())
+
+	var exhaustedRetryAttemptsLogged bool
+
+	bp.Logger = bp.Logger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+		if entry.Message == "Failed pulling block 3: retry count exhausted(2)" {
+			exhaustedRetryAttemptsLogged = true
+		}
+		return nil
+	}))
+
+	bp.MaxPullBlockRetries = 2
+	
+	
+	bp.FetchTimeout = time.Hour
+	
+	
+	bp.MaxTotalBufferBytes = 1
+
+	
+	assert.Equal(t, uint64(1), bp.PullBlock(uint64(1)).Header.Number)
+	assert.Equal(t, uint64(2), bp.PullBlock(uint64(2)).Header.Number)
+	assert.Nil(t, bp.PullBlock(uint64(3)))
+
+	bp.Close()
+	dialer.assertAllConnectionsClosed(t)
+	assert.True(t, exhaustedRetryAttemptsLogged)
+}

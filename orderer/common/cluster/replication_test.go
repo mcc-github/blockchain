@@ -276,6 +276,78 @@ func TestReplicateChainsFailures(t *testing.T) {
 	}
 }
 
+func TestPullChannelFailure(t *testing.T) {
+	blockchain := createBlockChain(0, 5)
+	for _, testcase := range []struct {
+		name                 string
+		genesisBlockSequence int
+		thirdBlockSequence   int
+	}{
+		{
+			name:                 "Failed to pull genesis block",
+			genesisBlockSequence: 1,
+		},
+		{
+			name:                 "Failed to pull some non genesis block",
+			genesisBlockSequence: 0,
+			thirdBlockSequence:   0,
+		},
+	} {
+		t.Run(testcase.name, func(t *testing.T) {
+			lw := &mocks.LedgerWriter{}
+			lw.On("Append", mock.Anything).Return(nil)
+			lw.On("Height").Return(uint64(0))
+
+			lf := &mocks.LedgerFactory{}
+			lf.On("GetOrCreate", "mychannel").Return(lw, nil)
+
+			osn := newClusterNode(t)
+			defer osn.stop()
+
+			enqueueBlock := func(seq int) {
+				osn.blockResponses <- &orderer.DeliverResponse{
+					Type: &orderer.DeliverResponse_Block{
+						Block: blockchain[seq],
+					},
+				}
+			}
+
+			dialer := newCountingDialer()
+			bp := newBlockPuller(dialer, osn.srv.Address())
+			
+			
+			bp.FetchTimeout = time.Hour
+			bp.MaxPullBlockRetries = 1
+			
+			bp.MaxTotalBufferBytes = 1
+
+			r := cluster.Replicator{
+				Filter: cluster.AnyChannel,
+				AmIPartOfChannel: func(configBlock *common.Block) error {
+					return nil
+				},
+				Logger:        flogging.MustGetLogger("test"),
+				SystemChannel: "system",
+				LedgerFactory: lf,
+				Puller:        bp,
+			}
+
+			osn.addExpectProbeAssert()
+			enqueueBlock(5)
+			osn.addExpectProbeAssert()
+			enqueueBlock(5)
+			osn.addExpectPullAssert(0)
+			enqueueBlock(testcase.genesisBlockSequence)
+			enqueueBlock(1)
+			enqueueBlock(testcase.thirdBlockSequence)
+
+			err := r.PullChannel("mychannel")
+			assert.Equal(t, cluster.ErrRetryCountExhausted, err)
+		})
+	}
+
+}
+
 func TestPullerConfigFromTopLevelConfig(t *testing.T) {
 	signer := &crypto.LocalSigner{}
 	expected := cluster.PullerConfig{
@@ -374,6 +446,8 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	
 	
 	
+	
+	
 
 	systemChannelBlocks := createBlockChain(0, 21)
 	block30WithConfigBlockOf21 := common.NewBlock(30, nil)
@@ -388,9 +462,11 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	dialer := newCountingDialer()
 	bp := newBlockPuller(dialer, osn.srv.Address())
 	bp.FetchTimeout = time.Hour
+	bp.MaxPullBlockRetries = 1
 
 	channelLister := &mocks.ChannelLister{}
 	channelLister.On("Channels").Return([]cluster.ChannelGenesisBlock{
+		{ChannelName: "E", GenesisBlock: fakeGB},
 		{ChannelName: "D", GenesisBlock: fakeGB}, {ChannelName: "C", GenesisBlock: fakeGB},
 		{ChannelName: "A"}, {ChannelName: "B", GenesisBlock: fakeGB},
 	})
@@ -398,15 +474,16 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 
 	amIPartOfChannelMock := &mock.Mock{}
 	
-	amIPartOfChannelMock.On("func11").Return(nil).Once()
+	amIPartOfChannelMock.On("func13").Return(nil).Once()
 	
-	amIPartOfChannelMock.On("func11").Return(cluster.ErrNotInChannel).Once()
+	amIPartOfChannelMock.On("func13").Return(cluster.ErrNotInChannel).Once()
 
 	
 	blocksCommittedToLedgerA := make(chan *common.Block, 31)
 	blocksCommittedToLedgerB := make(chan *common.Block, 1)
 	blocksCommittedToLedgerC := make(chan *common.Block, 1)
 	blocksCommittedToLedgerD := make(chan *common.Block, 1)
+	blocksCommittedToLedgerE := make(chan *common.Block, 1)
 	blocksCommittedToSystemLedger := make(chan *common.Block, 22)
 	
 	
@@ -448,6 +525,14 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 		blocksCommittedToLedgerD <- arg.Get(0).(*common.Block)
 	})
 
+	lwE := &mocks.LedgerWriter{}
+	lwE.On("Height").Return(func() uint64 {
+		return uint64(len(blocksCommittedToLedgerE))
+	})
+	lwE.On("Append", mock.Anything).Return(nil).Run(func(arg mock.Arguments) {
+		blocksCommittedToLedgerE <- arg.Get(0).(*common.Block)
+	})
+
 	lwSystem := &mocks.LedgerWriter{}
 	lwSystem.On("Append", mock.Anything).Return(nil).Run(func(arg mock.Arguments) {
 		blocksCommittedToSystemLedger <- arg.Get(0).(*common.Block)
@@ -462,6 +547,7 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	lf.On("GetOrCreate", "B").Return(lwB, nil)
 	lf.On("GetOrCreate", "C").Return(lwC, nil)
 	lf.On("GetOrCreate", "D").Return(lwD, nil)
+	lf.On("GetOrCreate", "E").Return(lwE, nil)
 	lf.On("GetOrCreate", "system").Return(lwSystem, nil)
 
 	r := cluster.Replicator{
@@ -476,6 +562,16 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 		Puller:        bp,
 		BootBlock:     systemChannelBlocks[21],
 	}
+
+	
+	
+	osn.seekAssertions <- func(info *orderer.SeekInfo, actualChannel string) {
+		
+		assert.NotNil(osn.t, info.GetStart().GetNewest())
+		assert.Equal(t, "E", actualChannel)
+	}
+	
+	osn.blockResponses <- nil
 
 	
 	
@@ -600,6 +696,7 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	assert.Len(t, blocksCommittedToLedgerB, 1)
 	assert.Len(t, blocksCommittedToLedgerC, 1)
 	assert.Len(t, blocksCommittedToLedgerD, 1)
+	assert.Len(t, blocksCommittedToLedgerE, 1)
 	
 	var expectedSequence uint64
 	for block := range blocksCommittedToLedgerA {
@@ -632,7 +729,7 @@ func TestParticipant(t *testing.T) {
 	}{
 		{
 			name:          "No available orderer",
-			expectedError: "no available orderer",
+			expectedError: cluster.ErrRetryCountExhausted.Error(),
 		},
 		{
 			name:                  "Unauthorized for the channel",
@@ -698,6 +795,34 @@ func TestParticipant(t *testing.T) {
 			latestConfigBlockSeq: 42,
 			latestConfigBlock:    &common.Block{Header: &common.BlockHeader{Number: 42}},
 			predicateReturns:     cluster.ErrNotInChannel,
+		},
+		{
+			name:          "Failed pulling last block",
+			expectedError: cluster.ErrRetryCountExhausted.Error(),
+			heightsByEndpoints: map[string]uint64{
+				"orderer.example.com:7050": 100,
+			},
+			latestBlockSeq: uint64(99),
+			latestBlock:    nil,
+		},
+		{
+			name:          "Failed pulling last config block",
+			expectedError: cluster.ErrRetryCountExhausted.Error(),
+			heightsByEndpoints: map[string]uint64{
+				"orderer.example.com:7050": 100,
+			},
+			latestBlockSeq: uint64(99),
+			latestBlock: &common.Block{
+				Metadata: &common.BlockMetadata{
+					Metadata: [][]byte{{1, 2, 3}, utils.MarshalOrPanic(&common.Metadata{
+						Value: utils.MarshalOrPanic(&common.LastConfig{
+							Index: 42,
+						}),
+					})},
+				},
+			},
+			latestConfigBlockSeq: 42,
+			latestConfigBlock:    nil,
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -1254,6 +1379,21 @@ func TestChannels(t *testing.T) {
 				panicValue := "Failed classifying block 3 : block data does not carry" +
 					" an envelope at index 0: error unmarshaling Envelope: " +
 					"proto: common.Envelope: illegal tag 0 (wire type 1)"
+				assert.PanicsWithValue(t, panicValue, func() {
+					ci.Channels()
+				})
+			},
+		},
+		{
+			name: "bad path - failed pulling blocks",
+			prepareSystemChain: func(systemChain []*common.Block) {
+				assignHashes(systemChain)
+				
+				
+				systemChain[len(systemChain)/2] = nil
+			},
+			assertion: func(t *testing.T, ci *cluster.ChainInspector) {
+				panicValue := "Failed pulling block 3 from the system channel"
 				assert.PanicsWithValue(t, panicValue, func() {
 					ci.Channels()
 				})

@@ -29,6 +29,7 @@ import (
 
 type BlockPuller struct {
 	
+	MaxPullBlockRetries uint64
 	MaxTotalBufferBytes int
 	Signer              crypto.LocalSigner
 	TLSCert             []byte
@@ -81,12 +82,20 @@ func (p *BlockPuller) Close() {
 
 
 
+
 func (p *BlockPuller) PullBlock(seq uint64) *common.Block {
+	retriesLeft := p.MaxPullBlockRetries
 	for {
 		block := p.tryFetchBlock(seq)
 		if block != nil {
 			return block
 		}
+		retriesLeft--
+		if retriesLeft == 0 && p.MaxPullBlockRetries > 0 {
+			p.Logger.Errorf("Failed pulling block %d: retry count exhausted(%d)", seq, p.MaxPullBlockRetries)
+			return nil
+		}
+		time.Sleep(p.RetryTimeout)
 	}
 }
 
