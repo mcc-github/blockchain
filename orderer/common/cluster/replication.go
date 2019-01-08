@@ -27,6 +27,10 @@ const (
 	RetryTimeout = time.Second * 10
 )
 
+
+type ChannelPredicate func(channelName string) bool
+
+
 func AnyChannel(_ string) bool {
 	return true
 }
@@ -78,7 +82,7 @@ type ChannelLister interface {
 
 type Replicator struct {
 	DoNotPanicIfClusterNotReachable bool
-	Filter                          func(string) bool
+	Filter                          ChannelPredicate
 	SystemChannel                   string
 	ChannelLister                   ChannelLister
 	Logger                          *flogging.FabricLogger
@@ -126,6 +130,9 @@ func (r *Replicator) ReplicateChains() []string {
 			replicatedChains = append(replicatedChains, channel.ChannelName)
 		} else {
 			r.Logger.Warningf("Failed pulling channel %s: %v", channel.ChannelName, err)
+			
+			
+			pullHints.channelsNotToPull = append(pullHints.channelsNotToPull, channel)
 		}
 	}
 	
@@ -164,7 +171,7 @@ func (r *Replicator) discoverChannels() []ChannelGenesisBlock {
 
 func (r *Replicator) PullChannel(channel string) error {
 	if !r.Filter(channel) {
-		r.Logger.Info("Channel", channel, "shouldn't be pulled. Skipping it")
+		r.Logger.Infof("Channel %s shouldn't be pulled. Skipping it", channel)
 		return ErrSkipped
 	}
 	r.Logger.Info("Pulling channel", channel)
@@ -254,7 +261,7 @@ type channelPullHints struct {
 }
 
 func (r *Replicator) channelsToPull(channels GenesisBlocks) channelPullHints {
-	r.Logger.Info("Will now attempt to pull channels:", channels.Names())
+	r.Logger.Info("Evaluating channels to pull:", channels.Names())
 	var channelsNotToPull []ChannelGenesisBlock
 	var channelsToPull []ChannelGenesisBlock
 	for _, channel := range channels {
@@ -400,6 +407,10 @@ var ErrRetryCountExhausted = errors.New("retry attempts exhausted")
 
 
 type selfMembershipPredicate func(configBlock *common.Block) error
+
+
+
+
 
 
 

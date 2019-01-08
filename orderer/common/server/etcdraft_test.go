@@ -59,6 +59,10 @@ func TestSpawnEtcdRaft(t *testing.T) {
 	
 	ordererProcess := launchOrderer(gt, cmd, orderer, tempDir, genesisBlockPath, blockchainRootDir)
 	defer ordererProcess.Kill()
+	
+	
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.ReplicationMaxRetries = 12"))
+	
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("Starting cluster listener on 127.0.0.1:5612"))
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("Beginning to serve requests"))
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("becomeLeader"))

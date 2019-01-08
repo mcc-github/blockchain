@@ -30,12 +30,15 @@ import (
 )
 
 
+type CreateChainCallback func()
+
+
 
 
 type InactiveChainRegistry interface {
 	
 	
-	TrackChain(chainName string, genesisBlock *common.Block, createChainCallback func())
+	TrackChain(chainName string, genesisBlock *common.Block, createChain CreateChainCallback)
 }
 
 
@@ -197,8 +200,14 @@ func ReadRaftMetadata(blockMetadata *common.Metadata, configMetadata *etcdraft.M
 }
 
 
-func New(clusterDialer *cluster.PredicateDialer, conf *localconfig.TopLevel,
-	srvConf comm.ServerConfig, srv *comm.GRPCServer, r *multichannel.Registrar, icr InactiveChainRegistry) *Consenter {
+func New(
+	clusterDialer *cluster.PredicateDialer,
+	conf *localconfig.TopLevel,
+	srvConf comm.ServerConfig,
+	srv *comm.GRPCServer,
+	r *multichannel.Registrar,
+	icr InactiveChainRegistry,
+) *Consenter {
 	logger := flogging.MustGetLogger("orderer.consensus.etcdraft")
 
 	var cfg Config

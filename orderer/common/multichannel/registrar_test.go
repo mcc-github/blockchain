@@ -199,7 +199,6 @@ func TestCreateChain(t *testing.T) {
 	assert.False(t, ok)
 	
 	close(chain2.Chain.(*mockChain).queue)
-
 }
 
 

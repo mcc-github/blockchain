@@ -21,14 +21,17 @@ import (
 
 type BundleSource struct {
 	bundle    atomic.Value
-	callbacks []func(*Bundle)
+	callbacks []BundleActor
 }
 
 
+type BundleActor func(bundle *Bundle)
 
 
 
-func NewBundleSource(bundle *Bundle, callbacks ...func(*Bundle)) *BundleSource {
+
+
+func NewBundleSource(bundle *Bundle, callbacks ...BundleActor) *BundleSource {
 	bs := &BundleSource{
 		callbacks: callbacks,
 	}

@@ -18,7 +18,6 @@ import (
 
 
 type MessageCryptoService interface {
-
 	
 	
 	
@@ -72,6 +71,10 @@ type PeerIdentityInfo struct {
 type PeerIdentitySet []PeerIdentityInfo
 
 
+
+type PeerIdentityFilter func(info PeerIdentityInfo) bool
+
+
 func (pis PeerIdentitySet) ByOrg() map[string]PeerIdentitySet {
 	m := make(map[string]PeerIdentitySet)
 	for _, id := range pis {
@@ -87,6 +90,18 @@ func (pis PeerIdentitySet) ByID() map[string]PeerIdentityInfo {
 		m[string(id.PKIId)] = id
 	}
 	return m
+}
+
+
+
+func (pis PeerIdentitySet) Filter(filter PeerIdentityFilter) PeerIdentitySet {
+	var result PeerIdentitySet
+	for _, id := range pis {
+		if filter(id) {
+			result = append(result, id)
+		}
+	}
+	return result
 }
 
 

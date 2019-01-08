@@ -11,7 +11,6 @@ package multichannel
 
 import (
 	"fmt"
-	"reflect"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/channelconfig"
@@ -102,7 +101,7 @@ type Registrar struct {
 	systemChannelID    string
 	systemChannel      *ChainSupport
 	templator          msgprocessor.ChannelConfigTemplator
-	callbacks          []func(bundle *channelconfig.Bundle)
+	callbacks          []channelconfig.BundleActor
 }
 
 
@@ -127,7 +126,7 @@ func configTx(reader blockledger.Reader) *cb.Envelope {
 
 
 func NewRegistrar(ledgerFactory blockledger.Factory,
-	signer crypto.LocalSigner, metricsProvider metrics.Provider, callbacks ...func(bundle *channelconfig.Bundle)) *Registrar {
+	signer crypto.LocalSigner, metricsProvider metrics.Provider, callbacks ...channelconfig.BundleActor) *Registrar {
 	r := &Registrar{
 		chains:             make(map[string]*ChainSupport),
 		ledgerFactory:      ledgerFactory,
@@ -290,8 +289,8 @@ func (r *Registrar) CreateChain(chainName string) {
 	}
 	chain := r.GetChain(chainName)
 	if chain != nil {
-		logger.Infof("A chain of type %v for channel %s already exists. "+
-			"Halting it.", reflect.TypeOf(chain.Chain), chainName)
+		logger.Infof("A chain of type %T for channel %s already exists. "+
+			"Halting it.", chain.Chain, chainName)
 		chain.Halt()
 	}
 	r.newChain(configTx(lf))
