@@ -241,6 +241,10 @@ type ChaincodeStubInterface interface {
 
 	
 	
+	GetPrivateDataHash(collection, key string) ([]byte, error)
+
+	
+	
 	
 	
 	

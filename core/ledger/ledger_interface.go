@@ -146,6 +146,11 @@ type QueryExecutor interface {
 	
 	GetPrivateData(namespace, collection, key string) ([]byte, error)
 	
+	
+	
+	
+	GetPrivateDataHash(namespace, collection, key string) ([]byte, error)
+	
 	GetPrivateDataMetadata(namespace, collection, key string) (map[string][]byte, error)
 	
 	GetPrivateDataMetadataByHash(namespace, collection string, keyhash []byte) (map[string][]byte, error)

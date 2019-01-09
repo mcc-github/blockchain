@@ -13,6 +13,7 @@ import (
 	"github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/mocks/config"
+	"github.com/mcc-github/blockchain/common/semaphore"
 	util2 "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	ledger2 "github.com/mcc-github/blockchain/core/ledger"
@@ -23,13 +24,12 @@ import (
 	"github.com/mcc-github/blockchain/core/mocks/validator"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/utils"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/sync/semaphore"
 )
 
 func testValidationWithNTXes(t *testing.T, ledger ledger2.PeerLedger, gbHash []byte, nBlocks int) {
@@ -50,8 +50,8 @@ func testValidationWithNTXes(t *testing.T, ledger ledger2.PeerLedger, gbHash []b
 	mockVsccValidator := &validator.MockVsccValidator{}
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: &config.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: &config.MockApplicationCapabilities{}}, semaphore.New(10)}
 	tValidator := &TxValidator{"", vcs, mockVsccValidator}
 
 	bcInfo, _ := ledger.GetBlockchainInfo()
@@ -126,8 +126,8 @@ func TestBlockValidationDuplicateTXId(t *testing.T) {
 	acv := &config.MockApplicationCapabilities{}
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: acv}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: acv}, semaphore.New(10)}
 	tValidator := &TxValidator{"", vcs, mockVsccValidator}
 
 	bcInfo, _ := ledger.GetBlockchainInfo()
@@ -214,8 +214,8 @@ func TestTxValidationFailure_InvalidTxid(t *testing.T) {
 
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: &config.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: &config.MockApplicationCapabilities{}}, semaphore.New(10)}
 	tValidator := &TxValidator{"", vcs, &validator.MockVsccValidator{}}
 
 	mockSigner, err := mspmgmt.GetLocalMSP().GetDefaultSigningIdentity()

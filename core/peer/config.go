@@ -168,6 +168,14 @@ func GetServerConfig() (comm.ServerConfig, error) {
 	
 	serverConfig.KaOpts = comm.DefaultKeepaliveOptions
 	
+	if viper.IsSet("peer.keepalive.interval") {
+		serverConfig.KaOpts.ServerInterval = viper.GetDuration("peer.keepalive.interval")
+	}
+	
+	if viper.IsSet("peer.keepalive.timeout") {
+		serverConfig.KaOpts.ServerTimeout = viper.GetDuration("peer.keepalive.timeout")
+	}
+	
 	if viper.IsSet("peer.keepalive.minInterval") {
 		serverConfig.KaOpts.ServerMinInterval = viper.GetDuration("peer.keepalive.minInterval")
 	}

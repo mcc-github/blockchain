@@ -52,6 +52,7 @@ type Logging struct {
 	encoderConfig  zapcore.EncoderConfig
 	multiFormatter *fabenc.MultiFormatter
 	writer         zapcore.WriteSyncer
+	observer       Observer
 }
 
 
@@ -158,6 +159,14 @@ func (s *Logging) SetWriter(w io.Writer) {
 
 
 
+func (s *Logging) SetObserver(observer Observer) {
+	s.mutex.Lock()
+	s.observer = observer
+	s.mutex.Unlock()
+}
+
+
+
 
 func (s *Logging) Write(b []byte) (int, error) {
 	s.mutex.RLock()
@@ -208,10 +217,31 @@ func (s *Logging) ZapLogger(name string) *zap.Logger {
 		},
 		Selector: s,
 		Output:   s,
+		Observer: s,
 	}
 	s.mutex.RUnlock()
 
 	return NewZapLogger(core).Named(name)
+}
+
+func (s *Logging) Check(e zapcore.Entry, ce *zapcore.CheckedEntry) {
+	s.mutex.RLock()
+	observer := s.observer
+	s.mutex.RUnlock()
+
+	if observer != nil {
+		observer.Check(e, ce)
+	}
+}
+
+func (s *Logging) WriteEntry(e zapcore.Entry, fields []zapcore.Field) {
+	s.mutex.RLock()
+	observer := s.observer
+	s.mutex.RUnlock()
+
+	if observer != nil {
+		observer.WriteEntry(e, fields)
+	}
 }
 
 

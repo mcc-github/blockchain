@@ -22,6 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/common/mocks/scc"
+	"github.com/mcc-github/blockchain/common/semaphore"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/mocks"
@@ -47,7 +48,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"golang.org/x/sync/semaphore"
 )
 
 func signedByAnyMember(ids []string) []byte {
@@ -110,8 +110,8 @@ func setupLedgerAndValidatorExplicitWithMSP(t *testing.T, cpb *mockconfig.MockAp
 	assert.NoError(t, err)
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: cpb, MSPManagerVal: mspMgr}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: cpb, MSPManagerVal: mspMgr}, semaphore.New(10)}
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 	pm := &mocks.PluginMapper{}
 	factory := &mocks.PluginFactory{}
@@ -1473,8 +1473,8 @@ func TestTokenDuplicateTxId(t *testing.T) {
 	theLedger := new(mockLedger)
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: fabTokenCapabilities()}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: fabTokenCapabilities()}, semaphore.New(10)}
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 	pm := &mocks.PluginMapper{}
 	validator := txvalidator.NewTxValidator("", vcs, mp, pm)
@@ -1662,6 +1662,11 @@ func (exec *mockQueryExecutor) GetPrivateData(namespace, collection, key string)
 	return args.Get(0).([]byte), args.Error(1)
 }
 
+func (exec *mockQueryExecutor) GetPrivateDataHash(namespace, collection, key string) ([]byte, error) {
+	args := exec.Called(namespace, collection, key)
+	return args.Get(0).([]byte), args.Error(1)
+}
+
 func (exec *mockQueryExecutor) GetPrivateDataMetadataByHash(namespace, collection string, keyhash []byte) (map[string][]byte, error) {
 	args := exec.Called(namespace, collection, keyhash)
 	return args.Get(0).(map[string][]byte), args.Error(1)
@@ -1723,8 +1728,8 @@ func TestDynamicCapabilitiesAndMSP(t *testing.T) {
 
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{support, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{support, semaphore.New(10)}
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 
 	v := txvalidator.NewTxValidator("", vcs, mp, pm)
@@ -1771,8 +1776,8 @@ func TestLedgerIsNoAvailable(t *testing.T) {
 	theLedger := new(mockLedger)
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.New(10)}
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 	pm := &mocks.PluginMapper{}
 	validator := txvalidator.NewTxValidator("", vcs, mp, pm)
@@ -1804,8 +1809,8 @@ func TestLedgerIsNotAvailableForCheckingTxidDuplicate(t *testing.T) {
 	theLedger := new(mockLedger)
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.New(10)}
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 	pm := &mocks.PluginMapper{}
 	validator := txvalidator.NewTxValidator("", vcs, mp, pm)
@@ -1831,8 +1836,8 @@ func TestDuplicateTxId(t *testing.T) {
 	theLedger := new(mockLedger)
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.New(10)}
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 	pm := &mocks.PluginMapper{}
 	validator := txvalidator.NewTxValidator("", vcs, mp, pm)
@@ -1863,8 +1868,8 @@ func TestValidationInvalidEndorsing(t *testing.T) {
 	theLedger := new(mockLedger)
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.New(10)}
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 	pm := &mocks.PluginMapper{}
 	factory := &mocks.PluginFactory{}
@@ -1954,8 +1959,8 @@ func TestValidationPluginNotFound(t *testing.T) {
 	l := createMockLedger(t, ccID)
 	vcs := struct {
 		*mocktxvalidator.Support
-		*semaphore.Weighted
-	}{&mocktxvalidator.Support{LedgerVal: l, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
+		semaphore.Semaphore
+	}{&mocktxvalidator.Support{LedgerVal: l, ACVal: &mockconfig.MockApplicationCapabilities{}}, semaphore.New(10)}
 
 	b := &common.Block{
 		Data:   &common.BlockData{Data: [][]byte{utils.MarshalOrPanic(tx)}},

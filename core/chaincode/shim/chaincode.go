@@ -521,6 +521,14 @@ func (stub *ChaincodeStub) GetPrivateData(collection string, key string) ([]byte
 }
 
 
+func (stub *ChaincodeStub) GetPrivateDataHash(collection string, key string) ([]byte, error) {
+	if collection == "" {
+		return nil, fmt.Errorf("collection must not be an empty string")
+	}
+	return stub.handler.handleGetPrivateDataHash(collection, key, stub.ChannelId, stub.TxID)
+}
+
+
 func (stub *ChaincodeStub) PutPrivateData(collection string, key string, value []byte) error {
 	if collection == "" {
 		return fmt.Errorf("collection must not be an empty string")

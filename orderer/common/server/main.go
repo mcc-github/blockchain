@@ -23,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
+	floggingmetrics "github.com/mcc-github/blockchain/common/flogging/metrics"
 	"github.com/mcc-github/blockchain/common/grpclogging"
 	"github.com/mcc-github/blockchain/common/grpcmetrics"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
@@ -119,6 +120,8 @@ func Start(cmd string, conf *localconfig.TopLevel) {
 	}
 	defer opsSystem.Stop()
 	metricsProvider := opsSystem.Provider
+	logObserver := floggingmetrics.NewObserver(metricsProvider)
+	flogging.Global.SetObserver(logObserver)
 
 	serverConfig := initializeServerConfig(conf, metricsProvider)
 	grpcServer := initializeGrpcServer(conf, serverConfig)
