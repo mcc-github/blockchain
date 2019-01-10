@@ -9,6 +9,7 @@ package client
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"io"
 	"time"
 
@@ -29,6 +30,9 @@ type TimeFunc func() time.Time
 type ProverPeerClient interface {
 	
 	CreateProverClient() (*grpc.ClientConn, token.ProverClient, error)
+
+	
+	Certificate() *tls.Certificate
 }
 
 
@@ -71,6 +75,11 @@ func (pc *ProverPeerClientImpl) CreateProverClient() (*grpc.ClientConn, token.Pr
 		return conn, nil, err
 	}
 	return conn, token.NewProverClient(conn), nil
+}
+
+func (pc *ProverPeerClientImpl) Certificate() *tls.Certificate {
+	cert := pc.GRPCClient.Certificate()
+	return &cert
 }
 
 
@@ -167,11 +176,17 @@ func (prover *ProverPeer) CreateSignedCommand(payload interface{}, signingIdenti
 		return nil, err
 	}
 
+	
+	tlsCertHash, err := GetTLSCertHash(prover.ProverPeerClient.Certificate())
+	if err != nil {
+		return nil, err
+	}
 	command.Header = &token.Header{
-		Timestamp: ts,
-		Nonce:     nonce,
-		Creator:   creator,
-		ChannelId: prover.ChannelID,
+		Timestamp:   ts,
+		Nonce:       nonce,
+		Creator:     creator,
+		ChannelId:   prover.ChannelID,
+		TlsCertHash: tlsCertHash,
 	}
 
 	raw, err := proto.Marshal(command)

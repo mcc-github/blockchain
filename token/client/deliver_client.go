@@ -12,8 +12,6 @@ import (
 	"math"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/bccsp"
-	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
@@ -102,16 +100,10 @@ func (d *deliverClient) Certificate() *tls.Certificate {
 
 
 func CreateDeliverEnvelope(channelId string, creator []byte, signingIdentity tk.SigningIdentity, cert *tls.Certificate) (*common.Envelope, error) {
-	var tlsCertHash []byte
-	var err error
 	
-	if cert != nil && len(cert.Certificate) > 0 {
-		tlsCertHash, err = factory.GetDefault().Hash(cert.Certificate[0], &bccsp.SHA256Opts{})
-		if err != nil {
-			err = errors.New("failed to compute SHA256 on client certificate")
-			logger.Errorf("%s", err)
-			return nil, err
-		}
+	tlsCertHash, err := GetTLSCertHash(cert)
+	if err != nil {
+		return nil, err
 	}
 
 	_, header, err := CreateHeader(common.HeaderType_DELIVER_SEEK_INFO, channelId, creator, tlsCertHash)

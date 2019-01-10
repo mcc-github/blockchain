@@ -49,6 +49,7 @@ import (
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/dockercontroller"
 	"github.com/mcc-github/blockchain/core/container/inproccontroller"
+	"github.com/mcc-github/blockchain/core/dispatcher"
 	"github.com/mcc-github/blockchain/core/endorser"
 	authHandler "github.com/mcc-github/blockchain/core/handlers/auth"
 	endorsement2 "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
@@ -722,7 +723,9 @@ func startChaincodeServer(
 	}
 
 	lifecycleSCC := &lifecycle.SCC{
-		Protobuf: &lifecycle.ProtobufImpl{},
+		Dispatcher: &dispatcher.Dispatcher{
+			Protobuf: &dispatcher.ProtobufImpl{},
+		},
 		Functions: &lifecycle.Lifecycle{
 			PackageParser:  ccPackageParser,
 			ChaincodeStore: ccStore,

@@ -11,8 +11,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
-	"github.com/mcc-github/blockchain/bccsp"
-	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
@@ -149,17 +147,10 @@ func (s *TxSubmitter) Submit(txEnvelope *common.Envelope, waitTimeout time.Durat
 
 
 func (s *TxSubmitter) CreateTxEnvelope(txBytes []byte) (*common.Envelope, string, error) {
-	var tlsCertHash []byte
-	var err error
 	
-	cert := s.OrdererClient.Certificate()
-	if cert != nil && len(cert.Certificate) > 0 {
-		tlsCertHash, err = factory.GetDefault().Hash(cert.Certificate[0], &bccsp.SHA256Opts{})
-		if err != nil {
-			err = errors.New("failed to compute SHA256 on client certificate")
-			logger.Errorf("%s", err)
-			return nil, "", err
-		}
+	tlsCertHash, err := GetTLSCertHash(s.OrdererClient.Certificate())
+	if err != nil {
+		return nil, "", err
 	}
 
 	txid, header, err := CreateHeader(common.HeaderType_TOKEN_TRANSACTION, s.Config.ChannelID, s.Creator, tlsCertHash)

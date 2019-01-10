@@ -7,10 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package client
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"time"
 
+	"github.com/mcc-github/blockchain/bccsp"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/pkg/errors"
 )
@@ -42,4 +45,17 @@ func CreateGRPCClient(config *ConnectionConfig) (*comm.GRPCClient, error) {
 	}
 
 	return comm.NewGRPCClient(clientConfig)
+}
+
+
+func GetTLSCertHash(cert *tls.Certificate) ([]byte, error) {
+	if cert == nil || len(cert.Certificate) == 0 {
+		return nil, nil
+	}
+
+	tlsCertHash, err := factory.GetDefault().Hash(cert.Certificate[0], &bccsp.SHA256Opts{})
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to compute SHA256 on client certificate")
+	}
+	return tlsCertHash, nil
 }
