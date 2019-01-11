@@ -23,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
@@ -35,17 +36,19 @@ import (
 
 
 
-func New(ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, aclProvider aclmgmt.ACLProvider) *PeerConfiger {
+func New(ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider,
+	aclProvider aclmgmt.ACLProvider, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider) *PeerConfiger {
 	return &PeerConfiger{
 		policyChecker: policy.NewPolicyChecker(
 			peer.NewChannelPolicyManagerGetter(),
 			mgmt.GetLocalMSP(),
 			mgmt.NewLocalMSPPrincipalGetter(),
 		),
-		configMgr:   peer.NewConfigSupport(),
-		ccp:         ccp,
-		sccp:        sccp,
-		aclProvider: aclProvider,
+		configMgr:              peer.NewConfigSupport(),
+		ccp:                    ccp,
+		sccp:                   sccp,
+		aclProvider:            aclProvider,
+		deployedCCInfoProvider: deployedCCInfoProvider,
 	}
 }
 
@@ -61,11 +64,12 @@ func (e *PeerConfiger) Enabled() bool             { return true }
 
 
 type PeerConfiger struct {
-	policyChecker policy.PolicyChecker
-	configMgr     config.Manager
-	ccp           ccprovider.ChaincodeProvider
-	sccp          sysccprovider.SystemChaincodeProvider
-	aclProvider   aclmgmt.ACLProvider
+	policyChecker          policy.PolicyChecker
+	configMgr              config.Manager
+	ccp                    ccprovider.ChaincodeProvider
+	sccp                   sysccprovider.SystemChaincodeProvider
+	aclProvider            aclmgmt.ACLProvider
+	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
 }
 
 var cnflogger = flogging.MustGetLogger("cscc")
@@ -161,7 +165,7 @@ func (e *PeerConfiger) InvokeNoShim(args [][]byte, sp *pb.SignedProposal) pb.Res
 			block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
 		}
 
-		return joinChain(cid, block, e.ccp, e.sccp)
+		return joinChain(cid, block, e.ccp, e.sccp, e.deployedCCInfoProvider)
 	case GetConfigBlock:
 		
 		if err = e.aclProvider.CheckACL(resources.Cscc_GetConfigBlock, string(args[1]), sp); err != nil {
@@ -232,8 +236,8 @@ func validateConfigBlock(block *common.Block) error {
 
 
 
-func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider) pb.Response {
-	if err := peer.CreateChainFromBlock(block, ccp, sccp); err != nil {
+func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider) pb.Response {
+	if err := peer.CreateChainFromBlock(block, ccp, sccp, deployedCCInfoProvider); err != nil {
 		return shim.Error(err.Error())
 	}
 

@@ -45,18 +45,19 @@ type Lifecycle interface {
 
 
 type ChaincodeSupport struct {
-	Keepalive        time.Duration
-	ExecuteTimeout   time.Duration
-	UserRunsCC       bool
-	Runtime          Runtime
-	ACLProvider      ACLProvider
-	HandlerRegistry  *HandlerRegistry
-	Launcher         Launcher
-	SystemCCProvider sysccprovider.SystemChaincodeProvider
-	Lifecycle        Lifecycle
-	appConfig        ApplicationConfigRetriever
-	HandlerMetrics   *HandlerMetrics
-	LaunchMetrics    *LaunchMetrics
+	Keepalive              time.Duration
+	ExecuteTimeout         time.Duration
+	UserRunsCC             bool
+	Runtime                Runtime
+	ACLProvider            ACLProvider
+	HandlerRegistry        *HandlerRegistry
+	Launcher               Launcher
+	SystemCCProvider       sysccprovider.SystemChaincodeProvider
+	Lifecycle              Lifecycle
+	appConfig              ApplicationConfigRetriever
+	HandlerMetrics         *HandlerMetrics
+	LaunchMetrics          *LaunchMetrics
+	DeployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
 }
 
 
@@ -74,18 +75,20 @@ func NewChaincodeSupport(
 	platformRegistry *platforms.Registry,
 	appConfig ApplicationConfigRetriever,
 	metricsProvider metrics.Provider,
+	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
 ) *ChaincodeSupport {
 	cs := &ChaincodeSupport{
-		UserRunsCC:       userRunsCC,
-		Keepalive:        config.Keepalive,
-		ExecuteTimeout:   config.ExecuteTimeout,
-		HandlerRegistry:  NewHandlerRegistry(userRunsCC),
-		ACLProvider:      aclProvider,
-		SystemCCProvider: SystemCCProvider,
-		Lifecycle:        lifecycle,
-		appConfig:        appConfig,
-		HandlerMetrics:   NewHandlerMetrics(metricsProvider),
-		LaunchMetrics:    NewLaunchMetrics(metricsProvider),
+		UserRunsCC:             userRunsCC,
+		Keepalive:              config.Keepalive,
+		ExecuteTimeout:         config.ExecuteTimeout,
+		HandlerRegistry:        NewHandlerRegistry(userRunsCC),
+		ACLProvider:            aclProvider,
+		SystemCCProvider:       SystemCCProvider,
+		Lifecycle:              lifecycle,
+		appConfig:              appConfig,
+		HandlerMetrics:         NewHandlerMetrics(metricsProvider),
+		LaunchMetrics:          NewLaunchMetrics(metricsProvider),
+		DeployedCCInfoProvider: deployedCCInfoProvider,
 	}
 
 	
@@ -183,6 +186,7 @@ func (cs *ChaincodeSupport) HandleChaincodeStream(stream ccintf.ChaincodeStream)
 		QueryResponseBuilder:       &QueryResponseGenerator{MaxResultLimit: 100},
 		UUIDGenerator:              UUIDGeneratorFunc(util.GenerateUUID),
 		LedgerGetter:               peer.Default,
+		DeployedCCInfoProvider:     cs.DeployedCCInfoProvider,
 		AppConfig:                  cs.appConfig,
 		Metrics:                    cs.HandlerMetrics,
 	}

@@ -465,15 +465,18 @@ var _ = Describe("Chain", func() {
 						
 						BeforeEach(func() {
 							chainID := "mychannel"
+							values := make(map[string]*common.ConfigValue)
 							configEnv = newConfigEnv(chainID,
-								common.HeaderType_ORDERER_TRANSACTION,
-								&common.ConfigUpdateEnvelope{ConfigUpdate: []byte("test channel creation envelope")})
+								common.HeaderType_CONFIG,
+								newConfigUpdateEnv(chainID, values),
+							)
 							configSeq = 0
 						}) 
 
 						It("should be able to create a channel", func() {
 							err := chain.Configure(configEnv, configSeq)
 							Expect(err).NotTo(HaveOccurred())
+							Eventually(support.WriteConfigBlockCallCount).Should(Equal(1))
 						})
 					})
 				}) 

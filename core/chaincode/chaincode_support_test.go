@@ -41,6 +41,7 @@ import (
 	"github.com/mcc-github/blockchain/core/container/inproccontroller"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	cmp "github.com/mcc-github/blockchain/core/mocks/peer"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
@@ -193,6 +194,7 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, error) {
 		pr,
 		peer.DefaultSupport,
 		&disabled.Provider{},
+		&ledgermock.DeployedChaincodeInfoProvider{},
 	)
 	ipRegistry.ChaincodeSupport = chaincodeSupport
 

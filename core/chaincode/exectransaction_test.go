@@ -49,6 +49,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	cut "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
 	cmp "github.com/mcc-github/blockchain/core/mocks/peer"
@@ -142,6 +143,7 @@ func initPeer(chainIDs ...string) (net.Listener, *ChaincodeSupport, func(), erro
 		pr,
 		peer.DefaultSupport,
 		&disabled.Provider{},
+		&ledgermock.DeployedChaincodeInfoProvider{},
 	)
 	ipRegistry.ChaincodeSupport = chaincodeSupport
 	pb.RegisterChaincodeSupportServer(grpcServer, chaincodeSupport)

@@ -19,15 +19,16 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
-	"github.com/mcc-github/blockchain/core/deliverservice"
+	deliverclient "github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
+	"github.com/mcc-github/blockchain/core/ledger/mock"
 	ledgermocks "github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/core/mocks/ccprovider"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/service"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	peergossip "github.com/mcc-github/blockchain/peer/gossip"
 	"github.com/mcc-github/blockchain/peer/gossip/mocks"
 	"github.com/stretchr/testify/assert"
@@ -127,7 +128,7 @@ func TestCreateChainFromBlock(t *testing.T) {
 	go grpcServer.Serve(socket)
 	defer grpcServer.Stop()
 
-	err = CreateChainFromBlock(block, nil, nil)
+	err = CreateChainFromBlock(block, nil, nil, &mock.DeployedChaincodeInfoProvider{})
 	if err != nil {
 		t.Fatalf("failed to create chain %s", err)
 	}

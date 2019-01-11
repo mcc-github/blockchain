@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package etcdraft
 
 import (
-	"bytes"
 	"context"
 	"encoding/pem"
 	"fmt"
@@ -446,9 +445,11 @@ func (c *Chain) serveRequest() {
 		close(c.syncC)
 	}
 
+	submitC := c.submitC
+
 	for {
 		select {
-		case msg := <-c.submitC:
+		case msg := <-submitC:
 			batches, pending, err := c.ordered(msg)
 			if err != nil {
 				c.logger.Errorf("Failed to order message: %s", err)
@@ -459,12 +460,14 @@ func (c *Chain) serveRequest() {
 				stop()
 			}
 
-			if err := c.commitBatches(batches...); err != nil {
-				c.logger.Errorf("Failed to commit block: %s", err)
+			if c.propose(batches...) {
+				submitC = nil 
 			}
 
 		case b := <-c.commitC:
-			c.writeBlock(b)
+			if c.writeBlock(b) {
+				submitC = c.submitC 
+			}
 
 		case <-c.resignC:
 			_ = c.support.BlockCutter().Cut()
@@ -481,9 +484,7 @@ func (c *Chain) serveRequest() {
 			}
 
 			c.logger.Debugf("Batch timer expired, creating block")
-			if err := c.commitBatches(batch); err != nil {
-				c.logger.Errorf("Failed to commit block: %s", err)
-			}
+			c.propose(batch) 
 
 		case sn := <-c.snapC:
 			if err := c.catchUp(sn); err != nil {
@@ -498,13 +499,16 @@ func (c *Chain) serveRequest() {
 	}
 }
 
-func (c *Chain) writeBlock(b block) {
+
+
+func (c *Chain) writeBlock(b block) bool {
 	c.BlockCreator.commitBlock(b.b)
 	if utils.IsConfigBlock(b.b) {
 		if err := c.writeConfigBlock(b); err != nil {
 			c.logger.Panicf("failed to write configuration block, %+v", err)
 		}
-		return
+
+		return true
 	}
 
 	c.raftMetadataLock.Lock()
@@ -513,6 +517,7 @@ func (c *Chain) writeBlock(b block) {
 	c.raftMetadataLock.Unlock()
 
 	c.support.WriteBlock(b.b, m)
+	return false
 }
 
 
@@ -551,38 +556,24 @@ func (c *Chain) ordered(msg *orderer.SubmitRequest) (batches [][]*common.Envelop
 
 }
 
-func (c *Chain) commitBatches(batches ...[]*common.Envelope) error {
+
+
+func (c *Chain) propose(batches ...[]*common.Envelope) (configInFlight bool) {
 	for _, batch := range batches {
 		b := c.BlockCreator.createNextBlock(batch)
 		data := utils.MarshalOrPanic(b)
 		if err := c.node.Propose(context.TODO(), data); err != nil {
-			return errors.Errorf("failed to propose data to Raft node: %s", err)
+			c.logger.Errorf("Failed to propose block to raft: %s", err)
+			return 
 		}
 
 		
 		if utils.IsConfigBlock(b) {
-			
-		commitConfigLoop:
-			for {
-				select {
-				case block := <-c.commitC:
-					c.writeBlock(block)
-					
-					if bytes.Equal(b.Header.Bytes(), block.b.Header.Bytes()) {
-						break commitConfigLoop
-					}
-
-				case <-c.resignC:
-					return errors.Errorf("aborted block committing: lost leadership")
-
-				case <-c.doneC:
-					return nil
-				}
-			}
+			configInFlight = true
 		}
 	}
 
-	return nil
+	return
 }
 
 func (c *Chain) catchUp(snap *raftpb.Snapshot) error {

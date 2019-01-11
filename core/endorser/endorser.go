@@ -95,6 +95,9 @@ type Support interface {
 
 	
 	GetLedgerHeight(channelID string) (uint64, error)
+
+	
+	GetDeployedCCInfoProvider() ledger.DeployedChaincodeInfoProvider
 }
 
 
@@ -252,7 +255,7 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid 
 				txParams.TXSimulator.Done()
 				return nil, nil, nil, nil, errors.New("Private data is forbidden to be used in instantiate")
 			}
-			pvtDataWithConfig, err := e.AssemblePvtRWSet(simResult.PvtSimulationResults, txParams.TXSimulator)
+			pvtDataWithConfig, err := e.AssemblePvtRWSet(simResult.PvtSimulationResults, txParams.TXSimulator, e.s.GetDeployedCCInfoProvider())
 			
 			
 			txParams.TXSimulator.Done()

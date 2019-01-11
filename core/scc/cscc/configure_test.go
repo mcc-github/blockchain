@@ -36,9 +36,10 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/inproccontroller"
-	"github.com/mcc-github/blockchain/core/deliverservice"
+	deliverclient "github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	ccprovidermocks "github.com/mcc-github/blockchain/core/mocks/ccprovider"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
@@ -47,7 +48,7 @@ import (
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/service"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	peergossip "github.com/mcc-github/blockchain/peer/gossip"
 	"github.com/mcc-github/blockchain/peer/gossip/mocks"
 	cb "github.com/mcc-github/blockchain/protos/common"
@@ -116,7 +117,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestConfigerInit(t *testing.T) {
-	e := New(nil, nil, mockAclProvider)
+	e := New(nil, nil, mockAclProvider, nil)
 	stub := shim.NewMockStub("PeerConfiger", e)
 
 	if res := stub.MockInit("1", nil); res.Status != shim.OK {
@@ -126,7 +127,7 @@ func TestConfigerInit(t *testing.T) {
 }
 
 func TestConfigerInvokeInvalidParameters(t *testing.T) {
-	e := New(nil, nil, mockAclProvider)
+	e := New(nil, nil, mockAclProvider, nil)
 	stub := shim.NewMockStub("PeerConfiger", e)
 
 	res := stub.MockInit("1", nil)
@@ -160,7 +161,7 @@ func TestConfigerInvokeJoinChainMissingParams(t *testing.T) {
 	os.Mkdir("/tmp/mcc-githubtest", 0755)
 	defer os.RemoveAll("/tmp/mcc-githubtest/")
 
-	e := New(nil, nil, mockAclProvider)
+	e := New(nil, nil, mockAclProvider, nil)
 	stub := shim.NewMockStub("PeerConfiger", e)
 
 	if res := stub.MockInit("1", nil); res.Status != shim.OK {
@@ -181,7 +182,7 @@ func TestConfigerInvokeJoinChainWrongParams(t *testing.T) {
 	os.Mkdir("/tmp/mcc-githubtest", 0755)
 	defer os.RemoveAll("/tmp/mcc-githubtest/")
 
-	e := New(nil, nil, mockAclProvider)
+	e := New(nil, nil, mockAclProvider, nil)
 	stub := shim.NewMockStub("PeerConfiger", e)
 
 	if res := stub.MockInit("1", nil); res.Status != shim.OK {
@@ -209,7 +210,7 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	defer ledgermgmt.CleanupTestEnv()
 	defer os.RemoveAll("/tmp/mcc-githubtest/")
 
-	e := New(ccp, mp, mockAclProvider)
+	e := New(ccp, mp, mockAclProvider, nil)
 	stub := shim.NewMockStub("PeerConfiger", e)
 
 	peerEndpoint := "localhost:13611"
@@ -236,6 +237,7 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 		platforms.NewRegistry(&golang.Platform{}),
 		peer.DefaultSupport,
 		&disabled.Provider{},
+		&ledgermock.DeployedChaincodeInfoProvider{},
 	)
 
 	
@@ -497,7 +499,7 @@ func TestPeerConfiger_SubmittingOrdererGenesis(t *testing.T) {
 	os.Mkdir("/tmp/mcc-githubtest", 0755)
 	defer os.RemoveAll("/tmp/mcc-githubtest/")
 
-	e := New(nil, nil, nil)
+	e := New(nil, nil, nil, nil)
 	stub := shim.NewMockStub("PeerConfiger", e)
 
 	if res := stub.MockInit("1", nil); res.Status != shim.OK {

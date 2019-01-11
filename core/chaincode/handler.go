@@ -146,6 +146,8 @@ type Handler struct {
 	
 	LedgerGetter LedgerGetter
 	
+	DeployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
+	
 	UUIDGenerator UUIDGenerator
 	
 	AppConfig ApplicationConfigRetriever
@@ -1271,7 +1273,8 @@ func (h *Handler) setChaincodeProposal(signedProp *pb.SignedProposal, prop *pb.P
 
 func (h *Handler) getCollectionStore(channelID string) privdata.CollectionStore {
 	csStoreSupport := &peer.CollectionSupport{
-		PeerLedger: h.LedgerGetter.GetLedger(channelID),
+		PeerLedger:             h.LedgerGetter.GetLedger(channelID),
+		DeployedCCInfoProvider: h.DeployedCCInfoProvider,
 	}
 	return privdata.NewSimpleCollectionStore(csStoreSupport)
 

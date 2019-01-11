@@ -56,6 +56,7 @@ import (
 	endorsement3 "github.com/mcc-github/blockchain/core/handlers/endorsement/api/identities"
 	"github.com/mcc-github/blockchain/core/handlers/library"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/operations"
@@ -260,7 +261,7 @@ func serve(args []string) error {
 	pb.RegisterDeliverServer(peerServer.Server(), abServer)
 
 	
-	chaincodeSupport, ccp, sccp, packageProvider := startChaincodeServer(peerHost, aclProvider, pr, opsSystem)
+	chaincodeSupport, ccp, sccp, packageProvider := startChaincodeServer(peerHost, aclProvider, pr, opsSystem, deployedCCInfoProvider)
 
 	logger.Debugf("Running peer")
 
@@ -629,6 +630,7 @@ func registerChaincodeSupport(
 	pr *platforms.Registry,
 	lifecycleSCC *lifecycle.SCC,
 	ops *operations.System,
+	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
 ) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider) {
 	
 	userRunsCC := chaincode.IsDevMode()
@@ -675,6 +677,7 @@ func registerChaincodeSupport(
 		pr,
 		peer.DefaultSupport,
 		ops.Provider,
+		deployedCCInfoProvider,
 	)
 	ipRegistry.ChaincodeSupport = chaincodeSupport
 	ccp := chaincode.NewProvider(chaincodeSupport)
@@ -684,7 +687,7 @@ func registerChaincodeSupport(
 		ccSrv = authenticator.Wrap(ccSrv)
 	}
 
-	csccInst := cscc.New(ccp, sccp, aclProvider)
+	csccInst := cscc.New(ccp, sccp, aclProvider, deployedCCInfoProvider)
 	qsccInst := qscc.New(aclProvider)
 
 	
@@ -706,6 +709,7 @@ func startChaincodeServer(
 	aclProvider aclmgmt.ACLProvider,
 	pr *platforms.Registry,
 	ops *operations.System,
+	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
 ) (*chaincode.ChaincodeSupport, ccprovider.ChaincodeProvider, *scc.Provider, *persistence.PackageProvider) {
 	
 	chaincodeInstallPath := ccprovider.GetChaincodeInstallPathFromViper()
@@ -750,6 +754,7 @@ func startChaincodeServer(
 		pr,
 		lifecycleSCC,
 		ops,
+		deployedCCInfoProvider,
 	)
 	go ccSrv.Start()
 	return chaincodeSupport, ccp, sccp, packageProvider

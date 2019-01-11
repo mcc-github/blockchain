@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/dispatcher"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -22,6 +23,9 @@ const (
 
 	
 	QueryInstalledChaincodeFuncName = "QueryInstalledChaincode"
+
+	
+	QueryInstalledChaincodesFuncName = "QueryInstalledChaincodes"
 )
 
 
@@ -32,6 +36,16 @@ type SCCFunctions interface {
 
 	
 	QueryInstalledChaincode(name, version string) (hash []byte, err error)
+
+	
+	QueryInstalledChaincodes() (chaincodes []chaincode.InstalledChaincode, err error)
+}
+
+
+type InstalledChaincode struct {
+	Name    string
+	Version string
+	Hash    []byte
 }
 
 
@@ -104,6 +118,7 @@ func (scc *SCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 	if err != nil {
 		return shim.Error(fmt.Sprintf("failed to invoke backing implementation of '%s': %s", string(args[0]), err.Error()))
 	}
+
 	return shim.Success(outputBytes)
 }
 
@@ -131,4 +146,25 @@ func (scc *SCC) QueryInstalledChaincode(input *lb.QueryInstalledChaincodeArgs) (
 	return &lb.QueryInstalledChaincodeResult{
 		Hash: hash,
 	}, nil
+}
+
+
+
+func (scc *SCC) QueryInstalledChaincodes(input *lb.QueryInstalledChaincodesArgs) (proto.Message, error) {
+	chaincodes, err := scc.Functions.QueryInstalledChaincodes()
+	if err != nil {
+		return nil, err
+	}
+
+	result := &lb.QueryInstalledChaincodesResult{}
+	for _, chaincode := range chaincodes {
+		result.InstalledChaincodes = append(
+			result.InstalledChaincodes,
+			&lb.QueryInstalledChaincodesResult_InstalledChaincode{
+				Name:    chaincode.Name,
+				Version: chaincode.Version,
+				Hash:    chaincode.Id,
+			})
+	}
+	return result, nil
 }

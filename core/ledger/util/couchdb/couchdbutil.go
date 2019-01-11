@@ -8,6 +8,7 @@ package couchdb
 import (
 	"bytes"
 	"encoding/hex"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -48,7 +49,14 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 	
 	client := &http.Client{Timeout: couchConf.RequestTimeout}
 
-	transport := &http.Transport{Proxy: http.ProxyFromEnvironment}
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+	}
 	transport.DisableCompression = false
 	client.Transport = transport
 

@@ -13,24 +13,31 @@ import (
 	"google.golang.org/grpc"
 )
 
+
 type Semaphore interface {
 	Acquire(ctx context.Context) error
 	Release()
 }
+
+
+type NewSemaphoreFunc func(size int) Semaphore
+
 
 type Throttle struct {
 	newSemaphore NewSemaphoreFunc
 	semaphore    Semaphore
 }
 
+
 type ThrottleOption func(t *Throttle)
-type NewSemaphoreFunc func(size int) Semaphore
+
 
 func WithNewSemaphore(newSemaphore NewSemaphoreFunc) ThrottleOption {
 	return func(t *Throttle) {
 		t.newSemaphore = newSemaphore
 	}
 }
+
 
 func NewThrottle(maxConcurrency int, options ...ThrottleOption) *Throttle {
 	t := &Throttle{
@@ -45,6 +52,7 @@ func NewThrottle(maxConcurrency int, options ...ThrottleOption) *Throttle {
 	return t
 }
 
+
 func (t *Throttle) UnaryServerIntercptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	if err := t.semaphore.Acquire(ctx); err != nil {
 		return nil, err
@@ -53,6 +61,9 @@ func (t *Throttle) UnaryServerIntercptor(ctx context.Context, req interface{}, i
 
 	return handler(ctx, req)
 }
+
+
+
 
 func (t *Throttle) StreamServerInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	ctx := ss.Context()
