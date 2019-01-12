@@ -115,8 +115,11 @@ func UpdateConfig(n *Network, orderer *Orderer, channel string, current, updated
 	Expect(sess.Err).To(gbytes.Say("Successfully submitted channel update"))
 
 	
-	ccb := func() uint64 { return CurrentConfigBlockNumber(n, submitter, orderer, channel) }
-	Eventually(ccb, n.EventuallyTimeout).Should(BeNumerically(">", currentBlockNumber))
+	
+	for _, peer := range n.PeersWithChannel(channel) {
+		ccb := func() uint64 { return CurrentConfigBlockNumber(n, peer, orderer, channel) }
+		Eventually(ccb, n.EventuallyTimeout).Should(BeNumerically(">", currentBlockNumber))
+	}
 }
 
 

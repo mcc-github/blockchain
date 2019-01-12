@@ -9,12 +9,14 @@ package endorser
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
@@ -106,6 +108,7 @@ type Endorser struct {
 	s                     Support
 	PlatformRegistry      *platforms.Registry
 	PvtRWSetAssembler
+	Metrics *EndorserMetrics
 }
 
 
@@ -118,12 +121,13 @@ type validateResult struct {
 }
 
 
-func NewEndorserServer(privDist privateDataDistributor, s Support, pr *platforms.Registry) *Endorser {
+func NewEndorserServer(privDist privateDataDistributor, s Support, pr *platforms.Registry, metricsProv metrics.Provider) *Endorser {
 	e := &Endorser{
 		distributePrivateData: privDist,
 		s:                     s,
 		PlatformRegistry:      pr,
 		PvtRWSetAssembler:     &rwSetAssembler{},
+		Metrics:               NewEndorserMetrics(metricsProv),
 	}
 	return e
 }
@@ -181,6 +185,12 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, version
 
 		_, _, err = e.s.ExecuteLegacyInit(txParams, txParams.ChannelID, cds.ChaincodeSpec.ChaincodeId.Name, cds.ChaincodeSpec.ChaincodeId.Version, txParams.TxID, txParams.SignedProp, txParams.Proposal, cds)
 		if err != nil {
+			
+			meterLabels := []string{
+				"channel", txParams.ChannelID,
+				"chaincode", cds.ChaincodeSpec.ChaincodeId.Name + ":" + cds.ChaincodeSpec.ChaincodeId.Version,
+			}
+			e.Metrics.InitFailed.With(meterLabels...).Add(1)
 			return nil, nil, err
 		}
 	}
@@ -344,6 +354,7 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, e
 	prop, hdr, hdrExt, err := validation.ValidateProposalMessage(signedProp)
 
 	if err != nil {
+		e.Metrics.ProposalValidationFailed.Add(1)
 		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
 		return vr, err
 	}
@@ -374,8 +385,17 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, e
 
 	if chainID != "" {
 		
+		meterLabels := []string{
+			"channel", chainID,
+			"chaincode", hdrExt.ChaincodeId.Name + ":" + hdrExt.ChaincodeId.Version,
+		}
+
+		
 		
 		if _, err = e.s.GetTransactionByID(chainID, txid); err == nil {
+			
+			
+			e.Metrics.DuplicateTxsFailure.With(meterLabels...).Add(1)
 			err = errors.Errorf("duplicate transaction found [%s]. Creator [%x]", txid, shdr.Creator)
 			vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
 			return vr, err
@@ -386,6 +406,7 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, e
 		if !e.s.IsSysCC(hdrExt.ChaincodeId.Name) {
 			
 			if err = e.s.CheckACL(signedProp, chdr, shdr, hdrExt); err != nil {
+				e.Metrics.ProposalACLCheckFailed.With(meterLabels...).Add(1)
 				vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
 				return vr, err
 			}
@@ -403,9 +424,32 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, e
 
 
 func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedProposal) (*pb.ProposalResponse, error) {
+	
+	startTime := time.Now()
+	e.Metrics.ProposalsReceived.Add(1)
+
 	addr := util.ExtractRemoteAddress(ctx)
 	endorserLogger.Debug("Entering: request from", addr)
-	defer endorserLogger.Debug("Exit: request from", addr)
+
+	
+	var chainID string
+	var hdrExt *pb.ChaincodeHeaderExtension
+	var success bool
+	defer func() {
+		
+		
+		
+		if hdrExt != nil {
+			meterLabels := []string{
+				"channel", chainID,
+				"chaincode", hdrExt.ChaincodeId.Name + ":" + hdrExt.ChaincodeId.Version,
+				"success", strconv.FormatBool(success),
+			}
+			e.Metrics.ProposalDuration.With(meterLabels...).Observe(time.Since(startTime).Seconds())
+		}
+
+		endorserLogger.Debug("Exit: request from", addr)
+	}()
 
 	
 	vr, err := e.preProcess(signedProp)
@@ -489,10 +533,23 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 	} else {
 		
 		pResp, err = e.endorseProposal(ctx, chainID, txid, signedProp, prop, res, simulationResult, ccevent, hdrExt.PayloadVisibility, hdrExt.ChaincodeId, txsim, cd)
+
+		
+		meterLabels := []string{
+			"channel", chainID,
+			"chaincode", hdrExt.ChaincodeId.Name + ":" + hdrExt.ChaincodeId.Version,
+		}
+
 		if err != nil {
+			meterLabels = append(meterLabels, "chaincodeerror", strconv.FormatBool(false))
+			e.Metrics.EndorsementsFailed.With(meterLabels...).Add(1)
 			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
 		}
 		if pResp.Response.Status >= shim.ERRORTHRESHOLD {
+			
+			
+			meterLabels = append(meterLabels, "chaincodeerror", strconv.FormatBool(true))
+			e.Metrics.EndorsementsFailed.With(meterLabels...).Add(1)
 			endorserLogger.Debugf("[%s][%s] endorseProposal() resulted in chaincode %s error for txid: %s", chainID, shorttxid(txid), hdrExt.ChaincodeId, txid)
 			return pResp, nil
 		}
@@ -502,6 +559,10 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 	
 	
 	pResp.Response = res
+
+	
+	e.Metrics.SuccessfulProposals.Add(1)
+	success = true
 
 	return pResp, nil
 }
