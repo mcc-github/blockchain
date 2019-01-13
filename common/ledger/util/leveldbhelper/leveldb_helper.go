@@ -38,7 +38,7 @@ type DB struct {
 	conf    *Conf
 	db      *leveldb.DB
 	dbState dbState
-	mux     sync.RWMutex
+	mutex   sync.RWMutex
 
 	readOpts        *opt.ReadOptions
 	writeOptsNoSync *opt.WriteOptions
@@ -62,8 +62,8 @@ func CreateDB(conf *Conf) *DB {
 
 
 func (dbInst *DB) Open() {
-	dbInst.mux.Lock()
-	defer dbInst.mux.Unlock()
+	dbInst.mutex.Lock()
+	defer dbInst.mutex.Unlock()
 	if dbInst.dbState == opened {
 		return
 	}
@@ -83,8 +83,8 @@ func (dbInst *DB) Open() {
 
 
 func (dbInst *DB) Close() {
-	dbInst.mux.Lock()
-	defer dbInst.mux.Unlock()
+	dbInst.mutex.Lock()
+	defer dbInst.mutex.Unlock()
 	if dbInst.dbState == closed {
 		return
 	}
@@ -96,8 +96,8 @@ func (dbInst *DB) Close() {
 
 
 func (dbInst *DB) Get(key []byte) ([]byte, error) {
-	dbInst.mux.RLock()
-	defer dbInst.mux.RUnlock()
+	dbInst.mutex.RLock()
+	defer dbInst.mutex.RUnlock()
 	value, err := dbInst.db.Get(key, dbInst.readOpts)
 	if err == leveldb.ErrNotFound {
 		value = nil
@@ -112,8 +112,8 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
 
 
 func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
-	dbInst.mux.RLock()
-	defer dbInst.mux.RUnlock()
+	dbInst.mutex.RLock()
+	defer dbInst.mutex.RUnlock()
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync
@@ -128,8 +128,8 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
 
 
 func (dbInst *DB) Delete(key []byte, sync bool) error {
-	dbInst.mux.RLock()
-	defer dbInst.mux.RUnlock()
+	dbInst.mutex.RLock()
+	defer dbInst.mutex.RUnlock()
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync
@@ -146,15 +146,15 @@ func (dbInst *DB) Delete(key []byte, sync bool) error {
 
 
 func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator {
-	dbInst.mux.RLock()
-	defer dbInst.mux.RUnlock()
+	dbInst.mutex.RLock()
+	defer dbInst.mutex.RUnlock()
 	return dbInst.db.NewIterator(&goleveldbutil.Range{Start: startKey, Limit: endKey}, dbInst.readOpts)
 }
 
 
 func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
-	dbInst.mux.RLock()
-	defer dbInst.mux.RUnlock()
+	dbInst.mutex.RLock()
+	defer dbInst.mutex.RUnlock()
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync

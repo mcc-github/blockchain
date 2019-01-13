@@ -153,6 +153,7 @@ func CreateSignedCCDepSpecForInstall(pack []*common.Envelope) (*common.Envelope,
 			baseCip = cip
 			
 			if len(cip.OwnerEndorsements) > 0 {
+				endorsementExists = true
 				endorsements = make([]*peer.Endorsement, len(pack))
 			}
 
