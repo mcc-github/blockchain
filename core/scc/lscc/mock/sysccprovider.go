@@ -2,11 +2,11 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	channelconfig "github.com/mcc-github/blockchain/common/channelconfig"
-	policies "github.com/mcc-github/blockchain/common/policies"
-	ledger "github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/common/channelconfig"
+	"github.com/mcc-github/blockchain/common/policies"
+	"github.com/mcc-github/blockchain/core/ledger"
 )
 
 type SystemChaincodeProvider struct {

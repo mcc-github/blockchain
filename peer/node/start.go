@@ -43,7 +43,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
 	"github.com/mcc-github/blockchain/core/comm"
-	"github.com/mcc-github/blockchain/core/committer/txvalidator"
+	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/container"
@@ -354,7 +354,7 @@ func serve(args []string) error {
 			logger.Panicf("Failed subscribing to chaincode lifecycle updates")
 		}
 		cceventmgmt.GetMgr().Register(cid, sub)
-	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName),
+	}, ccp, sccp, plugin.MapBasedMapper(validationPluginsByName),
 		pr, deployedCCInfoProvider, membershipInfoProvider, metricsProvider)
 
 	if viper.GetBool("peer.discovery.enabled") {

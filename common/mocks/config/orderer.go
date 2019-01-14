@@ -19,6 +19,11 @@ type Orderer struct {
 	ConsensusTypeVal string
 	
 	ConsensusMetadataVal []byte
+
+	ConsensusTypeMigrationStateVal ab.ConsensusType_MigrationState
+
+	ConsensusTypeMigrationContextVal uint64
+
 	
 	BatchSizeVal *ab.BatchSize
 	
@@ -41,6 +46,16 @@ func (o *Orderer) ConsensusType() string {
 
 func (o *Orderer) ConsensusMetadata() []byte {
 	return o.ConsensusMetadataVal
+}
+
+
+func (o *Orderer) ConsensusMigrationState() ab.ConsensusType_MigrationState {
+	return o.ConsensusTypeMigrationStateVal
+}
+
+
+func (o *Orderer) ConsensusMigrationContext() uint64 {
+	return o.ConsensusTypeMigrationContextVal
 }
 
 
@@ -86,6 +101,8 @@ type OrdererCapabilities struct {
 
 	
 	ExpirationVal bool
+
+	Kafka2RaftMigVal bool
 }
 
 
@@ -107,4 +124,9 @@ func (oc *OrdererCapabilities) Resubmission() bool {
 
 func (oc *OrdererCapabilities) ExpirationCheck() bool {
 	return oc.ExpirationVal
+}
+
+
+func (oc *OrdererCapabilities) Kafka2RaftMigration() bool {
+	return oc.Kafka2RaftMigVal
 }

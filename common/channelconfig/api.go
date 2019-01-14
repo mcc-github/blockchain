@@ -87,6 +87,12 @@ type Orderer interface {
 	ConsensusMetadata() []byte
 
 	
+	ConsensusMigrationState() ab.ConsensusType_MigrationState
+
+	
+	ConsensusMigrationContext() uint64
+
+	
 	BatchSize() *ab.BatchSize
 
 	
@@ -155,6 +161,12 @@ type ApplicationCapabilities interface {
 	
 	
 	
+	
+	V2_0Validation() bool
+
+	
+	
+	
 	MetadataLifecycle() bool
 
 	
@@ -181,6 +193,9 @@ type OrdererCapabilities interface {
 	
 	
 	ExpirationCheck() bool
+
+	
+	Kafka2RaftMigration() bool
 }
 
 

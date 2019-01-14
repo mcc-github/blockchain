@@ -94,6 +94,16 @@ func (oc *OrdererConfig) ConsensusMetadata() []byte {
 }
 
 
+func (oc *OrdererConfig) ConsensusMigrationState() ab.ConsensusType_MigrationState {
+	return oc.protos.ConsensusType.MigrationState
+}
+
+
+func (oc *OrdererConfig) ConsensusMigrationContext() uint64 {
+	return oc.protos.ConsensusType.MigrationContext
+}
+
+
 func (oc *OrdererConfig) BatchSize() *ab.BatchSize {
 	return oc.protos.BatchSize
 }

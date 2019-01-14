@@ -26,7 +26,7 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics/statsd/goruntime"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/middleware"
-	prom "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 
@@ -178,7 +178,7 @@ func (s *System) initializeMetricsProvider() error {
 	case "prometheus":
 		s.Provider = &prometheus.Provider{}
 		s.versionGauge = versionGauge(s.Provider)
-		s.mux.Handle("/metrics", s.handlerChain(prom.Handler(), s.options.TLS.Enabled))
+		s.mux.Handle("/metrics", s.handlerChain(promhttp.Handler(), s.options.TLS.Enabled))
 		return nil
 
 	default:

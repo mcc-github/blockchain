@@ -21,9 +21,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/metrics/disabled"
-
 	"github.com/mcc-github/blockchain/common/configtx/test"
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -106,7 +105,7 @@ func TestChaincodeInfoProvider(t *testing.T) {
 	CreateLedger(gb)
 
 	mockDeployedCCInfoProvider := &mock.DeployedChaincodeInfoProvider{}
-	mockDeployedCCInfoProvider.ChaincodeInfoStub = func(ccName string, qe ledger.SimpleQueryExecutor) (*ledger.DeployedChaincodeInfo, error) {
+	mockDeployedCCInfoProvider.ChaincodeInfoStub = func(channelName, ccName string, qe ledger.SimpleQueryExecutor) (*ledger.DeployedChaincodeInfo, error) {
 		return constructTestCCInfo(ccName, ccName, ccName), nil
 	}
 

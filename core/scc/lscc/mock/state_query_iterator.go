@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	queryresult "github.com/mcc-github/blockchain/protos/ledger/queryresult"
+	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 )
 
 type StateQueryIterator struct {

@@ -46,6 +46,12 @@ type Capabilities interface {
 	
 	
 	
+	
+	V2_0Validation() bool
+
+	
+	
+	
 	MetadataLifecycle() bool
 
 	

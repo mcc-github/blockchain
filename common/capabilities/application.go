@@ -103,6 +103,14 @@ func (ap *ApplicationProvider) V1_3Validation() bool {
 
 
 
+
+func (ap *ApplicationProvider) V2_0Validation() bool {
+	return false
+}
+
+
+
+
 func (ap *ApplicationProvider) MetadataLifecycle() bool {
 	return false
 }

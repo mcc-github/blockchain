@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
-	"github.com/mcc-github/blockchain/core/committer/txvalidator"
+	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	vmocks "github.com/mcc-github/blockchain/core/handlers/validation/builtin/mocks"
 	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/v12/mocks"
@@ -52,6 +52,7 @@ func TestErrorConversion(t *testing.T) {
 		},
 	}
 
+	capabilities.On("V2_0Validation").Return(false)
 	capabilities.On("V1_3Validation").Return(false)
 	capabilities.On("V1_2Validation").Return(true)
 
@@ -59,22 +60,22 @@ func TestErrorConversion(t *testing.T) {
 	
 	validator.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("bla bla")).Once()
 	assert.Panics(t, func() {
-		validation.Validate(block, "", 0, 0, txvalidator.SerializedPolicy("policy"))
+		validation.Validate(block, "", 0, 0, plugin.SerializedPolicy("policy"))
 	})
 
 	
 	validator.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&commonerrors.VSCCEndorsementPolicyError{Err: errors.New("foo")}).Once()
-	err := validation.Validate(block, "", 0, 0, txvalidator.SerializedPolicy("policy"))
+	err := validation.Validate(block, "", 0, 0, plugin.SerializedPolicy("policy"))
 	assert.Equal(t, (&commonerrors.VSCCEndorsementPolicyError{Err: errors.New("foo")}).Error(), err.Error())
 
 	
 	validator.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&commonerrors.VSCCExecutionFailureError{Err: errors.New("bar")}).Once()
-	err = validation.Validate(block, "", 0, 0, txvalidator.SerializedPolicy("policy"))
+	err = validation.Validate(block, "", 0, 0, plugin.SerializedPolicy("policy"))
 	assert.Equal(t, &ExecutionFailureError{Reason: "bar"}, err)
 
 	
 	validator.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-	assert.NoError(t, validation.Validate(block, "", 0, 0, txvalidator.SerializedPolicy("policy")))
+	assert.NoError(t, validation.Validate(block, "", 0, 0, plugin.SerializedPolicy("policy")))
 }
 
 func TestValidateBadInput(t *testing.T) {
@@ -85,7 +86,7 @@ func TestValidateBadInput(t *testing.T) {
 
 	
 	validator.On("Validate", mock.Anything, mock.Anything).Return(nil).Once()
-	err := validation.Validate(nil, "", 0, 0, txvalidator.SerializedPolicy("policy"))
+	err := validation.Validate(nil, "", 0, 0, plugin.SerializedPolicy("policy"))
 	assert.Equal(t, "empty block", err.Error())
 
 	block := &common.Block{
@@ -96,7 +97,7 @@ func TestValidateBadInput(t *testing.T) {
 	}
 	
 	validator.On("Validate", mock.Anything, mock.Anything).Return(nil).Once()
-	err = validation.Validate(block, "", 1, 0, txvalidator.SerializedPolicy("policy"))
+	err = validation.Validate(block, "", 1, 0, plugin.SerializedPolicy("policy"))
 	assert.Equal(t, "block has only 1 transactions, but requested tx at position 1", err.Error())
 
 	
@@ -105,7 +106,7 @@ func TestValidateBadInput(t *testing.T) {
 		Data: &common.BlockData{
 			Data: [][]byte{{}},
 		},
-	}, "", 0, 0, txvalidator.SerializedPolicy("policy"))
+	}, "", 0, 0, plugin.SerializedPolicy("policy"))
 	assert.Equal(t, "no block header", err.Error())
 
 	

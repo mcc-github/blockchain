@@ -2,11 +2,11 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	timestamp "github.com/golang/protobuf/ptypes/timestamp"
-	shim "github.com/mcc-github/blockchain/core/chaincode/shim"
-	peer "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 type ChaincodeStub struct {

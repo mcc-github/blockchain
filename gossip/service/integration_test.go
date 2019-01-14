@@ -105,19 +105,29 @@ func TestLeaderYield(t *testing.T) {
 	
 	takeOverMaxTimeout := time.Minute
 	viper.Set("peer.gossip.election.leaderAliveThreshold", time.Second*5)
-	viper.Set("peer.deliveryclient.reconnectTotalTimeThreshold", time.Second*5)
+	
+	
+	viper.Set("peer.gossip.election.leaderElectionDuration", time.Millisecond*500)
+	
+	viper.Set("peer.deliveryclient.reconnectTotalTimeThreshold", time.Second*1)
+	
+	
+	viper.Set("peer.gossip.election.membershipSampleInterval", time.Millisecond*100)
+	
+	
+	viper.Set("peer.deliveryclient.connTimeout", time.Millisecond*100)
 	viper.Set("peer.gossip.useLeaderElection", true)
 	viper.Set("peer.gossip.orgLeader", false)
 	n := 2
 	portPrefix := 30000
-	gossips := startPeers(t, n, portPrefix)
+	gossips := startPeers(t, n, portPrefix, 0, 1)
 	defer stopPeers(gossips)
 	channelName := "channelA"
 	peerIndexes := []int{0, 1}
 	
 	addPeersToChannel(t, n, portPrefix, channelName, gossips, peerIndexes)
 	
-	waitForFullMembership(t, gossips, n, time.Second*30, time.Second*2)
+	waitForFullMembership(t, gossips, n, time.Second*30, time.Millisecond*100)
 	
 	newGossipService := func(i int) *gossipServiceImpl {
 		gs := gossips[i].(*gossipServiceImpl)
@@ -164,12 +174,13 @@ func TestLeaderYield(t *testing.T) {
 	
 	timeLimit := time.Now().Add(takeOverMaxTimeout)
 	for getLeader() != 1 && time.Now().Before(timeLimit) {
-		time.Sleep(time.Second)
+		time.Sleep(100 * time.Millisecond)
 	}
 	if time.Now().After(timeLimit) {
 		util.PrintStackTrace()
 		t.Fatalf("p1 hasn't taken over leadership within %v: %d", takeOverMaxTimeout, getLeader())
 	}
+	t.Log("p1 has taken over leadership")
 	p0.chains[channelName].Stop()
 	p1.chains[channelName].Stop()
 	p0.deliveryService[channelName].Stop()

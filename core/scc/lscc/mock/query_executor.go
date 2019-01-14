@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	ledger "github.com/mcc-github/blockchain/common/ledger"
+	"github.com/mcc-github/blockchain/common/ledger"
 	ledgera "github.com/mcc-github/blockchain/core/ledger"
 )
 

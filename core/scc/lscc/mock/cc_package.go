@@ -2,11 +2,11 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	proto "github.com/golang/protobuf/proto"
-	ccprovider "github.com/mcc-github/blockchain/core/common/ccprovider"
-	peer "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 type CCPackage struct {
