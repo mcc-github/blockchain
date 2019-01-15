@@ -7,7 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package client
 
 import (
-	"github.com/golang/protobuf/proto"
+	"time"
+
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/token"
 	tk "github.com/mcc-github/blockchain/token"
@@ -39,11 +40,19 @@ type FabricTxSubmitter interface {
 	
 	
 	
-	Submit(tx []byte) error
+	
+	
+	
+	Submit(txEnvelope *common.Envelope, waitTimeout time.Duration) (*common.Status, bool, error)
+
+	
+	
+	CreateTxEnvelope(tokenTx []byte) (*common.Envelope, string, error)
 }
 
 
 type Client struct {
+	Config          *ClientConfig
 	SigningIdentity tk.SigningIdentity
 	Prover          Prover
 	TxSubmitter     FabricTxSubmitter
@@ -51,50 +60,77 @@ type Client struct {
 
 
 
+func NewClient(config ClientConfig, signingIdentity tk.SigningIdentity) (*Client, error) {
+	err := ValidateClientConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	prover, err := NewProverPeer(&config)
+	if err != nil {
+		return nil, err
+	}
+
+	txSubmitter, err := NewTxSubmitter(&config, signingIdentity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		Config:          &config,
+		SigningIdentity: signingIdentity,
+		Prover:          prover,
+		TxSubmitter:     txSubmitter,
+	}, nil
+}
 
 
-func (c *Client) Issue(tokensToIssue []*token.TokenToIssue) ([]byte, error) {
+
+
+
+
+
+
+
+
+
+func (c *Client) Issue(tokensToIssue []*token.TokenToIssue, waitTimeout time.Duration) (*common.Envelope, string, *common.Status, bool, error) {
 	serializedTokenTx, err := c.Prover.RequestImport(tokensToIssue, c.SigningIdentity)
 	if err != nil {
-		return nil, err
+		return nil, "", nil, false, err
 	}
 
-	tx, err := c.createTx(serializedTokenTx)
+	txEnvelope, txid, err := c.TxSubmitter.CreateTxEnvelope(serializedTokenTx)
 	if err != nil {
-		return nil, err
+		return nil, "", nil, false, err
 	}
 
-	return tx, c.TxSubmitter.Submit(tx)
+	ordererStatus, committed, err := c.TxSubmitter.Submit(txEnvelope, waitTimeout)
+	return txEnvelope, txid, ordererStatus, committed, err
 }
 
 
 
 
-func (c *Client) Transfer(tokenIDs [][]byte, shares []*token.RecipientTransferShare) ([]byte, error) {
+
+
+
+
+
+
+
+
+func (c *Client) Transfer(tokenIDs [][]byte, shares []*token.RecipientTransferShare, waitTimeout time.Duration) (*common.Envelope, string, *common.Status, bool, error) {
 	serializedTokenTx, err := c.Prover.RequestTransfer(tokenIDs, shares, c.SigningIdentity)
 	if err != nil {
-		return nil, err
+		return nil, "", nil, false, err
 	}
-	tx, err := c.createTx(serializedTokenTx)
+
+	txEnvelope, txid, err := c.TxSubmitter.CreateTxEnvelope(serializedTokenTx)
 	if err != nil {
-		return nil, err
+		return nil, "", nil, false, err
 	}
 
-	return tx, c.TxSubmitter.Submit(tx)
-}
-
-
-
-func (c *Client) createTx(tokenTx []byte) ([]byte, error) {
-	payload := &common.Payload{Data: tokenTx}
-	payloadBytes, err := proto.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	signature, err := c.SigningIdentity.Sign(payloadBytes)
-	if err != nil {
-		return nil, err
-	}
-	envelope := &common.Envelope{Payload: payloadBytes, Signature: signature}
-	return proto.Marshal(envelope)
+	ordererStatus, committed, err := c.TxSubmitter.Submit(txEnvelope, waitTimeout)
+	return txEnvelope, txid, ordererStatus, committed, err
 }

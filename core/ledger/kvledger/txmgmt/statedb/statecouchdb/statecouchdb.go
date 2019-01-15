@@ -7,6 +7,7 @@ package statecouchdb
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -65,6 +66,11 @@ func (provider *VersionedDBProvider) GetDBHandle(dbName string) (statedb.Version
 
 func (provider *VersionedDBProvider) Close() {
 	
+}
+
+
+func (provider *VersionedDBProvider) HealthCheck(ctx context.Context) error {
+	return provider.couchInstance.HealthCheck(ctx)
 }
 
 

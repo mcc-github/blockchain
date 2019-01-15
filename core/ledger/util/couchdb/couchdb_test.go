@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package couchdb
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -140,6 +141,29 @@ func TestEncodePathElement(t *testing.T) {
 	encodedString = encodePathElement("/test+ element:")
 	assert.Equal(t, "%2Ftest%2B%20element:", encodedString)
 
+}
+
+func TestHealthCheck(t *testing.T) {
+	client := &http.Client{}
+
+	
+	badURL := fmt.Sprintf("http://%s", couchDBDef.URL+"1") 
+	badConnectDef := CouchConnectionDef{URL: badURL, Username: "", Password: "",
+		MaxRetries: 1, MaxRetriesOnStartup: 1, RequestTimeout: time.Second * 30}
+
+	badCouchDBInstance := CouchInstance{badConnectDef, client, newStats(&disabled.Provider{})}
+	err := badCouchDBInstance.HealthCheck(context.Background())
+	assert.Error(t, err, "Health check should result in an error if unable to connect to couch db")
+	assert.Contains(t, err.Error(), "failed to connect to couch db")
+
+	
+	goodURL := fmt.Sprintf("http://%s", couchDBDef.URL) 
+	goodConnectDef := CouchConnectionDef{URL: goodURL, Username: "", Password: "",
+		MaxRetries: 1, MaxRetriesOnStartup: 1, RequestTimeout: time.Second * 30}
+
+	goodCouchDBInstance := CouchInstance{goodConnectDef, client, newStats(&disabled.Provider{})}
+	err = goodCouchDBInstance.HealthCheck(context.Background())
+	assert.NoError(t, err)
 }
 
 func TestBadCouchDBInstance(t *testing.T) {

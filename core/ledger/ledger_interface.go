@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-lib-go/healthz"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -24,6 +25,7 @@ type Initializer struct {
 	DeployedChaincodeInfoProvider DeployedChaincodeInfoProvider
 	MembershipInfoProvider        MembershipInfoProvider
 	MetricsProvider               metrics.Provider
+	HealthCheckRegistry           HealthCheckRegistry
 }
 
 
@@ -504,3 +506,9 @@ type MembershipInfoProvider interface {
 
 
 
+
+
+
+type HealthCheckRegistry interface {
+	RegisterChecker(string, healthz.HealthChecker) error
+}

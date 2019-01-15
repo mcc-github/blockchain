@@ -13,8 +13,6 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
-	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
-	peercommon "github.com/mcc-github/blockchain/peer/common"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/utils"
 	tk "github.com/mcc-github/blockchain/token"
@@ -42,21 +40,8 @@ type TxEvent struct {
 }
 
 
-func NewTxSubmitter(config ClientConfig) (*TxSubmitter, error) {
-	err := ValidateClientConfig(config)
-	if err != nil {
-		return nil, err
-	}
-
-	if config.MSPInfo.MSPType == "" {
-		config.MSPInfo.MSPType = "bccsp"
-	}
-	peercommon.InitCrypto(config.MSPInfo.MSPConfigPath, config.MSPInfo.MSPID, config.MSPInfo.MSPType)
-
-	signingIdentity, err := mspmgmt.GetLocalMSP().GetDefaultSigningIdentity()
-	if err != nil {
-		return nil, err
-	}
+func NewTxSubmitter(config *ClientConfig, signingIdentity tk.SigningIdentity) (*TxSubmitter, error) {
+	
 	creator, err := signingIdentity.Serialize()
 	if err != nil {
 		return nil, err
@@ -73,7 +58,7 @@ func NewTxSubmitter(config ClientConfig) (*TxSubmitter, error) {
 	}
 
 	return &TxSubmitter{
-		Config:          &config,
+		Config:          config,
 		SigningIdentity: signingIdentity,
 		Creator:         creator,
 		OrdererClient:   ordererClient,
@@ -92,7 +77,7 @@ func (s *TxSubmitter) Submit(txEnvelope *common.Envelope, waitTimeout time.Durat
 		return nil, false, errors.New("envelope is nil")
 	}
 
-	txid, err := getTransactionId(txEnvelope)
+	txid, err := GetTransactionID(txEnvelope)
 	if err != nil {
 		return nil, false, err
 	}
@@ -235,7 +220,7 @@ func CreateEnvelope(data []byte, header *common.Header, signingIdentity tk.Signi
 	return txEnvelope, nil
 }
 
-func getTransactionId(txEnvelope *common.Envelope) (string, error) {
+func GetTransactionID(txEnvelope *common.Envelope) (string, error) {
 	payload := common.Payload{}
 	err := proto.Unmarshal(txEnvelope.Payload, &payload)
 	if err != nil {

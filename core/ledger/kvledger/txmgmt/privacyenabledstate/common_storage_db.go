@@ -10,9 +10,11 @@ import (
 	"encoding/base64"
 	"strings"
 
+	"github.com/mcc-github/blockchain-lib-go/healthz"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
@@ -34,11 +36,12 @@ const (
 
 type CommonStorageDBProvider struct {
 	statedb.VersionedDBProvider
+	HealthCheckRegistry ledger.HealthCheckRegistry
 	bookkeepingProvider bookkeeping.Provider
 }
 
 
-func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider, metricsProvider metrics.Provider) (DBProvider, error) {
+func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider, metricsProvider metrics.Provider, healthCheckRegistry ledger.HealthCheckRegistry) (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
 	var err error
 	if ledgerconfig.IsCouchDBEnabled() {
@@ -48,7 +51,22 @@ func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider, metrics
 	} else {
 		vdbProvider = stateleveldb.NewVersionedDBProvider()
 	}
-	return &CommonStorageDBProvider{vdbProvider, bookkeeperProvider}, nil
+
+	dbProvider := &CommonStorageDBProvider{vdbProvider, healthCheckRegistry, bookkeeperProvider}
+
+	err = dbProvider.RegisterHealthChecker()
+	if err != nil {
+		return nil, err
+	}
+
+	return dbProvider, nil
+}
+
+func (p *CommonStorageDBProvider) RegisterHealthChecker() error {
+	if healthChecker, ok := p.VersionedDBProvider.(healthz.HealthChecker); ok {
+		return p.HealthCheckRegistry.RegisterChecker("couchdb", healthChecker)
+	}
+	return nil
 }
 
 
