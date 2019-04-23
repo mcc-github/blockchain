@@ -7,6 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package node
 
 import (
+	"path/filepath"
+
+	coreconfig "github.com/mcc-github/blockchain/core/config"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
 
@@ -27,16 +30,37 @@ func ledgerConfig() *ledger.Config {
 	if viper.IsSet("ledger.state.couchDBConfig.maxBatchUpdateSize") {
 		maxBatchUpdateSize = viper.GetInt("ledger.state.couchDBConfig.maxBatchUpdateSize")
 	}
+	collElgProcMaxDbBatchSize := 5000
+	if viper.IsSet("ledger.pvtdataStore.collElgProcMaxDbBatchSize") {
+		collElgProcMaxDbBatchSize = viper.GetInt("ledger.pvtdataStore.collElgProcMaxDbBatchSize")
+	}
+	collElgProcDbBatchesInterval := 1000
+	if viper.IsSet("ledger.pvtdataStore.collElgProcDbBatchesInterval") {
+		collElgProcDbBatchesInterval = viper.GetInt("ledger.pvtdataStore.collElgProcDbBatchesInterval")
+	}
+	purgeInterval := 100
+	if viper.IsSet("ledger.pvtdataStore.purgeInterval") {
+		purgeInterval = viper.GetInt("ledger.pvtdataStore.purgeInterval")
+	}
 
-	config := &ledger.Config{
+	rootFSPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "ledgersData")
+	conf := &ledger.Config{
+		RootFSPath: rootFSPath,
 		StateDB: &ledger.StateDB{
 			StateDatabase: viper.GetString("ledger.state.stateDatabase"),
+			LevelDBPath:   filepath.Join(rootFSPath, "stateLeveldb"),
 			CouchDB:       &couchdb.Config{},
+		},
+		PrivateData: &ledger.PrivateData{
+			StorePath:       filepath.Join(rootFSPath, "pvtdataStore"),
+			MaxBatchSize:    collElgProcMaxDbBatchSize,
+			BatchesInterval: collElgProcDbBatchesInterval,
+			PurgeInterval:   purgeInterval,
 		},
 	}
 
-	if config.StateDB.StateDatabase == "CouchDB" {
-		config.StateDB.CouchDB = &couchdb.Config{
+	if conf.StateDB.StateDatabase == "CouchDB" {
+		conf.StateDB.CouchDB = &couchdb.Config{
 			Address:                 viper.GetString("ledger.state.couchDBConfig.couchDBAddress"),
 			Username:                viper.GetString("ledger.state.couchDBConfig.username"),
 			Password:                viper.GetString("ledger.state.couchDBConfig.password"),
@@ -47,7 +71,8 @@ func ledgerConfig() *ledger.Config {
 			MaxBatchUpdateSize:      maxBatchUpdateSize,
 			WarmIndexesAfterNBlocks: warmAfterNBlocks,
 			CreateGlobalChangesDB:   viper.GetBool("ledger.state.couchDBConfig.createGlobalChangesDB"),
+			RedoLogPath:             filepath.Join(rootFSPath, "couchdbRedoLogs"),
 		}
 	}
-	return config
+	return conf
 }

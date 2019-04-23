@@ -19,8 +19,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestLedgerAPIs(t *testing.T) {
-	env := newEnv(defaultConfig, t)
+	env := newEnv(t)
 	defer env.cleanup()
+	env.initLedgerMgmt()
 
 	
 	h1 := newTestHelperCreateLgr("ledger1", t)

@@ -7,13 +7,22 @@ SPDX-License-Identifier: Apache-2.0
 package pvtdatastorage
 
 import (
+	"io/ioutil"
 	"os"
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/stretchr/testify/assert"
 )
+
+func pvtDataConf() *ledger.PrivateData {
+	return &ledger.PrivateData{
+		BatchesInterval: 1000,
+		MaxBatchSize:    5000,
+		PurgeInterval:   2,
+	}
+}
 
 
 type StoreEnv struct {
@@ -22,24 +31,34 @@ type StoreEnv struct {
 	TestStore         Store
 	ledgerid          string
 	btlPolicy         pvtdatapolicy.BTLPolicy
+	conf              *ledger.PrivateData
 }
 
 
-func NewTestStoreEnv(t *testing.T, ledgerid string, btlPolicy pvtdatapolicy.BTLPolicy) *StoreEnv {
-	removeStorePath(t)
+func NewTestStoreEnv(
+	t *testing.T,
+	ledgerid string,
+	btlPolicy pvtdatapolicy.BTLPolicy,
+	conf *ledger.PrivateData) *StoreEnv {
+
+	storeDir, err := ioutil.TempDir("", "pdstore")
+	if err != nil {
+		t.Fatalf("Failed to create private data storage directory: %s", err)
+	}
 	assert := assert.New(t)
-	testStoreProvider := NewProvider()
+	conf.StorePath = storeDir
+	testStoreProvider := NewProvider(conf)
 	testStore, err := testStoreProvider.OpenStore(ledgerid)
 	testStore.Init(btlPolicy)
 	assert.NoError(err)
-	return &StoreEnv{t, testStoreProvider, testStore, ledgerid, btlPolicy}
+	return &StoreEnv{t, testStoreProvider, testStore, ledgerid, btlPolicy, conf}
 }
 
 
 func (env *StoreEnv) CloseAndReopen() {
 	var err error
 	env.TestStoreProvider.Close()
-	env.TestStoreProvider = NewProvider()
+	env.TestStoreProvider = NewProvider(env.conf)
 	env.TestStore, err = env.TestStoreProvider.OpenStore(env.ledgerid)
 	env.TestStore.Init(env.btlPolicy)
 	assert.NoError(env.t, err)
@@ -47,14 +66,5 @@ func (env *StoreEnv) CloseAndReopen() {
 
 
 func (env *StoreEnv) Cleanup() {
-	
-	removeStorePath(env.t)
-}
-
-func removeStorePath(t testing.TB) {
-	dbPath := ledgerconfig.GetPvtdataStorePath()
-	if err := os.RemoveAll(dbPath); err != nil {
-		t.Fatalf("Err: %s", err)
-		t.FailNow()
-	}
+	os.RemoveAll(env.conf.StorePath)
 }

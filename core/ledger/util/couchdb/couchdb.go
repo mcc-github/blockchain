@@ -142,6 +142,8 @@ type Config struct {
 	
 	
 	CreateGlobalChangesDB bool
+	
+	RedoLogPath string
 }
 
 

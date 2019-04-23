@@ -31,21 +31,26 @@ type EndpointCriteria struct {
 
 
 func (ec EndpointCriteria) Equals(other EndpointCriteria) bool {
-	return ec.Endpoint == other.Endpoint && equalStringSets(ec.Organizations, other.Organizations)
+	ss1 := stringSet(ec.Organizations)
+	ss2 := stringSet(other.Organizations)
+	return ec.Endpoint == other.Endpoint && ss1.equals(ss2)
 }
 
-func equalStringSets(s1, s2 []string) bool {
+
+
+type stringSet []string
+
+func (ss stringSet) equals(ss2 stringSet) bool {
 	
-	if len(s1) != len(s2) {
+	if len(ss) != len(ss2) {
 		return false
 	}
-
-	return reflect.DeepEqual(stringSliceToSet(s1), stringSliceToSet(s2))
+	return reflect.DeepEqual(ss.toMap(), ss2.toMap())
 }
 
-func stringSliceToSet(set []string) map[string]struct{} {
+func (ss stringSet) toMap() map[string]struct{} {
 	m := make(map[string]struct{})
-	for _, s := range set {
+	for _, s := range ss {
 		m[s] = struct{}{}
 	}
 	return m

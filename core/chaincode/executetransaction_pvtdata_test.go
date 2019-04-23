@@ -14,7 +14,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/spf13/viper"
@@ -351,137 +350,133 @@ func TestQueriesPrivateData(t *testing.T) {
 
 	
 	
-	if ledgerconfig.IsCouchDBEnabled() == true {
+	
+	
+	f = "query"
+	args = util.ToChaincodeArgs(f, "{\"selector\":{\"color\":\"blue\"}}")
 
-		
-		
-		f = "query"
-		args = util.ToChaincodeArgs(f, "{\"selector\":{\"color\":\"blue\"}}")
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, _, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+	nextBlockNumber++
 
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, _, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		return
+	}
 
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
+	
+	err = json.Unmarshal(retval, &keys)
+	assert.NoError(t, err)
 
-		
-		err = json.Unmarshal(retval, &keys)
-		assert.NoError(t, err)
+	
+	if len(keys) != 100 {
+		t.Fail()
+		t.Logf("Error detected with the rich query, should have returned 100 but returned %v %s", len(keys), keys)
+		return
+	}
+	f = "queryPrivate"
+	args = util.ToChaincodeArgs(f, "c1", "{\"selector\":{\"color\":\"blue\"}}")
 
-		
-		if len(keys) != 100 {
-			t.Fail()
-			t.Logf("Error detected with the rich query, should have returned 100 but returned %v %s", len(keys), keys)
-			return
-		}
-		f = "queryPrivate"
-		args = util.ToChaincodeArgs(f, "c1", "{\"selector\":{\"color\":\"blue\"}}")
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, _, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+	nextBlockNumber++
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		return
+	}
 
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, _, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
+	
+	err = json.Unmarshal(retval, &keys)
+	assert.NoError(t, err)
 
-		
-		err = json.Unmarshal(retval, &keys)
-		assert.NoError(t, err)
+	
+	if len(keys) != 100 {
+		t.Fail()
+		t.Logf("Error detected with the rich query, should have returned 100 but returned %v %s", len(keys), keys)
+		return
+	}
+	
+	viper.Set("ledger.state.queryLimit", 5)
 
-		
-		if len(keys) != 100 {
-			t.Fail()
-			t.Logf("Error detected with the rich query, should have returned 100 but returned %v %s", len(keys), keys)
-			return
-		}
-		
-		viper.Set("ledger.state.queryLimit", 5)
+	
+	f = "keys"
+	args = util.ToChaincodeArgs(f, "marble001", "marble011")
 
-		
-		f = "keys"
-		args = util.ToChaincodeArgs(f, "marble001", "marble011")
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+	nextBlockNumber++
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		return
+	}
 
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, retval, err := invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
+	
+	err = json.Unmarshal(retval, &keys)
+	assert.NoError(t, err)
+	
+	if len(keys) != 5 {
+		t.Fail()
+		t.Logf("Error detected with the range query, should have returned 5 but returned %v", len(keys))
+		return
+	}
 
-		
-		err = json.Unmarshal(retval, &keys)
-		assert.NoError(t, err)
-		
-		if len(keys) != 5 {
-			t.Fail()
-			t.Logf("Error detected with the range query, should have returned 5 but returned %v", len(keys))
-			return
-		}
+	
+	viper.Set("ledger.state.queryLimit", 10000)
 
-		
-		viper.Set("ledger.state.queryLimit", 10000)
+	
+	f = "query"
+	args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}")
 
-		
-		f = "query"
-		args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}")
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+	nextBlockNumber++
 
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		return
+	}
 
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
+	
+	err = json.Unmarshal(retval, &keys)
+	assert.NoError(t, err)
 
-		
-		err = json.Unmarshal(retval, &keys)
-		assert.NoError(t, err)
+	
+	
+	if len(keys) != 50 {
+		t.Fail()
+		t.Logf("Error detected with the rich query, should have returned 50 but returned %v", len(keys))
+		return
+	}
 
-		
-		
-		if len(keys) != 50 {
-			t.Fail()
-			t.Logf("Error detected with the rich query, should have returned 50 but returned %v", len(keys))
-			return
-		}
+	
+	viper.Set("ledger.state.queryLimit", 5)
 
-		
-		viper.Set("ledger.state.queryLimit", 5)
+	
+	f = "query"
+	args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}")
 
-		
-		f = "query"
-		args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}")
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+	nextBlockNumber++
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		return
+	}
 
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
+	
+	err = json.Unmarshal(retval, &keys)
+	assert.NoError(t, err)
 
-		
-		err = json.Unmarshal(retval, &keys)
-		assert.NoError(t, err)
-
-		
-		if len(keys) != 5 {
-			t.Fail()
-			t.Logf("Error detected with the rich query, should have returned 5 but returned %v", len(keys))
-			return
-		}
-
+	
+	if len(keys) != 5 {
+		t.Fail()
+		t.Logf("Error detected with the rich query, should have returned 5 but returned %v", len(keys))
+		return
 	}
 
 	

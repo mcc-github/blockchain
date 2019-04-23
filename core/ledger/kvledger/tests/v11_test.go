@@ -16,11 +16,11 @@ import (
 
 
 func TestV11(t *testing.T) {
-	fsPath := defaultConfig["peer.fileSystemPath"].(string)
-	
-	testutil.CopyDir("testdata/v11/sample_ledgers/ledgersData", fsPath)
-	env := newEnv(defaultConfig, t)
+	env := newEnv(t)
 	defer env.cleanup()
+	
+	testutil.CopyDir("testdata/v11/sample_ledgers/ledgersData", env.rootPath)
+	env.initLedgerMgmt()
 
 	h1, h2 := newTestHelperOpenLgr("ledger1", t), newTestHelperOpenLgr("ledger2", t)
 	dataHelper := &v11SampleDataHelper{}

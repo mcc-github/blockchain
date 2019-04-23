@@ -47,7 +47,6 @@ import (
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/protoutil"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -73,27 +72,27 @@ func fabTokenCapabilities() *mockconfig.MockApplicationCapabilities {
 	return &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, FabTokenRv: true}
 }
 
-func setupLedgerAndValidatorExplicit(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin validation.Plugin) (ledger.PeerLedger, txvalidator.Validator) {
+func setupLedgerAndValidatorExplicit(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin validation.Plugin) (ledger.PeerLedger, txvalidator.Validator, func()) {
 	return setupLedgerAndValidatorExplicitWithMSP(t, cpb, plugin, nil)
 }
 
-func setupLedgerAndValidatorWithPreV12Capabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator) {
+func setupLedgerAndValidatorWithPreV12Capabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator, func()) {
 	return setupLedgerAndValidatorWithCapabilities(t, preV12Capabilities())
 }
 
-func setupLedgerAndValidatorWithV12Capabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator) {
+func setupLedgerAndValidatorWithV12Capabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator, func()) {
 	return setupLedgerAndValidatorWithCapabilities(t, v12Capabilities())
 }
 
-func setupLedgerAndValidatorWithV13Capabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator) {
+func setupLedgerAndValidatorWithV13Capabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator, func()) {
 	return setupLedgerAndValidatorWithCapabilities(t, v13Capabilities())
 }
 
-func setupLedgerAndValidatorWithFabTokenCapabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator) {
+func setupLedgerAndValidatorWithFabTokenCapabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator, func()) {
 	return setupLedgerAndValidatorWithCapabilities(t, fabTokenCapabilities())
 }
 
-func setupLedgerAndValidatorWithCapabilities(t *testing.T, c *mockconfig.MockApplicationCapabilities) (ledger.PeerLedger, txvalidator.Validator) {
+func setupLedgerAndValidatorWithCapabilities(t *testing.T, c *mockconfig.MockApplicationCapabilities) (ledger.PeerLedger, txvalidator.Validator, func()) {
 	mspmgr := &mocks2.MSPManager{}
 	idThatSatisfiesPrincipal := &mocks2.Identity{}
 	idThatSatisfiesPrincipal.SatisfiesPrincipalReturns(nil)
@@ -103,9 +102,8 @@ func setupLedgerAndValidatorWithCapabilities(t *testing.T, c *mockconfig.MockApp
 	return setupLedgerAndValidatorExplicitWithMSP(t, c, &builtin.DefaultValidation{}, mspmgr)
 }
 
-func setupLedgerAndValidatorExplicitWithMSP(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin validation.Plugin, mspMgr msp.MSPManager) (ledger.PeerLedger, txvalidator.Validator) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/validatortest")
-	ledgermgmt.InitializeTestEnv()
+func setupLedgerAndValidatorExplicitWithMSP(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin validation.Plugin, mspMgr msp.MSPManager) (ledger.PeerLedger, txvalidator.Validator, func()) {
+	cleanup := ledgermgmt.InitializeTestEnv(t)
 	gb, err := ctxt.MakeGenesisBlock("TestLedger")
 	assert.NoError(t, err)
 	theLedger, err := ledgermgmt.CreateLedger(gb)
@@ -124,7 +122,12 @@ func setupLedgerAndValidatorExplicitWithMSP(t *testing.T, cpb *mockconfig.MockAp
 		pm,
 	)
 
-	return theLedger, theValidator
+	return theLedger,
+		theValidator,
+		func() {
+			theLedger.Close()
+			cleanup()
+		}
 }
 
 func createRWset(t *testing.T, ccnames ...string) []byte {
@@ -322,17 +325,15 @@ func assertValid(block *common.Block, t *testing.T) {
 
 func TestInvokeBadRWSet(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeBadRWSet(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeBadRWSet(t, l, v)
 	})
@@ -351,17 +352,15 @@ func testInvokeBadRWSet(t *testing.T, l ledger.PeerLedger, v txvalidator.Validat
 
 func TestInvokeNoPolicy(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNoPolicy(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNoPolicy(t, l, v)
 	})
@@ -382,17 +381,15 @@ func testInvokeNoPolicy(t *testing.T, l ledger.PeerLedger, v txvalidator.Validat
 
 func TestInvokeOK(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeOK(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeOK(t, l, v)
 	})
@@ -416,9 +413,8 @@ func TestInvokeNoRWSet(t *testing.T) {
 	plugin.On("Init", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	t.Run("Pre-1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicit(t, preV12Capabilities(), plugin)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicit(t, preV12Capabilities(), plugin)
+		defer cleanup()
 
 		ccID := "mycc"
 
@@ -444,9 +440,8 @@ func TestInvokeNoRWSet(t *testing.T) {
 	
 	
 	t.Run("Post-1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicitWithMSP(t, v12Capabilities(), &builtin.DefaultValidation{}, mspmgr)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, v12Capabilities(), &builtin.DefaultValidation{}, mspmgr)
+		defer cleanup()
 
 		testInvokeNoRWSet(t, l, v)
 	})
@@ -454,9 +449,8 @@ func TestInvokeNoRWSet(t *testing.T) {
 	
 	
 	t.Run("Post-1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicitWithMSP(t, v13Capabilities(), &builtin.DefaultValidation{}, mspmgr)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, v13Capabilities(), &builtin.DefaultValidation{}, mspmgr)
+		defer cleanup()
 
 		testInvokeNoRWSet(t, l, v)
 	})
@@ -618,9 +612,8 @@ func TestParallelValidation(t *testing.T) {
 
 	vpKey := pb.MetaDataKeys_VALIDATION_PARAMETER.String()
 
-	l, v := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, V1_3ValidationRv: true}, &builtin.DefaultValidation{}, mgr)
-	defer ledgermgmt.CleanupTestEnv()
-	defer l.Close()
+	l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, V1_3ValidationRv: true}, &builtin.DefaultValidation{}, mgr)
+	defer cleanup()
 
 	ccID := "mycc"
 
@@ -735,9 +728,8 @@ func TestParallelValidation(t *testing.T) {
 func TestChaincodeEvent(t *testing.T) {
 	t.Run("PreV1.2", func(t *testing.T) {
 		t.Run("MisMatchedName", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithPreV12Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithPreV12Capabilities(t)
+			defer cleanup()
 
 			ccID := "mycc"
 
@@ -752,9 +744,8 @@ func TestChaincodeEvent(t *testing.T) {
 		})
 
 		t.Run("BadBytes", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithPreV12Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithPreV12Capabilities(t)
+			defer cleanup()
 
 			ccID := "mycc"
 
@@ -769,9 +760,8 @@ func TestChaincodeEvent(t *testing.T) {
 		})
 
 		t.Run("GoodPath", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithPreV12Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithPreV12Capabilities(t)
+			defer cleanup()
 
 			ccID := "mycc"
 
@@ -788,25 +778,22 @@ func TestChaincodeEvent(t *testing.T) {
 
 	t.Run("PostV1.2", func(t *testing.T) {
 		t.Run("MisMatchedName", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+			defer cleanup()
 
 			testCCEventMismatchedName(t, l, v)
 		})
 
 		t.Run("BadBytes", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+			defer cleanup()
 
 			testCCEventBadBytes(t, l, v)
 		})
 
 		t.Run("GoodPath", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+			defer cleanup()
 
 			testCCEventGoodPath(t, l, v)
 		})
@@ -814,25 +801,22 @@ func TestChaincodeEvent(t *testing.T) {
 
 	t.Run("V1.3", func(t *testing.T) {
 		t.Run("MisMatchedName", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+			defer cleanup()
 
 			testCCEventMismatchedName(t, l, v)
 		})
 
 		t.Run("BadBytes", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+			defer cleanup()
 
 			testCCEventBadBytes(t, l, v)
 		})
 
 		t.Run("GoodPath", func(t *testing.T) {
-			l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-			defer ledgermgmt.CleanupTestEnv()
-			defer l.Close()
+			l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+			defer cleanup()
 
 			testCCEventGoodPath(t, l, v)
 		})
@@ -886,17 +870,15 @@ func TestInvokeOKPvtDataOnly(t *testing.T) {
 	mspmgr.DeserializeIdentityReturns(idThatSatisfiesPrincipal, nil)
 
 	t.Run("V1.2", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicitWithMSP(t, v12Capabilities(), &builtin.DefaultValidation{}, mspmgr)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, v12Capabilities(), &builtin.DefaultValidation{}, mspmgr)
+		defer cleanup()
 
 		testInvokeOKPvtDataOnly(t, l, v)
 	})
 
 	t.Run("V1.3", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicitWithMSP(t, v13Capabilities(), &builtin.DefaultValidation{}, mspmgr)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, v13Capabilities(), &builtin.DefaultValidation{}, mspmgr)
+		defer cleanup()
 
 		testInvokeOKPvtDataOnly(t, l, v)
 	})
@@ -930,17 +912,15 @@ func TestInvokeOKMetaUpdateOnly(t *testing.T) {
 	mspmgr.DeserializeIdentityReturns(idThatSatisfiesPrincipal, nil)
 
 	t.Run("V1.2", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, PrivateChannelDataRv: true}, &builtin.DefaultValidation{}, mspmgr)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, PrivateChannelDataRv: true}, &builtin.DefaultValidation{}, mspmgr)
+		defer cleanup()
 
 		testInvokeOKMetaUpdateOnly(t, l, v)
 	})
 
 	t.Run("V1.3", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_3ValidationRv: true, V1_2ValidationRv: true, PrivateChannelDataRv: true}, &builtin.DefaultValidation{}, mspmgr)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_3ValidationRv: true, V1_2ValidationRv: true, PrivateChannelDataRv: true}, &builtin.DefaultValidation{}, mspmgr)
+		defer cleanup()
 
 		testInvokeOKMetaUpdateOnly(t, l, v)
 	})
@@ -974,17 +954,15 @@ func TestInvokeOKPvtMetaUpdateOnly(t *testing.T) {
 	mspmgr.DeserializeIdentityReturns(idThatSatisfiesPrincipal, nil)
 
 	t.Run("V1.2", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, PrivateChannelDataRv: true}, &builtin.DefaultValidation{}, mspmgr)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, PrivateChannelDataRv: true}, &builtin.DefaultValidation{}, mspmgr)
+		defer cleanup()
 
 		testInvokeOKPvtMetaUpdateOnly(t, l, v)
 	})
 
 	t.Run("V1.3", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_3ValidationRv: true, V1_2ValidationRv: true, PrivateChannelDataRv: true}, &builtin.DefaultValidation{}, mspmgr)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorExplicitWithMSP(t, &mockconfig.MockApplicationCapabilities{V1_3ValidationRv: true, V1_2ValidationRv: true, PrivateChannelDataRv: true}, &builtin.DefaultValidation{}, mspmgr)
+		defer cleanup()
 
 		testInvokeOKPvtMetaUpdateOnly(t, l, v)
 	})
@@ -1012,17 +990,15 @@ func testInvokeOKPvtMetaUpdateOnly(t *testing.T, l ledger.PeerLedger, v txvalida
 
 func TestInvokeOKSCC(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeOKSCC(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeOKSCC(t, l, v)
 	})
@@ -1063,17 +1039,15 @@ func testInvokeOKSCC(t *testing.T, l ledger.PeerLedger, v txvalidator.Validator)
 
 func TestInvokeNOKWritesToLSCC(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKWritesToLSCC(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKWritesToLSCC(t, l, v)
 	})
@@ -1094,17 +1068,15 @@ func testInvokeNOKWritesToLSCC(t *testing.T, l ledger.PeerLedger, v txvalidator.
 
 func TestInvokeNOKWritesToESCC(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKWritesToESCC(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKWritesToESCC(t, l, v)
 	})
@@ -1128,17 +1100,15 @@ func testInvokeNOKWritesToESCC(t *testing.T, l ledger.PeerLedger, v txvalidator.
 
 func TestInvokeNOKWritesToNotExt(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKWritesToNotExt(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKWritesToNotExt(t, l, v)
 	})
@@ -1162,17 +1132,15 @@ func testInvokeNOKWritesToNotExt(t *testing.T, l ledger.PeerLedger, v txvalidato
 
 func TestInvokeNOKInvokesNotExt(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKInvokesNotExt(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKInvokesNotExt(t, l, v)
 	})
@@ -1196,17 +1164,15 @@ func testInvokeNOKInvokesNotExt(t *testing.T, l ledger.PeerLedger, v txvalidator
 
 func TestInvokeNOKInvokesEmptyCCName(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKInvokesEmptyCCName(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKInvokesEmptyCCName(t, l, v)
 	})
@@ -1230,17 +1196,15 @@ func testInvokeNOKInvokesEmptyCCName(t *testing.T, l ledger.PeerLedger, v txvali
 
 func TestInvokeNOKExpiredCC(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKExpiredCC(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKExpiredCC(t, l, v)
 	})
@@ -1264,17 +1228,15 @@ func testInvokeNOKExpiredCC(t *testing.T, l ledger.PeerLedger, v txvalidator.Val
 
 func TestInvokeNOKBogusActions(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKBogusActions(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKBogusActions(t, l, v)
 	})
@@ -1298,17 +1260,15 @@ func testInvokeNOKBogusActions(t *testing.T, l ledger.PeerLedger, v txvalidator.
 
 func TestInvokeNOKCCDoesntExist(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKCCDoesntExist(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKCCDoesntExist(t, l, v)
 	})
@@ -1330,17 +1290,15 @@ func testInvokeNOKCCDoesntExist(t *testing.T, l ledger.PeerLedger, v txvalidator
 
 func TestInvokeNOKVSCCUnspecified(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKVSCCUnspecified(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNOKVSCCUnspecified(t, l, v)
 	})
@@ -1364,17 +1322,15 @@ func testInvokeNOKVSCCUnspecified(t *testing.T, l ledger.PeerLedger, v txvalidat
 
 func TestInvokeNoBlock(t *testing.T) {
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		testInvokeNoBlock(t, l, v)
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		testInvokeNoBlock(t, l, v)
 	})
@@ -1404,9 +1360,8 @@ func TestValidateTxWithStateBasedEndorsement(t *testing.T) {
 	
 
 	t.Run("1.2Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV12Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
 
 		err, b := validateTxWithStateBasedEndorsement(t, l, v)
 
@@ -1415,9 +1370,8 @@ func TestValidateTxWithStateBasedEndorsement(t *testing.T) {
 	})
 
 	t.Run("1.3Capability", func(t *testing.T) {
-		l, v := setupLedgerAndValidatorWithV13Capabilities(t)
-		defer ledgermgmt.CleanupTestEnv()
-		defer l.Close()
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
 
 		err, b := validateTxWithStateBasedEndorsement(t, l, v)
 
@@ -1441,9 +1395,8 @@ func validateTxWithStateBasedEndorsement(t *testing.T, l ledger.PeerLedger, v tx
 }
 
 func TestTokenValidTransaction(t *testing.T) {
-	l, v := setupLedgerAndValidatorWithFabTokenCapabilities(t)
-	defer ledgermgmt.CleanupTestEnv()
-	defer l.Close()
+	_, v, cleanup := setupLedgerAndValidatorWithFabTokenCapabilities(t)
+	defer cleanup()
 
 	tx := getTokenTx(t)
 	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 1}}
@@ -1454,9 +1407,8 @@ func TestTokenValidTransaction(t *testing.T) {
 }
 
 func TestTokenCapabilityNotEnabled(t *testing.T) {
-	l, v := setupLedgerAndValidatorWithPreV12Capabilities(t)
-	defer ledgermgmt.CleanupTestEnv()
-	defer l.Close()
+	_, v, cleanup := setupLedgerAndValidatorWithPreV12Capabilities(t)
+	defer cleanup()
 
 	tx := getTokenTx(t)
 	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 1}}
@@ -1689,9 +1641,8 @@ func (exec *mockQueryExecutor) GetPrivateDataMetadata(namespace, collection, key
 	return nil, nil
 }
 
-func createCustomSupportAndLedger(t *testing.T) (*mocktxvalidator.Support, ledger.PeerLedger) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/validatortest")
-	ledgermgmt.InitializeTestEnv()
+func createCustomSupportAndLedger(t *testing.T) (*mocktxvalidator.Support, ledger.PeerLedger, func()) {
+	cleanup := ledgermgmt.InitializeTestEnv(t)
 	gb, err := ctxt.MakeGenesisBlock("TestLedger")
 	assert.NoError(t, err)
 	l, err := ledgermgmt.CreateLedger(gb)
@@ -1705,7 +1656,7 @@ func createCustomSupportAndLedger(t *testing.T) (*mocktxvalidator.Support, ledge
 	mspManager := &mocks2.MSPManager{}
 	mspManager.DeserializeIdentityReturns(identity, nil)
 	support := &mocktxvalidator.Support{LedgerVal: l, ACVal: &mockconfig.MockApplicationCapabilities{}, MSPManagerVal: mspManager}
-	return support, l
+	return support, l, cleanup
 }
 
 func TestDynamicCapabilitiesAndMSP(t *testing.T) {
@@ -1714,8 +1665,8 @@ func TestDynamicCapabilitiesAndMSP(t *testing.T) {
 	pm := &mocks.Mapper{}
 	pm.On("FactoryByName", vp.Name("vscc")).Return(factory)
 
-	support, l := createCustomSupportAndLedger(t)
-	defer l.Close()
+	support, l, cleanup := createCustomSupportAndLedger(t)
+	defer cleanup()
 
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 
@@ -1926,9 +1877,8 @@ func TestValidationPluginExecutionError(t *testing.T) {
 	plugin := &mocks.Plugin{}
 	plugin.On("Init", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	l, v := setupLedgerAndValidatorExplicit(t, &mockconfig.MockApplicationCapabilities{}, plugin)
-	defer ledgermgmt.CleanupTestEnv()
-	defer l.Close()
+	l, v, cleanup := setupLedgerAndValidatorExplicit(t, &mockconfig.MockApplicationCapabilities{}, plugin)
+	defer cleanup()
 
 	ccID := "mycc"
 	putCCInfo(l, ccID, signedByAnyMember([]string{"SampleOrg"}), t)

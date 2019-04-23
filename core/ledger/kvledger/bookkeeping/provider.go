@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 )
 
 
@@ -36,8 +35,8 @@ type provider struct {
 }
 
 
-func NewProvider() Provider {
-	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: getInternalBookkeeperPath()})
+func NewProvider(dbPath string) Provider {
+	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
 	return &provider{dbProvider: dbProvider}
 }
 
@@ -49,8 +48,4 @@ func (provider *provider) GetDBHandle(ledgerID string, cat Category) *leveldbhel
 
 func (provider *provider) Close() {
 	provider.dbProvider.Close()
-}
-
-func getInternalBookkeeperPath() string {
-	return ledgerconfig.GetInternalBookkeeperPath()
 }

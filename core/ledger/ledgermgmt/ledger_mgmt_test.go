@@ -7,7 +7,8 @@ package ledgermgmt
 
 import (
 	"fmt"
-	"os"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/configtx/test"
@@ -17,14 +18,8 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
-
-func TestMain(m *testing.M) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/ledgermgmt")
-	os.Exit(m.Run())
-}
 
 func TestLedgerMgmt(t *testing.T) {
 	
@@ -44,8 +39,27 @@ func TestLedgerMgmt(t *testing.T) {
 
 	Close()
 
-	InitializeTestEnv()
-	defer CleanupTestEnv()
+	rootPath, err := ioutil.TempDir("", "lgrmgmt")
+	if err != nil {
+		t.Fatalf("Failed to create ledger directory: %s", err)
+	}
+
+	initializer := &Initializer{
+		PlatformRegistry: platforms.NewRegistry(&golang.Platform{}),
+		MetricsProvider:  &disabled.Provider{},
+		Config: &ledger.Config{
+			RootFSPath: rootPath,
+			StateDB: &ledger.StateDB{
+				LevelDBPath: filepath.Join(rootPath, "stateleveldb"),
+			},
+		},
+	}
+
+	cleanup, err := InitializeTestEnvWithInitializer(initializer)
+	if err != nil {
+		t.Fatalf("Failed to initialize test environment: %s", err)
+	}
+	defer cleanup()
 
 	numLedgers := 10
 	ledgers := make([]ledger.PeerLedger, numLedgers)
@@ -78,19 +92,15 @@ func TestLedgerMgmt(t *testing.T) {
 	Close()
 
 	
-	Initialize(&Initializer{
-		PlatformRegistry: platforms.NewRegistry(&golang.Platform{}),
-		MetricsProvider:  &disabled.Provider{},
-		Config:           &ledger.Config{},
-	})
+	Initialize(initializer)
 	l, err = OpenLedger(ledgerID)
 	assert.NoError(t, err)
 	Close()
 }
 
 func TestChaincodeInfoProvider(t *testing.T) {
-	InitializeTestEnv()
-	defer CleanupTestEnv()
+	cleanup := InitializeTestEnv(t)
+	defer cleanup()
 	gb, _ := test.MakeGenesisBlock("ledger1")
 	CreateLedger(gb)
 

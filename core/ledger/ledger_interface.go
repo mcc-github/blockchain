@@ -33,7 +33,11 @@ type Initializer struct {
 
 type Config struct {
 	
+	RootFSPath string
+	
 	StateDB *StateDB
+	
+	PrivateData *PrivateData
 }
 
 
@@ -43,7 +47,25 @@ type StateDB struct {
 	StateDatabase string
 	
 	
+	LevelDBPath string
+	
+	
 	CouchDB *couchdb.Config
+}
+
+
+type PrivateData struct {
+	
+	StorePath string
+	
+	
+	BatchesInterval int
+	
+	
+	MaxBatchSize int
+	
+	
+	PurgeInterval int
 }
 
 

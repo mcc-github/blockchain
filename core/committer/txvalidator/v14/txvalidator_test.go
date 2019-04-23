@@ -28,7 +28,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -100,9 +99,8 @@ func TestDetectTXIdDuplicates(t *testing.T) {
 }
 
 func TestBlockValidationDuplicateTXId(t *testing.T) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/txvalidatortest")
-	ledgermgmt.InitializeTestEnv()
-	defer ledgermgmt.CleanupTestEnv()
+	cleanup := ledgermgmt.InitializeTestEnv(t)
+	defer cleanup()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
 	gbHash := protoutil.BlockHeaderHash(gb.Header)
@@ -161,9 +159,8 @@ func TestBlockValidationDuplicateTXId(t *testing.T) {
 }
 
 func TestBlockValidation(t *testing.T) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/txvalidatortest")
-	ledgermgmt.InitializeTestEnv()
-	defer ledgermgmt.CleanupTestEnv()
+	cleanup := ledgermgmt.InitializeTestEnv(t)
+	defer cleanup()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
 	gbHash := protoutil.BlockHeaderHash(gb.Header)
@@ -175,9 +172,8 @@ func TestBlockValidation(t *testing.T) {
 }
 
 func TestParallelBlockValidation(t *testing.T) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/txvalidatortest")
-	ledgermgmt.InitializeTestEnv()
-	defer ledgermgmt.CleanupTestEnv()
+	cleanup := ledgermgmt.InitializeTestEnv(t)
+	defer cleanup()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
 	gbHash := protoutil.BlockHeaderHash(gb.Header)
@@ -189,9 +185,8 @@ func TestParallelBlockValidation(t *testing.T) {
 }
 
 func TestVeryLargeParallelBlockValidation(t *testing.T) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/txvalidatortest")
-	ledgermgmt.InitializeTestEnv()
-	defer ledgermgmt.CleanupTestEnv()
+	cleanup := ledgermgmt.InitializeTestEnv(t)
+	defer cleanup()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
 	gbHash := protoutil.BlockHeaderHash(gb.Header)
@@ -205,9 +200,8 @@ func TestVeryLargeParallelBlockValidation(t *testing.T) {
 }
 
 func TestTxValidationFailure_InvalidTxid(t *testing.T) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/txvalidatortest")
-	ledgermgmt.InitializeTestEnv()
-	defer ledgermgmt.CleanupTestEnv()
+	cleanup := ledgermgmt.InitializeTestEnv(t)
+	defer cleanup()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
 	ledger, _ := ledgermgmt.CreateLedger(gb)

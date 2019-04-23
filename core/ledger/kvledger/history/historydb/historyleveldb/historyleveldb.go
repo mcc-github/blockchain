@@ -31,8 +31,7 @@ type HistoryDBProvider struct {
 }
 
 
-func NewHistoryDBProvider() *HistoryDBProvider {
-	dbPath := ledgerconfig.GetHistoryLevelDBPath()
+func NewHistoryDBProvider(dbPath string) *HistoryDBProvider {
 	logger.Debugf("constructing HistoryDBProvider dbPath=%s", dbPath)
 	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
 	return &HistoryDBProvider{dbProvider}

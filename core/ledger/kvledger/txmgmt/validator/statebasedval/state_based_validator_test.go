@@ -30,7 +30,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,7 +44,6 @@ type keyValue struct {
 
 func TestMain(m *testing.M) {
 	flogging.ActivateSpec("statevalidator,statebasedval,statecouchdb=debug")
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/kvledger/txmgmt/validator/statebasedval")
 	os.Exit(m.Run())
 }
 

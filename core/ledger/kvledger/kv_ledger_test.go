@@ -29,15 +29,16 @@ import (
 func TestMain(m *testing.M) {
 	ledgertestutil.SetupCoreYAMLConfig()
 	flogging.ActivateSpec("lockbasedtxmgr,statevalidator,valimpl,confighistory,pvtstatepurgemgmt=debug")
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/kvledger")
 	viper.Set("ledger.history.enableHistoryDatabase", true)
 	os.Exit(m.Run())
 }
 
 func TestKVLedgerBlockStorage(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-	provider := testutilNewProvider(t)
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+	
+	_ = createTestEnv(t, conf.RootFSPath)
+	provider := testutilNewProvider(conf, t)
 	defer provider.Close()
 
 	bg, gb := testutil.NewBlockGenerator(t, "testLedger", false)
@@ -121,9 +122,11 @@ func TestKVLedgerBlockStorage(t *testing.T) {
 
 func TestKVLedgerBlockStorageWithPvtdata(t *testing.T) {
 	t.Skip()
-	env := newTestEnv(t)
-	defer env.cleanup()
-	provider := testutilNewProvider(t)
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+	
+	_ = createTestEnv(t, conf.RootFSPath)
+	provider := testutilNewProvider(conf, t)
 	defer provider.Close()
 
 	bg, gb := testutil.NewBlockGenerator(t, "testLedger", false)
@@ -191,10 +194,15 @@ func TestKVLedgerDBRecovery(t *testing.T) {
 }
 
 func testSyncStateAndHistoryDBWithBlockstore(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-	provider := testutilNewProviderWithCollectionConfig(t,
-		"ns", map[string]uint64{"coll": 0},
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+	
+	_ = createTestEnv(t, conf.RootFSPath)
+	provider := testutilNewProviderWithCollectionConfig(
+		t,
+		"ns",
+		map[string]uint64{"coll": 0},
+		conf,
 	)
 	defer provider.Close()
 	testLedgerid := "testLedger"
@@ -255,8 +263,11 @@ func testSyncStateAndHistoryDBWithBlockstore(t *testing.T) {
 
 	
 	
-	provider = testutilNewProviderWithCollectionConfig(t,
-		"ns", map[string]uint64{"coll": 0},
+	provider = testutilNewProviderWithCollectionConfig(
+		t,
+		"ns",
+		map[string]uint64{"coll": 0},
+		conf,
 	)
 	ledger, _ = provider.Open(testLedgerid)
 	checkBCSummaryForTest(t, ledger,
@@ -306,8 +317,11 @@ func testSyncStateAndHistoryDBWithBlockstore(t *testing.T) {
 
 	
 	
-	provider = testutilNewProviderWithCollectionConfig(t,
-		"ns", map[string]uint64{"coll": 0},
+	provider = testutilNewProviderWithCollectionConfig(
+		t,
+		"ns",
+		map[string]uint64{"coll": 0},
+		conf,
 	)
 	ledger, _ = provider.Open(testLedgerid)
 
@@ -357,8 +371,11 @@ func testSyncStateAndHistoryDBWithBlockstore(t *testing.T) {
 
 	
 	
-	provider = testutilNewProviderWithCollectionConfig(t,
-		"ns", map[string]uint64{"coll": 0},
+	provider = testutilNewProviderWithCollectionConfig(
+		t,
+		"ns",
+		map[string]uint64{"coll": 0},
+		conf,
 	)
 	ledger, _ = provider.Open(testLedgerid)
 	checkBCSummaryForTest(t, ledger,
@@ -375,10 +392,15 @@ func testSyncStateAndHistoryDBWithBlockstore(t *testing.T) {
 }
 
 func testSyncStateDBWithPvtdatastore(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-	provider := testutilNewProviderWithCollectionConfig(t,
-		"ns", map[string]uint64{"coll": 0},
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+	
+	_ = createTestEnv(t, conf.RootFSPath)
+	provider := testutilNewProviderWithCollectionConfig(
+		t,
+		"ns",
+		map[string]uint64{"coll": 0},
+		conf,
 	)
 	defer provider.Close()
 	testLedgerid := "testLedger"
@@ -423,8 +445,11 @@ func testSyncStateDBWithPvtdatastore(t *testing.T) {
 
 	
 	
-	provider = testutilNewProviderWithCollectionConfig(t,
-		"ns", map[string]uint64{"coll": 0},
+	provider = testutilNewProviderWithCollectionConfig(
+		t,
+		"ns",
+		map[string]uint64{"coll": 0},
+		conf,
 	)
 	ledger, _ = provider.Open(testLedgerid)
 
@@ -436,16 +461,16 @@ func testSyncStateDBWithPvtdatastore(t *testing.T) {
 }
 
 func TestLedgerWithCouchDbEnabledWithBinaryAndJSONData(t *testing.T) {
+	logger.Debugf(
+		"TestLedgerWithCouchDbEnabledWithBinaryAndJSONData  IsHistoryDBEnabled()value: %v\n",
+		ledgerconfig.IsHistoryDBEnabled(),
+	)
 
+	conf, cleanup := testConfig(t)
+	defer cleanup()
 	
-	ledgertestutil.SetupCoreYAMLConfig()
-
-	logger.Debugf("TestLedgerWithCouchDbEnabledWithBinaryAndJSONData  IsCouchDBEnabled()value: %v , IsHistoryDBEnabled()value: %v\n",
-		ledgerconfig.IsCouchDBEnabled(), ledgerconfig.IsHistoryDBEnabled())
-
-	env := newTestEnv(t)
-	defer env.cleanup()
-	provider := testutilNewProvider(t)
+	_ = createTestEnv(t, conf.RootFSPath)
+	provider := testutilNewProvider(conf, t)
 	defer provider.Close()
 	bg, gb := testutil.NewBlockGenerator(t, "testLedger", false)
 	gbHash := protoutil.BlockHeaderHash(gb.Header)

@@ -7,19 +7,21 @@ SPDX-License-Identifier: Apache-2.0
 package ledgerstorage
 
 import (
+	"path/filepath"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
 	lutil "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
+
+const maxBlockFileSize = 64 * 1024 * 1024
 
 var logger = flogging.MustGetLogger("ledgerstorage")
 
@@ -37,7 +39,7 @@ type Store struct {
 }
 
 
-func NewProvider() *Provider {
+func NewProvider(storeDir string, conf *ledger.PrivateData) *Provider {
 	
 	attrsToIndex := []blkstorage.IndexableAttr{
 		blkstorage.IndexableAttrBlockHash,
@@ -49,10 +51,14 @@ func NewProvider() *Provider {
 	}
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
 	blockStoreProvider := fsblkstorage.NewProvider(
-		fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
-		indexConfig)
+		fsblkstorage.NewConf(
+			filepath.Join(storeDir, "chains"),
+			maxBlockFileSize,
+		),
+		indexConfig,
+	)
 
-	pvtStoreProvider := pvtdatastorage.NewProvider()
+	pvtStoreProvider := pvtdatastorage.NewProvider(conf)
 	return &Provider{blockStoreProvider, pvtStoreProvider}
 }
 

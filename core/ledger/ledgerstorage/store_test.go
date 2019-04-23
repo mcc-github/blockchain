@@ -7,7 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package ledgerstorage
 
 import (
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
@@ -16,7 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
@@ -24,20 +25,25 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
 	flogging.ActivateSpec("ledgerstorage,pvtdatastorage=debug")
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/core/ledger/ledgerstorage")
 	os.Exit(m.Run())
 }
 
 func TestStore(t *testing.T) {
-	testEnv := newTestEnv(t)
-	defer testEnv.cleanup()
-	provider := NewProvider()
+	storeDir, err := ioutil.TempDir("", "lstore")
+	if err != nil {
+		t.Fatalf("Failed to create ledger storage directory: %s", err)
+	}
+	defer os.RemoveAll(storeDir)
+	conf := &ledger.PrivateData{
+		StorePath:     filepath.Join(storeDir, "pvtdataStore"),
+		PurgeInterval: 1,
+	}
+	provider := NewProvider(storeDir, conf)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())
@@ -109,8 +115,11 @@ func TestStore(t *testing.T) {
 
 func TestStoreWithExistingBlockchain(t *testing.T) {
 	testLedgerid := "test-ledger"
-	testEnv := newTestEnv(t)
-	defer testEnv.cleanup()
+	storeDir, err := ioutil.TempDir("", "lstore")
+	if err != nil {
+		t.Fatalf("Failed to create ledger storage directory: %s", err)
+	}
+	defer os.RemoveAll(storeDir)
 
 	
 	attrsToIndex := []blkstorage.IndexableAttr{
@@ -123,8 +132,9 @@ func TestStoreWithExistingBlockchain(t *testing.T) {
 	}
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
 	blockStoreProvider := fsblkstorage.NewProvider(
-		fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
-		indexConfig)
+		fsblkstorage.NewConf(filepath.Join(storeDir, "chains"), maxBlockFileSize),
+		indexConfig,
+	)
 
 	blkStore, err := blockStoreProvider.OpenBlockStore(testLedgerid)
 	assert.NoError(t, err)
@@ -141,7 +151,11 @@ func TestStoreWithExistingBlockchain(t *testing.T) {
 
 	
 	
-	provider := NewProvider()
+	conf := &ledger.PrivateData{
+		StorePath:     filepath.Join(storeDir, "pvtdataStore"),
+		PurgeInterval: 1,
+	}
+	provider := NewProvider(storeDir, conf)
 	defer provider.Close()
 	store, err := provider.Open(testLedgerid)
 	store.Init(btlPolicyForSampleData())
@@ -161,9 +175,16 @@ func TestStoreWithExistingBlockchain(t *testing.T) {
 }
 
 func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
-	testEnv := newTestEnv(t)
-	defer testEnv.cleanup()
-	provider := NewProvider()
+	storeDir, err := ioutil.TempDir("", "lstore")
+	if err != nil {
+		t.Fatalf("Failed to create ledger storage directory: %s", err)
+	}
+	defer os.RemoveAll(storeDir)
+	conf := &ledger.PrivateData{
+		StorePath:     filepath.Join(storeDir, "pvtdataStore"),
+		PurgeInterval: 1,
+	}
+	provider := NewProvider(storeDir, conf)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())
@@ -186,7 +207,7 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
 	store.Shutdown()
 	provider.Close()
-	provider = NewProvider()
+	provider = NewProvider(storeDir, conf)
 	store, err = provider.Open("testLedger")
 	assert.NoError(t, err)
 	store.Init(btlPolicyForSampleData())
@@ -216,9 +237,16 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 }
 
 func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
-	testEnv := newTestEnv(t)
-	defer testEnv.cleanup()
-	provider := NewProvider()
+	storeDir, err := ioutil.TempDir("", "lstore")
+	if err != nil {
+		t.Fatalf("Failed to create ledger storage directory: %s", err)
+	}
+	defer os.RemoveAll(storeDir)
+	conf := &ledger.PrivateData{
+		StorePath:     filepath.Join(storeDir, "pvtdataStore"),
+		PurgeInterval: 1,
+	}
+	provider := NewProvider(storeDir, conf)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())
@@ -244,7 +272,7 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 	store.BlockStore.AddBlock(dataAtCrash.Block)
 	store.Shutdown()
 	provider.Close()
-	provider = NewProvider()
+	provider = NewProvider(storeDir, conf)
 	store, err = provider.Open("testLedger")
 	assert.NoError(t, err)
 	store.Init(btlPolicyForSampleData())
@@ -255,9 +283,16 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 }
 
 func TestAddAfterPvtdataStoreError(t *testing.T) {
-	testEnv := newTestEnv(t)
-	defer testEnv.cleanup()
-	provider := NewProvider()
+	storeDir, err := ioutil.TempDir("", "lstore")
+	if err != nil {
+		t.Fatalf("Failed to create ledger storage directory: %s", err)
+	}
+	defer os.RemoveAll(storeDir)
+	conf := &ledger.PrivateData{
+		StorePath:     filepath.Join(storeDir, "pvtdataStore"),
+		PurgeInterval: 1,
+	}
+	provider := NewProvider(storeDir, conf)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())
@@ -292,9 +327,16 @@ func TestAddAfterPvtdataStoreError(t *testing.T) {
 }
 
 func TestAddAfterBlkStoreError(t *testing.T) {
-	testEnv := newTestEnv(t)
-	defer testEnv.cleanup()
-	provider := NewProvider()
+	storeDir, err := ioutil.TempDir("", "lstore")
+	if err != nil {
+		t.Fatalf("Failed to create ledger storage directory: %s", err)
+	}
+	defer os.RemoveAll(storeDir)
+	conf := &ledger.PrivateData{
+		StorePath:     filepath.Join(storeDir, "pvtdataStore"),
+		PurgeInterval: 1,
+	}
+	provider := NewProvider(storeDir, conf)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())

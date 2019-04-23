@@ -8,9 +8,14 @@ package peer
 
 import (
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/spf13/viper"
 
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
@@ -84,8 +89,11 @@ func TestInitChain(t *testing.T) {
 }
 
 func TestInitialize(t *testing.T) {
-	cleanup := setupPeerFS(t)
-	defer cleanup()
+	rootFSPath, err := ioutil.TempDir("", "ledgersData")
+	if err != nil {
+		t.Fatalf("Failed to create ledger directory: %s", err)
+	}
+	defer os.RemoveAll(rootFSPath)
 
 	Initialize(
 		nil,
@@ -97,13 +105,28 @@ func TestInitialize(t *testing.T) {
 		&disabled.Provider{},
 		nil,
 		nil,
-		&ledger.Config{},
+		&ledger.Config{
+			RootFSPath: rootFSPath,
+			StateDB: &ledger.StateDB{
+				LevelDBPath: filepath.Join(rootFSPath, "stateleveldb"),
+			},
+			PrivateData: &ledger.PrivateData{
+				StorePath:       filepath.Join(rootFSPath, "pvtdataStore"),
+				MaxBatchSize:    5000,
+				BatchesInterval: 1000,
+				PurgeInterval:   100,
+			},
+		},
 	)
 }
 
 func TestCreateChainFromBlock(t *testing.T) {
-	cleanup := setupPeerFS(t)
-	defer cleanup()
+	peerFSPath, err := ioutil.TempDir("", "ledgersData")
+	if err != nil {
+		t.Fatalf("Failed to create peer directory: %s", err)
+	}
+	defer os.RemoveAll(peerFSPath)
+	viper.Set("peer.fileSystemPath", peerFSPath)
 
 	Initialize(
 		nil,
@@ -115,7 +138,18 @@ func TestCreateChainFromBlock(t *testing.T) {
 		&disabled.Provider{},
 		nil,
 		nil,
-		&ledger.Config{},
+		&ledger.Config{
+			RootFSPath: filepath.Join(peerFSPath, "ledgersData"),
+			StateDB: &ledger.StateDB{
+				LevelDBPath: filepath.Join(peerFSPath, "ledgersData", "stateleveldb"),
+			},
+			PrivateData: &ledger.PrivateData{
+				StorePath:       filepath.Join(peerFSPath, "ledgersData", "pvtdataStore"),
+				MaxBatchSize:    5000,
+				BatchesInterval: 1000,
+				PurgeInterval:   100,
+			},
+		},
 	)
 	testChainID := fmt.Sprintf("mytestchainid-%d", rand.Int())
 	block, err := configtxtest.MakeGenesisBlock(testChainID)

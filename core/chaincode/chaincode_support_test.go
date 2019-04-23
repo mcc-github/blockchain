@@ -23,7 +23,6 @@ import (
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
-	mc "github.com/mcc-github/blockchain/common/mocks/config"
 	mocklgr "github.com/mcc-github/blockchain/common/mocks/ledger"
 	mockpeer "github.com/mcc-github/blockchain/common/mocks/peer"
 	"github.com/mcc-github/blockchain/common/util"
@@ -42,7 +41,6 @@ import (
 	"github.com/mcc-github/blockchain/core/container/dockercontroller"
 	"github.com/mcc-github/blockchain/core/container/inproccontroller"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	cmp "github.com/mcc-github/blockchain/core/mocks/peer"
 	"github.com/mcc-github/blockchain/core/peer"
@@ -159,8 +157,12 @@ func (p *PackageProviderWrapper) GetChaincodeCodePackage(ccci *ccprovider.Chainc
 
 
 func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
+	fakeApplicationConfig := &mock.ApplicationConfig{}
+	capabilities := &mock.ApplicationCapabilities{}
+	capabilities.LifecycleV20Returns(false)
+	fakeApplicationConfig.CapabilitiesReturns(capabilities)
 	msi := &cmp.MockSupportImpl{
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+		GetApplicationConfigRv:     fakeApplicationConfig,
 		GetApplicationConfigBoolRv: true,
 	}
 
@@ -170,7 +172,10 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
 	mockAclProvider = &mocks.MockACLProvider{}
 	mockAclProvider.Reset()
 
-	peer.MockInitialize()
+	ledgerCleanup, err := peer.MockInitialize()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	mspGetter := func(cid string) []string {
 		return []string{"SampleOrg"}
@@ -182,14 +187,17 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to create temporary directory: %s", err))
 	}
-	cleanup := func() { os.RemoveAll(tempdir) }
+	cleanup := func() {
+		os.RemoveAll(tempdir)
+		ledgerCleanup()
+	}
 
 	ccprovider.SetChaincodesPath(tempdir)
 	ca, _ := tlsgen.NewCA()
 	certGenerator := accesscontrol.NewAuthenticator(ca)
-	config := GlobalConfig()
-	config.StartupTimeout = 10 * time.Second
-	config.ExecuteTimeout = 1 * time.Second
+	globalConfig := GlobalConfig()
+	globalConfig.StartupTimeout = 10 * time.Second
+	globalConfig.ExecuteTimeout = 1 * time.Second
 	pr := platforms.NewRegistry(&golang.Platform{})
 	lsccImpl := lscc.New(sccp, mockAclProvider, pr)
 	ml := &mock.Lifecycle{}
@@ -218,7 +226,7 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
 	mcd.On("RequiresInit").Return(false)
 	ml.On("ChaincodeDefinition", ma.Anything, "calledCC", ma.Anything).Return(mcd, nil)
 	chaincodeSupport := NewChaincodeSupport(
-		config,
+		globalConfig,
 		"0.0.0.0:7052",
 		true,
 		ca.CertBytes(),
@@ -270,7 +278,6 @@ func finitMockPeer(chainIDs ...string) {
 			lgr.Close()
 		}
 	}
-	ledgermgmt.CleanupTestEnv()
 	ledgerPath := config.GetPath("peer.fileSystemPath")
 	os.RemoveAll(ledgerPath)
 	os.RemoveAll(filepath.Join(os.TempDir(), "mcc-github"))
@@ -1139,9 +1146,13 @@ func TestGetTxContextFromHandler(t *testing.T) {
 	}
 
 	
-	peer.MockInitialize()
+	cleanup, err := peer.MockInitialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize ledger: %s", err)
+	}
+	defer cleanup()
 
-	err := peer.MockCreateChain(chnl)
+	err = peer.MockCreateChain(chnl)
 	if err != nil {
 		t.Fatalf("failed to create Peer Ledger %s", err)
 	}

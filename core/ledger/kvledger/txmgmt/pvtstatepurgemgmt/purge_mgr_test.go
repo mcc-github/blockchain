@@ -18,13 +18,11 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
 	flogging.ActivateSpec("pvtstatepurgemgmt,privacyenabledstate=debug")
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/kvledger/pvtstatepurgemgmt")
 	os.Exit(m.Run())
 }
 

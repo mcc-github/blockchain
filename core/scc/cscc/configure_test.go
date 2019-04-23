@@ -35,7 +35,6 @@ import (
 	"github.com/mcc-github/blockchain/core/container/inproccontroller"
 	deliverclient "github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
-	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
@@ -218,14 +217,13 @@ func (p *PackageProviderWrapper) GetChaincodeCodePackage(ccci *ccprovider.Chainc
 func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 
-	viper.Set("peer.fileSystemPath", "/tmp/mcc-githubtest/")
 	viper.Set("chaincode.executetimeout", "3s")
-	os.Mkdir("/tmp/mcc-githubtest", 0755)
 
-	peer.MockInitialize()
-	ledgermgmt.InitializeTestEnv()
-	defer ledgermgmt.CleanupTestEnv()
-	defer os.RemoveAll("/tmp/mcc-githubtest/")
+	cleanup, err := peer.MockInitialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize peer: %s", err)
+	}
+	defer cleanup()
 
 	e := New(mp, mockAclProvider, nil, nil, nil)
 	stub := shim.NewMockStub("PeerConfiger", e)

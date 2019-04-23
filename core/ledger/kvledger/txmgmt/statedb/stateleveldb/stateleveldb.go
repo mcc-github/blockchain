@@ -12,7 +12,6 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
@@ -29,8 +28,7 @@ type VersionedDBProvider struct {
 }
 
 
-func NewVersionedDBProvider() *VersionedDBProvider {
-	dbPath := ledgerconfig.GetStateLevelDBPath()
+func NewVersionedDBProvider(dbPath string) *VersionedDBProvider {
 	logger.Debugf("constructing VersionedDBProvider dbPath=%s", dbPath)
 	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
 	return &VersionedDBProvider{dbProvider}

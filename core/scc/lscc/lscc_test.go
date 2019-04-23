@@ -98,8 +98,8 @@ func constructDeploymentSpec(name string, path string, version string, initArgs 
 
 func TestInstall(t *testing.T) {
 	
-	ledgermgmt.InitializeTestEnv()
-	defer ledgermgmt.CleanupTestEnv()
+	cleanup := ledgermgmt.InitializeTestEnv(t)
+	defer cleanup()
 	scc := New(NewMockProvider(), mockAclProvider, platforms.NewRegistry(&golang.Platform{}))
 	scc.Support = &lscc.MockSupport{}
 	stub := shim.NewMockStub("lscc", scc)

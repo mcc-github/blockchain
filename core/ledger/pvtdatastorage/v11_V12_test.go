@@ -7,13 +7,16 @@ SPDX-License-Identifier: Apache-2.0
 package pvtdatastorage
 
 import (
+	"io/ioutil"
+	"path/filepath"
+
 	"os"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
+	"github.com/mcc-github/blockchain/core/ledger"
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,12 +26,12 @@ import (
 
 
 func TestV11v12(t *testing.T) {
-	testWorkingDir := "test-working-dir"
-	testutil.CopyDir("testdata/v11_v12/ledgersData", testWorkingDir)
+	testWorkingDir, err := ioutil.TempDir("", "pdstore")
+	if err != nil {
+		t.Fatalf("Failed to create private data storage directory: %s", err)
+	}
 	defer os.RemoveAll(testWorkingDir)
-
-	viper.Set("peer.fileSystemPath", testWorkingDir)
-	defer viper.Reset()
+	testutil.CopyDir("testdata/v11_v12/ledgersData/pvtdataStore", testWorkingDir)
 
 	ledgerid := "ch1"
 	btlPolicy := btltestutil.SampleBTLPolicy(
@@ -37,7 +40,13 @@ func TestV11v12(t *testing.T) {
 			{"marbles_private", "collectionMarblePrivateDetails"}: 0,
 		},
 	)
-	p := NewProvider()
+	conf := &ledger.PrivateData{
+		StorePath:       filepath.Join(testWorkingDir, "pvtdataStore"),
+		BatchesInterval: 1000,
+		MaxBatchSize:    5000,
+		PurgeInterval:   100,
+	}
+	p := NewProvider(conf)
 	defer p.Close()
 	s, err := p.OpenStore(ledgerid)
 	assert.NoError(t, err)

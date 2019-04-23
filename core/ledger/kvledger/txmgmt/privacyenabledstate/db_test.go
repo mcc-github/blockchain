@@ -8,7 +8,6 @@ package privacyenabledstate
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
@@ -18,16 +17,8 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
-
-func TestMain(m *testing.M) {
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/kvledger/txmgmt/privacyenabledstate")
-	
-	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", false)
-	os.Exit(m.Run())
-}
 
 func TestBatch(t *testing.T) {
 	batch := UpdateMap(make(map[string]nsBatch))

@@ -17,39 +17,34 @@ limitations under the License.
 package stateleveldb
 
 import (
+	"io/ioutil"
 	"os"
 	"testing"
 
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 )
 
 
 type TestVDBEnv struct {
 	t          testing.TB
 	DBProvider statedb.VersionedDBProvider
+	dbPath     string
 }
 
 
 func NewTestVDBEnv(t testing.TB) *TestVDBEnv {
 	t.Logf("Creating new TestVDBEnv")
-	removeDBPath(t, "NewTestVDBEnv")
-	dbProvider := NewVersionedDBProvider()
-	return &TestVDBEnv{t, dbProvider}
+	dbPath, err := ioutil.TempDir("", "statelvldb")
+	if err != nil {
+		t.Fatalf("Failed to create leveldb directory: %s", err)
+	}
+	dbProvider := NewVersionedDBProvider(dbPath)
+	return &TestVDBEnv{t, dbProvider, dbPath}
 }
 
 
 func (env *TestVDBEnv) Cleanup() {
 	env.t.Logf("Cleaningup TestVDBEnv")
 	env.DBProvider.Close()
-	removeDBPath(env.t, "Cleanup")
-}
-
-func removeDBPath(t testing.TB, caller string) {
-	dbPath := ledgerconfig.GetStateLevelDBPath()
-	if err := os.RemoveAll(dbPath); err != nil {
-		t.Fatalf("Err: %s", err)
-		t.FailNow()
-	}
-	logger.Debugf("Removed folder [%s] for test environment for %s", dbPath, caller)
+	os.RemoveAll(env.dbPath)
 }

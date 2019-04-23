@@ -6,33 +6,38 @@ SPDX-License-Identifier: Apache-2.0
 package ledgermgmt
 
 import (
-	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"testing"
 
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
 )
 
 
-func InitializeTestEnv() {
-	remove()
-	InitializeTestEnvWithInitializer(nil)
+
+
+func InitializeTestEnv(t *testing.T) (cleanup func()) {
+	cleanup, err := InitializeTestEnvWithInitializer(nil)
+	if err != nil {
+		t.Fatalf("Failed to initialize test environment: %s", err)
+	}
+	return cleanup
 }
 
 
-func InitializeTestEnvWithInitializer(initializer *Initializer) {
-	remove()
-	InitializeExistingTestEnvWithInitializer(initializer)
+func InitializeTestEnvWithInitializer(initializer *Initializer) (cleanup func(), err error) {
+	return InitializeExistingTestEnvWithInitializer(initializer)
 }
 
 
 
 
-func InitializeExistingTestEnvWithInitializer(initializer *Initializer) {
+func InitializeExistingTestEnvWithInitializer(initializer *Initializer) (cleanup func(), err error) {
 	if initializer == nil {
 		initializer = &Initializer{}
 	}
@@ -46,22 +51,29 @@ func InitializeExistingTestEnvWithInitializer(initializer *Initializer) {
 		initializer.PlatformRegistry = platforms.NewRegistry(&golang.Platform{})
 	}
 	if initializer.Config == nil {
-		initializer.Config = &ledger.Config{}
+		rootPath, err := ioutil.TempDir("", "ltestenv")
+		if err != nil {
+			return nil, err
+		}
+		initializer.Config = &ledger.Config{
+			RootFSPath: rootPath,
+			StateDB: &ledger.StateDB{
+				LevelDBPath: filepath.Join(rootPath, "stateleveldb"),
+			},
+		}
+	}
+	if initializer.Config.PrivateData == nil {
+		initializer.Config.PrivateData = &ledger.PrivateData{
+			StorePath:       filepath.Join(initializer.Config.RootFSPath, "pvtdataStore"),
+			MaxBatchSize:    5000,
+			BatchesInterval: 1000,
+			PurgeInterval:   100,
+		}
 	}
 	initialize(initializer)
-}
-
-
-func CleanupTestEnv() {
-	Close()
-	remove()
-}
-
-func remove() {
-	path := ledgerconfig.GetRootPath()
-	fmt.Printf("removing dir = %s\n", path)
-	err := os.RemoveAll(path)
-	if err != nil {
-		logger.Errorf("Error: %s", err)
+	cleanup = func() {
+		Close()
+		os.RemoveAll(initializer.Config.RootFSPath)
 	}
+	return cleanup, nil
 }

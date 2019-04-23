@@ -39,9 +39,11 @@ func (ctp *customTxProcessor) GenerateSimulationResults(txEnvelop *common.Envelo
 }
 
 func TestCustomProcessor(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-	provider := testutilNewProvider(t)
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+	
+	_ = createTestEnv(t, conf.RootFSPath)
+	provider := testutilNewProvider(conf, t)
 	defer provider.Close()
 
 	

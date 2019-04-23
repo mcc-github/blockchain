@@ -65,8 +65,8 @@ func TestDeploy(t *testing.T) {
 		p.DeploySysCCs("a", ccp)
 	}
 	assert.Panics(t, f)
-	ledgermgmt.InitializeTestEnv()
-	defer ledgermgmt.CleanupTestEnv()
+	cleanup := ledgermgmt.InitializeTestEnv(t)
+	defer cleanup()
 	err := peer.MockCreateChain("a")
 	fmt.Println(err)
 	deploySysCC("a", ccp, &SysCCWrapper{SCC: &SystemChaincode{

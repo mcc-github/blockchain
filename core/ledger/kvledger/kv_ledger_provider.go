@@ -9,6 +9,7 @@ package kvledger
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
@@ -18,7 +19,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb/historyleveldb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerstorage"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
@@ -56,35 +56,53 @@ type Provider struct {
 
 func NewProvider() (ledger.PeerLedgerProvider, error) {
 	logger.Info("Initializing ledger provider")
-	
-	idStore := openIDStore(ledgerconfig.GetLedgerProviderPath())
-	ledgerStoreProvider := ledgerstorage.NewProvider()
-	
-	historydbProvider := historyleveldb.NewHistoryDBProvider()
+
 	logger.Info("ledger provider Initialized")
-	p := &Provider{idStore, ledgerStoreProvider,
-		nil, historydbProvider, nil, nil, nil, nil, nil, nil}
+	p := &Provider{}
 	return p, nil
 }
 
 
 func (p *Provider) Initialize(initializer *ledger.Initializer) error {
 	var err error
-	configHistoryMgr := confighistory.NewMgr(initializer.DeployedChaincodeInfoProvider)
+
+	p.initializer = initializer
+	
+	idStore := openIDStore(filepath.Join(p.initializer.Config.RootFSPath, "ledgerProvider"))
+	
+	ledgerStoreProvider := ledgerstorage.NewProvider(
+		p.initializer.Config.RootFSPath,
+		p.initializer.Config.PrivateData,
+	)
+	
+	historydbProvider := historyleveldb.NewHistoryDBProvider(
+		filepath.Join(p.initializer.Config.RootFSPath, "historyLeveldb"),
+	)
+	
+	configHistoryMgr := confighistory.NewMgr(
+		filepath.Join(p.initializer.Config.RootFSPath, "configHistory"),
+		initializer.DeployedChaincodeInfoProvider,
+	)
+	
 	collElgNotifier := &collElgNotifier{
 		initializer.DeployedChaincodeInfoProvider,
 		initializer.MembershipInfoProvider,
 		make(map[string]collElgListener),
 	}
+	
 	stateListeners := initializer.StateListeners
 	stateListeners = append(stateListeners, collElgNotifier)
 	stateListeners = append(stateListeners, configHistoryMgr)
 
-	p.initializer = initializer
+	p.idStore = idStore
+	p.ledgerStoreProvider = ledgerStoreProvider
+	p.historydbProvider = historydbProvider
 	p.configHistoryMgr = configHistoryMgr
 	p.stateListeners = stateListeners
 	p.collElgNotifier = collElgNotifier
-	p.bookkeepingProvider = bookkeeping.NewProvider()
+	p.bookkeepingProvider = bookkeeping.NewProvider(
+		filepath.Join(p.initializer.Config.RootFSPath, "bookkeeper"),
+	)
 	p.vdbProvider, err = privacyenabledstate.NewCommonStorageDBProvider(
 		p.bookkeepingProvider,
 		initializer.MetricsProvider,

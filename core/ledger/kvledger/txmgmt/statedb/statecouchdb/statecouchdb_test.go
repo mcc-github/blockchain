@@ -20,41 +20,20 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/commontests"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	ledgertestutil "github.com/mcc-github/blockchain/core/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
 	"github.com/mcc-github/blockchain/integration/runner"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(testMain(m))
-}
-
-func testMain(m *testing.M) int {
 	
-	ledgertestutil.SetupCoreYAMLConfig()
-	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/kvledger/txmgmt/statedb/statecouchdb")
-	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", false)
-
-	
-	couchAddress, cleanup := couchDBSetup()
+	address, cleanup := couchDBSetup()
+	couchAddress = address
 	defer cleanup()
-
-	testConfig = &couchdb.Config{
-		Address:             couchAddress,
-		Username:            "",
-		Password:            "",
-		InternalQueryLimit:  1000,
-		MaxBatchUpdateSize:  1000,
-		MaxRetries:          3,
-		MaxRetriesOnStartup: 20,
-		RequestTimeout:      35 * time.Second,
-	}
 
 	flogging.ActivateSpec("statecouchdb=debug")
 	
-	return m.Run()
+	os.Exit(m.Run())
 }
 
 func couchDBSetup() (addr string, cleanup func()) {
@@ -119,10 +98,8 @@ func TestGetVersion(t *testing.T) {
 }
 
 func TestSmallBatchSize(t *testing.T) {
-	viper.Set("ledger.state.couchDBConfig.maxBatchUpdateSize", 2)
 	env := NewTestVDBEnv(t)
 	defer env.Cleanup()
-	defer viper.Set("ledger.state.couchDBConfig.maxBatchUpdateSize", 1000)
 	commontests.TestSmallBatchSize(t, env.DBProvider)
 }
 
@@ -574,9 +551,6 @@ func TestPaginatedQuery(t *testing.T) {
 	assert.NoError(t, err)
 
 	
-	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 50)
-
-	
 	
 	returnKeys = []string{"key2", "key3", "key4", "key6", "key8", "key12", "key13", "key14", "key15", "key16"}
 	bookmark, err = executeQuery(t, db, "ns1", queryString, "", int32(10), returnKeys)
@@ -589,9 +563,6 @@ func TestPaginatedQuery(t *testing.T) {
 	assert.NoError(t, err)
 
 	
-	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 10)
-
-	
 	returnKeys = []string{"key2", "key3", "key4", "key6", "key8", "key12", "key13", "key14", "key15",
 		"key16", "key17", "key18", "key19", "key20", "key22", "key24", "key25", "key26", "key28", "key29",
 		"key30", "key32", "key33", "key34", "key35", "key37", "key39", "key40"}
@@ -599,15 +570,9 @@ func TestPaginatedQuery(t *testing.T) {
 	assert.NoError(t, err)
 
 	
-	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 5)
-
-	
 	returnKeys = []string{"key2", "key3", "key4", "key6", "key8", "key12", "key13", "key14", "key15", "key16"}
 	_, err = executeQuery(t, db, "ns1", queryString, "", int32(10), returnKeys)
 	assert.NoError(t, err)
-
-	
-	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 1000)
 }
 
 func executeQuery(t *testing.T, db statedb.VersionedDB, namespace, query, bookmark string, limit int32, returnKeys []string) (string, error) {

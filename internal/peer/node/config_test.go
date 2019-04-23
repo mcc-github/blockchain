@@ -26,18 +26,28 @@ func TestLedgerConfig(t *testing.T) {
 		{
 			name: "goleveldb",
 			config: map[string]interface{}{
+				"peer.fileSystemPath":        "/peerfs",
 				"ledger.state.stateDatabase": "goleveldb",
 			},
 			expected: &ledger.Config{
+				RootFSPath: "/peerfs/ledgersData",
 				StateDB: &ledger.StateDB{
 					StateDatabase: "goleveldb",
+					LevelDBPath:   "/peerfs/ledgersData/stateLeveldb",
 					CouchDB:       &couchdb.Config{},
+				},
+				PrivateData: &ledger.PrivateData{
+					StorePath:       "/peerfs/ledgersData/pvtdataStore",
+					MaxBatchSize:    5000,
+					BatchesInterval: 1000,
+					PurgeInterval:   100,
 				},
 			},
 		},
 		{
 			name: "CouchDB Defaults",
 			config: map[string]interface{}{
+				"peer.fileSystemPath":                              "/peerfs",
 				"ledger.state.stateDatabase":                       "CouchDB",
 				"ledger.state.couchDBConfig.couchDBAddress":        "localhost:5984",
 				"ledger.state.couchDBConfig.username":              "username",
@@ -48,8 +58,10 @@ func TestLedgerConfig(t *testing.T) {
 				"ledger.state.couchDBConfig.createGlobalChangesDB": true,
 			},
 			expected: &ledger.Config{
+				RootFSPath: "/peerfs/ledgersData",
 				StateDB: &ledger.StateDB{
 					StateDatabase: "CouchDB",
+					LevelDBPath:   "/peerfs/ledgersData/stateLeveldb",
 					CouchDB: &couchdb.Config{
 						Address:                 "localhost:5984",
 						Username:                "username",
@@ -61,13 +73,21 @@ func TestLedgerConfig(t *testing.T) {
 						MaxBatchUpdateSize:      500,
 						WarmIndexesAfterNBlocks: 1,
 						CreateGlobalChangesDB:   true,
+						RedoLogPath:             "/peerfs/ledgersData/couchdbRedoLogs",
 					},
+				},
+				PrivateData: &ledger.PrivateData{
+					StorePath:       "/peerfs/ledgersData/pvtdataStore",
+					MaxBatchSize:    5000,
+					BatchesInterval: 1000,
+					PurgeInterval:   100,
 				},
 			},
 		},
 		{
 			name: "CouchDB Explicit",
 			config: map[string]interface{}{
+				"peer.fileSystemPath":                                "/peerfs",
 				"ledger.state.stateDatabase":                         "CouchDB",
 				"ledger.state.couchDBConfig.couchDBAddress":          "localhost:5984",
 				"ledger.state.couchDBConfig.username":                "username",
@@ -79,10 +99,15 @@ func TestLedgerConfig(t *testing.T) {
 				"ledger.state.couchDBConfig.maxBatchUpdateSize":      600,
 				"ledger.state.couchDBConfig.warmIndexesAfterNBlocks": 5,
 				"ledger.state.couchDBConfig.createGlobalChangesDB":   true,
+				"ledger.pvtdataStore.collElgProcMaxDbBatchSize":      50000,
+				"ledger.pvtdataStore.collElgProcDbBatchesInterval":   10000,
+				"ledger.pvtdataStore.purgeInterval":                  1000,
 			},
 			expected: &ledger.Config{
+				RootFSPath: "/peerfs/ledgersData",
 				StateDB: &ledger.StateDB{
 					StateDatabase: "CouchDB",
+					LevelDBPath:   "/peerfs/ledgersData/stateLeveldb",
 					CouchDB: &couchdb.Config{
 						Address:                 "localhost:5984",
 						Username:                "username",
@@ -94,7 +119,14 @@ func TestLedgerConfig(t *testing.T) {
 						MaxBatchUpdateSize:      600,
 						WarmIndexesAfterNBlocks: 5,
 						CreateGlobalChangesDB:   true,
+						RedoLogPath:             "/peerfs/ledgersData/couchdbRedoLogs",
 					},
+				},
+				PrivateData: &ledger.PrivateData{
+					StorePath:       "/peerfs/ledgersData/pvtdataStore",
+					MaxBatchSize:    50000,
+					BatchesInterval: 10000,
+					PurgeInterval:   1000,
 				},
 			},
 		},
