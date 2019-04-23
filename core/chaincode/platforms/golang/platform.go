@@ -19,7 +19,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/util"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
@@ -29,8 +28,7 @@ import (
 )
 
 
-type Platform struct {
-}
+type Platform struct{}
 
 
 func pathExists(path string) (bool, error) {
@@ -89,12 +87,12 @@ func filter(vs []string, f func(string) bool) []string {
 }
 
 
-func (goPlatform *Platform) Name() string {
+func (p *Platform) Name() string {
 	return pb.ChaincodeSpec_GOLANG.String()
 }
 
 
-func (goPlatform *Platform) ValidatePath(rawPath string) error {
+func (p *Platform) ValidatePath(rawPath string) error {
 	path, err := url.Parse(rawPath)
 	if err != nil || path == nil {
 		return fmt.Errorf("invalid path: %s", err)
@@ -120,13 +118,7 @@ func (goPlatform *Platform) ValidatePath(rawPath string) error {
 	return nil
 }
 
-func (goPlatform *Platform) ValidateCodePackage(code []byte) error {
-
-	if len(code) == 0 {
-		
-		return nil
-	}
-
+func (p *Platform) ValidateCodePackage(code []byte) error {
 	
 	
 	
@@ -174,6 +166,20 @@ func (goPlatform *Platform) ValidateCodePackage(code []byte) error {
 	}
 
 	return nil
+}
+
+type Sources []SourceDescriptor
+
+func (s Sources) Len() int {
+	return len(s)
+}
+
+func (s Sources) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s Sources) Less(i, j int) bool {
+	return strings.Compare(s[i].Name, s[j].Name) < 0
 }
 
 
@@ -245,7 +251,7 @@ func vendorDependencies(pkg string, files Sources) {
 }
 
 
-func (goPlatform *Platform) GetDeploymentPayload(path string) ([]byte, error) {
+func (p *Platform) GetDeploymentPayload(path string) ([]byte, error) {
 
 	var err error
 
@@ -476,11 +482,11 @@ func (goPlatform *Platform) GetDeploymentPayload(path string) ([]byte, error) {
 	return payload.Bytes(), nil
 }
 
-func (goPlatform *Platform) GenerateDockerfile() (string, error) {
+func (p *Platform) GenerateDockerfile() (string, error) {
 
 	var buf []string
 
-	buf = append(buf, "FROM "+cutil.GetDockerfileFromConfig("chaincode.golang.runtime"))
+	buf = append(buf, "FROM "+util.GetDockerfileFromConfig("chaincode.golang.runtime"))
 	buf = append(buf, "ADD binpackage.tar /usr/local/bin")
 
 	dockerFileContents := strings.Join(buf, "\n")
@@ -498,7 +504,7 @@ func getLDFlagsOpts() string {
 	return staticLDFlagsOpts
 }
 
-func (goPlatform *Platform) GenerateDockerBuild(path string, code []byte, tw *tar.Writer) error {
+func (p *Platform) GenerateDockerBuild(path string, code []byte, tw *tar.Writer) error {
 	pkgname, err := decodeUrl(path)
 	if err != nil {
 		return fmt.Errorf("could not decode url: %s", err)
@@ -522,6 +528,7 @@ func (goPlatform *Platform) GenerateDockerBuild(path string, code []byte, tw *ta
 }
 
 
-func (goPlatform *Platform) GetMetadataProvider(code []byte) platforms.MetadataProvider {
-	return &ccmetadata.TargzMetadataProvider{Code: code}
+func (p *Platform) GetMetadataAsTarEntries(code []byte) ([]byte, error) {
+	metadataProvider := ccmetadata.TargzMetadataProvider{Code: code}
+	return metadataProvider.GetMetadataAsTarEntries()
 }

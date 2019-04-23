@@ -166,6 +166,11 @@ func InitialConnWindowSize(s int32) ServerOption {
 
 
 func KeepaliveParams(kp keepalive.ServerParameters) ServerOption {
+	if kp.Time > 0 && kp.Time < time.Second {
+		grpclog.Warning("Adjusting keepalive ping interval to minimum period of 1s")
+		kp.Time = time.Second
+	}
+
 	return func(o *options) {
 		o.keepaliveParams = kp
 	}
@@ -732,7 +737,7 @@ func (s *Server) traceInfo(st transport.ServerTransport, stream *transport.Strea
 	trInfo.firstLine.remoteAddr = st.RemoteAddr()
 
 	if dl, ok := stream.Context().Deadline(); ok {
-		trInfo.firstLine.deadline = dl.Sub(time.Now())
+		trInfo.firstLine.deadline = time.Until(dl)
 	}
 	return trInfo
 }
@@ -858,7 +863,7 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 			PeerAddr:   nil,
 		}
 		if deadline, ok := ctx.Deadline(); ok {
-			logEntry.Timeout = deadline.Sub(time.Now())
+			logEntry.Timeout = time.Until(deadline)
 			if logEntry.Timeout < 0 {
 				logEntry.Timeout = 0
 			}
@@ -1090,7 +1095,7 @@ func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transp
 			PeerAddr:   nil,
 		}
 		if deadline, ok := ctx.Deadline(); ok {
-			logEntry.Timeout = deadline.Sub(time.Now())
+			logEntry.Timeout = time.Until(deadline)
 			if logEntry.Timeout < 0 {
 				logEntry.Timeout = 0
 			}

@@ -13,8 +13,8 @@ import (
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/discovery/support/acl"
 	"github.com/mcc-github/blockchain/discovery/support/mocks"
-	gmocks "github.com/mcc-github/blockchain/peer/gossip/mocks"
-	cb "github.com/mcc-github/blockchain/protos/common"
+	gmocks "github.com/mcc-github/blockchain/internal/peer/gossip/mocks"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -52,7 +52,7 @@ func TestConfigSequence(t *testing.T) {
 			shouldPanic:    true,
 		},
 		{
-			name:           "both resoruces and validator are found",
+			name:           "both resources and validator are found",
 			resourcesFound: true,
 			validatorFound: true,
 			sequence:       100,
@@ -94,13 +94,13 @@ func TestEligibleForService(t *testing.T) {
 	e.EvaluateReturnsOnCall(1, nil)
 	chConfig := &mocks.ChanConfig{}
 	sup := acl.NewDiscoverySupport(v, e, chConfig)
-	err := sup.EligibleForService("mychannel", cb.SignedData{})
+	err := sup.EligibleForService("mychannel", protoutil.SignedData{})
 	assert.Equal(t, "verification failed", err.Error())
-	err = sup.EligibleForService("mychannel", cb.SignedData{})
+	err = sup.EligibleForService("mychannel", protoutil.SignedData{})
 	assert.NoError(t, err)
-	err = sup.EligibleForService("", cb.SignedData{})
+	err = sup.EligibleForService("", protoutil.SignedData{})
 	assert.Equal(t, "verification failed for local msp", err.Error())
-	err = sup.EligibleForService("", cb.SignedData{})
+	err = sup.EligibleForService("", protoutil.SignedData{})
 	assert.NoError(t, err)
 }
 
@@ -194,7 +194,7 @@ func TestChannelVerifier(t *testing.T) {
 	}
 
 	t.Run("Valid channel, identity, signature", func(t *testing.T) {
-		err := verifier.VerifyByChannel("mychannel", &cb.SignedData{
+		err := verifier.VerifyByChannel("mychannel", &protoutil.SignedData{
 			Data:      []byte("msg"),
 			Identity:  []byte("Bob"),
 			Signature: []byte("msg"),
@@ -203,7 +203,7 @@ func TestChannelVerifier(t *testing.T) {
 	})
 
 	t.Run("Invalid channel", func(t *testing.T) {
-		err := verifier.VerifyByChannel("notmychannel", &cb.SignedData{
+		err := verifier.VerifyByChannel("notmychannel", &protoutil.SignedData{
 			Data:      []byte("msg"),
 			Identity:  []byte("Bob"),
 			Signature: []byte("msg"),
@@ -214,7 +214,7 @@ func TestChannelVerifier(t *testing.T) {
 
 	t.Run("Writers policy cannot be retrieved", func(t *testing.T) {
 		polMgr.Managers["mychannel"].(*gmocks.ChannelPolicyManager).Policy = nil
-		err := verifier.VerifyByChannel("mychannel", &cb.SignedData{
+		err := verifier.VerifyByChannel("mychannel", &protoutil.SignedData{
 			Data:      []byte("msg"),
 			Identity:  []byte("Bob"),
 			Signature: []byte("msg"),

@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	accesscontrol "github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
+	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
 )
 
 type CertGenerator struct {

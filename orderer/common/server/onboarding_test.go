@@ -19,11 +19,13 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
-	"github.com/mcc-github/blockchain/common/crypto"
+	deliver_mocks "github.com/mcc-github/blockchain/common/deliver/mock"
 	"github.com/mcc-github/blockchain/common/flogging"
+	ledger_mocks "github.com/mcc-github/blockchain/common/ledger/blockledger/mocks"
 	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config/configtest"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/cluster/mocks"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
@@ -31,7 +33,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -92,7 +94,7 @@ func readSeekEnvelope(stream orderer.AtomicBroadcast_DeliverServer) (*orderer.Se
 	if err != nil {
 		return nil, err
 	}
-	payload, err := utils.UnmarshalPayload(env.Payload)
+	payload, err := protoutil.UnmarshalPayload(env.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -126,24 +128,24 @@ func channelCreationBlock(systemChannel, applicationChannel string, prevBlock *c
 	block := &common.Block{
 		Header: &common.BlockHeader{
 			Number:       prevBlock.Header.Number + 1,
-			PreviousHash: prevBlock.Header.Hash(),
+			PreviousHash: protoutil.BlockHeaderHash(prevBlock.Header),
 		},
 		Metadata: &common.BlockMetadata{
 			Metadata: [][]byte{{}, {}, {}, {}},
 		},
 		Data: &common.BlockData{
-			Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-				Payload: utils.MarshalOrPanic(&common.Payload{
+			Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+				Payload: protoutil.MarshalOrPanic(&common.Payload{
 					Header: &common.Header{
-						ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+						ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 							ChannelId: systemChannel,
 							Type:      int32(common.HeaderType_ORDERER_TRANSACTION),
 						}),
 					},
-					Data: utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									Type:      int32(common.HeaderType_CONFIG),
 									ChannelId: applicationChannel,
 								}),
@@ -155,7 +157,7 @@ func channelCreationBlock(systemChannel, applicationChannel string, prevBlock *c
 		},
 	}
 
-	block.Header.DataHash = block.Data.Hash()
+	block.Header.DataHash = protoutil.BlockDataHash(block.Data)
 	return block
 }
 
@@ -193,20 +195,20 @@ func TestOnboardingChannelUnavailable(t *testing.T) {
 		Metadata: &common.BlockMetadata{
 			Metadata: [][]byte{{}, {}, {}},
 		},
-		Data: &common.BlockData{Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-			Payload: utils.MarshalOrPanic(&common.Payload{
+		Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+			Payload: protoutil.MarshalOrPanic(&common.Payload{
 				Header: &common.Header{},
 			}),
 		})}},
 	}
-	systemChannelGenesisBlock.Header.DataHash = systemChannelGenesisBlock.Data.Hash()
+	systemChannelGenesisBlock.Header.DataHash = protoutil.BlockDataHash(systemChannelGenesisBlock.Data)
 
 	channelCreationBlock := channelCreationBlock("system", "testchainid", systemChannelGenesisBlock)
 
 	bootBlock := &common.Block{}
 	assert.NoError(t, proto.Unmarshal(systemChannelBlockBytes, bootBlock))
 	bootBlock.Header.Number = 2
-	bootBlock.Header.PreviousHash = channelCreationBlock.Header.Hash()
+	bootBlock.Header.PreviousHash = protoutil.BlockHeaderHash(channelCreationBlock.Header)
 	injectOrdererEndpoint(t, bootBlock, deliverServer.srv.Address())
 	injectConsenterCertificate(t, testchainidGB, cert)
 
@@ -253,11 +255,17 @@ func TestOnboardingChannelUnavailable(t *testing.T) {
 		ServerRootCAs: [][]byte{caCert},
 	}
 
+	verifier := &mocks.BlockVerifier{}
+	verifier.On("VerifyBlockSignature", mock.Anything, mock.Anything).Return(nil)
+	vr := &mocks.VerifierRetriever{}
+	vr.On("RetrieveVerifier", mock.Anything).Return(verifier)
+
 	r := &replicationInitiator{
-		lf:      lf,
-		logger:  flogging.MustGetLogger("testOnboarding"),
-		conf:    config,
-		secOpts: secConfig,
+		verifierRetriever: vr,
+		lf:                lf,
+		logger:            flogging.MustGetLogger("testOnboarding"),
+		conf:              config,
+		secOpts:           secConfig,
 	}
 
 	type event struct {
@@ -384,6 +392,12 @@ func TestOnboardingChannelUnavailable(t *testing.T) {
 	
 	deliverServer.blockResponses <- &orderer.DeliverResponse{
 		Type: &orderer.DeliverResponse_Block{
+			Block: systemChannelGenesisBlock,
+		},
+	}
+	
+	deliverServer.blockResponses <- &orderer.DeliverResponse{
+		Type: &orderer.DeliverResponse_Block{
 			Block: channelCreationBlock,
 		},
 	}
@@ -429,7 +443,7 @@ func TestReplicate(t *testing.T) {
 
 		copyBlock := func(block *common.Block, seq uint64) common.Block {
 			res := common.Block{}
-			proto.Unmarshal(utils.MarshalOrPanic(block), &res)
+			proto.Unmarshal(protoutil.MarshalOrPanic(block), &res)
 			res.Header.Number = seq
 			return res
 		}
@@ -446,12 +460,11 @@ func TestReplicate(t *testing.T) {
 		}
 
 		blocks := make([]*common.Block, 11)
-		
-		
-		blocks[0] = &common.Block{Header: &common.BlockHeader{}}
-		for seq := uint64(1); seq <= uint64(10); seq++ {
+		for seq := uint64(0); seq <= uint64(10); seq++ {
 			block := copyBlock(&bootBlock, seq)
-			block.Header.PreviousHash = blocks[seq-1].Header.Hash()
+			if seq > 0 {
+				block.Header.PreviousHash = protoutil.BlockHeaderHash(blocks[seq-1].Header)
+			}
 			blocks[seq] = &block
 			deliverServer.blockResponses <- &orderer.DeliverResponse{
 				Type: &orderer.DeliverResponse_Block{Block: &block},
@@ -464,7 +477,7 @@ func TestReplicate(t *testing.T) {
 		
 		
 		
-		bootBlock.Header.PreviousHash = blocks[9].Header.Hash()
+		bootBlock.Header.PreviousHash = protoutil.BlockHeaderHash(blocks[9].Header)
 		return deliverServer
 	}
 
@@ -478,10 +491,11 @@ func TestReplicate(t *testing.T) {
 		secOpts            *comm.SecureOptions
 		conf               *localconfig.TopLevel
 		ledgerFactoryErr   error
-		signer             crypto.LocalSigner
+		signer             identity.SignerSerializer
 		zapHooks           []func(zapcore.Entry) error
 		shouldConnect      bool
 		replicateFunc      func(*replicationInitiator, *common.Block)
+		verificationCount  int
 	}{
 		{
 			name:               "Genesis block makes replication be skipped",
@@ -586,6 +600,7 @@ func TestReplicate(t *testing.T) {
 		},
 		{
 			name:               "Explicit replication is requested, but the channel shouldn't be pulled",
+			verificationCount:  20,
 			shouldConnect:      true,
 			systemLedgerHeight: 10,
 			bootBlock:          &bootBlock,
@@ -664,13 +679,19 @@ func TestReplicate(t *testing.T) {
 			lw.On("Height").Return(testCase.systemLedgerHeight).Once()
 
 			lf := &mocks.LedgerFactory{}
-			lf.On("GetOrCreate", mock.Anything).Return(lw, testCase.ledgerFactoryErr).Once()
+			lf.On("GetOrCreate", mock.Anything).Return(lw, testCase.ledgerFactoryErr).Twice()
 			lf.On("Close")
 
+			verifier := &mocks.BlockVerifier{}
+			verifier.On("VerifyBlockSignature", mock.Anything, mock.Anything).Return(nil)
+			vr := &mocks.VerifierRetriever{}
+			vr.On("RetrieveVerifier", mock.Anything).Return(verifier)
+
 			r := &replicationInitiator{
-				lf:     lf,
-				logger: flogging.MustGetLogger("testReplicateIfNeeded"),
-				signer: testCase.signer,
+				verifierRetriever: vr,
+				lf:                lf,
+				logger:            flogging.MustGetLogger("testReplicateIfNeeded"),
+				signer:            testCase.signer,
 
 				conf:    testCase.conf,
 				secOpts: testCase.secOpts,
@@ -697,6 +718,7 @@ func TestReplicate(t *testing.T) {
 			}()
 
 			assert.Equal(t, testCase.shouldConnect, atomic.LoadInt32(&deliverServer.isConnected) == int32(1))
+			verifier.AssertNumberOfCalls(t, "VerifyBlockSignature", testCase.verificationCount)
 		})
 	}
 }
@@ -711,11 +733,13 @@ func TestInactiveChainReplicator(t *testing.T) {
 		ReplicateChainsOutput1               []string
 		ReplicateChainsOutput2               []string
 		chainsExpectedToBeReplicated         []string
+		expectedRegisteredChains             map[string]struct{}
 		ReplicateChainsExpectedCallCount     int
 		genesisBlock                         *common.Block
 	}{
 		{
-			description: "no chains tracked",
+			description:              "no chains tracked",
+			expectedRegisteredChains: map[string]struct{}{},
 		},
 		{
 			description:                          "some chains tracked, but not all succeed replication",
@@ -728,6 +752,10 @@ func TestInactiveChainReplicator(t *testing.T) {
 			chainsExpectedToBeReplicated:         []string{"foo"},
 			ReplicateChainsExpectedCallCount:     2,
 			genesisBlock:                         &common.Block{},
+			expectedRegisteredChains: map[string]struct{}{
+				"foo": {},
+				"bar": {},
+			},
 		},
 		{
 			description:                          "some chains tracked, and all succeed replication but on 2nd pass",
@@ -740,12 +768,21 @@ func TestInactiveChainReplicator(t *testing.T) {
 			chainsExpectedToBeReplicated:         []string{"foo", "bar"},
 			ReplicateChainsExpectedCallCount:     2,
 			genesisBlock:                         &common.Block{},
+			expectedRegisteredChains: map[string]struct{}{
+				"foo": {},
+				"bar": {},
+			},
 		},
 	} {
 		t.Run(testCase.description, func(t *testing.T) {
+			registeredChains := make(map[string]struct{})
+			registerChain := func(chain string) {
+				registeredChains[chain] = struct{}{}
+			}
 			scheduler := make(chan time.Time)
 			replicator := &server_mocks.ChainReplicator{}
 			icr := &inactiveChainReplicator{
+				registerChain:            registerChain,
 				logger:                   flogging.MustGetLogger("test"),
 				replicator:               replicator,
 				chains2CreationCallbacks: make(map[string]chainCreation),
@@ -798,6 +835,7 @@ func TestInactiveChainReplicator(t *testing.T) {
 			}
 			assert.Equal(t, testCase.chainsExpectedToBeReplicated, replicatedChains)
 			replicator.AssertNumberOfCalls(t, "ReplicateChains", testCase.ReplicateChainsExpectedCallCount)
+			assert.Equal(t, testCase.expectedRegisteredChains, registeredChains)
 		})
 	}
 }
@@ -823,23 +861,26 @@ func TestTrackChainNilGenesisBlock(t *testing.T) {
 }
 
 func TestLedgerFactory(t *testing.T) {
-	lf := &ledgerFactory{ramledger.New(1)}
+	lf := &ledgerFactory{
+		Factory:       ramledger.New(1),
+		onBlockCommit: func(_ *common.Block, _ string) {},
+	}
 	lw, err := lf.GetOrCreate("mychannel")
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(0), lw.Height())
 }
 
 func injectConsenterCertificate(t *testing.T, block *common.Block, tlsCert []byte) {
-	env, err := utils.ExtractEnvelope(block, 0)
+	env, err := protoutil.ExtractEnvelope(block, 0)
 	assert.NoError(t, err)
-	payload, err := utils.ExtractPayload(env)
+	payload, err := protoutil.ExtractPayload(env)
 	assert.NoError(t, err)
 	confEnv, err := configtx.UnmarshalConfigEnvelope(payload.Data)
 	assert.NoError(t, err)
 	consensus := confEnv.Config.ChannelGroup.Groups[channelconfig.OrdererGroupKey].Values[channelconfig.ConsensusTypeKey]
-	consensus.Value = utils.MarshalOrPanic(&orderer.ConsensusType{
+	consensus.Value = protoutil.MarshalOrPanic(&orderer.ConsensusType{
 		Type: "etcdraft",
-		Metadata: utils.MarshalOrPanic(&etcdraft.Metadata{
+		Metadata: protoutil.MarshalOrPanic(&etcdraft.ConfigMetadata{
 			Consenters: []*etcdraft.Consenter{
 				{
 					ServerTlsCert: tlsCert,
@@ -849,26 +890,230 @@ func injectConsenterCertificate(t *testing.T, block *common.Block, tlsCert []byt
 		}),
 	})
 
-	payload.Data = utils.MarshalOrPanic(confEnv)
-	env.Payload = utils.MarshalOrPanic(payload)
-	block.Data.Data[0] = utils.MarshalOrPanic(env)
-	block.Header.DataHash = block.Data.Hash()
+	payload.Data = protoutil.MarshalOrPanic(confEnv)
+	env.Payload = protoutil.MarshalOrPanic(payload)
+	block.Data.Data[0] = protoutil.MarshalOrPanic(env)
+	block.Header.DataHash = protoutil.BlockDataHash(block.Data)
 }
 
 func injectOrdererEndpoint(t *testing.T, block *common.Block, endpoint string) {
 	ordererAddresses := channelconfig.OrdererAddressesValue([]string{endpoint})
 	
-	env, err := utils.ExtractEnvelope(block, 0)
+	env, err := protoutil.ExtractEnvelope(block, 0)
 	assert.NoError(t, err)
-	payload, err := utils.ExtractPayload(env)
+	payload, err := protoutil.ExtractPayload(env)
 	assert.NoError(t, err)
 	confEnv, err := configtx.UnmarshalConfigEnvelope(payload.Data)
 	assert.NoError(t, err)
 	
-	confEnv.Config.ChannelGroup.Values[ordererAddresses.Key()].Value = utils.MarshalOrPanic(ordererAddresses.Value())
+	confEnv.Config.ChannelGroup.Values[ordererAddresses.Key()].Value = protoutil.MarshalOrPanic(ordererAddresses.Value())
 	
-	payload.Data = utils.MarshalOrPanic(confEnv)
-	env.Payload = utils.MarshalOrPanic(payload)
-	block.Data.Data[0] = utils.MarshalOrPanic(env)
-	block.Header.DataHash = block.Data.Hash()
+	payload.Data = protoutil.MarshalOrPanic(confEnv)
+	env.Payload = protoutil.MarshalOrPanic(payload)
+	block.Data.Data[0] = protoutil.MarshalOrPanic(env)
+	block.Header.DataHash = protoutil.BlockDataHash(block.Data)
+}
+
+func TestVerifierLoader(t *testing.T) {
+	systemChannelBlockBytes, err := ioutil.ReadFile(filepath.Join("testdata", "system.block"))
+	assert.NoError(t, err)
+
+	configBlock := &common.Block{}
+	err = proto.Unmarshal(systemChannelBlockBytes, configBlock)
+	assert.NoError(t, err)
+
+	verifier := &mocks.BlockVerifier{}
+
+	for _, testCase := range []struct {
+		description               string
+		ledgerGetOrCreateErr      error
+		ledgerHeight              uint64
+		lastBlock                 *common.Block
+		lastConfigBlock           *common.Block
+		verifierFromConfigReturns cluster.BlockVerifier
+		verifierFromConfigErr     error
+		onFailureInvoked          bool
+		expectedPanic             string
+		expectedLoggedMessages    map[string]struct{}
+		expectedResult            verifiersByChannel
+	}{
+		{
+			description:          "obtaining ledger fails",
+			ledgerGetOrCreateErr: errors.New("IO error"),
+			expectedPanic:        "Failed obtaining ledger for channel mychannel",
+		},
+		{
+			description: "empty ledger",
+			expectedLoggedMessages: map[string]struct{}{
+				"Channel mychannel has no blocks, skipping it": {},
+			},
+			expectedResult: make(verifiersByChannel),
+		},
+		{
+			description:   "block retrieval fails",
+			ledgerHeight:  100,
+			expectedPanic: "Failed retrieving block [99] for channel mychannel",
+		},
+		{
+			description:   "block retrieval succeeds but the block is bad",
+			ledgerHeight:  100,
+			lastBlock:     &common.Block{},
+			expectedPanic: "Failed retrieving config block [99] for channel mychannel",
+		},
+		{
+			description:  "config block retrieved is bad",
+			ledgerHeight: 100,
+			lastBlock: &common.Block{
+				Metadata: &common.BlockMetadata{
+					Metadata: [][]byte{{}, protoutil.MarshalOrPanic(&common.Metadata{
+						Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 21}),
+					}), {}, {}},
+				},
+			},
+			lastConfigBlock:  &common.Block{Header: &common.BlockHeader{Number: 21}},
+			expectedPanic:    "Failed extracting configuration for channel mychannel from block [21]: empty block",
+			onFailureInvoked: true,
+		},
+		{
+			description:  "VerifierFromConfig fails",
+			ledgerHeight: 100,
+			lastBlock: &common.Block{
+				Metadata: &common.BlockMetadata{
+					Metadata: [][]byte{{}, protoutil.MarshalOrPanic(&common.Metadata{
+						Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 21}),
+					}), {}, {}},
+				},
+			},
+			lastConfigBlock:       configBlock,
+			verifierFromConfigErr: errors.New("failed initializing MSP"),
+			expectedPanic:         "Failed creating verifier for channel mychannel from block [99]: failed initializing MSP",
+			onFailureInvoked:      true,
+		},
+		{
+			description:  "VerifierFromConfig succeeds",
+			ledgerHeight: 100,
+			lastBlock: &common.Block{
+				Metadata: &common.BlockMetadata{
+					Metadata: [][]byte{{}, protoutil.MarshalOrPanic(&common.Metadata{
+						Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 21}),
+					}), {}, {}},
+				},
+			},
+			lastConfigBlock: configBlock,
+			expectedLoggedMessages: map[string]struct{}{
+				"Loaded verifier for channel mychannel from config block at index 99": {},
+			},
+			expectedResult: verifiersByChannel{
+				"mychannel": verifier,
+			},
+		},
+	} {
+		t.Run(testCase.description, func(t *testing.T) {
+			iterator := &deliver_mocks.BlockIterator{}
+			iterator.NextReturnsOnCall(0, testCase.lastBlock, common.Status_SUCCESS)
+			iterator.NextReturnsOnCall(1, testCase.lastConfigBlock, common.Status_SUCCESS)
+
+			ledger := &ledger_mocks.ReadWriter{}
+			ledger.On("Height").Return(testCase.ledgerHeight)
+			ledger.On("Iterator", mock.Anything).Return(iterator, uint64(1))
+
+			ledgerFactory := &server_mocks.Factory{}
+			ledgerFactory.On("GetOrCreate", "mychannel").Return(ledger, testCase.ledgerGetOrCreateErr)
+			ledgerFactory.On("ChainIDs").Return([]string{"mychannel"})
+
+			verifierFactory := &mocks.VerifierFactory{}
+			verifierFactory.On("VerifierFromConfig", mock.Anything, "mychannel").Return(verifier, testCase.verifierFromConfigErr)
+
+			var onFailureInvoked bool
+			onFailure := func(_ *common.Block) {
+				onFailureInvoked = true
+			}
+
+			verifierLoader := &verifierLoader{
+				onFailure:       onFailure,
+				ledgerFactory:   ledgerFactory,
+				verifierFactory: verifierFactory,
+				logger:          flogging.MustGetLogger("test"),
+			}
+
+			verifierLoader.logger = verifierLoader.logger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+				delete(testCase.expectedLoggedMessages, entry.Message)
+				return nil
+			}))
+
+			if testCase.expectedPanic != "" {
+				f := func() {
+					verifierLoader.loadVerifiers()
+				}
+				assert.PanicsWithValue(t, testCase.expectedPanic, f)
+			} else {
+				res := verifierLoader.loadVerifiers()
+				assert.Equal(t, testCase.expectedResult, res)
+			}
+
+			assert.Equal(t, testCase.onFailureInvoked, onFailureInvoked)
+			assert.Empty(t, testCase.expectedLoggedMessages)
+		})
+	}
+}
+
+func TestValidateBootstrapBlock(t *testing.T) {
+	systemChannelBlockBytes, err := ioutil.ReadFile(filepath.Join("testdata", "system.block"))
+	assert.NoError(t, err)
+
+	applicationChannelBlockBytes, err := ioutil.ReadFile(filepath.Join("testdata", "mychannel.block"))
+	assert.NoError(t, err)
+
+	appBlock := &common.Block{}
+	err = proto.Unmarshal(applicationChannelBlockBytes, appBlock)
+	assert.NoError(t, err)
+
+	systemBlock := &common.Block{}
+	err = proto.Unmarshal(systemChannelBlockBytes, systemBlock)
+	assert.NoError(t, err)
+
+	for _, testCase := range []struct {
+		description   string
+		block         *common.Block
+		expectedError string
+	}{
+		{
+			description:   "nil block",
+			expectedError: "nil block",
+		},
+		{
+			description:   "empty block",
+			block:         &common.Block{},
+			expectedError: "empty block data",
+		},
+		{
+			description: "bad envelope",
+			block: &common.Block{
+				Data: &common.BlockData{
+					Data: [][]byte{{1, 2, 3}},
+				},
+			},
+			expectedError: "failed extracting envelope from block: " +
+				"proto: common.Envelope: illegal tag 0 (wire type 1)",
+		},
+		{
+			description:   "application channel block",
+			block:         appBlock,
+			expectedError: "the block isn't a system channel block because it lacks ConsortiumsConfig",
+		},
+		{
+			description: "system channel block",
+			block:       systemBlock,
+		},
+	} {
+		t.Run(testCase.description, func(t *testing.T) {
+			err := ValidateBootstrapBlock(testCase.block)
+			if testCase.expectedError == "" {
+				assert.NoError(t, err)
+				return
+			}
+
+			assert.EqualError(t, err, testCase.expectedError)
+		})
+	}
 }

@@ -11,16 +11,18 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
-	"github.com/mcc-github/blockchain/core/cclifecycle"
+	cc "github.com/mcc-github/blockchain/core/cclifecycle"
 	"github.com/mcc-github/blockchain/core/cclifecycle/mocks"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/pkg/errors"
@@ -69,20 +71,20 @@ func TestHandleChaincodeDeployGreenPath(t *testing.T) {
 	recorder, restoreLogger := newLogRecorder(t)
 	defer restoreLogger()
 
-	cc1Bytes := utils.MarshalOrPanic(&ccprovider.ChaincodeData{
+	cc1Bytes := protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
 		Name:    "cc1",
 		Version: "1.0",
 		Id:      []byte{42},
 		Policy:  []byte{1, 2, 3, 4, 5},
 	})
 
-	cc2Bytes := utils.MarshalOrPanic(&ccprovider.ChaincodeData{
+	cc2Bytes := protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
 		Name:    "cc2",
 		Version: "1.0",
 		Id:      []byte{42},
 	})
 
-	cc3Bytes := utils.MarshalOrPanic(&ccprovider.ChaincodeData{
+	cc3Bytes := protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
 		Name:    "cc3",
 		Version: "1.0",
 		Id:      []byte{42},
@@ -101,19 +103,19 @@ func TestHandleChaincodeDeployGreenPath(t *testing.T) {
 		{
 			Name:    "cc1",
 			Version: "1.0",
-			Id:      []byte{42},
+			Hash:    []byte{42},
 		},
 		{
 			
 			Name:    "cc2",
 			Version: "1.1",
-			Id:      []byte{50},
+			Hash:    []byte{50},
 		},
 		{
 			
 			Name:    "cc3",
 			Version: "1.0",
-			Id:      []byte{50},
+			Hash:    []byte{50},
 		},
 	}, nil)
 
@@ -138,7 +140,7 @@ func TestHandleChaincodeDeployGreenPath(t *testing.T) {
 	}})
 
 	
-	cc3Bytes = utils.MarshalOrPanic(&ccprovider.ChaincodeData{
+	cc3Bytes = protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
 		Name:    "cc3",
 		Version: "1.0",
 		Id:      []byte{50},
@@ -163,7 +165,7 @@ func TestHandleChaincodeDeployGreenPath(t *testing.T) {
 
 	
 	
-	cc3Bytes = utils.MarshalOrPanic(&ccprovider.ChaincodeData{
+	cc3Bytes = protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
 		Name:    "cc3",
 		Version: "1.1",
 		Id:      []byte{50},
@@ -191,7 +193,7 @@ func TestHandleChaincodeDeployFailures(t *testing.T) {
 	recorder, restoreLogger := newLogRecorder(t)
 	defer restoreLogger()
 
-	cc1Bytes := utils.MarshalOrPanic(&ccprovider.ChaincodeData{
+	cc1Bytes := protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
 		Name:    "cc1",
 		Version: "1.0",
 		Id:      []byte{42},
@@ -206,7 +208,7 @@ func TestHandleChaincodeDeployFailures(t *testing.T) {
 		{
 			Name:    "cc1",
 			Version: "1.0",
-			Id:      []byte{42},
+			Hash:    []byte{42},
 		},
 	}, nil)
 
@@ -262,21 +264,104 @@ func TestHandleChaincodeDeployFailures(t *testing.T) {
 	sub.HandleChaincodeDeploy(&cceventmgmt.ChaincodeDefinition{Name: "cc1", Version: "1.1", Hash: []byte{42}}, nil)
 	sub.ChaincodeDeployDone(false)
 	lsnr.AssertNumberOfCalls(t, "LifeCycleChangeListener", 3)
-	assertLogged(t, recorder, "Chaincode deploy for cc1 failed")
+	assertLogged(t, recorder, "Chaincode deploy for updates [Name=cc1, Version=1.1, Hash=[]byte{0x2a}] failed")
+}
+
+func TestMultipleUpdates(t *testing.T) {
+	recorder, restoreLogger := newLogRecorder(t)
+	defer restoreLogger()
+
+	cc1Bytes := protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
+		Name:    "cc1",
+		Version: "1.1",
+		Id:      []byte{42},
+		Policy:  []byte{1, 2, 3, 4, 5},
+	})
+	cc2Bytes := protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
+		Name:    "cc2",
+		Version: "1.0",
+		Id:      []byte{50},
+		Policy:  []byte{1, 2, 3, 4, 5},
+	})
+
+	query := &mocks.Query{}
+	query.On("GetState", "lscc", "cc1").Return(cc1Bytes, nil)
+	query.On("GetState", "lscc", "cc2").Return(cc2Bytes, nil)
+	query.On("Done")
+	queryCreator := &mocks.QueryCreator{}
+	queryCreator.On("NewQuery").Return(query, nil)
+
+	enum := &mocks.Enumerator{}
+	enum.On("Enumerate").Return([]chaincode.InstalledChaincode{
+		{
+			Name:    "cc1",
+			Version: "1.1",
+			Hash:    []byte{42},
+		},
+		{
+			Name:    "cc2",
+			Version: "1.0",
+			Hash:    []byte{50},
+		},
+	}, nil)
+
+	lc, err := cc.NewLifeCycle(enum)
+	assert.NoError(t, err)
+
+	var lsnrCalled sync.WaitGroup
+	lsnrCalled.Add(3)
+	lsnr := &mocks.LifeCycleChangeListener{}
+	lsnr.On("LifeCycleChangeListener", mock.Anything, mock.Anything).Run(func(arguments mock.Arguments) {
+		lsnrCalled.Done()
+	})
+	lc.AddListener(lsnr)
+
+	sub, err := lc.NewChannelSubscription("mychannel", queryCreator)
+	assert.NoError(t, err)
+
+	sub.HandleChaincodeDeploy(&cceventmgmt.ChaincodeDefinition{Name: "cc1", Version: "1.1", Hash: []byte{42}}, nil)
+	sub.HandleChaincodeDeploy(&cceventmgmt.ChaincodeDefinition{Name: "cc2", Version: "1.0", Hash: []byte{50}}, nil)
+	sub.ChaincodeDeployDone(true)
+
+	cc1MD := chaincode.Metadata{
+		Name:    "cc1",
+		Version: "1.1",
+		Id:      []byte{42},
+		Policy:  []byte{1, 2, 3, 4, 5},
+	}
+	cc2MD := chaincode.Metadata{
+		Name:    "cc2",
+		Version: "1.0",
+		Id:      []byte{50},
+		Policy:  []byte{1, 2, 3, 4, 5},
+	}
+	metadataSetWithBothChaincodes := chaincode.MetadataSet{cc1MD, cc2MD}
+
+	lsnrCalled.Wait()
+	
+	
+	expectedMetadata := sortedMetadataSet(lsnr.Calls[2].Arguments.Get(1).(chaincode.MetadataSet)).sort()
+	assert.Equal(t, metadataSetWithBothChaincodes, expectedMetadata)
+
+	
+	g := NewGomegaWithT(t)
+	g.Eventually(func() []string {
+		return recorder.EntriesMatching("Listeners for channel mychannel invoked")
+	}, time.Second*10).Should(HaveLen(3))
 }
 
 func TestMetadata(t *testing.T) {
 	recorder, restoreLogger := newLogRecorder(t)
 	defer restoreLogger()
 
-	cc1Bytes := utils.MarshalOrPanic(&ccprovider.ChaincodeData{
+	cc1Bytes := protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
 		Name:    "cc1",
 		Version: "1.0",
 		Id:      []byte{42},
 		Policy:  []byte{1, 2, 3, 4, 5},
 	})
 
-	cc2Bytes := utils.MarshalOrPanic(&ccprovider.ChaincodeData{
+	cc2Bytes := protoutil.MarshalOrPanic(&ccprovider.ChaincodeData{
 		Name:    "cc2",
 		Version: "1.0",
 		Id:      []byte{42},
@@ -292,7 +377,7 @@ func TestMetadata(t *testing.T) {
 		{
 			Name:    "cc1",
 			Version: "1.0",
-			Id:      []byte{42},
+			Hash:    []byte{42},
 		},
 	}, nil)
 

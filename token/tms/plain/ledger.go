@@ -33,7 +33,12 @@ func (p *MemoryLedger) GetState(namespace string, key string) ([]byte, error) {
 
 func (p *MemoryLedger) SetState(namespace string, key string, value []byte) error {
 	p.entries[key] = value
+	return nil
+}
 
+
+func (p *MemoryLedger) DeleteState(namespace string, key string) error {
+	delete(p.entries, key)
 	return nil
 }
 

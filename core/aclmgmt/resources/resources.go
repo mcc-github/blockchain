@@ -12,6 +12,16 @@ package resources
 
 const (
 	
+	Lifecycle_InstallChaincode                   = "_lifecycle/InstallChaincode"
+	Lifecycle_QueryInstalledChaincode            = "_lifecycle/QueryInstalledChaincode"
+	Lifecycle_QueryInstalledChaincodes           = "_lifecycle/QueryInstalledChaincodes"
+	Lifecycle_ApproveChaincodeDefinitionForMyOrg = "_lifecycle/ApproveChaincodeDefinitionForMyOrg"
+	Lifecycle_CommitChaincodeDefinition          = "_lifecycle/CommitChaincodeDefinition"
+	Lifecycle_QueryChaincodeDefinition           = "_lifecycle/QueryChaincodeDefinition"
+	Lifecycle_QueryNamespaceDefinitions          = "_lifecycle/QueryNamespaceDefinitions"
+	Lifecycle_QueryApprovalStatus                = "_lifecycle/QueryApprovalStatus"
+
+	
 	Lscc_Install                   = "lscc/Install"
 	Lscc_Deploy                    = "lscc/Deploy"
 	Lscc_Upgrade                   = "lscc/Upgrade"

@@ -19,7 +19,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -40,11 +40,13 @@ var once sync.Once
 
 type Initializer struct {
 	CustomTxProcessors            customtx.Processors
+	StateListeners                []ledger.StateListener
 	PlatformRegistry              *platforms.Registry
 	DeployedChaincodeInfoProvider ledger.DeployedChaincodeInfoProvider
 	MembershipInfoProvider        ledger.MembershipInfoProvider
 	MetricsProvider               metrics.Provider
 	HealthCheckRegistry           ledger.HealthCheckRegistry
+	Config                        *ledger.Config
 }
 
 
@@ -65,18 +67,22 @@ func initialize(initializer *Initializer) {
 		initializer.PlatformRegistry,
 		initializer.DeployedChaincodeInfoProvider,
 	})
-	finalStateListeners := addListenerForCCEventsHandler(initializer.DeployedChaincodeInfoProvider, []ledger.StateListener{})
+	finalStateListeners := addListenerForCCEventsHandler(initializer.DeployedChaincodeInfoProvider, initializer.StateListeners)
 	provider, err := kvledger.NewProvider()
 	if err != nil {
 		panic(errors.WithMessage(err, "Error in instantiating ledger provider"))
 	}
-	provider.Initialize(&ledger.Initializer{
+	err = provider.Initialize(&ledger.Initializer{
 		StateListeners:                finalStateListeners,
 		DeployedChaincodeInfoProvider: initializer.DeployedChaincodeInfoProvider,
 		MembershipInfoProvider:        initializer.MembershipInfoProvider,
 		MetricsProvider:               initializer.MetricsProvider,
 		HealthCheckRegistry:           initializer.HealthCheckRegistry,
+		Config:                        initializer.Config,
 	})
+	if err != nil {
+		panic(errors.WithMessage(err, "Error initializing ledger provider"))
+	}
 	ledgerProvider = provider
 	logger.Info("ledger mgmt initialized")
 }
@@ -90,7 +96,7 @@ func CreateLedger(genesisBlock *common.Block) (ledger.PeerLedger, error) {
 	if !initialized {
 		return nil, ErrLedgerMgmtNotInitialized
 	}
-	id, err := utils.GetChainIDFromBlock(genesisBlock)
+	id, err := protoutil.GetChainIDFromBlock(genesisBlock)
 	if err != nil {
 		return nil, err
 	}

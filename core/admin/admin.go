@@ -15,6 +15,7 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,7 +32,7 @@ type requestValidator interface {
 type AccessControlEvaluator interface {
 	
 	
-	Evaluate(signatureSet []*common.SignedData) error
+	Evaluate(signatureSet []*protoutil.SignedData) error
 }
 
 

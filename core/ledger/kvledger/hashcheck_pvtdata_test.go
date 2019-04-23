@@ -16,6 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,7 +27,7 @@ func TestConstructValidInvalidBlocksPvtData(t *testing.T) {
 	defer provider.Close()
 
 	_, gb := testutil.NewBlockGenerator(t, "testLedger", false)
-	gbHash := gb.Header.Hash()
+	gbHash := protoutil.BlockHeaderHash(gb.Header)
 	lg, _ := provider.Create(gb)
 	defer lg.Close()
 
@@ -154,4 +155,62 @@ func produceSamplePvtdata(t *testing.T, txNum uint64, nsColls []string, values [
 	pubSimulationResultsBytes, err := proto.Marshal(simRes.PubSimulationResults)
 	assert.NoError(t, err)
 	return &ledger.TxPvtData{SeqInBlock: txNum, WriteSet: simRes.PvtSimulationResults}, pubSimulationResultsBytes
+}
+
+func TestRemoveCollFromTxPvtReadWriteSet(t *testing.T) {
+	txpvtrwset := testutilConstructSampleTxPvtRwset(
+		[]*testNsColls{
+			{ns: "ns-1", colls: []string{"coll-1", "coll-2"}},
+			{ns: "ns-2", colls: []string{"coll-3", "coll-4"}},
+		},
+	)
+
+	removeCollFromTxPvtReadWriteSet(txpvtrwset, "ns-1", "coll-1")
+	assert.Equal(
+		t,
+		testutilConstructSampleTxPvtRwset(
+			[]*testNsColls{
+				{ns: "ns-1", colls: []string{"coll-2"}},
+				{ns: "ns-2", colls: []string{"coll-3", "coll-4"}},
+			},
+		),
+		txpvtrwset,
+	)
+
+	removeCollFromTxPvtReadWriteSet(txpvtrwset, "ns-1", "coll-2")
+	assert.Equal(
+		t,
+		testutilConstructSampleTxPvtRwset(
+			[]*testNsColls{
+				{ns: "ns-2", colls: []string{"coll-3", "coll-4"}},
+			},
+		),
+		txpvtrwset,
+	)
+}
+
+func testutilConstructSampleTxPvtRwset(nsCollsList []*testNsColls) *rwset.TxPvtReadWriteSet {
+	txPvtRwset := &rwset.TxPvtReadWriteSet{}
+	for _, nsColls := range nsCollsList {
+		ns := nsColls.ns
+		nsdata := &rwset.NsPvtReadWriteSet{
+			Namespace:          ns,
+			CollectionPvtRwset: []*rwset.CollectionPvtReadWriteSet{},
+		}
+		txPvtRwset.NsPvtRwset = append(txPvtRwset.NsPvtRwset, nsdata)
+		for _, coll := range nsColls.colls {
+			nsdata.CollectionPvtRwset = append(nsdata.CollectionPvtRwset,
+				&rwset.CollectionPvtReadWriteSet{
+					CollectionName: coll,
+					Rwset:          []byte(fmt.Sprintf("pvtrwset-for-%s-%s", ns, coll)),
+				},
+			)
+		}
+	}
+	return txPvtRwset
+}
+
+type testNsColls struct {
+	ns    string
+	colls []string
 }

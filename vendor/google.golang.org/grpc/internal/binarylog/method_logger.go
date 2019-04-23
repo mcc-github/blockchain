@@ -361,10 +361,7 @@ func metadataKeyOmit(key string) bool {
 	case "grpc-trace-bin": 
 		return false
 	}
-	if strings.HasPrefix(key, "grpc-") {
-		return true
-	}
-	return false
+	return strings.HasPrefix(key, "grpc-")
 }
 
 func mdToMetadataProto(md metadata.MD) *pb.Metadata {

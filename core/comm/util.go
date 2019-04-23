@@ -111,7 +111,7 @@ func noopBinding(_ context.Context, _ []byte) error {
 
 
 func ExtractCertificateHashFromContext(ctx context.Context) []byte {
-	rawCert := ExtractCertificateFromContext(ctx)
+	rawCert := ExtractRawCertificateFromContext(ctx)
 	if len(rawCert) == 0 {
 		return nil
 	}
@@ -122,7 +122,7 @@ func ExtractCertificateHashFromContext(ctx context.Context) []byte {
 
 
 
-func ExtractCertificateFromContext(ctx context.Context) []byte {
+func ExtractCertificateFromContext(ctx context.Context) *x509.Certificate {
 	pr, extracted := peer.FromContext(ctx)
 	if !extracted {
 		return nil
@@ -141,5 +141,15 @@ func ExtractCertificateFromContext(ctx context.Context) []byte {
 	if len(certs) == 0 {
 		return nil
 	}
-	return certs[0].Raw
+	return certs[0]
+}
+
+
+
+func ExtractRawCertificateFromContext(ctx context.Context) []byte {
+	cert := ExtractCertificateFromContext(ctx)
+	if cert == nil {
+		return nil
+	}
+	return cert.Raw
 }

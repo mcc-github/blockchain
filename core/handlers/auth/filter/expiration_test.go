@@ -16,7 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -59,8 +59,8 @@ func createIdemixIdentity(t *testing.T) []byte {
 }
 
 func createSignedProposal(t *testing.T, serializedIdentity []byte, corruptSigHdr mutator, corruptHdr mutator) *peer.SignedProposal {
-	sHdr := utils.MakeSignatureHeader(serializedIdentity, nil)
-	hdr := utils.MakePayloadHeader(&common.ChannelHeader{}, sHdr)
+	sHdr := protoutil.MakeSignatureHeader(serializedIdentity, nil)
+	hdr := protoutil.MakePayloadHeader(&common.ChannelHeader{}, sHdr)
 	hdr.SignatureHeader = corruptSigHdr(hdr.SignatureHeader)
 	hdrBytes, err := proto.Marshal(hdr)
 	assert.NoError(t, err)

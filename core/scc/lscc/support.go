@@ -11,9 +11,8 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -60,7 +59,7 @@ func (s *supportImpl) GetInstantiationPolicy(channel string, ccpack ccprovider.C
 		mspids := peer.GetMSPIDs(channel)
 
 		p := cauthdsl.SignedByAnyAdmin(mspids)
-		ip, err = utils.Marshal(p)
+		ip, err = protoutil.Marshal(p)
 		if err != nil {
 			return nil, errors.Errorf("error marshalling default instantiation policy")
 		}
@@ -82,21 +81,21 @@ func (s *supportImpl) CheckInstantiationPolicy(signedProp *pb.SignedProposal, ch
 	if err != nil {
 		return err
 	}
-	proposal, err := utils.GetProposal(signedProp.ProposalBytes)
+	proposal, err := protoutil.GetProposal(signedProp.ProposalBytes)
 	if err != nil {
 		return err
 	}
 	
-	header, err := utils.GetHeader(proposal.Header)
+	header, err := protoutil.GetHeader(proposal.Header)
 	if err != nil {
 		return err
 	}
-	shdr, err := utils.GetSignatureHeader(header.SignatureHeader)
+	shdr, err := protoutil.GetSignatureHeader(header.SignatureHeader)
 	if err != nil {
 		return err
 	}
 	
-	sd := []*common.SignedData{{
+	sd := []*protoutil.SignedData{{
 		Data:      signedProp.ProposalBytes,
 		Identity:  shdr.Creator,
 		Signature: signedProp.Signature,

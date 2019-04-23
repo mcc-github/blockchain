@@ -5,16 +5,27 @@
 
 package internal
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 var (
 	
-	WithContextDialer interface{} 
-	
 	WithResolverBuilder interface{} 
 	
-	HealthCheckFunc func(ctx context.Context, newStream func() (interface{}, error), reportHealth func(bool), serviceName string) error
+	WithHealthCheckFunc interface{} 
+	
+	HealthCheckFunc HealthChecker
+	
+	BalancerUnregister func(name string)
+	
+	
+	KeepaliveMinPingTime = 10 * time.Second
 )
+
+
+type HealthChecker func(ctx context.Context, newStream func() (interface{}, error), reportHealth func(bool), serviceName string) error
 
 const (
 	

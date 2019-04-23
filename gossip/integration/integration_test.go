@@ -13,9 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/common"
+	"github.com/mcc-github/blockchain/gossip/metrics"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
@@ -44,22 +46,23 @@ func TestNewGossipCryptoService(t *testing.T) {
 	s1 := grpc.NewServer()
 	s2 := grpc.NewServer()
 	s3 := grpc.NewServer()
-	ll1, _ := net.Listen("tcp", fmt.Sprintf("%s:%d", "", 5611))
-	ll2, _ := net.Listen("tcp", fmt.Sprintf("%s:%d", "", 5612))
-	ll3, _ := net.Listen("tcp", fmt.Sprintf("%s:%d", "", 5613))
-	endpoint1 := "localhost:5611"
-	endpoint2 := "localhost:5612"
-	endpoint3 := "localhost:5613"
+	ll1, _ := net.Listen("tcp", "127.0.0.1:0")
+	ll2, _ := net.Listen("tcp", "127.0.0.1:0")
+	ll3, _ := net.Listen("tcp", "127.0.0.1:0")
+	endpoint1 := ll1.Addr().String()
+	endpoint2 := ll2.Addr().String()
+	endpoint3 := ll3.Addr().String()
 	msptesttools.LoadMSPSetupForTesting()
 	peerIdentity, _ := mgmt.GetLocalSigningIdentityOrPanic().Serialize()
+	gossipMetrics := metrics.NewGossipMetrics(&disabled.Provider{})
 	g1, err := NewGossipComponent(peerIdentity, endpoint1, s1, secAdv, cryptSvc,
-		defaultSecureDialOpts, nil)
+		defaultSecureDialOpts, nil, gossipMetrics)
 	assert.NoError(t, err)
 	g2, err := NewGossipComponent(peerIdentity, endpoint2, s2, secAdv, cryptSvc,
-		defaultSecureDialOpts, nil, endpoint1)
+		defaultSecureDialOpts, nil, gossipMetrics, endpoint1)
 	assert.NoError(t, err)
 	g3, err := NewGossipComponent(peerIdentity, endpoint3, s3, secAdv, cryptSvc,
-		defaultSecureDialOpts, nil, endpoint1)
+		defaultSecureDialOpts, nil, gossipMetrics, endpoint1)
 	assert.NoError(t, err)
 	defer g1.Stop()
 	defer g2.Stop()

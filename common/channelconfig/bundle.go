@@ -13,8 +13,7 @@ import (
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/msp"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -83,22 +82,14 @@ func (b *Bundle) ValidateNew(nb Resources) error {
 	if oc, ok := b.OrdererConfig(); ok {
 		noc, ok := nb.OrdererConfig()
 		if !ok {
-			return errors.New("Current config has orderer section, but new config does not")
+			return errors.New("current config has orderer section, but new config does not")
 		}
 
 		
-		if !oc.Capabilities().Kafka2RaftMigration() {
+		if !b.channelConfig.Capabilities().ConsensusTypeMigration() {
 			if oc.ConsensusType() != noc.ConsensusType() {
-				return errors.Errorf("Attempted to change consensus type from %s to %s",
+				return errors.Errorf("attempted to change consensus type from %s to %s",
 					oc.ConsensusType(), noc.ConsensusType())
-			}
-			if noc.ConsensusMigrationState() != ab.ConsensusType_MIG_STATE_NONE || noc.ConsensusMigrationContext() != 0 {
-				return errors.Errorf("New config has unexpected consensus-migration state or context: (%s/%d) should be (MIG_STATE_NONE/0)",
-					noc.ConsensusMigrationState().String(), noc.ConsensusMigrationContext())
-			}
-		} else {
-			if err := validateMigrationStep(oc, noc); err != nil {
-				return err
 			}
 		}
 
@@ -109,7 +100,7 @@ func (b *Bundle) ValidateNew(nb Resources) error {
 			}
 			mspID := org.MSPID()
 			if mspID != norg.MSPID() {
-				return errors.Errorf("Orderer org %s attempted to change MSP ID from %s to %s", orgName, mspID, norg.MSPID())
+				return errors.Errorf("orderer org %s attempted to change MSP ID from %s to %s", orgName, mspID, norg.MSPID())
 			}
 		}
 	}
@@ -117,7 +108,7 @@ func (b *Bundle) ValidateNew(nb Resources) error {
 	if ac, ok := b.ApplicationConfig(); ok {
 		nac, ok := nb.ApplicationConfig()
 		if !ok {
-			return errors.New("Current config has application section, but new config does not")
+			return errors.New("current config has application section, but new config does not")
 		}
 
 		for orgName, org := range ac.Organizations() {
@@ -127,7 +118,7 @@ func (b *Bundle) ValidateNew(nb Resources) error {
 			}
 			mspID := org.MSPID()
 			if mspID != norg.MSPID() {
-				return errors.Errorf("Application org %s attempted to change MSP ID from %s to %s", orgName, mspID, norg.MSPID())
+				return errors.Errorf("application org %s attempted to change MSP ID from %s to %s", orgName, mspID, norg.MSPID())
 			}
 		}
 	}
@@ -135,7 +126,7 @@ func (b *Bundle) ValidateNew(nb Resources) error {
 	if cc, ok := b.ConsortiumsConfig(); ok {
 		ncc, ok := nb.ConsortiumsConfig()
 		if !ok {
-			return errors.Errorf("Current config has consortiums section, but new config does not")
+			return errors.Errorf("current config has consortiums section, but new config does not")
 		}
 
 		for consortiumName, consortium := range cc.Consortiums() {
@@ -151,10 +142,12 @@ func (b *Bundle) ValidateNew(nb Resources) error {
 				}
 				mspID := org.MSPID()
 				if mspID != norg.MSPID() {
-					return errors.Errorf("Consortium %s org %s attempted to change MSP ID from %s to %s", consortiumName, orgName, mspID, norg.MSPID())
+					return errors.Errorf("consortium %s org %s attempted to change MSP ID from %s to %s", consortiumName, orgName, mspID, norg.MSPID())
 				}
 			}
 		}
+	} else if _, okNew := nb.ConsortiumsConfig(); okNew {
+		return errors.Errorf("current config has no consortiums section, but new config does")
 	}
 
 	return nil
@@ -163,7 +156,7 @@ func (b *Bundle) ValidateNew(nb Resources) error {
 
 
 func NewBundleFromEnvelope(env *cb.Envelope) (*Bundle, error) {
-	payload, err := utils.UnmarshalPayload(env.Payload)
+	payload, err := protoutil.UnmarshalPayload(env.Payload)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal payload from envelope")
 	}
@@ -177,7 +170,7 @@ func NewBundleFromEnvelope(env *cb.Envelope) (*Bundle, error) {
 		return nil, errors.Errorf("envelope header cannot be nil")
 	}
 
-	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal channel header")
 	}
@@ -246,102 +239,6 @@ func preValidate(config *cb.Config) error {
 					return errors.New("cannot enable application capabilities without orderer support first")
 				}
 			}
-		}
-	}
-
-	return nil
-}
-
-
-
-
-func validateMigrationStep(oc Orderer, noc Orderer) error {
-	oldType := oc.ConsensusType()
-	oldState := oc.ConsensusMigrationState()
-	newType := noc.ConsensusType()
-	newState := noc.ConsensusMigrationState()
-	newContext := noc.ConsensusMigrationContext()
-
-	
-	if oldType != newType {
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		if oldType == "kafka" && newType == "etcdraft" {
-			
-			isSysCommit := oldState == ab.ConsensusType_MIG_STATE_START && newState == ab.ConsensusType_MIG_STATE_COMMIT
-			
-			isStdCtx := oldState == ab.ConsensusType_MIG_STATE_NONE && newState == ab.ConsensusType_MIG_STATE_CONTEXT
-			if isSysCommit || isStdCtx {
-				logger.Debugf("Kafka-to-etcdraft migration, config update, state transition: %s to %s", oldState, newState)
-			} else {
-				return errors.Errorf("Attempted to change consensus type from %s to %s, unexpected migration state transition: %s to %s",
-					oldType, newType, oldState, newState)
-			}
-		} else if oldType == "etcdraft" && newType == "kafka" {
-			
-			if oldState == ab.ConsensusType_MIG_STATE_CONTEXT && newState == ab.ConsensusType_MIG_STATE_NONE {
-				logger.Debugf("Kafka-to-etcdraft migration, config update, state transition: %s to %s", oldState, newState)
-			} else {
-				return errors.Errorf("Attempted to change consensus type from %s to %s, unexpected migration state transition: %s to %s",
-					oldType, newType, oldState, newState)
-			}
-		} else {
-			return errors.Errorf("Attempted to change consensus type from %s to %s, only kafka to etcdraft is supported",
-				oldType, newType)
-		}
-	} else {
-		
-		isNotMig := oldState == ab.ConsensusType_MIG_STATE_NONE && newState == ab.ConsensusType_MIG_STATE_NONE
-
-		
-		if oldType == "kafka" {
-			
-			
-			isSysStart := oldState == ab.ConsensusType_MIG_STATE_NONE && newState == ab.ConsensusType_MIG_STATE_START
-			
-			isSysAbort := oldState == ab.ConsensusType_MIG_STATE_START && newState == ab.ConsensusType_MIG_STATE_ABORT
-			
-			isSysNotMigAfterAbort := oldState == ab.ConsensusType_MIG_STATE_ABORT && newState == ab.ConsensusType_MIG_STATE_NONE
-			
-			isSysStartAfterAbort := oldState == ab.ConsensusType_MIG_STATE_ABORT && newState == ab.ConsensusType_MIG_STATE_START
-			if !(isNotMig || isSysStart || isSysAbort || isSysNotMigAfterAbort || isSysStartAfterAbort) {
-				return errors.Errorf("Consensus type %s, unexpected migration state transition: %s to %s",
-					oldType, oldState, newState)
-			} else if newState != ab.ConsensusType_MIG_STATE_NONE {
-				logger.Debugf("Kafka-to-etcdraft migration, config update, state transition: %s to %s", oldState, newState)
-			}
-		} else if oldType == "etcdraft" {
-			
-			
-			isSysAfterSuccess := oldState == ab.ConsensusType_MIG_STATE_COMMIT && newState == ab.ConsensusType_MIG_STATE_NONE
-			
-			
-			isStdAfterSuccess := oldState == ab.ConsensusType_MIG_STATE_CONTEXT && newState == ab.ConsensusType_MIG_STATE_NONE
-			if !(isNotMig || isSysAfterSuccess || isStdAfterSuccess) {
-				return errors.Errorf("Consensus type %s, unexpected migration state transition: %s to %s",
-					oldType, oldState.String(), newState)
-			}
-		}
-	}
-
-	
-	switch newState {
-	case ab.ConsensusType_MIG_STATE_START, ab.ConsensusType_MIG_STATE_ABORT, ab.ConsensusType_MIG_STATE_NONE:
-		if newContext != 0 {
-			return errors.Errorf("Consensus migration state %s, unexpected migration context: %d (expected: 0)",
-				newState, newContext)
-		}
-	case ab.ConsensusType_MIG_STATE_CONTEXT, ab.ConsensusType_MIG_STATE_COMMIT:
-		if newContext <= 0 {
-			return errors.Errorf("Consensus migration state %s, unexpected migration context: %d (expected >0)",
-				newState, newContext)
 		}
 	}
 

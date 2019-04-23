@@ -12,11 +12,8 @@ import (
 
 	"github.com/mcc-github/blockchain-amcl/amcl"
 	"github.com/mcc-github/blockchain-amcl/amcl/FP256BN"
-	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/pkg/errors"
 )
-
-var idemixLogger = flogging.MustGetLogger("idemix")
 
 
 const signLabel = "sign"
@@ -376,7 +373,7 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 
 	if *ProofC != *HashModOrder(proofData) {
 		
-		idemixLogger.Debugf("Signature Verification : \n"+
+		logger.Printf("Signature Verification : \n"+
 			"	[t1:%v]\n,"+
 			"	[t2:%v]\n,"+
 			"	[t3:%v]\n,"+
@@ -398,7 +395,8 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 			nonRevokedProofBytes,
 			ipk.Hash,
 			Disclosure,
-			msg)
+			msg,
+		)
 		return errors.Errorf("signature invalid: zero-knowledge proof is invalid")
 	}
 

@@ -92,7 +92,23 @@ func newKVLedger(
 func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider, ccInfoProvider ledger.DeployedChaincodeInfoProvider) error {
 	var err error
-	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, ccInfoProvider)
+	txmgr, err := lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, ccInfoProvider)
+	if err != nil {
+		return err
+	}
+	l.txtmgmt = txmgr
+	
+	
+	qe, err := txmgr.NewQueryExecutorNoCollChecks()
+	if err != nil {
+		return err
+	}
+	defer qe.Done()
+	for _, sl := range stateListeners {
+		if err := sl.Initialize(l.ledgerID, qe); err != nil {
+			return err
+		}
+	}
 	return err
 }
 
@@ -267,11 +283,6 @@ func (l *kvLedger) GetTxValidationCodeByTxID(txID string) (peer.TxValidationCode
 }
 
 
-func (l *kvLedger) Prune(policy commonledger.PrunePolicy) error {
-	return errors.New("not yet implemented")
-}
-
-
 func (l *kvLedger) NewTxSimulator(txid string) (ledger.TxSimulator, error) {
 	return l.txtmgmt.NewTxSimulator(txid)
 }
@@ -384,18 +395,6 @@ func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilte
 	l.blockAPIsRWLock.RLock()
 	l.blockAPIsRWLock.RUnlock()
 	return pvtdata, err
-}
-
-
-
-
-func (l *kvLedger) PurgePrivateData(maxBlockNumToRetain uint64) error {
-	return errors.New("not yet implemented")
-}
-
-
-func (l *kvLedger) PrivateDataMinBlockNum() (uint64, error) {
-	return 0, errors.New("not yet implemented")
 }
 
 func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, error) {

@@ -8,11 +8,9 @@ import (
 	"sync"
 
 	"google.golang.org/grpc/balancer"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/resolver"
-	"google.golang.org/grpc/status"
 )
 
 type balancerWrapperBuilder struct {
@@ -268,8 +266,7 @@ func (bw *balancerWrapper) Close() {
 
 
 
-
-func (bw *balancerWrapper) Pick(ctx context.Context, opts balancer.PickOptions) (balancer.SubConn, func(balancer.DoneInfo), error) {
+func (bw *balancerWrapper) Pick(ctx context.Context, opts balancer.PickOptions) (sc balancer.SubConn, done func(balancer.DoneInfo), err error) {
 	failfast := true 
 	if ss, ok := rpcInfoFromContext(ctx); ok {
 		failfast = ss.failfast
@@ -278,35 +275,51 @@ func (bw *balancerWrapper) Pick(ctx context.Context, opts balancer.PickOptions) 
 	if err != nil {
 		return nil, nil, err
 	}
-	var done func(balancer.DoneInfo)
 	if p != nil {
-		done = func(i balancer.DoneInfo) { p() }
+		done = func(balancer.DoneInfo) { p() }
+		defer func() {
+			if err != nil {
+				p()
+			}
+		}()
 	}
-	var sc balancer.SubConn
+
 	bw.mu.Lock()
 	defer bw.mu.Unlock()
 	if bw.pickfirst {
 		
-		for _, sc = range bw.conns {
-			break
+		for _, sc := range bw.conns {
+			return sc, done, nil
 		}
-	} else {
-		var ok bool
-		sc, ok = bw.conns[resolver.Address{
-			Addr:       a.Addr,
-			Type:       resolver.Backend,
-			ServerName: "",
-			Metadata:   a.Metadata,
-		}]
-		if !ok && failfast {
-			return nil, nil, status.Errorf(codes.Unavailable, "there is no connection available")
-		}
-		if s, ok := bw.connSt[sc]; failfast && (!ok || s.s != connectivity.Ready) {
-			
-			
-			return nil, nil, status.Errorf(codes.Unavailable, "there is no connection available")
-		}
+		return nil, nil, balancer.ErrNoSubConnAvailable
 	}
-
-	return sc, done, nil
+	sc, ok1 := bw.conns[resolver.Address{
+		Addr:       a.Addr,
+		Type:       resolver.Backend,
+		ServerName: "",
+		Metadata:   a.Metadata,
+	}]
+	s, ok2 := bw.connSt[sc]
+	if !ok1 || !ok2 {
+		
+		
+		
+		return nil, nil, balancer.ErrNoSubConnAvailable
+	}
+	switch s.s {
+	case connectivity.Ready, connectivity.Idle:
+		return sc, done, nil
+	case connectivity.Shutdown, connectivity.TransientFailure:
+		
+		
+		
+		return nil, nil, balancer.ErrTransientFailure
+	default:
+		
+		
+		
+		
+		
+		return nil, nil, balancer.ErrNoSubConnAvailable
+	}
 }

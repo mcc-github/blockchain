@@ -14,10 +14,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
+	"github.com/mcc-github/blockchain/gossip/metrics"
+	"github.com/mcc-github/blockchain/gossip/metrics/mocks"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
+	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -35,7 +40,8 @@ func TestNewAdapter(t *testing.T) {
 	peersCluster := newClusterOfPeers("0")
 	peersCluster.addPeer("peer0", mockGossip)
 
-	NewAdapter(mockGossip, selfNetworkMember.PKIid, []byte("channel0"))
+	NewAdapter(mockGossip, selfNetworkMember.PKIid, []byte("channel0"),
+		metrics.NewGossipMetrics(&disabled.Provider{}).ElectionMetrics)
 }
 
 func TestAdapterImpl_CreateMessage(t *testing.T) {
@@ -46,10 +52,11 @@ func TestAdapterImpl_CreateMessage(t *testing.T) {
 	}
 	mockGossip := newGossip("peer0", selfNetworkMember)
 
-	adapter := NewAdapter(mockGossip, selfNetworkMember.PKIid, []byte("channel0"))
+	adapter := NewAdapter(mockGossip, selfNetworkMember.PKIid, []byte("channel0"),
+		metrics.NewGossipMetrics(&disabled.Provider{}).ElectionMetrics)
 	msg := adapter.CreateMessage(true)
 
-	if !msg.(*msgImpl).msg.IsLeadershipMsg() {
+	if !protoext.IsLeadershipMsg(msg.(*msgImpl).msg) {
 		t.Error("Newly created message should be LeadershipMsg")
 	}
 
@@ -59,7 +66,7 @@ func TestAdapterImpl_CreateMessage(t *testing.T) {
 
 	msg = adapter.CreateMessage(false)
 
-	if !msg.(*msgImpl).msg.IsLeadershipMsg() {
+	if !protoext.IsLeadershipMsg(msg.(*msgImpl).msg) {
 		t.Error("Newly created message should be LeadershipMsg")
 	}
 
@@ -189,7 +196,7 @@ func (g *peerMockGossip) Peers() []discovery.NetworkMember {
 	return res
 }
 
-func (g *peerMockGossip) Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage) {
+func (g *peerMockGossip) Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage) {
 	ch := make(chan *proto.GossipMessage, 100)
 	g.acceptorLock.Lock()
 	g.acceptors = append(g.acceptors, &mockAcceptor{
@@ -281,10 +288,43 @@ func createCluster(peers ...int) (*clusterOfPeers, map[string]*adapterImpl) {
 		}
 
 		mockGossip := newGossip(peerEndpoint, peerMember)
-		adapter := NewAdapter(mockGossip, peerMember.PKIid, []byte("channel0"))
+		adapter := NewAdapter(mockGossip, peerMember.PKIid, []byte("channel0"),
+			metrics.NewGossipMetrics(&disabled.Provider{}).ElectionMetrics)
 		adapters[peerEndpoint] = adapter.(*adapterImpl)
 		cluster.addPeer(peerEndpoint, mockGossip)
 	}
 
 	return cluster, adapters
+}
+
+func TestReportMetrics(t *testing.T) {
+
+	testMetricProvider := mocks.TestUtilConstructMetricProvider()
+	electionMetrics := metrics.NewGossipMetrics(testMetricProvider.FakeProvider).ElectionMetrics
+
+	mockGossip := newGossip("", &discovery.NetworkMember{})
+	adapter := NewAdapter(mockGossip, nil, []byte("channel0"), electionMetrics)
+
+	adapter.ReportMetrics(true)
+
+	assert.Equal(t,
+		[]string{"channel", "channel0"},
+		testMetricProvider.FakeDeclarationGauge.WithArgsForCall(0),
+	)
+	assert.EqualValues(t,
+		1,
+		testMetricProvider.FakeDeclarationGauge.SetArgsForCall(0),
+	)
+
+	adapter.ReportMetrics(false)
+
+	assert.Equal(t,
+		[]string{"channel", "channel0"},
+		testMetricProvider.FakeDeclarationGauge.WithArgsForCall(1),
+	)
+	assert.EqualValues(t,
+		0,
+		testMetricProvider.FakeDeclarationGauge.SetArgsForCall(1),
+	)
+
 }

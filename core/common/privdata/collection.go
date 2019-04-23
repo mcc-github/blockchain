@@ -12,6 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -53,6 +54,10 @@ type CollectionAccessPolicy interface {
 	
 	
 	IsMemberOnlyRead() bool
+
+	
+	
+	IsMemberOnlyWrite() bool
 }
 
 
@@ -69,7 +74,7 @@ type CollectionPersistenceConfigs interface {
 
 
 
-type Filter func(common.SignedData) bool
+type Filter func(protoutil.SignedData) bool
 
 
 
@@ -103,7 +108,8 @@ type CollectionStore interface {
 
 	
 	
-	HasReadAccess(common.CollectionCriteria, *pb.SignedProposal, ledger.QueryExecutor) (bool, error)
+	
+	RetrieveReadWritePermission(common.CollectionCriteria, *pb.SignedProposal, ledger.QueryExecutor) (bool, bool, error)
 
 	CollectionFilter
 }

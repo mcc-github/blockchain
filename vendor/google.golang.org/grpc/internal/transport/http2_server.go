@@ -989,44 +989,73 @@ func (t *http2Server) Close() error {
 }
 
 
-
-func (t *http2Server) closeStream(s *Stream, rst bool, rstCode http2.ErrCode, hdr *headerFrame, eosReceived bool) {
-	if s.swapState(streamDone) == streamDone {
-		
+func (t *http2Server) deleteStream(s *Stream, eosReceived bool) {
+	t.mu.Lock()
+	if _, ok := t.activeStreams[s.id]; !ok {
+		t.mu.Unlock()
 		return
 	}
+
+	delete(t.activeStreams, s.id)
+	if len(t.activeStreams) == 0 {
+		t.idle = time.Now()
+	}
+	t.mu.Unlock()
+
+	if channelz.IsOn() {
+		if eosReceived {
+			atomic.AddInt64(&t.czData.streamsSucceeded, 1)
+		} else {
+			atomic.AddInt64(&t.czData.streamsFailed, 1)
+		}
+	}
+}
+
+
+
+func (t *http2Server) closeStream(s *Stream, rst bool, rstCode http2.ErrCode, hdr *headerFrame, eosReceived bool) {
+	
+	oldState := s.swapState(streamDone)
+
 	
 	
 	
 	s.cancel()
+
+	
+	t.deleteStream(s, eosReceived)
+
 	cleanup := &cleanupStream{
 		streamID: s.id,
 		rst:      rst,
 		rstCode:  rstCode,
-		onWrite: func() {
-			t.mu.Lock()
-			if t.activeStreams != nil {
-				delete(t.activeStreams, s.id)
-				if len(t.activeStreams) == 0 {
-					t.idle = time.Now()
-				}
-			}
-			t.mu.Unlock()
-			if channelz.IsOn() {
-				if eosReceived {
-					atomic.AddInt64(&t.czData.streamsSucceeded, 1)
-				} else {
-					atomic.AddInt64(&t.czData.streamsFailed, 1)
-				}
-			}
-		},
+		onWrite:  func() {},
 	}
-	if hdr != nil {
-		hdr.cleanup = cleanup
-		t.controlBuf.put(hdr)
-	} else {
+
+	
+	if hdr == nil {
 		t.controlBuf.put(cleanup)
+		return
 	}
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+	
+	if oldState == streamDone {
+		return
+	}
+
+	hdr.cleanup = cleanup
+	t.controlBuf.put(hdr)
 }
 
 func (t *http2Server) RemoteAddr() net.Addr {
@@ -1139,7 +1168,7 @@ func (t *http2Server) IncrMsgRecv() {
 }
 
 func (t *http2Server) getOutFlowWindow() int64 {
-	resp := make(chan uint32)
+	resp := make(chan uint32, 1)
 	timer := time.NewTimer(time.Second)
 	defer timer.Stop()
 	t.controlBuf.put(&outFlowControlSizeRequest{resp})

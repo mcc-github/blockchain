@@ -13,7 +13,7 @@ peer:
     # The Peer id is used for identifying this Peer instance.
     id: jdoe
 
-    # The networkId allows for logical seperation of networks
+    # The networkId allows for logical separation of networks
     networkId: dev
 
     # The Address at local network interface this Peer will listen on.
@@ -202,6 +202,30 @@ peer:
             reconcileSleepInterval: 1m
             # reconciliationEnabled is a flag that indicates whether private data reconciliation is enable or not.
             reconciliationEnabled: true
+
+        # Gossip state transfer related configuration
+        state:
+            # indicates whenever state transfer is enabled or not
+            # default value is true, i.e. state transfer is active
+            # and takes care to sync up missing blocks allowing
+            # lagging peer to catch up to speed with rest network
+            enabled: true
+            # checkInterval interval to check whether peer is lagging behind enough to
+            # request blocks via state transfer from another peer.
+            checkInterval: 10s
+            # responseTimeout amount of time to wait for state transfer response from
+            # other peers
+            responseTimeout: 3s
+            # batchSize the number of blocks to request via state transfer from another peer
+            batchSize: 10
+            # blockBufferSize reflects the size of the re-ordering buffer
+            # which captures blocks and takes care to deliver them in order
+            # down to the ledger layer. The actually buffer size is bounded between
+            # 0 and 2*blockBufferSize, each channel maintains its own buffer
+            blockBufferSize: 100
+            # maxRetries maximum number of re-tries to ask
+            # for single state transfer request
+            maxRetries: 3
 
     # TLS Settings
     # Note that peer-chaincode connections through chaincodeListenAddress is
@@ -397,6 +421,14 @@ peer:
         # Whether to allow non-admins to perform non channel scoped queries.
         # When this is false, it means that only peer admins can perform non channel scoped queries.
         orgMembersAllowedAccess: false
+
+    # Limits is used to configure some internal resource limits.
+    limits:
+      # Concurrency limits the number of concurrently running system chaincode requests.
+      # This option is only supported for qscc at this time.
+      concurrency:
+        qscc: 5000
+
 ###############################################################################
 #
 #    VM section
@@ -472,15 +504,10 @@ chaincode:
 
     golang:
         # golang will never need more than baseos
-        runtime: $(BASE_DOCKER_NS)/blockchain-baseos:$(PROJECT_VERSION)
+        runtime: $(DOCKER_NS)/blockchain-baseos:$(PROJECT_VERSION)
 
         # whether or not golang chaincode should be linked dynamically
         dynamicLink: false
-
-    car:
-        # car may need more facilities (JVM, etc) in the future as the catalog
-        # of platforms are expanded.  For now, we can just use baseos
-        runtime: $(BASE_DOCKER_NS)/blockchain-baseos:$(PROJECT_VERSION)
 
     java:
         # This is an image based on java:openjdk-8 with addition compiler
@@ -523,14 +550,14 @@ chaincode:
     # whitelist, add "myscc: enable" to the list below, and register in
     # chaincode/importsysccs.go
     system:
-        +lifecycle: enable
+        _lifecycle: enable
         cscc: enable
         lscc: enable
         escc: enable
         vscc: enable
         qscc: enable
 
-    # System chaincode plugins: 
+    # System chaincode plugins:
     # System chaincodes can be loaded as shared objects compiled as Go plugins.
     # See examples/plugins/scc for an example.
     # Plugins must be white listed in the chaincode.system section above.
@@ -553,7 +580,7 @@ chaincode:
 
 ###############################################################################
 #
-#    Ledger section - ledger configuration encompases both the blockchain
+#    Ledger section - ledger configuration encompasses both the blockchain
 #    and the state
 #
 ###############################################################################
@@ -577,7 +604,7 @@ ledger:
        # This username must have read and write authority on CouchDB
        username:
        # The password is recommended to pass as an environment variable
-       # during start up (eg LEDGER_COUCHDBCONFIG_PASSWORD).
+       # during start up (eg CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD).
        # If it is stored here, the file must be access control protected
        # to prevent unintended users from discovering the password.
        password:
@@ -614,6 +641,14 @@ ledger:
     # CouchDB or alternate database for the state.
     enableHistoryDatabase: true
 
+  pvtdataStore:
+    # the maximum db batch size for converting
+    # the ineligible missing data entries to eligible missing data entries
+    collElgProcMaxDbBatchSize: 5000
+    # the minimum duration (in milliseconds) between writing
+    # two consecutive db batches for converting the ineligible missing data entries to eligible missing data entries
+    collElgProcDbBatchesInterval: 1000
+
 ###############################################################################
 #
 #    Operations section
@@ -636,7 +671,9 @@ operations:
         key:
             file:
 
-        # require client certificate authentication to access all resources
+        # most operations service endpoints require client authentication when TLS
+        # is enabled. clientAuthRequired requires client certificate authentication
+        # at the TLS layer to access all resources.
         clientAuthRequired: false
 
         # paths to PEM encoded ca certificates to trust for client authentication

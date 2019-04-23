@@ -12,6 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
 )
@@ -43,6 +44,9 @@ func InitializeExistingTestEnvWithInitializer(initializer *Initializer) {
 	}
 	if initializer.PlatformRegistry == nil {
 		initializer.PlatformRegistry = platforms.NewRegistry(&golang.Platform{})
+	}
+	if initializer.Config == nil {
+		initializer.Config = &ledger.Config{}
 	}
 	initialize(initializer)
 }

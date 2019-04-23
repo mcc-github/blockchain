@@ -1,4 +1,8 @@
+/*
+Copyright IBM Corp. All Rights Reserved.
 
+SPDX-License-Identifier: Apache-2.0
+*/
 
 package txvalidator
 
@@ -11,11 +15,11 @@ import (
 	coreUtil "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -44,13 +48,13 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 	logger.Debugf("[%s] VSCCValidateTx starts for bytes %p", chainID, envBytes)
 
 	
-	hdrExt, err := utils.GetChaincodeHeaderExtension(payload.Header)
+	hdrExt, err := protoutil.GetChaincodeHeaderExtension(payload.Header)
 	if err != nil {
 		return err, peer.TxValidationCode_BAD_HEADER_EXTENSION
 	}
 
 	
-	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 	if err != nil {
 		return err, peer.TxValidationCode_BAD_CHANNEL_HEADER
 	}
@@ -58,7 +62,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 	
 	writesToLSCC := false
 	writesToNonInvokableSCC := false
-	respPayload, err := utils.GetActionFromEnvelope(envBytes)
+	respPayload, err := protoutil.GetActionFromEnvelope(envBytes)
 	if err != nil {
 		return errors.WithMessage(err, "GetActionFromEnvelope failed"), peer.TxValidationCode_BAD_RESPONSE_PAYLOAD
 	}
@@ -336,7 +340,7 @@ func (v *VsccValidatorImpl) GetInfoForValidate(chdr *common.ChannelHeader, ccID 
 		
 		
 		p := cauthdsl.SignedByAnyMember(v.cr.GetMSPIDs(chdr.ChannelId))
-		policy, err = utils.Marshal(p)
+		policy, err = protoutil.Marshal(p)
 		if err != nil {
 			return nil, nil, nil, err
 		}

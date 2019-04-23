@@ -16,30 +16,30 @@ import (
 var _ = Describe("Issuer", func() {
 	var (
 		issuer        *plain.Issuer
-		tokensToIssue []*token.TokenToIssue
+		tokensToIssue []*token.Token
 	)
 
 	BeforeEach(func() {
-		tokensToIssue = []*token.TokenToIssue{
-			{Recipient: []byte("R1"), Type: "TOK1", Quantity: 1001},
-			{Recipient: []byte("R2"), Type: "TOK2", Quantity: 1002},
-			{Recipient: []byte("R3"), Type: "TOK3", Quantity: 1003},
+		tokensToIssue = []*token.Token{
+			{Owner: &token.TokenOwner{Raw: []byte("R1")}, Type: "TOK1", Quantity: ToHex(1001)},
+			{Owner: &token.TokenOwner{Raw: []byte("R2")}, Type: "TOK2", Quantity: ToHex(1002)},
+			{Owner: &token.TokenOwner{Raw: []byte("R3")}, Type: "TOK3", Quantity: ToHex(1003)},
 		}
-		issuer = &plain.Issuer{}
+		issuer = &plain.Issuer{TokenOwnerValidator: &TestTokenOwnerValidator{}}
 	})
 
-	It("converts an import request to a token transaction", func() {
-		tt, err := issuer.RequestImport(tokensToIssue)
+	It("converts an issue request to a token transaction", func() {
+		tt, err := issuer.RequestIssue(tokensToIssue)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(tt).To(Equal(&token.TokenTransaction{
-			Action: &token.TokenTransaction_PlainAction{
-				PlainAction: &token.PlainTokenAction{
-					Data: &token.PlainTokenAction_PlainImport{
-						PlainImport: &token.PlainImport{
-							Outputs: []*token.PlainOutput{
-								{Owner: []byte("R1"), Type: "TOK1", Quantity: 1001},
-								{Owner: []byte("R2"), Type: "TOK2", Quantity: 1002},
-								{Owner: []byte("R3"), Type: "TOK3", Quantity: 1003},
+			Action: &token.TokenTransaction_TokenAction{
+				TokenAction: &token.TokenAction{
+					Data: &token.TokenAction_Issue{
+						Issue: &token.Issue{
+							Outputs: []*token.Token{
+								{Owner: &token.TokenOwner{Raw: []byte("R1")}, Type: "TOK1", Quantity: ToHex(1001)},
+								{Owner: &token.TokenOwner{Raw: []byte("R2")}, Type: "TOK2", Quantity: ToHex(1002)},
+								{Owner: &token.TokenOwner{Raw: []byte("R3")}, Type: "TOK3", Quantity: ToHex(1003)},
 							},
 						},
 					},
@@ -49,71 +49,87 @@ var _ = Describe("Issuer", func() {
 	})
 
 	Context("when tokens to issue is nil", func() {
-		It("creates a token transaction with no outputs", func() {
-			tt, err := issuer.RequestImport(nil)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(tt).To(Equal(&token.TokenTransaction{
-				Action: &token.TokenTransaction_PlainAction{
-					PlainAction: &token.PlainTokenAction{
-						Data: &token.PlainTokenAction_PlainImport{PlainImport: &token.PlainImport{}},
-					},
-				},
-			}))
+		It("should return an error", func() {
+			tt, err := issuer.RequestIssue(nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError("invalid tokensToIssue"))
+			Expect(tt).To(BeNil())
 		})
 	})
 
 	Context("when tokens to issue is empty", func() {
-		It("creates a token transaction with no outputs", func() {
-			tt, err := issuer.RequestImport([]*token.TokenToIssue{})
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(tt).To(Equal(&token.TokenTransaction{
-				Action: &token.TokenTransaction_PlainAction{
-					PlainAction: &token.PlainTokenAction{
-						Data: &token.PlainTokenAction_PlainImport{PlainImport: &token.PlainImport{}},
-					},
-				},
-			}))
+		It("should return an error", func() {
+			tt, err := issuer.RequestIssue([]*token.Token{})
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError("invalid tokensToIssue"))
+			Expect(tt).To(BeNil())
 		})
 	})
 
-	Describe("RequestExpectation", func() {
+	Context("when tokens to issue have invalid owner", func() {
+		It("creates a token transaction with no outputs", func() {
+			tokensToIssue = []*token.Token{
+				{Owner: nil, Type: "TOK1", Quantity: ToHex(1001)},
+			}
+
+			tt, err := issuer.RequestIssue(tokensToIssue)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError("invalid recipient in issue request 'owner is nil'"))
+			Expect(tt).To(BeNil())
+		})
+	})
+
+	Context("when tokens to issue have invalid quantity", func() {
+		It("creates a token transaction with no outputs", func() {
+			tokensToIssue = []*token.Token{
+				{Owner: &token.TokenOwner{Raw: []byte("R1")}, Type: "TOK1", Quantity: "INVALID_QUANTITY"},
+			}
+
+			tt, err := issuer.RequestIssue(tokensToIssue)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError("invalid quantity in issue request 'invalid input'"))
+			Expect(tt).To(BeNil())
+		})
+	})
+
+	Describe("RequestTokenOperation", func() {
 		var (
-			outputs            []*token.PlainOutput
-			expectationRequest *token.ExpectationRequest
+			outputs               []*token.Token
+			tokenOperationRequest *token.TokenOperationRequest
 		)
 
 		BeforeEach(func() {
-			outputs = []*token.PlainOutput{{
-				Owner:    []byte("token-owner"),
+			outputs = []*token.Token{{
+				Owner:    &token.TokenOwner{Raw: []byte("token-owner")},
 				Type:     "XYZ",
-				Quantity: 99,
+				Quantity: ToHex(99),
 			}}
-			expectationRequest = &token.ExpectationRequest{
+			tokenOperationRequest = &token.TokenOperationRequest{
 				Credential: []byte("credential"),
-				Expectation: &token.TokenExpectation{
-					Expectation: &token.TokenExpectation_PlainExpectation{
-						PlainExpectation: &token.PlainExpectation{
-							Payload: &token.PlainExpectation_ImportExpectation{
-								ImportExpectation: &token.PlainTokenExpectation{
+				Operations: []*token.TokenOperation{{
+					Operation: &token.TokenOperation_Action{
+						Action: &token.TokenOperationAction{
+							Payload: &token.TokenOperationAction_Issue{
+								Issue: &token.TokenActionTerms{
+									Sender:  &token.TokenOwner{Raw: []byte("credential")},
 									Outputs: outputs,
 								},
 							},
 						},
 					},
 				},
+				},
 			}
 		})
 
 		It("creates a token transaction", func() {
-			tt, err := issuer.RequestExpectation(expectationRequest)
+			tt, err := issuer.RequestTokenOperation(tokenOperationRequest.Operations[0])
 			Expect(err).NotTo(HaveOccurred())
 			Expect(tt).To(Equal(&token.TokenTransaction{
-				Action: &token.TokenTransaction_PlainAction{
-					PlainAction: &token.PlainTokenAction{
-						Data: &token.PlainTokenAction_PlainImport{
-							PlainImport: &token.PlainImport{
+				Action: &token.TokenTransaction_TokenAction{
+					TokenAction: &token.TokenAction{
+						Data: &token.TokenAction_Issue{
+							Issue: &token.Issue{
 								Outputs: outputs,
 							},
 						},
@@ -124,63 +140,55 @@ var _ = Describe("Issuer", func() {
 
 		Context("when outputs is nil", func() {
 			BeforeEach(func() {
-				expectationRequest.GetExpectation().GetPlainExpectation().GetImportExpectation().Outputs = nil
+				tokenOperationRequest.GetOperations()[0].GetAction().GetIssue().Outputs = nil
 			})
 
 			It("returns an error", func() {
-				_, err := issuer.RequestExpectation(expectationRequest)
+				_, err := issuer.RequestTokenOperation(tokenOperationRequest.Operations[0])
 				Expect(err).To(MatchError("no outputs in ExpectationRequest"))
 			})
 		})
 
 		Context("when outputs is empty", func() {
 			BeforeEach(func() {
-				expectationRequest.GetExpectation().GetPlainExpectation().GetImportExpectation().Outputs = []*token.PlainOutput{}
+				tokenOperationRequest.GetOperations()[0].GetAction().GetIssue().Outputs = []*token.Token{}
 			})
 
 			It("returns an error", func() {
-				_, err := issuer.RequestExpectation(expectationRequest)
+				_, err := issuer.RequestTokenOperation(tokenOperationRequest.Operations[0])
 				Expect(err).To(MatchError("no outputs in ExpectationRequest"))
-			})
-		})
-
-		Context("when ExpectationRequest has nil Expectation", func() {
-			BeforeEach(func() {
-				expectationRequest.Expectation = nil
-			})
-
-			It("returns the error", func() {
-				_, err := issuer.RequestExpectation(expectationRequest)
-				Expect(err).To(MatchError("no token expectation in ExpectationRequest"))
 			})
 		})
 
 		Context("when ExpectationRequest has nil PlainExpectation", func() {
 			BeforeEach(func() {
-				expectationRequest.Expectation = &token.TokenExpectation{}
+				tokenOperationRequest.Operations = []*token.TokenOperation{{}}
 			})
 
 			It("returns the error", func() {
-				_, err := issuer.RequestExpectation(expectationRequest)
-				Expect(err).To(MatchError("no plain expectation in ExpectationRequest"))
+				_, err := issuer.RequestTokenOperation(tokenOperationRequest.Operations[0])
+				Expect(err).To(MatchError("no action in request"))
 			})
 		})
 
 		Context("when ExpectationRequest has nil ImportExpectation", func() {
 			BeforeEach(func() {
-				expectationRequest = &token.ExpectationRequest{
+				tokenOperationRequest = &token.TokenOperationRequest{
 					Credential: []byte("credential"),
-					Expectation: &token.TokenExpectation{
-						Expectation: &token.TokenExpectation_PlainExpectation{
-							PlainExpectation: &token.PlainExpectation{},
+					Operations: []*token.TokenOperation{{
+						Operation: &token.TokenOperation_Action{
+							Action: &token.TokenOperationAction{
+								Payload: &token.TokenOperationAction_Issue{},
+							},
 						},
+					},
 					},
 				}
 			})
 
 			It("returns the error", func() {
-				_, err := issuer.RequestExpectation(expectationRequest)
-				Expect(err).To(MatchError("no import expectation in ExpectationRequest"))
+				_, err := issuer.RequestTokenOperation(tokenOperationRequest.Operations[0])
+				Expect(err).To(MatchError("no issue in action"))
 			})
 		})
 	})

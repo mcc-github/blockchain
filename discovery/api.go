@@ -10,15 +10,15 @@ import (
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
-	common2 "github.com/mcc-github/blockchain/protos/common"
 	discprotos "github.com/mcc-github/blockchain/protos/discovery"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
 type AccessControlSupport interface {
 	
 	
-	EligibleForService(channel string, data common2.SignedData) error
+	EligibleForService(channel string, data protoutil.SignedData) error
 }
 
 

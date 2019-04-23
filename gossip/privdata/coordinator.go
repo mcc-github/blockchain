@@ -21,6 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/transientstore"
+	"github.com/mcc-github/blockchain/gossip/metrics"
 	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -28,16 +29,11 @@ import (
 	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/peer"
 	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
-const (
-	pullRetrySleepInterval           = time.Second
-	transientBlockRetentionConfigKey = "peer.gossip.pvtData.transientstoreMaxBlockRetention"
-	transientBlockRetentionDefault   = 1000
-)
+const pullRetrySleepInterval = time.Second
 
 var logger = util.GetLogger(util.PrivateDataLogger, "")
 
@@ -84,7 +80,7 @@ type Coordinator interface {
 	
 	
 	
-	GetPvtDataAndBlockByNum(seqNum uint64, peerAuth common.SignedData) (*common.Block, util.PvtDataCollections, error)
+	GetPvtDataAndBlockByNum(seqNum uint64, peerAuth protoutil.SignedData) (*common.Block, util.PvtDataCollections, error)
 
 	
 	LedgerHeight() (uint64, error)
@@ -121,19 +117,24 @@ type Support struct {
 }
 
 type coordinator struct {
-	selfSignedData common.SignedData
+	selfSignedData protoutil.SignedData
 	Support
 	transientBlockRetention uint64
+	metrics                 *metrics.PrivdataMetrics
+	pullRetryThreshold      time.Duration
+}
+
+type CoordinatorConfig struct {
+	TransientBlockRetention uint64
+	PullRetryThreshold      time.Duration
 }
 
 
-func NewCoordinator(support Support, selfSignedData common.SignedData) Coordinator {
-	transientBlockRetention := uint64(viper.GetInt(transientBlockRetentionConfigKey))
-	if transientBlockRetention == 0 {
-		logger.Warning("Configuration key", transientBlockRetentionConfigKey, "isn't set, defaulting to", transientBlockRetentionDefault)
-		transientBlockRetention = transientBlockRetentionDefault
-	}
-	return &coordinator{Support: support, selfSignedData: selfSignedData, transientBlockRetention: transientBlockRetention}
+func NewCoordinator(support Support, selfSignedData protoutil.SignedData, metrics *metrics.PrivdataMetrics,
+	config CoordinatorConfig) Coordinator {
+	return &coordinator{Support: support, selfSignedData: selfSignedData,
+		transientBlockRetention: config.TransientBlockRetention, metrics: metrics,
+		pullRetryThreshold: config.PullRetryThreshold}
 }
 
 
@@ -153,7 +154,10 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	logger.Infof("[%s] Received block [%d] from buffer", c.ChainID, block.Header.Number)
 
 	logger.Debugf("[%s] Validating block [%d]", c.ChainID, block.Header.Number)
+
+	validationStart := time.Now()
 	err := c.Validator.Validate(block)
+	c.reportValidationDuration(time.Since(validationStart))
 	if err != nil {
 		logger.Errorf("Validation failed: %+v", err)
 		return err
@@ -165,6 +169,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 		MissingPvtData: make(ledger.TxMissingPvtDataMap),
 	}
 
+	listMissingStart := time.Now()
 	ownedRWsets, err := computeOwnedRWsets(block, privateDataSets)
 	if err != nil {
 		logger.Warning("Failed computing owned RWSets", err)
@@ -177,7 +182,9 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 		return err
 	}
 
-	retryThresh := viper.GetDuration("peer.gossip.pvtData.pullRetryThreshold")
+	c.reportListMissingPrivateDataDuration(time.Since(listMissingStart))
+
+	retryThresh := c.pullRetryThreshold
 	var bFetchFromPeers bool 
 	if len(privateInfo.missingKeys) == 0 {
 		logger.Debugf("[%s] No missing collection private write sets to fetch from remote peers", c.ChainID)
@@ -198,6 +205,8 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 		time.Sleep(pullRetrySleepInterval)
 	}
 	elapsedPull := int64(time.Since(startPull) / time.Millisecond) 
+
+	c.reportFetchDuration(time.Since(startPull))
 
 	
 	if bFetchFromPeers {
@@ -230,10 +239,14 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	}
 
 	
+	commitStart := time.Now()
 	err = c.CommitWithPvtData(blockAndPvtData)
+	c.reportCommitDuration(time.Since(commitStart))
 	if err != nil {
 		return errors.Wrap(err, "commit failed")
 	}
+
+	purgeStart := time.Now()
 
 	if len(blockAndPvtData.PvtData) > 0 {
 		
@@ -249,6 +262,8 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 			logger.Error("Failed purging data from transient store at block", seq, ":", err)
 		}
 	}
+
+	c.reportPurgeDuration(time.Since(purgeStart))
 
 	return nil
 }
@@ -370,16 +385,16 @@ func computeOwnedRWsets(block *common.Block, blockPvtData util.PvtDataCollection
 			logger.Warningf("Claimed SeqInBlock %d but block has only %d transactions", txPvtData.SeqInBlock, len(block.Data.Data))
 			continue
 		}
-		env, err := utils.GetEnvelopeFromBlock(block.Data.Data[txPvtData.SeqInBlock])
+		env, err := protoutil.GetEnvelopeFromBlock(block.Data.Data[txPvtData.SeqInBlock])
 		if err != nil {
 			return nil, err
 		}
-		payload, err := utils.GetPayload(env)
+		payload, err := protoutil.GetPayload(env)
 		if err != nil {
 			return nil, err
 		}
 
-		chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+		chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 		if err != nil {
 			return nil, err
 		}
@@ -540,19 +555,19 @@ type blockConsumer func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *
 func (data blockData) forEachTxn(txsFilter txValidationFlags, consumer blockConsumer) (txns, error) {
 	var txList []string
 	for seqInBlock, envBytes := range data {
-		env, err := utils.GetEnvelopeFromBlock(envBytes)
+		env, err := protoutil.GetEnvelopeFromBlock(envBytes)
 		if err != nil {
 			logger.Warning("Invalid envelope:", err)
 			continue
 		}
 
-		payload, err := utils.GetPayload(env)
+		payload, err := protoutil.GetPayload(env)
 		if err != nil {
 			logger.Warning("Invalid payload:", err)
 			continue
 		}
 
-		chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+		chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 		if err != nil {
 			logger.Warning("Invalid channel header:", err)
 			continue
@@ -569,19 +584,19 @@ func (data blockData) forEachTxn(txsFilter txValidationFlags, consumer blockCons
 			continue
 		}
 
-		respPayload, err := utils.GetActionFromEnvelope(envBytes)
+		respPayload, err := protoutil.GetActionFromEnvelope(envBytes)
 		if err != nil {
 			logger.Warning("Failed obtaining action from envelope", err)
 			continue
 		}
 
-		tx, err := utils.GetTransaction(payload.Data)
+		tx, err := protoutil.GetTransaction(payload.Data)
 		if err != nil {
 			logger.Warning("Invalid transaction in payload data for tx ", chdr.TxId, ":", err)
 			continue
 		}
 
-		ccActionPayload, err := utils.GetChaincodeActionPayload(tx.Actions[0].Payload)
+		ccActionPayload, err := protoutil.GetChaincodeActionPayload(tx.Actions[0].Payload)
 		if err != nil {
 			logger.Warning("Invalid chaincode action in payload for tx", chdr.TxId, ":", err)
 			continue
@@ -821,7 +836,7 @@ func (ac aggregatedCollections) asPrivateData() []*ledger.TxPvtData {
 
 
 
-func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common.SignedData) (*common.Block, util.PvtDataCollections, error) {
+func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo protoutil.SignedData) (*common.Block, util.PvtDataCollections, error) {
 	blockAndPvtData, err := c.Committer.GetPvtDataAndBlockByNum(seqNum)
 	if err != nil {
 		return nil, nil, err
@@ -864,6 +879,26 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common
 	})
 
 	return blockAndPvtData.Block, seqs2Namespaces.asPrivateData(), nil
+}
+
+func (c *coordinator) reportValidationDuration(time time.Duration) {
+	c.metrics.ValidationDuration.With("channel", c.ChainID).Observe(time.Seconds())
+}
+
+func (c *coordinator) reportListMissingPrivateDataDuration(time time.Duration) {
+	c.metrics.ListMissingPrivateDataDuration.With("channel", c.ChainID).Observe(time.Seconds())
+}
+
+func (c *coordinator) reportFetchDuration(time time.Duration) {
+	c.metrics.FetchDuration.With("channel", c.ChainID).Observe(time.Seconds())
+}
+
+func (c *coordinator) reportCommitDuration(time time.Duration) {
+	c.metrics.CommitPrivateDataDuration.With("channel", c.ChainID).Observe(time.Seconds())
+}
+
+func (c *coordinator) reportPurgeDuration(time time.Duration) {
+	c.metrics.PurgeDuration.With("channel", c.ChainID).Observe(time.Seconds())
 }
 
 

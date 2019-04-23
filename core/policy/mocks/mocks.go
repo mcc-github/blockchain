@@ -24,8 +24,8 @@ import (
 
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/msp"
-	"github.com/mcc-github/blockchain/protos/common"
 	mspproto "github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 type MockChannelPolicyManagerGetter struct {
@@ -53,7 +53,7 @@ type MockPolicy struct {
 }
 
 
-func (m *MockPolicy) Evaluate(signatureSet []*common.SignedData) error {
+func (m *MockPolicy) Evaluate(signatureSet []*protoutil.SignedData) error {
 	fmt.Printf("Evaluate [%s], [% x], [% x]\n", string(signatureSet[0].Identity), string(signatureSet[0].Data), string(signatureSet[0].Signature))
 	identity, err := m.Deserializer.DeserializeIdentity(signatureSet[0].Identity)
 	if err != nil {

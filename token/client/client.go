@@ -22,14 +22,24 @@ type Prover interface {
 	
 	
 	
-	RequestImport(tokensToIssue []*token.TokenToIssue, signingIdentity tk.SigningIdentity) ([]byte, error)
+	RequestIssue(tokensToIssue []*token.Token, signingIdentity tk.SigningIdentity) ([]byte, error)
 
 	
 	
 	
 	
 	
-	RequestTransfer(tokenIDs [][]byte, shares []*token.RecipientTransferShare, signingIdentity tk.SigningIdentity) ([]byte, error)
+	RequestTransfer(tokenIDs []*token.TokenId, shares []*token.RecipientShare, signingIdentity tk.SigningIdentity) ([]byte, error)
+
+	
+	
+	
+	
+	RequestRedeem(tokenIDs []*token.TokenId, quantity string, signingIdentity tk.SigningIdentity) ([]byte, error)
+
+	
+	
+	ListTokens(signingIdentity tk.SigningIdentity) ([]*token.UnspentToken, error)
 }
 
 
@@ -94,8 +104,8 @@ func NewClient(config ClientConfig, signingIdentity tk.SigningIdentity) (*Client
 
 
 
-func (c *Client) Issue(tokensToIssue []*token.TokenToIssue, waitTimeout time.Duration) (*common.Envelope, string, *common.Status, bool, error) {
-	serializedTokenTx, err := c.Prover.RequestImport(tokensToIssue, c.SigningIdentity)
+func (c *Client) Issue(tokensToIssue []*token.Token, waitTimeout time.Duration) (*common.Envelope, string, *common.Status, bool, error) {
+	serializedTokenTx, err := c.Prover.RequestIssue(tokensToIssue, c.SigningIdentity)
 	if err != nil {
 		return nil, "", nil, false, err
 	}
@@ -120,7 +130,7 @@ func (c *Client) Issue(tokensToIssue []*token.TokenToIssue, waitTimeout time.Dur
 
 
 
-func (c *Client) Transfer(tokenIDs [][]byte, shares []*token.RecipientTransferShare, waitTimeout time.Duration) (*common.Envelope, string, *common.Status, bool, error) {
+func (c *Client) Transfer(tokenIDs []*token.TokenId, shares []*token.RecipientShare, waitTimeout time.Duration) (*common.Envelope, string, *common.Status, bool, error) {
 	serializedTokenTx, err := c.Prover.RequestTransfer(tokenIDs, shares, c.SigningIdentity)
 	if err != nil {
 		return nil, "", nil, false, err
@@ -133,4 +143,35 @@ func (c *Client) Transfer(tokenIDs [][]byte, shares []*token.RecipientTransferSh
 
 	ordererStatus, committed, err := c.TxSubmitter.Submit(txEnvelope, waitTimeout)
 	return txEnvelope, txid, ordererStatus, committed, err
+}
+
+
+
+
+
+
+
+
+
+
+
+func (c *Client) Redeem(tokenIDs []*token.TokenId, quantity string, waitTimeout time.Duration) (*common.Envelope, string, *common.Status, bool, error) {
+	serializedTokenTx, err := c.Prover.RequestRedeem(tokenIDs, quantity, c.SigningIdentity)
+	if err != nil {
+		return nil, "", nil, false, err
+	}
+
+	txEnvelope, txid, err := c.TxSubmitter.CreateTxEnvelope(serializedTokenTx)
+	if err != nil {
+		return nil, "", nil, false, err
+	}
+
+	ordererStatus, committed, err := c.TxSubmitter.Submit(txEnvelope, waitTimeout)
+	return txEnvelope, txid, ordererStatus, committed, err
+}
+
+
+
+func (c *Client) ListTokens() ([]*token.UnspentToken, error) {
+	return c.Prover.ListTokens(c.SigningIdentity)
 }

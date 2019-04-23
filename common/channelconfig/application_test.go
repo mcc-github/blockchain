@@ -12,7 +12,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/capabilities"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/gomega"
 )
 
@@ -25,12 +25,12 @@ func TestACL(t *testing.T) {
 	cgt := &cb.ConfigGroup{
 		Values: map[string]*cb.ConfigValue{
 			ACLsKey: {
-				Value: utils.MarshalOrPanic(
+				Value: protoutil.MarshalOrPanic(
 					ACLValues(map[string]string{}).Value(),
 				),
 			},
 			CapabilitiesKey: {
-				Value: utils.MarshalOrPanic(
+				Value: protoutil.MarshalOrPanic(
 					CapabilitiesValue(map[string]bool{
 						capabilities.ApplicationV1_2: true,
 					}).Value(),

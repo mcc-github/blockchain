@@ -1,4 +1,5 @@
 
+
 package mocks
 
 import mock "github.com/stretchr/testify/mock"
@@ -10,47 +11,29 @@ type Handler struct {
 }
 
 
-func (_m *Handler) OnStep(channel string, sender uint64, req *orderer.StepRequest) (*orderer.StepResponse, error) {
+func (_m *Handler) OnConsensus(channel string, sender uint64, req *orderer.ConsensusRequest) error {
 	ret := _m.Called(channel, sender, req)
 
-	var r0 *orderer.StepResponse
-	if rf, ok := ret.Get(0).(func(string, uint64, *orderer.StepRequest) *orderer.StepResponse); ok {
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, uint64, *orderer.ConsensusRequest) error); ok {
 		r0 = rf(channel, sender, req)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*orderer.StepResponse)
-		}
+		r0 = ret.Error(0)
 	}
 
-	var r1 error
-	if rf, ok := ret.Get(1).(func(string, uint64, *orderer.StepRequest) error); ok {
-		r1 = rf(channel, sender, req)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
+	return r0
 }
 
 
-func (_m *Handler) OnSubmit(channel string, sender uint64, req *orderer.SubmitRequest) (*orderer.SubmitResponse, error) {
+func (_m *Handler) OnSubmit(channel string, sender uint64, req *orderer.SubmitRequest) error {
 	ret := _m.Called(channel, sender, req)
 
-	var r0 *orderer.SubmitResponse
-	if rf, ok := ret.Get(0).(func(string, uint64, *orderer.SubmitRequest) *orderer.SubmitResponse); ok {
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, uint64, *orderer.SubmitRequest) error); ok {
 		r0 = rf(channel, sender, req)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*orderer.SubmitResponse)
-		}
+		r0 = ret.Error(0)
 	}
 
-	var r1 error
-	if rf, ok := ret.Get(1).(func(string, uint64, *orderer.SubmitRequest) error); ok {
-		r1 = rf(channel, sender, req)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
+	return r0
 }

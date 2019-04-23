@@ -10,8 +10,8 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/policies"
-	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -39,14 +39,14 @@ type Verifier interface {
 	
 	
 	
-	VerifyByChannel(channel string, sd *cb.SignedData) error
+	VerifyByChannel(channel string, sd *protoutil.SignedData) error
 }
 
 
 
 type Evaluator interface {
 	
-	Evaluate(signatureSet []*cb.SignedData) error
+	Evaluate(signatureSet []*protoutil.SignedData) error
 }
 
 
@@ -64,9 +64,9 @@ func NewDiscoverySupport(v Verifier, e Evaluator, chanConf ChannelConfigGetter) 
 
 
 
-func (s *DiscoverySupport) EligibleForService(channel string, data cb.SignedData) error {
+func (s *DiscoverySupport) EligibleForService(channel string, data protoutil.SignedData) error {
 	if channel == "" {
-		return s.Evaluate([]*cb.SignedData{&data})
+		return s.Evaluate([]*protoutil.SignedData{&data})
 	}
 	return s.VerifyByChannel(channel, &data)
 }
@@ -132,7 +132,7 @@ type ChannelVerifier struct {
 
 
 
-func (cv *ChannelVerifier) VerifyByChannel(channel string, sd *cb.SignedData) error {
+func (cv *ChannelVerifier) VerifyByChannel(channel string, sd *protoutil.SignedData) error {
 	mgr, _ := cv.Manager(channel)
 	if mgr == nil {
 		return errors.Errorf("policy manager for channel %s doesn't exist", channel)
@@ -141,5 +141,5 @@ func (cv *ChannelVerifier) VerifyByChannel(channel string, sd *cb.SignedData) er
 	if pol == nil {
 		return errors.New("failed obtaining channel application writers policy")
 	}
-	return pol.Evaluate([]*cb.SignedData{sd})
+	return pol.Evaluate([]*protoutil.SignedData{sd})
 }

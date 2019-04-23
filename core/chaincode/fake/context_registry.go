@@ -2,10 +2,10 @@
 package fake
 
 import (
-	sync "sync"
+	"sync"
 
-	chaincode "github.com/mcc-github/blockchain/core/chaincode"
-	ccprovider "github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/core/chaincode"
+	"github.com/mcc-github/blockchain/core/common/ccprovider"
 )
 
 type ContextRegistry struct {

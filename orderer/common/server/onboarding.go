@@ -10,15 +10,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mcc-github/blockchain/common/crypto"
+	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	"github.com/mcc-github/blockchain/core/comm"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -27,12 +30,14 @@ const (
 )
 
 type replicationInitiator struct {
-	channelLister cluster.ChannelLister
-	logger        *flogging.FabricLogger
-	secOpts       *comm.SecureOptions
-	conf          *localconfig.TopLevel
-	lf            cluster.LedgerFactory
-	signer        crypto.LocalSigner
+	registerChain     func(chain string)
+	verifierRetriever cluster.VerifierRetriever
+	channelLister     cluster.ChannelLister
+	logger            *flogging.FabricLogger
+	secOpts           *comm.SecureOptions
+	conf              *localconfig.TopLevel
+	lf                cluster.LedgerFactory
+	signer            identity.SignerSerializer
 }
 
 func (ri *replicationInitiator) replicateIfNeeded(bootstrapBlock *common.Block) {
@@ -45,12 +50,12 @@ func (ri *replicationInitiator) replicateIfNeeded(bootstrapBlock *common.Block) 
 
 func (ri *replicationInitiator) createReplicator(bootstrapBlock *common.Block, filter func(string) bool) *cluster.Replicator {
 	consenterCert := etcdraft.ConsenterCertificate(ri.secOpts.Certificate)
-	systemChannelName, err := utils.GetChainIDFromBlock(bootstrapBlock)
+	systemChannelName, err := protoutil.GetChainIDFromBlock(bootstrapBlock)
 	if err != nil {
 		ri.logger.Panicf("Failed extracting system channel name from bootstrap block: %v", err)
 	}
 	pullerConfig := cluster.PullerConfigFromTopLevelConfig(systemChannelName, ri.conf, ri.secOpts.Key, ri.secOpts.Certificate, ri.signer)
-	puller, err := cluster.BlockPullerFromConfigBlock(pullerConfig, bootstrapBlock)
+	puller, err := cluster.BlockPullerFromConfigBlock(pullerConfig, bootstrapBlock, ri.verifierRetriever)
 	if err != nil {
 		ri.logger.Panicf("Failed creating puller config from bootstrap block: %v", err)
 	}
@@ -117,10 +122,20 @@ func (ri *replicationInitiator) ReplicateChains(lastConfigBlock *common.Block, c
 
 type ledgerFactory struct {
 	blockledger.Factory
+	onBlockCommit cluster.BlockCommitFunc
 }
 
 func (lf *ledgerFactory) GetOrCreate(chainID string) (cluster.LedgerWriter, error) {
-	return lf.Factory.GetOrCreate(chainID)
+	ledger, err := lf.Factory.GetOrCreate(chainID)
+	if err != nil {
+		return nil, err
+	}
+	interceptedLedger := &cluster.LedgerInterceptor{
+		LedgerWriter:         ledger,
+		Channel:              chainID,
+		InterceptBlockCommit: lf.onBlockCommit,
+	}
+	return interceptedLedger, nil
 }
 
 
@@ -134,6 +149,7 @@ type ChainReplicator interface {
 
 
 type inactiveChainReplicator struct {
+	registerChain                     func(chain string)
 	logger                            *flogging.FabricLogger
 	retrieveLastSysChannelConfigBlock func() *common.Block
 	replicator                        ChainReplicator
@@ -166,7 +182,7 @@ type chainCreation struct {
 
 
 
-func (dc *inactiveChainReplicator) TrackChain(chain string, genesisBlock *common.Block, createChain etcdraft.CreateChainCallback) {
+func (dc *inactiveChainReplicator) TrackChain(chain string, genesisBlock *common.Block, createChainCallback etcdraft.CreateChainCallback) {
 	if genesisBlock == nil {
 		dc.logger.Panicf("Called with a nil genesis block")
 	}
@@ -175,7 +191,7 @@ func (dc *inactiveChainReplicator) TrackChain(chain string, genesisBlock *common
 	dc.logger.Infof("Adding %s to the set of chains to track", chain)
 	dc.chains2CreationCallbacks[chain] = chainCreation{
 		genesisBlock: genesisBlock,
-		create:       createChain,
+		create:       createChainCallback,
 	}
 }
 
@@ -196,6 +212,13 @@ func (dc *inactiveChainReplicator) replicateDisabledChains() {
 		dc.logger.Debugf("No inactive chains to try to replicate")
 		return
 	}
+
+	
+	
+	for _, chain := range chains {
+		dc.registerChain(chain)
+	}
+
 	dc.logger.Infof("Found %d inactive chains: %v", len(chains), chains)
 	lastSystemChannelConfigBlock := dc.retrieveLastSysChannelConfigBlock()
 	replicatedChains := dc.replicator.ReplicateChains(lastSystemChannelConfigBlock, chains)
@@ -221,4 +244,116 @@ func (dc *inactiveChainReplicator) listInactiveChains() []string {
 		chains = append(chains, chain)
 	}
 	return chains
+}
+
+
+
+
+type Factory interface {
+	
+	
+	GetOrCreate(chainID string) (blockledger.ReadWriter, error)
+
+	
+	ChainIDs() []string
+
+	
+	Close()
+}
+
+type blockGetter struct {
+	ledger blockledger.Reader
+}
+
+func (bg *blockGetter) Block(number uint64) *common.Block {
+	return blockledger.GetBlock(bg.ledger, number)
+}
+
+type verifierLoader struct {
+	ledgerFactory   blockledger.Factory
+	verifierFactory cluster.VerifierFactory
+	logger          *flogging.FabricLogger
+	onFailure       func(block *common.Block)
+}
+
+type verifiersByChannel map[string]cluster.BlockVerifier
+
+func (vl *verifierLoader) loadVerifiers() verifiersByChannel {
+	res := make(verifiersByChannel)
+
+	for _, chain := range vl.ledgerFactory.ChainIDs() {
+		v := vl.loadVerifier(chain)
+		if v == nil {
+			continue
+		}
+		res[chain] = v
+	}
+
+	return res
+}
+
+func (vl *verifierLoader) loadVerifier(chain string) cluster.BlockVerifier {
+	ledger, err := vl.ledgerFactory.GetOrCreate(chain)
+	if err != nil {
+		vl.logger.Panicf("Failed obtaining ledger for channel %s", chain)
+	}
+
+	blockRetriever := &blockGetter{ledger: ledger}
+	height := ledger.Height()
+	if height == 0 {
+		vl.logger.Errorf("Channel %s has no blocks, skipping it", chain)
+		return nil
+	}
+	lastBlockIndex := height - 1
+	lastBlock := blockRetriever.Block(lastBlockIndex)
+	if lastBlock == nil {
+		vl.logger.Panicf("Failed retrieving block [%d] for channel %s", lastBlockIndex, chain)
+	}
+
+	lastConfigBlock, err := cluster.LastConfigBlock(lastBlock, blockRetriever)
+	if err != nil {
+		vl.logger.Panicf("Failed retrieving config block [%d] for channel %s", lastBlockIndex, chain)
+	}
+	conf, err := cluster.ConfigFromBlock(lastConfigBlock)
+	if err != nil {
+		vl.onFailure(lastConfigBlock)
+		vl.logger.Panicf("Failed extracting configuration for channel %s from block [%d]: %v",
+			chain, lastConfigBlock.Header.Number, err)
+	}
+
+	verifier, err := vl.verifierFactory.VerifierFromConfig(conf, chain)
+	if err != nil {
+		vl.onFailure(lastConfigBlock)
+		vl.logger.Panicf("Failed creating verifier for channel %s from block [%d]: %v", chain, lastBlockIndex, err)
+	}
+	vl.logger.Infof("Loaded verifier for channel %s from config block at index %d", chain, lastBlockIndex)
+	return verifier
+}
+
+
+
+func ValidateBootstrapBlock(block *common.Block) error {
+	if block == nil {
+		return errors.New("nil block")
+	}
+
+	if block.Data == nil || len(block.Data.Data) == 0 {
+		return errors.New("empty block data")
+	}
+
+	firstTransaction := &common.Envelope{}
+	if err := proto.Unmarshal(block.Data.Data[0], firstTransaction); err != nil {
+		return errors.Wrap(err, "failed extracting envelope from block")
+	}
+
+	bundle, err := channelconfig.NewBundleFromEnvelope(firstTransaction)
+	if err != nil {
+		return err
+	}
+
+	_, exists := bundle.ConsortiumsConfig()
+	if !exists {
+		return errors.New("the block isn't a system channel block because it lacks ConsortiumsConfig")
+	}
+	return nil
 }

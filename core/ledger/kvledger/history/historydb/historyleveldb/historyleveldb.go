@@ -17,7 +17,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
-	putils "github.com/mcc-github/blockchain/protos/utils"
+	protoutil "github.com/mcc-github/blockchain/protoutil"
 )
 
 var logger = flogging.MustGetLogger("historyleveldb")
@@ -96,17 +96,17 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 			continue
 		}
 
-		env, err := putils.GetEnvelopeFromBlock(envBytes)
+		env, err := protoutil.GetEnvelopeFromBlock(envBytes)
 		if err != nil {
 			return err
 		}
 
-		payload, err := putils.GetPayload(env)
+		payload, err := protoutil.GetPayload(env)
 		if err != nil {
 			return err
 		}
 
-		chdr, err := putils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+		chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 		if err != nil {
 			return err
 		}
@@ -114,7 +114,7 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 		if common.HeaderType(chdr.Type) == common.HeaderType_ENDORSER_TRANSACTION {
 
 			
-			respPayload, err := putils.GetActionFromEnvelope(envBytes)
+			respPayload, err := protoutil.GetActionFromEnvelope(envBytes)
 			if err != nil {
 				return err
 			}

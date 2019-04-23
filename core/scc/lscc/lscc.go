@@ -31,7 +31,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	mb "github.com/mcc-github/blockchain/protos/msp"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +42,13 @@ import (
 
 
 
-var logger = flogging.MustGetLogger("lscc")
+var (
+	logger = flogging.MustGetLogger("lscc")
+	
+	
+	chaincodeNameRegExp    = regexp.MustCompile("^[a-zA-Z0-9]+([-_][a-zA-Z0-9]+)*$")
+	chaincodeVersionRegExp = regexp.MustCompile("^[A-Za-z0-9_.+-]+$")
+)
 
 const (
 	
@@ -91,9 +97,6 @@ const (
 
 	
 	GETCOLLECTIONSCONFIGALIAS = "getcollectionsconfig"
-
-	allowedChaincodeName = "^[a-zA-Z0-9]+([-_][a-zA-Z0-9]+)*$"
-	allowedCharsVersion  = "[A-Za-z0-9_.+-]+"
 )
 
 
@@ -161,7 +164,7 @@ func (lscc *LifeCycleSysCC) InvokableExternal() bool   { return true }
 func (lscc *LifeCycleSysCC) InvokableCC2CC() bool      { return true }
 func (lscc *LifeCycleSysCC) Enabled() bool             { return true }
 
-func (lscc *LifeCycleSysCC) ChaincodeContainerInfo(chaincodeName string, qe ledger.QueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
+func (lscc *LifeCycleSysCC) ChaincodeContainerInfo(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
 	chaincodeDataBytes, err := qe.GetState("lscc", chaincodeName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not retrieve state for chaincode %s", chaincodeName)
@@ -182,7 +185,7 @@ func (lscc *LifeCycleSysCC) ChaincodeContainerInfo(chaincodeName string, qe ledg
 	return ccprovider.DeploymentSpecToChaincodeContainerInfo(cds), nil
 }
 
-func (lscc *LifeCycleSysCC) ChaincodeDefinition(chaincodeName string, qe ledger.QueryExecutor) (ccprovider.ChaincodeDefinition, error) {
+func (lscc *LifeCycleSysCC) ChaincodeDefinition(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error) {
 	chaincodeDataBytes, err := qe.GetState("lscc", chaincodeName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not retrieve state for chaincode %s", chaincodeName)
@@ -199,6 +202,42 @@ func (lscc *LifeCycleSysCC) ChaincodeDefinition(chaincodeName string, qe ledger.
 	}
 
 	return chaincodeData, nil
+}
+
+
+
+
+
+
+
+func (lscc *LifeCycleSysCC) ValidationInfo(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (plugin string, args []byte, unexpectedErr error, validationErr error) {
+	chaincodeDataBytes, err := qe.GetState("lscc", chaincodeName)
+	if err != nil {
+		
+		
+		unexpectedErr = errors.Wrapf(err, "could not retrieve state for chaincode %s", chaincodeName)
+		return
+	}
+
+	if chaincodeDataBytes == nil {
+		
+		
+		validationErr = errors.Errorf("chaincode %s not found", chaincodeName)
+		return
+	}
+
+	chaincodeData := &ccprovider.ChaincodeData{}
+	err = proto.Unmarshal(chaincodeDataBytes, chaincodeData)
+	if err != nil {
+		
+		
+		unexpectedErr = errors.Wrapf(err, "chaincode %s has bad definition", chaincodeName)
+		return
+	}
+
+	plugin = chaincodeData.Vscc
+	args = chaincodeData.Policy
+	return
 }
 
 
@@ -330,7 +369,7 @@ func (lscc *LifeCycleSysCC) putChaincodeCollectionData(stub shim.ChaincodeStubIn
 
 	err = stub.PutState(key, collectionConfigBytes)
 	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("error putting collection for chaincode %s:%s", cd.Name, cd.Version))
+		return errors.WithMessagef(err, "error putting collection for chaincode %s:%s", cd.Name, cd.Version)
 	}
 
 	return nil
@@ -493,7 +532,7 @@ func (lscc *LifeCycleSysCC) isValidChaincodeName(chaincodeName string) error {
 		return EmptyChaincodeNameErr("")
 	}
 
-	if !isValidCCNameOrVersion(chaincodeName, allowedChaincodeName) {
+	if !chaincodeNameRegExp.MatchString(chaincodeName) {
 		return InvalidChaincodeNameErr(chaincodeName)
 	}
 
@@ -508,22 +547,11 @@ func (lscc *LifeCycleSysCC) isValidChaincodeVersion(chaincodeName string, versio
 		return EmptyVersionErr(chaincodeName)
 	}
 
-	if !isValidCCNameOrVersion(version, allowedCharsVersion) {
+	if !chaincodeVersionRegExp.MatchString(version) {
 		return InvalidVersionErr(version)
 	}
 
 	return nil
-}
-
-func isValidCCNameOrVersion(ccNameOrVersion string, regExp string) bool {
-	re, _ := regexp.Compile(regExp)
-
-	matched := re.FindString(ccNameOrVersion)
-	if len(matched) != len(ccNameOrVersion) {
-		return false
-	}
-
-	return true
 }
 
 func isValidStatedbArtifactsTar(statedbArtifactsTar []byte) error {
@@ -778,7 +806,7 @@ func (lscc *LifeCycleSysCC) executeUpgrade(stub shim.ChaincodeStubInterface, cha
 	}
 
 	lifecycleEvent := &pb.LifecycleEvent{ChaincodeName: chaincodeName}
-	lifecycleEventBytes := utils.MarshalOrPanic(lifecycleEvent)
+	lifecycleEventBytes := protoutil.MarshalOrPanic(lifecycleEvent)
 	stub.SetEvent(UPGRADE, lifecycleEventBytes)
 	return cdfs, nil
 }
@@ -817,7 +845,7 @@ func (lscc *LifeCycleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		}
 
 		
-		if err = lscc.PolicyChecker.CheckPolicyNoChannel(mgmt.Admins, sp); err != nil {
+		if err = lscc.ACLProvider.CheckACL(resources.Lscc_Install, "", sp); err != nil {
 			return shim.Error(fmt.Sprintf("access denied for [%s]: %s", function, err))
 		}
 
@@ -848,6 +876,10 @@ func (lscc *LifeCycleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 			logger.Panicf("programming error, non-existent appplication config for channel '%s'", channel)
 		}
 
+		if ac.Capabilities().LifecycleV20() {
+			return shim.Error(fmt.Sprintf("Channel '%s' has been migrated to the new lifecycle, LSCC is now read-only", channel))
+		}
+
 		
 		if !ac.Capabilities().PrivateChannelData() && len(args) > 6 {
 			return shim.Error(PrivateChannelDataNotAvailable("").Error())
@@ -873,7 +905,7 @@ func (lscc *LifeCycleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 			EP = args[3]
 		} else {
 			p := cauthdsl.SignedByAnyMember(peer.GetMSPIDs(channel))
-			EP, err = utils.Marshal(p)
+			EP, err = protoutil.Marshal(p)
 			if err != nil {
 				return shim.Error(err.Error())
 			}
@@ -971,7 +1003,7 @@ func (lscc *LifeCycleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		}
 
 		
-		if err = lscc.PolicyChecker.CheckPolicyNoChannel(mgmt.Admins, sp); err != nil {
+		if err = lscc.ACLProvider.CheckACL(resources.Lscc_GetInstalledChaincodes, "", sp); err != nil {
 			return shim.Error(fmt.Sprintf("access denied for [%s]: %s", function, err))
 		}
 

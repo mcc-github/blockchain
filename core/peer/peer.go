@@ -28,9 +28,11 @@ import (
 	"github.com/mcc-github/blockchain/core/committer"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/core/committer/txvalidator/v20/plugindispatcher"
+	vir "github.com/mcc-github/blockchain/core/committer/txvalidator/v20/valinforetriever"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
@@ -41,7 +43,7 @@ import (
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/mcc-github/blockchain/token/tms/manager"
 	"github.com/mcc-github/blockchain/token/transaction"
 	"github.com/pkg/errors"
@@ -65,6 +67,15 @@ var ConfigTxProcessors = customtx.Processors{
 
 
 var credSupport = comm.GetCredentialSupport()
+
+type CollectionInfoShim struct {
+	plugindispatcher.CollectionAndLifecycleResources
+	ChannelID string
+}
+
+func (cis *CollectionInfoShim) CollectionValidationInfo(chaincodeName, collectionName string, validationState validation.State) ([]byte, error, error) {
+	return cis.CollectionAndLifecycleResources.CollectionValidationInfo(cis.ChannelID, chaincodeName, collectionName, validationState)
+}
 
 type gossipSupport struct {
 	channelconfig.Application
@@ -172,6 +183,8 @@ func (cs *chainSupport) Reader() blockledger.Reader {
 
 
 func (cs *chainSupport) Errored() <-chan struct{} {
+	
+	
 	return nil
 }
 
@@ -205,9 +218,18 @@ var validationWorkersSemaphore semaphore.Semaphore
 
 
 
-func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider,
-	pm plugin.Mapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
-	membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider) {
+func Initialize(
+	init func(string),
+	sccp sysccprovider.SystemChaincodeProvider,
+	pm plugin.Mapper,
+	pr *platforms.Registry,
+	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
+	membershipProvider ledger.MembershipInfoProvider,
+	metricsProvider metrics.Provider,
+	legacyLifecycleValidation plugindispatcher.LifecycleResources,
+	newLifecycleValidation plugindispatcher.CollectionAndLifecycleResources,
+	ledgerConfig *ledger.Config,
+) {
 	nWorkers := viper.GetInt("peer.validatorPoolSize")
 	if nWorkers <= 0 {
 		nWorkers = runtime.NumCPU()
@@ -225,6 +247,7 @@ func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccp
 		DeployedChaincodeInfoProvider: deployedCCInfoProvider,
 		MembershipInfoProvider:        membershipProvider,
 		MetricsProvider:               metricsProvider,
+		Config:                        ledgerConfig,
 	})
 	ledgerIds, err := ledgermgmt.GetLedgerIDs()
 	if err != nil {
@@ -233,18 +256,18 @@ func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccp
 	for _, cid := range ledgerIds {
 		peerLogger.Infof("Loading chain %s", cid)
 		if ledger, err = ledgermgmt.OpenLedger(cid); err != nil {
-			peerLogger.Warningf("Failed to load ledger %s(%s)", cid, err)
+			peerLogger.Errorf("Failed to load ledger %s(%s)", cid, err)
 			peerLogger.Debugf("Error while loading ledger %s with message %s. We continue to the next ledger rather than abort.", cid, err)
 			continue
 		}
 		if cb, err = getCurrConfigBlockFromLedger(ledger); err != nil {
-			peerLogger.Warningf("Failed to find config block on ledger %s(%s)", cid, err)
+			peerLogger.Errorf("Failed to find config block on ledger %s(%s)", cid, err)
 			peerLogger.Debugf("Error while looking for config block on ledger %s with message %s. We continue to the next ledger rather than abort.", cid, err)
 			continue
 		}
 		
-		if err = createChain(cid, ledger, cb, ccp, sccp, pm, deployedCCInfoProvider); err != nil {
-			peerLogger.Warningf("Failed to load chain %s(%s)", cid, err)
+		if err = createChain(cid, ledger, cb, sccp, pm, deployedCCInfoProvider, legacyLifecycleValidation, newLifecycleValidation); err != nil {
+			peerLogger.Errorf("Failed to load chain %s(%s)", cid, err)
 			peerLogger.Debugf("Error reloading chain %s with message %s. We continue to the next chain rather than abort.", cid, err)
 			continue
 		}
@@ -276,7 +299,7 @@ func getCurrConfigBlockFromLedger(ledger ledger.PeerLedger) (*common.Block, erro
 	}
 
 	
-	configBlockIndex, err := utils.GetLastConfigIndexFromBlock(lastBlock)
+	configBlockIndex, err := protoutil.GetLastConfigIndexFromBlock(lastBlock)
 	if err != nil {
 		return nil, err
 	}
@@ -292,9 +315,11 @@ func getCurrConfigBlockFromLedger(ledger ledger.PeerLedger) (*common.Block, erro
 }
 
 
-func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccprovider.ChaincodeProvider,
+func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block,
 	sccp sysccprovider.SystemChaincodeProvider, pm plugin.Mapper,
 	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
+	legacyLifecycleValidation plugindispatcher.LifecycleResources,
+	newLifecycleValidation plugindispatcher.CollectionAndLifecycleResources,
 ) error {
 	chanConf, err := retrievePersistedChannelConfig(ledger)
 	if err != nil {
@@ -311,7 +336,7 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 	} else {
 		
 		
-		envelopeConfig, err := utils.ExtractEnvelope(cb, 0)
+		envelopeConfig, err := protoutil.ExtractEnvelope(cb, 0)
 		if err != nil {
 			return err
 		}
@@ -384,9 +409,17 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		peerSingletonCallback,
 	)
 
-	validator := txvalidator.NewTxValidator(cid, validationWorkersSemaphore, cs, sccp, pm)
+	vInfoShim := &vir.ValidationInfoRetrieveShim{
+		New:    newLifecycleValidation,
+		Legacy: legacyLifecycleValidation,
+	}
+	validator := txvalidator.NewTxValidator(cid, validationWorkersSemaphore, cs, vInfoShim, &CollectionInfoShim{
+		CollectionAndLifecycleResources: newLifecycleValidation,
+		ChannelID:                       bundle.ConfigtxValidator().ChainID(),
+	}, sccp, pm, NewChannelPolicyManagerGetter())
+
 	c := committer.NewLedgerCommitterReactive(ledger, func(block *common.Block) error {
-		chainID, err := utils.GetChainIDFromBlock(block)
+		chainID, err := protoutil.GetChainIDFromBlock(block)
 		if err != nil {
 			return err
 		}
@@ -429,8 +462,14 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 }
 
 
-func CreateChainFromBlock(cb *common.Block, ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider) error {
-	cid, err := utils.GetChainIDFromBlock(cb)
+func CreateChainFromBlock(
+	cb *common.Block,
+	sccp sysccprovider.SystemChaincodeProvider,
+	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
+	legacyLifecycleValidation plugindispatcher.LifecycleResources,
+	newLifecycleValidation plugindispatcher.CollectionAndLifecycleResources,
+) error {
+	cid, err := protoutil.GetChainIDFromBlock(cb)
 	if err != nil {
 		return err
 	}
@@ -440,7 +479,7 @@ func CreateChainFromBlock(cb *common.Block, ccp ccprovider.ChaincodeProvider, sc
 		return errors.WithMessage(err, "cannot create ledger from genesis block")
 	}
 
-	return createChain(cid, l, cb, ccp, sccp, pluginMapper, deployedCCInfoProvider)
+	return createChain(cid, l, cb, sccp, pluginMapper, deployedCCInfoProvider, legacyLifecycleValidation, newLifecycleValidation)
 }
 
 
@@ -648,20 +687,20 @@ func SetCurrConfigBlock(block *common.Block, cid string) error {
 }
 
 
-func GetLocalIP() string {
+func GetLocalIP() (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		return ""
+		return "", err
 	}
 	for _, address := range addrs {
 		
 		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
+				return ipnet.IP.String(), nil
 			}
 		}
 	}
-	return ""
+	return "", fmt.Errorf("no non-loopback, IPv4 interface detected")
 }
 
 

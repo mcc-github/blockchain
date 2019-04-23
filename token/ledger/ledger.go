@@ -40,6 +40,8 @@ type LedgerWriter interface {
 	LedgerReader
 	
 	SetState(namespace string, key string, value []byte) error
+	
+	DeleteState(namespace string, key string) error
 }
 
 

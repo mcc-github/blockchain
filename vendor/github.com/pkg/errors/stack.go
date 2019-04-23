@@ -48,6 +48,7 @@ func (f Frame) line() int {
 
 
 
+
 func (f Frame) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 's':
@@ -78,6 +79,14 @@ func (f Frame) Format(s fmt.State, verb rune) {
 
 
 type StackTrace []Frame
+
+
+
+
+
+
+
+
 
 func (st StackTrace) Format(s fmt.State, verb rune) {
 	switch verb {
@@ -135,44 +144,4 @@ func funcname(name string) string {
 	name = name[i+1:]
 	i = strings.Index(name, ".")
 	return name[i+1:]
-}
-
-func trimGOPATH(name, file string) string {
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	const sep = "/"
-	goal := strings.Count(name, sep) + 2
-	i := len(file)
-	for n := 0; n < goal; n++ {
-		i = strings.LastIndex(file[:i], sep)
-		if i == -1 {
-			
-			
-			i = -len(sep)
-			break
-		}
-	}
-	
-	file = file[i+len(sep):]
-	return file
 }

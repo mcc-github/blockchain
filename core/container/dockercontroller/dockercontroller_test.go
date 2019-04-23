@@ -26,22 +26,27 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
-	coreutil "github.com/mcc-github/blockchain/core/testutil"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 
 func TestIntegrationPath(t *testing.T) {
-	coreutil.SetupTestConfig()
-	dc := NewDockerVM("", util.GenerateUUID(), NewBuildMetrics(&disabled.Provider{}))
-	ccid := ccintf.CCID{Name: "simple"}
+	client, err := docker.NewClientFromEnv()
+	assert.NoError(t, err)
+	provider := Provider{
+		PeerID:       "",
+		NetworkID:    util.GenerateUUID(),
+		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
+		Client:       client,
+	}
+	dc := provider.NewVM()
+	ccid := ccintf.CCID("simple")
 
-	err := dc.Start(ccid, nil, nil, nil, InMemBuilder{})
+	err = dc.Start(ccid, nil, nil, nil, InMemBuilder{})
 	require.NoError(t, err)
 
 	
@@ -55,41 +60,13 @@ func TestIntegrationPath(t *testing.T) {
 	_ = dc.Stop(ccid, 0, false, true)
 }
 
-func TestHostConfig(t *testing.T) {
-	coreutil.SetupTestConfig()
-	var hostConfig = new(docker.HostConfig)
-	err := viper.UnmarshalKey("vm.docker.hostConfig", hostConfig)
-	if err != nil {
-		t.Fatalf("Load docker HostConfig wrong, error: %s", err.Error())
-	}
-	assert.NotNil(t, hostConfig.LogConfig)
-	assert.Equal(t, "json-file", hostConfig.LogConfig.Type)
-	assert.Equal(t, "50m", hostConfig.LogConfig.Config["max-size"])
-	assert.Equal(t, "5", hostConfig.LogConfig.Config["max-file"])
-}
-
-func TestGetDockerHostConfig(t *testing.T) {
-	coreutil.SetupTestConfig()
-	hostConfig = nil 
-	hostConfig := getDockerHostConfig()
-	assert.NotNil(t, hostConfig)
-	assert.Equal(t, "host", hostConfig.NetworkMode)
-	assert.Equal(t, "json-file", hostConfig.LogConfig.Type)
-	assert.Equal(t, "50m", hostConfig.LogConfig.Config["max-size"])
-	assert.Equal(t, "5", hostConfig.LogConfig.Config["max-file"])
-	assert.Equal(t, int64(1024*1024*1024*2), hostConfig.Memory)
-	assert.Equal(t, int64(0), hostConfig.CPUShares)
-}
-
 func Test_Start(t *testing.T) {
 	gt := NewGomegaWithT(t)
 	dvm := DockerVM{
 		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
+		Client:       &mockClient{},
 	}
-	ccid := ccintf.CCID{
-		Name:    "simple",
-		Version: "1.0",
-	}
+	ccid := ccintf.CCID("simple:1.0")
 	args := make([]string, 1)
 	env := make([]string, 1)
 	files := map[string][]byte{
@@ -97,16 +74,8 @@ func Test_Start(t *testing.T) {
 	}
 
 	
-	
-	dvm.getClientFnc = getMockClient
-	getClientErr = true
-	err := dvm.Start(ccid, args, env, files, nil)
-	gt.Expect(err).To(HaveOccurred())
-	getClientErr = false
-
-	
 	createErr = true
-	err = dvm.Start(ccid, args, env, files, nil)
+	err := dvm.Start(ccid, args, env, files, nil)
 	gt.Expect(err).To(HaveOccurred())
 	createErr = false
 
@@ -123,13 +92,13 @@ func Test_Start(t *testing.T) {
 	gt.Expect(err).To(HaveOccurred())
 	buildErr = false
 
-	chaincodePath := "github.com/mcc-github/blockchain/examples/chaincode/go/example01/cmd"
+	chaincodePath := "github.com/mcc-github/blockchain/core/container/dockercontroller/testdata/src/chaincodes/noop"
 	spec := &pb.ChaincodeSpec{
 		Type:        pb.ChaincodeSpec_GOLANG,
 		ChaincodeId: &pb.ChaincodeID{Name: "ex01", Path: chaincodePath},
 		Input:       &pb.ChaincodeInput{Args: util.ToChaincodeArgs("f")},
 	}
-	codePackage, err := platforms.NewRegistry(&golang.Platform{}).GetDeploymentPayload(spec.CCType(), spec.Path())
+	codePackage, err := platforms.NewRegistry(&golang.Platform{}).GetDeploymentPayload(spec.Type.String(), spec.ChaincodeId.Path)
 	if err != nil {
 		t.Fatal()
 	}
@@ -137,18 +106,18 @@ func Test_Start(t *testing.T) {
 	bldr := &mockBuilder{
 		buildFunc: func() (io.Reader, error) {
 			return platforms.NewRegistry(&golang.Platform{}).GenerateDockerBuild(
-				cds.CCType(),
-				cds.Path(),
-				cds.Name(),
-				cds.Version(),
-				cds.Bytes(),
+				cds.ChaincodeSpec.Type.String(),
+				cds.ChaincodeSpec.ChaincodeId.Path,
+				cds.ChaincodeSpec.ChaincodeId.Name,
+				cds.ChaincodeSpec.ChaincodeId.Version,
+				cds.CodePackage,
 			)
 		},
 	}
 
 	
 	
-	viper.Set("vm.docker.attachStdout", true)
+	dvm.AttachStdOut = true
 	startErr = true
 	err = dvm.Start(ccid, args, env, files, bldr)
 	gt.Expect(err).To(HaveOccurred())
@@ -214,7 +183,7 @@ func Test_streamOutput(t *testing.T) {
 }
 
 func Test_BuildMetric(t *testing.T) {
-	ccid := ccintf.CCID{Name: "simple", Version: "1.0"}
+	ccid := ccintf.CCID("simple:1.0")
 	client := &mockClient{}
 
 	tests := []struct {
@@ -234,10 +203,11 @@ func Test_BuildMetric(t *testing.T) {
 				BuildMetrics: &BuildMetrics{
 					ChaincodeImageBuildDuration: fakeChaincodeImageBuildDuration,
 				},
+				Client: client,
 			}
 
 			buildErr = tt.buildErr
-			dvm.deployImage(client, ccid, &bytes.Buffer{})
+			dvm.deployImage(ccid, &bytes.Buffer{})
 
 			gt.Expect(fakeChaincodeImageBuildDuration.WithCallCount()).To(Equal(1))
 			gt.Expect(fakeChaincodeImageBuildDuration.WithArgsForCall(0)).To(Equal(tt.expectedLabels))
@@ -250,38 +220,44 @@ func Test_BuildMetric(t *testing.T) {
 }
 
 func Test_Stop(t *testing.T) {
-	dvm := DockerVM{}
-	ccid := ccintf.CCID{Name: "simple"}
+	dvm := DockerVM{Client: &mockClient{}}
+	ccid := ccintf.CCID("simple")
 
 	
-	getClientErr = true
-	dvm.getClientFnc = getMockClient
 	err := dvm.Stop(ccid, 10, true, true)
-	assert.Error(t, err)
-	getClientErr = false
+	assert.NoError(t, err)
+}
+
+func Test_Wait(t *testing.T) {
+	dvm := DockerVM{}
 
 	
-	err = dvm.Stop(ccid, 10, true, true)
+	client := &mockClient{}
+	dvm.Client = client
+
+	client.exitCode = 99
+	exitCode, err := dvm.Wait(ccintf.CCID("the-name:the-version"))
 	assert.NoError(t, err)
+	assert.Equal(t, 99, exitCode)
+	assert.Equal(t, "the-name-the-version", client.containerID)
+
+	
+	client.waitErr = errors.New("no-wait-for-you")
+	_, err = dvm.Wait(ccintf.CCID(""))
+	assert.EqualError(t, err, "no-wait-for-you")
 }
 
 func Test_HealthCheck(t *testing.T) {
 	dvm := DockerVM{}
 
-	dvm.getClientFnc = func() (dockerClient, error) {
-		client := &mockClient{
-			pingErr: false,
-		}
-		return client, nil
+	dvm.Client = &mockClient{
+		pingErr: false,
 	}
 	err := dvm.HealthCheck(context.Background())
 	assert.NoError(t, err)
 
-	dvm.getClientFnc = func() (dockerClient, error) {
-		client := &mockClient{
-			pingErr: true,
-		}
-		return client, nil
+	dvm.Client = &mockClient{
+		pingErr: true,
 	}
 	err = dvm.HealthCheck(context.Background())
 	assert.Error(t, err)
@@ -300,38 +276,38 @@ func TestGetVMNameForDocker(t *testing.T) {
 		{
 			name:           "mycc",
 			vm:             &DockerVM{NetworkID: "dev", PeerID: "peer0"},
-			ccid:           ccintf.CCID{Name: "mycc", Version: "1.0"},
-			expectedOutput: fmt.Sprintf("%s-%s", "dev-peer0-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("dev-peer0-mycc-1.0")))),
+			ccid:           ccintf.CCID("mycc:1.0"),
+			expectedOutput: fmt.Sprintf("%s-%s", "dev-peer0-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("dev-peer0-mycc:1.0")))),
 		},
 		{
 			name:           "mycc-nonetworkid",
 			vm:             &DockerVM{PeerID: "peer1"},
-			ccid:           ccintf.CCID{Name: "mycc", Version: "1.0"},
-			expectedOutput: fmt.Sprintf("%s-%s", "peer1-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("peer1-mycc-1.0")))),
+			ccid:           ccintf.CCID("mycc:1.0"),
+			expectedOutput: fmt.Sprintf("%s-%s", "peer1-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("peer1-mycc:1.0")))),
 		},
 		{
 			name:           "myCC-UCids",
 			vm:             &DockerVM{NetworkID: "Dev", PeerID: "Peer0"},
-			ccid:           ccintf.CCID{Name: "myCC", Version: "1.0"},
-			expectedOutput: fmt.Sprintf("%s-%s", "dev-peer0-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("Dev-Peer0-myCC-1.0")))),
+			ccid:           ccintf.CCID("myCC:1.0"),
+			expectedOutput: fmt.Sprintf("%s-%s", "dev-peer0-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("Dev-Peer0-myCC:1.0")))),
 		},
 		{
 			name:           "myCC-idsWithSpecialChars",
 			vm:             &DockerVM{NetworkID: "Dev$dev", PeerID: "Peer*0"},
-			ccid:           ccintf.CCID{Name: "myCC", Version: "1.0"},
-			expectedOutput: fmt.Sprintf("%s-%s", "dev-dev-peer-0-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("Dev$dev-Peer*0-myCC-1.0")))),
+			ccid:           ccintf.CCID("myCC:1.0"),
+			expectedOutput: fmt.Sprintf("%s-%s", "dev-dev-peer-0-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("Dev$dev-Peer*0-myCC:1.0")))),
 		},
 		{
 			name:           "mycc-nopeerid",
 			vm:             &DockerVM{NetworkID: "dev"},
-			ccid:           ccintf.CCID{Name: "mycc", Version: "1.0"},
-			expectedOutput: fmt.Sprintf("%s-%s", "dev-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("dev-mycc-1.0")))),
+			ccid:           ccintf.CCID("mycc:1.0"),
+			expectedOutput: fmt.Sprintf("%s-%s", "dev-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("dev-mycc:1.0")))),
 		},
 		{
 			name:           "myCC-LCids",
 			vm:             &DockerVM{NetworkID: "dev", PeerID: "peer0"},
-			ccid:           ccintf.CCID{Name: "myCC", Version: "1.0"},
-			expectedOutput: fmt.Sprintf("%s-%s", "dev-peer0-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("dev-peer0-myCC-1.0")))),
+			ccid:           ccintf.CCID("myCC:1.0"),
+			expectedOutput: fmt.Sprintf("%s-%s", "dev-peer0-mycc-1.0", hex.EncodeToString(util.ComputeSHA256([]byte("dev-peer0-myCC:1.0")))),
 		},
 	}
 
@@ -348,7 +324,7 @@ func TestGetVMName(t *testing.T) {
 		{
 			name:           "myCC-preserveCase",
 			vm:             &DockerVM{NetworkID: "Dev", PeerID: "Peer0"},
-			ccid:           ccintf.CCID{Name: "myCC", Version: "1.0"},
+			ccid:           ccintf.CCID("myCC:1.0"),
 			expectedOutput: fmt.Sprintf("%s", "Dev-Peer0-myCC-1.0"),
 		},
 	}
@@ -404,6 +380,10 @@ func (m *mockBuilder) Build() (io.Reader, error) {
 type mockClient struct {
 	noSuchImgErrReturned bool
 	pingErr              bool
+
+	containerID string
+	exitCode    int
+	waitErr     error
 
 	attachToContainerStub func(docker.AttachToContainerOptions) error
 }
@@ -486,4 +466,9 @@ func (c *mockClient) PingWithContext(context.Context) error {
 		return errors.New("Error pinging daemon")
 	}
 	return nil
+}
+
+func (c *mockClient) WaitContainer(id string) (int, error) {
+	c.containerID = id
+	return c.exitCode, c.waitErr
 }

@@ -14,6 +14,8 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,12 +24,13 @@ import (
 
 type client struct {
 	lgr            ledger.PeerLedger
+	lgrID          string
 	simulatedTrans []*txAndPvtdata 
 	assert         *assert.Assertions
 }
 
-func newClient(lgr ledger.PeerLedger, t *testing.T) *client {
-	return &client{lgr, nil, assert.New(t)}
+func newClient(lgr ledger.PeerLedger, lgrID string, t *testing.T) *client {
+	return &client{lgr, lgrID, nil, assert.New(t)}
 }
 
 
@@ -43,6 +46,27 @@ func (c *client) simulateDataTx(txid string, simulationLogic func(s *simulator))
 	sim := &simulator{ledgerSimulator, txid, c.assert}
 	simulationLogic(sim)
 	txAndPvtdata := sim.done()
+	c.simulatedTrans = append(c.simulatedTrans, txAndPvtdata)
+	return txAndPvtdata
+}
+
+func (c *client) addPostOrderTx(txid string, customTxType common.HeaderType) *txAndPvtdata {
+	if txid == "" {
+		txid = util.GenerateUUID()
+	}
+	channelHeader := protoutil.MakeChannelHeader(customTxType, 0, c.lgrID, 0)
+	channelHeader.TxId = txid
+	paylBytes := protoutil.MarshalOrPanic(
+		&common.Payload{
+			Header: protoutil.MakePayloadHeader(channelHeader, &common.SignatureHeader{}),
+			Data:   nil,
+		},
+	)
+	env := &common.Envelope{
+		Payload:   paylBytes,
+		Signature: nil,
+	}
+	txAndPvtdata := &txAndPvtdata{Txid: txid, Envelope: env}
 	c.simulatedTrans = append(c.simulatedTrans, txAndPvtdata)
 	return txAndPvtdata
 }

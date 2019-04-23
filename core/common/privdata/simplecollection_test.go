@@ -16,6 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	pb "github.com/mcc-github/blockchain/protos/common"
 	mb "github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -151,7 +152,7 @@ func TestSimpleCollectionFilter(t *testing.T) {
 	accessFilter := cap.AccessFilter()
 
 	
-	notMember := pb.SignedData{
+	notMember := protoutil.SignedData{
 		Identity:  []byte{1, 2, 3},
 		Signature: []byte{},
 		Data:      []byte{},
@@ -159,7 +160,7 @@ func TestSimpleCollectionFilter(t *testing.T) {
 	assert.False(t, accessFilter(notMember))
 
 	
-	member := pb.SignedData{
+	member := protoutil.SignedData{
 		Identity:  signers[0],
 		Signature: []byte{},
 		Data:      []byte{},

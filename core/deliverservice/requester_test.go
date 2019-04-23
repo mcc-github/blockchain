@@ -18,13 +18,21 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
+	"github.com/mcc-github/blockchain/core/deliverservice/mocks"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
+
+
+
+type signerSerializer interface {
+	identity.SignerSerializer
+}
 
 func TestTLSBinding(t *testing.T) {
 	defer ensureNoGoroutineLeak(t)()
@@ -32,6 +40,7 @@ func TestTLSBinding(t *testing.T) {
 	requester := blocksRequester{
 		tls:     true,
 		chainID: "testchainid",
+		signer:  &mocks.SignerSerializer{},
 	}
 
 	
@@ -135,7 +144,7 @@ func (o *mockOrderer) Deliver(stream orderer.AtomicBroadcast_DeliverServer) erro
 		if !isEnvelope || env == nil {
 			assert.Fail(o.t, "not an envelope")
 		}
-		ch, err := utils.ChannelHeader(env)
+		ch, err := protoutil.ChannelHeader(env)
 		assert.NoError(o.t, err)
 		return ch.TlsCertHash
 	})

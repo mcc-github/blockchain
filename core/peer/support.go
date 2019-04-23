@@ -10,14 +10,6 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 )
 
-var supportFactory SupportFactory
-
-
-type SupportFactory interface {
-	
-	NewSupport() Support
-}
-
 
 type Support interface {
 	

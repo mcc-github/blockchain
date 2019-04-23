@@ -22,7 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/core/comm"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -187,7 +187,7 @@ func isFiltered(srv *Server) bool {
 
 func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.Envelope) (status cb.Status, err error) {
 	addr := util.ExtractRemoteAddress(ctx)
-	payload, err := utils.UnmarshalPayload(envelope.Payload)
+	payload, err := protoutil.UnmarshalPayload(envelope.Payload)
 	if err != nil {
 		logger.Warningf("Received an envelope from %s with no payload: %s", addr, err)
 		return cb.Status_BAD_REQUEST, nil
@@ -198,7 +198,7 @@ func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.E
 		return cb.Status_BAD_REQUEST, nil
 	}
 
-	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 	if err != nil {
 		logger.Warningf("Failed to unmarshal channel header from %s: %s", addr, err)
 		return cb.Status_BAD_REQUEST, nil
@@ -228,7 +228,18 @@ func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.E
 		h.Metrics.RequestsCompleted.With(labels...).Add(1)
 	}()
 
+	seekInfo := &ab.SeekInfo{}
+	if err = proto.Unmarshal(payload.Data, seekInfo); err != nil {
+		logger.Warningf("[channel: %s] Received a signed deliver request from %s with malformed seekInfo payload: %s", chdr.ChannelId, addr, err)
+		return cb.Status_BAD_REQUEST, nil
+	}
+
 	erroredChan := chain.Errored()
+	if seekInfo.ErrorResponse == ab.SeekInfo_BEST_EFFORT {
+		
+		
+		erroredChan = nil
+	}
 	select {
 	case <-erroredChan:
 		logger.Warningf("[channel: %s] Rejecting deliver request for %s because of consenter error", chdr.ChannelId, addr)
@@ -247,12 +258,6 @@ func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.E
 		return cb.Status_FORBIDDEN, nil
 	}
 
-	seekInfo := &ab.SeekInfo{}
-	if err = proto.Unmarshal(payload.Data, seekInfo); err != nil {
-		logger.Warningf("[channel: %s] Received a signed deliver request from %s with malformed seekInfo payload: %s", chdr.ChannelId, addr, err)
-		return cb.Status_BAD_REQUEST, nil
-	}
-
 	if seekInfo.Start == nil || seekInfo.Stop == nil {
 		logger.Warningf("[channel: %s] Received seekInfo message from %s with missing start or stop %v, %v", chdr.ChannelId, addr, seekInfo.Start, seekInfo.Stop)
 		return cb.Status_BAD_REQUEST, nil
@@ -267,6 +272,14 @@ func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.E
 	case *ab.SeekPosition_Oldest:
 		stopNum = number
 	case *ab.SeekPosition_Newest:
+		
+		
+		
+		
+		if proto.Equal(seekInfo.Start, seekInfo.Stop) {
+			stopNum = number
+			break
+		}
 		stopNum = chain.Reader().Height() - 1
 	case *ab.SeekPosition_Specified:
 		stopNum = stop.Specified.Number
@@ -297,7 +310,9 @@ func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.E
 			logger.Debugf("Context canceled, aborting wait for next block")
 			return cb.Status_INTERNAL_SERVER_ERROR, errors.Wrapf(ctx.Err(), "context finished before block retrieved")
 		case <-erroredChan:
-			logger.Warningf("Aborting deliver for request because of background error")
+			
+			
+			logger.Warningf("Aborting deliver for request because the backing consensus implementation indicates an error")
 			return cb.Status_SERVICE_UNAVAILABLE, nil
 		case <-iterCh:
 			
@@ -316,7 +331,7 @@ func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.E
 			return cb.Status_FORBIDDEN, nil
 		}
 
-		logger.Debugf("[channel: %s] Delivering block for (%p) for %s", chdr.ChannelId, seekInfo, addr)
+		logger.Debugf("[channel: %s] Delivering block [%d] for (%p) for %s", chdr.ChannelId, block.Header.Number, seekInfo, addr)
 
 		if err := srv.SendBlockResponse(block); err != nil {
 			logger.Warningf("[channel: %s] Error sending to %s: %s", chdr.ChannelId, addr, err)

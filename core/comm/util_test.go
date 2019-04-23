@@ -20,7 +20,7 @@ import (
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/comm/testpb"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -93,7 +93,7 @@ func TestBindingInspector(t *testing.T) {
 		if !isEnvelope || env == nil {
 			return nil
 		}
-		ch, err := utils.ChannelHeader(env)
+		ch, err := protoutil.ChannelHeader(env)
 		if err != nil {
 			return nil
 		}
@@ -110,7 +110,7 @@ func TestBindingInspector(t *testing.T) {
 	assert.Contains(t, err.Error(), "client didn't include its TLS cert hash")
 
 	
-	ch, _ := proto.Marshal(utils.MakeChannelHeader(common.HeaderType_CONFIG, 0, "test", 0))
+	ch, _ := proto.Marshal(protoutil.MakeChannelHeader(common.HeaderType_CONFIG, 0, "test", 0))
 	
 	ch = append(ch, 0)
 	err = srv.newInspection(t).inspectBinding(envelopeWithChannelHeader(ch))
@@ -118,7 +118,7 @@ func TestBindingInspector(t *testing.T) {
 	assert.Contains(t, err.Error(), "client didn't include its TLS cert hash")
 
 	
-	chanHdr := utils.MakeChannelHeader(common.HeaderType_CONFIG, 0, "test", 0)
+	chanHdr := protoutil.MakeChannelHeader(common.HeaderType_CONFIG, 0, "test", 0)
 	ch, _ = proto.Marshal(chanHdr)
 	err = srv.newInspection(t).inspectBinding(envelopeWithChannelHeader(ch))
 	assert.Error(t, err)
@@ -215,9 +215,10 @@ func (ins *inspection) inspectBinding(envelope *common.Envelope) error {
 	ctx, c := context.WithTimeout(ctx, time.Second*3)
 	defer c()
 	conn, err := grpc.DialContext(ctx, ins.server.addr, grpc.WithTransportCredentials(ins.creds), grpc.WithBlock())
-	defer conn.Close()
 	assert.NoError(ins.t, err)
+	defer conn.Close()
 	_, err = testpb.NewTestServiceClient(conn).EmptyCall(context.Background(), &testpb.Empty{})
+	assert.NoError(ins.t, err)
 	return ins.server.inspect(envelope)
 }
 

@@ -7,18 +7,38 @@ SPDX-License-Identifier: Apache-2.0
 package testutil
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/configtx/test"
+	"github.com/mcc-github/blockchain/common/crypto"
+	mmsp "github.com/mcc-github/blockchain/common/mocks/msp"
 	"github.com/mcc-github/blockchain/common/util"
 	lutils "github.com/mcc-github/blockchain/core/ledger/util"
+	"github.com/mcc-github/blockchain/msp"
+	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	ptestutils "github.com/mcc-github/blockchain/protos/testutils"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
+
+var signer msp.SigningIdentity
+
+func init() {
+	var err error
+	
+	err = msptesttools.LoadMSPSetupForTesting()
+	if err != nil {
+		panic(fmt.Errorf("Could not load msp config, err %s", err))
+	}
+	signer, err = mspmgmt.GetLocalMSP().GetDefaultSigningIdentity()
+	if err != nil {
+		panic(fmt.Errorf("Could not initialize msp/signer"))
+	}
+}
 
 
 type BlockGenerator struct {
@@ -45,14 +65,14 @@ func NewBlockGenerator(t *testing.T, ledgerID string, signTxs bool) (*BlockGener
 	gb, err := test.MakeGenesisBlock(ledgerID)
 	assert.NoError(t, err)
 	gb.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = lutils.NewTxValidationFlagsSetValue(len(gb.Data.Data), pb.TxValidationCode_VALID)
-	return &BlockGenerator{1, gb.GetHeader().Hash(), signTxs, t}, gb
+	return &BlockGenerator{1, protoutil.BlockHeaderHash(gb.GetHeader()), signTxs, t}, gb
 }
 
 
 func (bg *BlockGenerator) NextBlock(simulationResults [][]byte) *common.Block {
 	block := ConstructBlock(bg.t, bg.blockNum, bg.previousHash, simulationResults, bg.signTxs)
 	bg.blockNum++
-	bg.previousHash = block.Header.Hash()
+	bg.previousHash = protoutil.BlockHeaderHash(block.Header)
 	return block
 }
 
@@ -64,7 +84,7 @@ func (bg *BlockGenerator) NextBlockWithTxid(simulationResults [][]byte, txids []
 	}
 	block := ConstructBlockWithTxid(bg.t, bg.blockNum, bg.previousHash, simulationResults, txids, bg.signTxs)
 	bg.blockNum++
-	bg.previousHash = block.Header.Hash()
+	bg.previousHash = protoutil.BlockHeaderHash(block.Header)
 	return block
 }
 
@@ -111,9 +131,9 @@ func ConstructTransactionFromTxDetails(txDetails *TxDetails, sign bool) (*common
 	var err error
 	var txID string
 	if sign {
-		txEnv, txID, err = ptestutils.ConstructSignedTxEnvWithDefaultSigner(util.GetTestChainID(), ccid, nil, txDetails.SimulationResults, txDetails.TxID, nil, nil)
+		txEnv, txID, err = ConstructSignedTxEnvWithDefaultSigner(util.GetTestChainID(), ccid, nil, txDetails.SimulationResults, txDetails.TxID, nil, nil)
 	} else {
-		txEnv, txID, err = ptestutils.ConstructUnsignedTxEnv(util.GetTestChainID(), ccid, nil, txDetails.SimulationResults, txDetails.TxID, nil, nil)
+		txEnv, txID, err = ConstructUnsignedTxEnv(util.GetTestChainID(), ccid, nil, txDetails.SimulationResults, txDetails.TxID, nil, nil)
 	}
 	return txEnv, txID, err
 }
@@ -181,19 +201,89 @@ func ConstructBytesProposalResponsePayload(version string, simulationResults []b
 		Name:    "foo",
 		Version: version,
 	}
-	return ptestutils.ConstructBytesProposalResponsePayload(util.GetTestChainID(), ccid, nil, simulationResults)
+	return constructBytesProposalResponsePayload(util.GetTestChainID(), ccid, nil, simulationResults)
 }
 
 func NewBlock(env []*common.Envelope, blockNum uint64, previousHash []byte) *common.Block {
-	block := common.NewBlock(blockNum, previousHash)
+	block := protoutil.NewBlock(blockNum, previousHash)
 	for i := 0; i < len(env); i++ {
 		txEnvBytes, _ := proto.Marshal(env[i])
 		block.Data.Data = append(block.Data.Data, txEnvBytes)
 	}
-	block.Header.DataHash = block.Data.Hash()
-	utils.InitBlockMetadata(block)
+	block.Header.DataHash = protoutil.BlockDataHash(block.Data)
+	protoutil.InitBlockMetadata(block)
 
 	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = lutils.NewTxValidationFlagsSetValue(len(env), pb.TxValidationCode_VALID)
 
 	return block
+}
+
+
+func constructBytesProposalResponsePayload(chainID string, ccid *pb.ChaincodeID, pResponse *pb.Response, simulationResults []byte) ([]byte, error) {
+	ss, err := signer.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	prop, _, err := protoutil.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, chainID, &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: ccid}}, ss)
+	if err != nil {
+		return nil, err
+	}
+
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, pResponse, simulationResults, nil, ccid, nil, signer)
+	if err != nil {
+		return nil, err
+	}
+
+	return presp.Payload, nil
+}
+
+
+
+func ConstructSignedTxEnvWithDefaultSigner(chainID string, ccid *pb.ChaincodeID, response *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte) (*common.Envelope, string, error) {
+	return ConstructSignedTxEnv(chainID, ccid, response, simulationResults, txid, events, visibility, signer)
+}
+
+
+func ConstructUnsignedTxEnv(chainID string, ccid *pb.ChaincodeID, response *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte) (*common.Envelope, string, error) {
+	mspLcl := mmsp.NewNoopMsp()
+	sigId, _ := mspLcl.GetDefaultSigningIdentity()
+
+	return ConstructSignedTxEnv(chainID, ccid, response, simulationResults, txid, events, visibility, sigId)
+}
+
+
+func ConstructSignedTxEnv(chainID string, ccid *pb.ChaincodeID, pResponse *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte, signer msp.SigningIdentity) (*common.Envelope, string, error) {
+	ss, err := signer.Serialize()
+	if err != nil {
+		return nil, "", err
+	}
+
+	var prop *pb.Proposal
+	if txid == "" {
+		
+		prop, txid, err = protoutil.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, chainID, &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: ccid}}, ss)
+
+	} else {
+		
+		nonce, err := crypto.GetRandomNonce()
+		if err != nil {
+			return nil, "", err
+		}
+		prop, txid, err = protoutil.CreateChaincodeProposalWithTxIDNonceAndTransient(txid, common.HeaderType_ENDORSER_TRANSACTION, chainID, &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: ccid}}, nonce, ss, nil)
+	}
+	if err != nil {
+		return nil, "", err
+	}
+
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, pResponse, simulationResults, nil, ccid, nil, signer)
+	if err != nil {
+		return nil, "", err
+	}
+
+	env, err := protoutil.CreateSignedTx(prop, signer, presp)
+	if err != nil {
+		return nil, "", err
+	}
+	return env, txid, nil
 }

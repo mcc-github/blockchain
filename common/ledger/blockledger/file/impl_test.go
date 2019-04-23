@@ -16,15 +16,16 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	cl "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-var genesisBlock = cb.NewBlock(0, nil)
+var genesisBlock = protoutil.NewBlock(0, nil)
 
 func init() {
 	flogging.ActivateSpec("common.ledger.blockledger.file=DEBUG")
@@ -131,7 +132,7 @@ func TestInitialization(t *testing.T) {
 
 	block := blockledger.GetBlock(fl, 0)
 	assert.NotNil(t, block, "Error retrieving genesis block")
-	assert.Equal(t, genesisBlock.Header.Hash(), block.Header.Hash(), "Block hashes did no match")
+	assert.Equal(t, protoutil.BlockHeaderHash(genesisBlock.Header), protoutil.BlockHeaderHash(block.Header), "Block hashes did no match")
 }
 
 func TestReinitialization(t *testing.T) {
@@ -146,7 +147,7 @@ func TestReinitialization(t *testing.T) {
 
 	fl, err := tev.flf.GetOrCreate(genesisconfig.TestChainID)
 	ledger1, ok := fl.(*FileLedger)
-	assert.NoError(t, err, "Expected to sucessfully get test chain")
+	assert.NoError(t, err, "Expected to successfully get test chain")
 	assert.Equal(t, 1, len(tev.flf.ChainIDs()), "Exptected not new chain to be created")
 	assert.True(t, ok, "Exptected type assertion to succeed")
 
@@ -169,7 +170,7 @@ func TestReinitialization(t *testing.T) {
 
 	block := blockledger.GetBlock(fl, 1)
 	assert.NotNil(t, block, "Error retrieving block 1")
-	assert.Equal(t, b1.Header.Hash(), block.Header.Hash(), "Block hashes did no match")
+	assert.Equal(t, protoutil.BlockHeaderHash(b1.Header), protoutil.BlockHeaderHash(block.Header), "Block hashes did no match")
 }
 
 func TestAddition(t *testing.T) {

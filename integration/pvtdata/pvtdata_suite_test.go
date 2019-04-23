@@ -22,10 +22,10 @@ func TestEndToEnd(t *testing.T) {
 }
 
 var components *nwo.Components
+var suiteBase = 31000
 
 var _ = SynchronizedBeforeSuite(func() []byte {
 	components = &nwo.Components{}
-	components.Build()
 
 	payload, err := json.Marshal(components)
 	Expect(err).NotTo(HaveOccurred())
@@ -35,6 +35,10 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	err := json.Unmarshal(payload, &components)
 	Expect(err).NotTo(HaveOccurred())
 })
+
+func StartPort() int {
+	return suiteBase + (GinkgoParallelNode()-1)*100
+}
 
 var _ = SynchronizedAfterSuite(func() {
 }, func() {

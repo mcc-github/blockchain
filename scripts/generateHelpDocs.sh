@@ -31,6 +31,19 @@ for x in "peer chaincode install" "peer chaincode instantiate" "peer chaincode i
 done
 cat docs/wrappers/peer_chaincode_postscript.md >> $DOC
 
+DOC=docs/source/commands/peerlifecycle.md
+cat docs/wrappers/peer_lifecycle_chaincode_preamble.md > $DOC
+
+for x in "peer lifecycle" "peer lifecycle chaincode" "peer lifecycle chaincode package" "peer lifecycle chaincode install" "peer lifecycle chaincode queryinstalled" "peer lifecycle chaincode approveformyorg" "peer lifecycle chaincode queryapprovalstatus" "peer lifecycle chaincode commit" "peer lifecycle chaincode querycommitted"; do
+  echo "" >> $DOC
+  echo "##" $x >> $DOC
+  echo "\`\`\`" >> $DOC
+  .build/bin/${x} --help 1>> $DOC 2>/dev/null
+  echo "\`\`\`" >> $DOC
+  echo "" >> $DOC
+done
+cat docs/wrappers/peer_lifecycle_chaincode_postscript.md >> $DOC
+
 DOC=docs/source/commands/peerchannel.md
 cat docs/wrappers/peer_channel_preamble.md > $DOC
 
@@ -69,6 +82,20 @@ for x in "peer node start" "peer node status"; do
   echo "" >> $DOC
 done
 cat docs/wrappers/peer_node_postscript.md >> $DOC
+
+DOC=${PWD}/docs/source/commands/token.md
+cat docs/wrappers/token_preamble.md > $DOC
+
+for x in "token issue" "token list" "token transfer" "token redeem" "token saveConfig"; do
+ echo "" >> $DOC
+ echo "##" $x >> $DOC
+ echo "\`\`\`" >> $DOC
+ (cd .build/bin && PATH=./:${PATH} ${x} --help 2>> $DOC)
+ echo "\`\`\`" >> $DOC
+ echo "" >> $DOC
+done
+
+cat docs/wrappers/token_postscript.md >> $DOC
 
 DOC=${PWD}/docs/source/commands/configtxgen.md
 cat docs/wrappers/configtxgen_preamble.md > $DOC

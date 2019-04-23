@@ -29,14 +29,11 @@ const confStateleveldb = "stateLeveldb"
 const confHistoryLeveldb = "historyLeveldb"
 const confBookkeeper = "bookkeeper"
 const confConfigHistory = "configHistory"
+const couchdbRedoLogPath = "couchdbRedoLogs"
 const confChains = "chains"
 const confPvtdataStore = "pvtdataStore"
 const confTotalQueryLimit = "ledger.state.totalQueryLimit"
-const confInternalQueryLimit = "ledger.state.couchDBConfig.internalQueryLimit"
 const confEnableHistoryDatabase = "ledger.history.enableHistoryDatabase"
-const confMaxBatchSize = "ledger.state.couchDBConfig.maxBatchUpdateSize"
-const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
-const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
 
 var confCollElgProcMaxDbBatchSize = &conf{"ledger.pvtdataStore.collElgProcMaxDbBatchSize", 5000}
 var confCollElgProcDbBatchesInterval = &conf{"ledger.pvtdataStore.collElgProcDbBatchesInterval", 1000}
@@ -83,6 +80,10 @@ func GetConfigHistoryPath() string {
 	return filepath.Join(GetRootPath(), confConfigHistory)
 }
 
+func GetCouchdbRedologsPath() string {
+	return filepath.Join(GetRootPath(), couchdbRedoLogPath)
+}
+
 
 func GetMaxBlockfileSize() int {
 	return 64 * 1024 * 1024
@@ -96,26 +97,6 @@ func GetTotalQueryLimit() int {
 		totalQueryLimit = 10000
 	}
 	return totalQueryLimit
-}
-
-
-func GetInternalQueryLimit() int {
-	internalQueryLimit := viper.GetInt(confInternalQueryLimit)
-	
-	if !viper.IsSet(confInternalQueryLimit) {
-		internalQueryLimit = 1000
-	}
-	return internalQueryLimit
-}
-
-
-func GetMaxBatchUpdateSize() int {
-	maxBatchUpdateSize := viper.GetInt(confMaxBatchSize)
-	
-	if !viper.IsSet(confMaxBatchSize) {
-		maxBatchUpdateSize = 500
-	}
-	return maxBatchUpdateSize
 }
 
 
@@ -164,26 +145,6 @@ func IsQueryReadsHashingEnabled() bool {
 
 func GetMaxDegreeQueryReadsHashing() uint32 {
 	return 50
-}
-
-
-func IsAutoWarmIndexesEnabled() bool {
-	
-	if viper.IsSet(confAutoWarmIndexes) {
-		return viper.GetBool(confAutoWarmIndexes)
-	}
-	return true
-
-}
-
-
-func GetWarmIndexesAfterNBlocks() int {
-	warmAfterNBlocks := viper.GetInt(confWarmIndexesAfterNBlocks)
-	
-	if !viper.IsSet(confWarmIndexesAfterNBlocks) {
-		warmAfterNBlocks = 1
-	}
-	return warmAfterNBlocks
 }
 
 type conf struct {

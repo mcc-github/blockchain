@@ -14,7 +14,7 @@ import (
 	mockchannelconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -25,9 +25,9 @@ func init() {
 
 func makeEnvelope() *cb.Envelope {
 	return &cb.Envelope{
-		Payload: utils.MarshalOrPanic(&cb.Payload{
+		Payload: protoutil.MarshalOrPanic(&cb.Payload{
 			Header: &cb.Header{
-				SignatureHeader: utils.MarshalOrPanic(&cb.SignatureHeader{}),
+				SignatureHeader: protoutil.MarshalOrPanic(&cb.SignatureHeader{}),
 			},
 		}),
 	}

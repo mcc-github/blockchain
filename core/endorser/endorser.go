@@ -14,7 +14,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/util"
@@ -23,10 +22,11 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/validation"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/transientstore"
-	putils "github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -40,7 +40,7 @@ type privateDataDistributor func(channel string, txID string, privateData *trans
 
 
 type Support interface {
-	crypto.SignerSupport
+	identity.SignerSerializer
 	
 	
 	IsSysCCAndNotInvokableExternal(name string) bool
@@ -62,13 +62,13 @@ type Support interface {
 	IsSysCC(name string) bool
 
 	
-	Execute(txParams *ccprovider.TransactionParams, cid, name, version, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error)
+	Execute(txParams *ccprovider.TransactionParams, cid, name, txid string, idBytes []byte, initRequired bool, signedProp *pb.SignedProposal, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error)
 
 	
 	ExecuteLegacyInit(txParams *ccprovider.TransactionParams, cid, name, version, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, spec *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error)
 
 	
-	GetChaincodeDefinition(chaincodeID string, txsim ledger.QueryExecutor) (ccprovider.ChaincodeDefinition, error)
+	GetChaincodeDefinition(channelID, chaincodeID string, txsim ledger.QueryExecutor) (ccprovider.ChaincodeDefinition, error)
 
 	
 	
@@ -133,7 +133,7 @@ func NewEndorserServer(privDist privateDataDistributor, s Support, pr *platforms
 }
 
 
-func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, version string, input *pb.ChaincodeInput, cid *pb.ChaincodeID) (*pb.Response, *pb.ChaincodeEvent, error) {
+func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, idBytes []byte, requiresInit bool, input *pb.ChaincodeInput, cid *pb.ChaincodeID) (*pb.Response, *pb.ChaincodeEvent, error) {
 	endorserLogger.Infof("[%s][%s] Entry chaincode: %s", txParams.ChannelID, shorttxid(txParams.TxID), cid)
 	defer func(start time.Time) {
 		logger := endorserLogger.WithOptions(zap.AddCallerSkip(1))
@@ -146,7 +146,7 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, version
 	var ccevent *pb.ChaincodeEvent
 
 	
-	res, ccevent, err = e.s.Execute(txParams, txParams.ChannelID, cid.Name, version, txParams.TxID, txParams.SignedProp, txParams.Proposal, input)
+	res, ccevent, err = e.s.Execute(txParams, txParams.ChannelID, cid.Name, txParams.TxID, idBytes, requiresInit, txParams.SignedProp, txParams.Proposal, input)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,7 +167,12 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, version
 	
 	
 	if cid.Name == "lscc" && len(input.Args) >= 3 && (string(input.Args[0]) == "deploy" || string(input.Args[0]) == "upgrade") {
-		userCDS, err := putils.GetChaincodeDeploymentSpec(input.Args[2], e.PlatformRegistry)
+		userCDS, err := protoutil.GetChaincodeDeploymentSpec(input.Args[2])
+		if err != nil {
+			return nil, nil, err
+		}
+
+		err = e.PlatformRegistry.ValidateDeploymentSpec(userCDS.ChaincodeSpec.Type.String(), userCDS.CodePackage)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -219,27 +224,33 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid 
 	
 	
 	
-	cis, err := putils.GetChaincodeInvocationSpec(txParams.Proposal)
+	cis, err := protoutil.GetChaincodeInvocationSpec(txParams.Proposal)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
 	var cdLedger ccprovider.ChaincodeDefinition
-	var version string
 
+	
+	
+	
+	
+	
+	
+	var idBytes []byte
+	requiresInit := false
 	if !e.s.IsSysCC(cid.Name) {
-		cdLedger, err = e.s.GetChaincodeDefinition(cid.Name, txParams.TXSimulator)
+		cdLedger, err = e.s.GetChaincodeDefinition(txParams.ChannelID, cid.Name, txParams.TXSimulator)
 		if err != nil {
-			return nil, nil, nil, nil, errors.WithMessage(err, fmt.Sprintf("make sure the chaincode %s has been successfully instantiated and try again", cid.Name))
+			return nil, nil, nil, nil, errors.WithMessagef(err, "make sure the chaincode %s has been successfully instantiated and try again", cid.Name)
 		}
-		version = cdLedger.CCVersion()
+		idBytes = cdLedger.Hash()
 
-		err = e.s.CheckInstantiationPolicy(cid.Name, version, cdLedger)
+		err = e.s.CheckInstantiationPolicy(cid.Name, cdLedger.CCVersion(), cdLedger)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
-	} else {
-		version = util.GetSysCCVersion()
+		requiresInit = cdLedger.RequiresInit()
 	}
 
 	
@@ -247,7 +258,7 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid 
 	var pubSimResBytes []byte
 	var res *pb.Response
 	var ccevent *pb.ChaincodeEvent
-	res, ccevent, err = e.callChaincode(txParams, version, cis.ChaincodeSpec.Input, cid)
+	res, ccevent, err = e.callChaincode(txParams, idBytes, requiresInit, cis.ChaincodeSpec.Input, cid)
 	if err != nil {
 		endorserLogger.Errorf("[%s][%s] failed to invoke chaincode %s, error: %+v", txParams.ChannelID, shorttxid(txParams.TxID), cid, err)
 		return nil, nil, nil, nil, err
@@ -317,7 +328,7 @@ func (e *Endorser) endorseProposal(_ context.Context, chainID string, txid strin
 	var err error
 	var eventBytes []byte
 	if event != nil {
-		eventBytes, err = putils.GetBytesChaincodeEvent(event)
+		eventBytes, err = protoutil.GetBytesChaincodeEvent(event)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to marshal event bytes")
 		}
@@ -359,13 +370,13 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, e
 		return vr, err
 	}
 
-	chdr, err := putils.UnmarshalChannelHeader(hdr.ChannelHeader)
+	chdr, err := protoutil.UnmarshalChannelHeader(hdr.ChannelHeader)
 	if err != nil {
 		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
 		return vr, err
 	}
 
-	shdr, err := putils.GetSignatureHeader(hdr.SignatureHeader)
+	shdr, err := protoutil.GetSignatureHeader(hdr.SignatureHeader)
 	if err != nil {
 		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
 		return vr, err
@@ -509,12 +520,12 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 			endorserLogger.Errorf("[%s][%s] simulateProposal() resulted in chaincode %s response status %d for txid: %s", chainID, shorttxid(txid), hdrExt.ChaincodeId, res.Status, txid)
 			var cceventBytes []byte
 			if ccevent != nil {
-				cceventBytes, err = putils.GetBytesChaincodeEvent(ccevent)
+				cceventBytes, err = protoutil.GetBytesChaincodeEvent(ccevent)
 				if err != nil {
 					return nil, errors.Wrap(err, "failed to marshal event bytes")
 				}
 			}
-			pResp, err := putils.CreateProposalResponseFailure(prop.Header, prop.Payload, res, simulationResult, cceventBytes, hdrExt.ChaincodeId, hdrExt.PayloadVisibility)
+			pResp, err := protoutil.CreateProposalResponseFailure(prop.Header, prop.Payload, res, simulationResult, cceventBytes, hdrExt.ChaincodeId, hdrExt.PayloadVisibility)
 			if err != nil {
 				return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
 			}

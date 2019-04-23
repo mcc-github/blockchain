@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence"
+	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 )
 
 type PackageParser struct {

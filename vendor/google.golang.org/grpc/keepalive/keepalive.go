@@ -17,6 +17,7 @@ import (
 type ClientParameters struct {
 	
 	
+	
 	Time time.Duration 
 	
 	
@@ -44,6 +45,7 @@ type ServerParameters struct {
 	
 	
 	MaxConnectionAgeGrace time.Duration 
+	
 	
 	
 	Time time.Duration 

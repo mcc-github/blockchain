@@ -8,6 +8,7 @@ package identity
 
 import (
 	"github.com/mcc-github/blockchain/msp"
+	"github.com/mcc-github/blockchain/protos/token"
 )
 
 
@@ -35,4 +36,19 @@ type Deserializer interface {
 	
 	
 	DeserializeIdentity(serializedIdentity []byte) (msp.Identity, error)
+}
+
+type Identity interface {
+	msp.Identity
+}
+
+
+
+type TokenOwnerValidator interface {
+	
+	Validate(owner *token.TokenOwner) error
+}
+
+type TokenOwnerValidatorManager interface {
+	Get(channel string) (TokenOwnerValidator, error)
 }

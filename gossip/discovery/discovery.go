@@ -10,13 +10,14 @@ import (
 	"fmt"
 
 	"github.com/mcc-github/blockchain/gossip/common"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
 
 
 type CryptoService interface {
 	
-	ValidateAliveMsg(message *proto.SignedGossipMessage) bool
+	ValidateAliveMsg(message *protoext.SignedGossipMessage) bool
 
 	
 	SignMessage(m *proto.GossipMessage, internalEndpoint string) *proto.Envelope
@@ -24,12 +25,12 @@ type CryptoService interface {
 
 
 
-type EnvelopeFilter func(message *proto.SignedGossipMessage) *proto.Envelope
+type EnvelopeFilter func(message *protoext.SignedGossipMessage) *proto.Envelope
 
 
 
 
-type Sieve func(message *proto.SignedGossipMessage) bool
+type Sieve func(message *protoext.SignedGossipMessage) bool
 
 
 
@@ -45,17 +46,17 @@ type DisclosurePolicy func(remotePeer *NetworkMember) (Sieve, EnvelopeFilter)
 
 type CommService interface {
 	
-	Gossip(msg *proto.SignedGossipMessage)
+	Gossip(msg *protoext.SignedGossipMessage)
 
 	
 	
-	SendToPeer(peer *NetworkMember, msg *proto.SignedGossipMessage)
+	SendToPeer(peer *NetworkMember, msg *protoext.SignedGossipMessage)
 
 	
 	Ping(peer *NetworkMember) bool
 
 	
-	Accept() <-chan proto.ReceivedMessage
+	Accept() <-chan protoext.ReceivedMessage
 
 	
 	PresumedDead() <-chan common.PKIidType
@@ -65,7 +66,7 @@ type CommService interface {
 
 	
 	
-	Forward(msg proto.ReceivedMessage)
+	Forward(msg protoext.ReceivedMessage)
 }
 
 

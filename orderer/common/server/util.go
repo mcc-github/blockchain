@@ -13,9 +13,9 @@ import (
 
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	"github.com/mcc-github/blockchain/common/ledger/blockledger/file"
-	"github.com/mcc-github/blockchain/common/ledger/blockledger/json"
-	"github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
+	fileledger "github.com/mcc-github/blockchain/common/ledger/blockledger/file"
+	jsonledger "github.com/mcc-github/blockchain/common/ledger/blockledger/json"
+	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
 	config "github.com/mcc-github/blockchain/orderer/common/localconfig"
 )
 

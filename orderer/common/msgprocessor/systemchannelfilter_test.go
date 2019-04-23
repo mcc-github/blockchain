@@ -12,15 +12,14 @@ import (
 
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
-	"github.com/mcc-github/blockchain/common/crypto"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	mockconfigtx "github.com/mcc-github/blockchain/common/mocks/configtx"
-	mockcrypto "github.com/mcc-github/blockchain/common/mocks/crypto"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
+	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
+	"github.com/mcc-github/blockchain/orderer/common/msgprocessor/mocks"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,17 +36,17 @@ func init() {
 	}
 }
 
-func mockCrypto() crypto.LocalSigner {
-	return mockcrypto.FakeLocalSigner
+func mockCrypto() *mocks.SignerSerializer {
+	return &mocks.SignerSerializer{}
 }
 
 func makeConfigTxFromConfigUpdateTx(configUpdateTx *cb.Envelope) *cb.Envelope {
 	confUpdate := configtx.UnmarshalConfigUpdateOrPanic(
 		configtx.UnmarshalConfigUpdateEnvelopeOrPanic(
-			utils.UnmarshalPayloadOrPanic(configUpdateTx.Payload).Data,
+			protoutil.UnmarshalPayloadOrPanic(configUpdateTx.Payload).Data,
 		).ConfigUpdate,
 	)
-	res, err := utils.CreateSignedEnvelope(cb.HeaderType_CONFIG, confUpdate.ChannelId, nil, &cb.ConfigEnvelope{
+	res, err := protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG, confUpdate.ChannelId, nil, &cb.ConfigEnvelope{
 		Config:     validConfig,
 		LastUpdate: configUpdateTx,
 	}, 0, 0)
@@ -58,7 +57,7 @@ func makeConfigTxFromConfigUpdateTx(configUpdateTx *cb.Envelope) *cb.Envelope {
 }
 
 func wrapConfigTx(env *cb.Envelope) *cb.Envelope {
-	result, err := utils.CreateSignedEnvelope(cb.HeaderType_ORDERER_TRANSACTION, "foo", mockCrypto(), env, msgVersion, epoch)
+	result, err := protoutil.CreateSignedEnvelope(cb.HeaderType_ORDERER_TRANSACTION, "foo", mockCrypto(), env, msgVersion, epoch)
 	if err != nil {
 		panic(err)
 	}
@@ -207,7 +206,7 @@ func TestBadProposal(t *testing.T) {
 			"BadConfigTx",
 			&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(
+					ChannelHeader: protoutil.MarshalOrPanic(
 						&cb.ChannelHeader{
 							Type: int32(cb.HeaderType_ORDERER_TRANSACTION),
 						},
@@ -221,13 +220,13 @@ func TestBadProposal(t *testing.T) {
 			"BadConfigTxPayload",
 			&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(
+					ChannelHeader: protoutil.MarshalOrPanic(
 						&cb.ChannelHeader{
 							Type: int32(cb.HeaderType_ORDERER_TRANSACTION),
 						},
 					),
 				},
-				Data: utils.MarshalOrPanic(
+				Data: protoutil.MarshalOrPanic(
 					&cb.Envelope{
 						Payload: []byte("bad payload"),
 					},
@@ -239,15 +238,15 @@ func TestBadProposal(t *testing.T) {
 			"MissingConfigTxChannelHeader",
 			&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(
+					ChannelHeader: protoutil.MarshalOrPanic(
 						&cb.ChannelHeader{
 							Type: int32(cb.HeaderType_ORDERER_TRANSACTION),
 						},
 					),
 				},
-				Data: utils.MarshalOrPanic(
+				Data: protoutil.MarshalOrPanic(
 					&cb.Envelope{
-						Payload: utils.MarshalOrPanic(
+						Payload: protoutil.MarshalOrPanic(
 							&cb.Payload{},
 						),
 					},
@@ -259,15 +258,15 @@ func TestBadProposal(t *testing.T) {
 			"BadConfigTxChannelHeader",
 			&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(
+					ChannelHeader: protoutil.MarshalOrPanic(
 						&cb.ChannelHeader{
 							Type: int32(cb.HeaderType_ORDERER_TRANSACTION),
 						},
 					),
 				},
-				Data: utils.MarshalOrPanic(
+				Data: protoutil.MarshalOrPanic(
 					&cb.Envelope{
-						Payload: utils.MarshalOrPanic(
+						Payload: protoutil.MarshalOrPanic(
 							&cb.Payload{
 								Header: &cb.Header{
 									ChannelHeader: []byte("bad channel header"),
@@ -283,18 +282,18 @@ func TestBadProposal(t *testing.T) {
 			"BadConfigTxChannelHeaderType",
 			&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(
+					ChannelHeader: protoutil.MarshalOrPanic(
 						&cb.ChannelHeader{
 							Type: int32(cb.HeaderType_ORDERER_TRANSACTION),
 						},
 					),
 				},
-				Data: utils.MarshalOrPanic(
+				Data: protoutil.MarshalOrPanic(
 					&cb.Envelope{
-						Payload: utils.MarshalOrPanic(
+						Payload: protoutil.MarshalOrPanic(
 							&cb.Payload{
 								Header: &cb.Header{
-									ChannelHeader: utils.MarshalOrPanic(
+									ChannelHeader: protoutil.MarshalOrPanic(
 										&cb.ChannelHeader{
 											Type: 0xBad,
 										},
@@ -311,18 +310,18 @@ func TestBadProposal(t *testing.T) {
 			"BadConfigEnvelope",
 			&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(
+					ChannelHeader: protoutil.MarshalOrPanic(
 						&cb.ChannelHeader{
 							Type: int32(cb.HeaderType_ORDERER_TRANSACTION),
 						},
 					),
 				},
-				Data: utils.MarshalOrPanic(
+				Data: protoutil.MarshalOrPanic(
 					&cb.Envelope{
-						Payload: utils.MarshalOrPanic(
+						Payload: protoutil.MarshalOrPanic(
 							&cb.Payload{
 								Header: &cb.Header{
-									ChannelHeader: utils.MarshalOrPanic(
+									ChannelHeader: protoutil.MarshalOrPanic(
 										&cb.ChannelHeader{
 											Type: int32(cb.HeaderType_CONFIG),
 										},
@@ -340,24 +339,24 @@ func TestBadProposal(t *testing.T) {
 			"MissingConfigEnvelopeLastUpdate",
 			&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(
+					ChannelHeader: protoutil.MarshalOrPanic(
 						&cb.ChannelHeader{
 							Type: int32(cb.HeaderType_ORDERER_TRANSACTION),
 						},
 					),
 				},
-				Data: utils.MarshalOrPanic(
+				Data: protoutil.MarshalOrPanic(
 					&cb.Envelope{
-						Payload: utils.MarshalOrPanic(
+						Payload: protoutil.MarshalOrPanic(
 							&cb.Payload{
 								Header: &cb.Header{
-									ChannelHeader: utils.MarshalOrPanic(
+									ChannelHeader: protoutil.MarshalOrPanic(
 										&cb.ChannelHeader{
 											Type: int32(cb.HeaderType_CONFIG),
 										},
 									),
 								},
-								Data: utils.MarshalOrPanic(
+								Data: protoutil.MarshalOrPanic(
 									&cb.ConfigEnvelope{},
 								),
 							},
@@ -369,7 +368,7 @@ func TestBadProposal(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := sysFilter.Apply(&cb.Envelope{Payload: utils.MarshalOrPanic(tc.payload)})
+			err := sysFilter.Apply(&cb.Envelope{Payload: protoutil.MarshalOrPanic(tc.payload)})
 			assert.NotNil(t, err)
 			assert.Regexp(t, tc.regexp, err.Error())
 		})

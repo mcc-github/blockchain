@@ -85,11 +85,11 @@ func (pc *ProverPeerClientImpl) Certificate() *tls.Certificate {
 
 
 
-func (prover *ProverPeer) RequestImport(tokensToIssue []*token.TokenToIssue, signingIdentity tk.SigningIdentity) ([]byte, error) {
-	ir := &token.ImportRequest{
+func (prover *ProverPeer) RequestIssue(tokensToIssue []*token.Token, signingIdentity tk.SigningIdentity) ([]byte, error) {
+	ir := &token.IssueRequest{
 		TokensToIssue: tokensToIssue,
 	}
-	payload := &token.Command_ImportRequest{ImportRequest: ir}
+	payload := &token.Command_IssueRequest{IssueRequest: ir}
 
 	sc, err := prover.CreateSignedCommand(payload, signingIdentity)
 	if err != nil {
@@ -104,10 +104,7 @@ func (prover *ProverPeer) RequestImport(tokensToIssue []*token.TokenToIssue, sig
 
 
 
-func (prover *ProverPeer) RequestTransfer(
-	tokenIDs [][]byte,
-	shares []*token.RecipientTransferShare,
-	signingIdentity tk.SigningIdentity) ([]byte, error) {
+func (prover *ProverPeer) RequestTransfer(tokenIDs []*token.TokenId, shares []*token.RecipientShare, signingIdentity tk.SigningIdentity) ([]byte, error) {
 
 	tr := &token.TransferRequest{
 		Shares:   shares,
@@ -124,7 +121,61 @@ func (prover *ProverPeer) RequestTransfer(
 }
 
 
+
+
+
+func (prover *ProverPeer) RequestRedeem(tokenIDs []*token.TokenId, quantity string, signingIdentity tk.SigningIdentity) ([]byte, error) {
+	rr := &token.RedeemRequest{
+		Quantity: quantity,
+		TokenIds: tokenIDs,
+	}
+	payload := &token.Command_RedeemRequest{RedeemRequest: rr}
+
+	sc, err := prover.CreateSignedCommand(payload, signingIdentity)
+	if err != nil {
+		return nil, err
+	}
+
+	return prover.SendCommand(context.Background(), sc)
+}
+
+
+
+func (prover *ProverPeer) ListTokens(signingIdentity tk.SigningIdentity) ([]*token.UnspentToken, error) {
+	payload := &token.Command_ListRequest{ListRequest: &token.ListRequest{}}
+	sc, err := prover.CreateSignedCommand(payload, signingIdentity)
+	if err != nil {
+		return nil, err
+	}
+
+	commandResp, err := prover.processCommand(context.Background(), sc)
+	if err != nil {
+		return nil, err
+	}
+
+	if commandResp.GetUnspentTokens() == nil {
+		return nil, errors.New("no UnspentTokens in command response")
+	}
+	return commandResp.GetUnspentTokens().GetTokens(), nil
+}
+
+
+
 func (prover *ProverPeer) SendCommand(ctx context.Context, sc *token.SignedCommand) ([]byte, error) {
+	commandResp, err := prover.processCommand(ctx, sc)
+	if err != nil {
+		return nil, err
+	}
+
+	txBytes, err := proto.Marshal(commandResp.GetTokenTransaction())
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to marshal TokenTransaction")
+	}
+	return txBytes, nil
+}
+
+
+func (prover *ProverPeer) processCommand(ctx context.Context, sc *token.SignedCommand) (*token.CommandResponse, error) {
 	conn, proverClient, err := prover.ProverPeerClient.CreateProverClient()
 	if conn != nil {
 		defer conn.Close()
@@ -146,11 +197,7 @@ func (prover *ProverPeer) SendCommand(ctx context.Context, sc *token.SignedComma
 		return nil, errors.Errorf("error from prover: %s", commandResp.GetErr().GetMessage())
 	}
 
-	txBytes, err := proto.Marshal(commandResp.GetTokenTransaction())
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to marshal TokenTransaction")
-	}
-	return txBytes, nil
+	return commandResp, nil
 }
 
 func (prover *ProverPeer) CreateSignedCommand(payload interface{}, signingIdentity tk.SigningIdentity) (*token.SignedCommand, error) {
@@ -208,9 +255,13 @@ func (prover *ProverPeer) CreateSignedCommand(payload interface{}, signingIdenti
 
 func commandFromPayload(payload interface{}) (*token.Command, error) {
 	switch t := payload.(type) {
-	case *token.Command_ImportRequest:
+	case *token.Command_IssueRequest:
+		return &token.Command{Payload: t}, nil
+	case *token.Command_RedeemRequest:
 		return &token.Command{Payload: t}, nil
 	case *token.Command_TransferRequest:
+		return &token.Command{Payload: t}, nil
+	case *token.Command_ListRequest:
 		return &token.Command{Payload: t}, nil
 	default:
 		return nil, errors.Errorf("command type not recognized: %T", t)

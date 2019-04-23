@@ -10,6 +10,8 @@ import (
 	"math/rand"
 	"sort"
 	"time"
+
+	"github.com/mcc-github/blockchain/gossip/protoext"
 )
 
 
@@ -98,7 +100,7 @@ func ExcludeByHost(reject func(host string) bool) ExclusionFilter {
 		var internalEndpoint string
 		se := p.AliveMessage.GetSecretEnvelope()
 		if se != nil {
-			internalEndpoint = se.InternalEndpoint()
+			internalEndpoint = protoext.InternalEndpoint(se)
 		}
 		return reject(endpoint) || reject(internalEndpoint)
 	})

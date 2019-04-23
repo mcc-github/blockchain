@@ -26,7 +26,7 @@ var sysccLogger = flogging.MustGetLogger("sccapi")
 
 type Registrar interface {
 	
-	Register(ccid *ccintf.CCID, cc shim.Chaincode) error
+	Register(ccid ccintf.CCID, cc shim.Chaincode) error
 }
 
 
@@ -112,10 +112,7 @@ func (p *Provider) registerSysCC(syscc SelfDescribingSysCC) (bool, error) {
 	
 	version := util.GetSysCCVersion()
 
-	ccid := &ccintf.CCID{
-		Name:    syscc.Name(),
-		Version: version,
-	}
+	ccid := ccintf.CCID(syscc.Name() + ":" + version)
 	err := p.Registrar.Register(ccid, syscc.Chaincode())
 	if err != nil {
 		
@@ -204,8 +201,11 @@ func deDeploySysCC(chainID string, ccprov ccprovider.ChaincodeProvider, syscc Se
 }
 
 func isWhitelisted(syscc SelfDescribingSysCC) bool {
-	chaincodes := viper.GetStringMapString("chaincode.system")
-	val, ok := chaincodes[syscc.Name()]
-	enabled := val == "enable" || val == "true" || val == "yes"
-	return ok && enabled
+	key := "chaincode.system." + syscc.Name()
+	if !viper.IsSet(key) {
+		return false
+	}
+
+	val := viper.GetString(key)
+	return val == "enable" || val == "true" || val == "yes"
 }

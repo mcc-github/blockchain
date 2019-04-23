@@ -31,9 +31,9 @@ type queryHelper struct {
 	doneInvoked       bool
 }
 
-func newQueryHelper(txmgr *LockBasedTxMgr, rwsetBuilder *rwsetutil.RWSetBuilder) *queryHelper {
+func newQueryHelper(txmgr *LockBasedTxMgr, rwsetBuilder *rwsetutil.RWSetBuilder, performCollCheck bool) *queryHelper {
 	helper := &queryHelper{txmgr: txmgr, rwsetBuilder: rwsetBuilder}
-	validator := newCollNameValidator(txmgr.ledgerid, txmgr.ccInfoProvider, &lockBasedQueryExecutor{helper: helper})
+	validator := newCollNameValidator(txmgr.ledgerid, txmgr.ccInfoProvider, &lockBasedQueryExecutor{helper: helper}, !performCollCheck)
 	helper.collNameValidator = validator
 	return helper
 }
@@ -145,7 +145,7 @@ func (h *queryHelper) getPrivateData(ns, coll, key string) ([]byte, error) {
 	}
 	if !version.AreSame(hashVersion, ver) {
 		return nil, &txmgr.ErrPvtdataNotAvailable{Msg: fmt.Sprintf(
-			"private data matching public hash version is not available. Public hash version = %#v, Private data version = %#v",
+			"private data matching public hash version is not available. Public hash version = %s, Private data version = %s",
 			hashVersion, ver)}
 	}
 	if h.rwsetBuilder != nil {
@@ -162,9 +162,7 @@ func (h *queryHelper) getPrivateDataValueHash(ns, coll, key string) (valueHash, 
 		return nil, nil, err
 	}
 	var versionedValue *statedb.VersionedValue
-
-	keyHash := util.ComputeStringHash(key)
-	if versionedValue, err = h.txmgr.db.GetValueHash(ns, coll, keyHash); err != nil {
+	if versionedValue, err = h.txmgr.db.GetPrivateDataHash(ns, coll, key); err != nil {
 		return nil, nil, err
 	}
 	valHash, metadata, ver := decomposeVersionedValue(versionedValue)
@@ -302,10 +300,10 @@ func (h *queryHelper) addRangeQueryInfo() {
 				return
 			}
 			if results != nil {
-				itr.rangeQueryInfo.SetRawReads(results)
+				rwsetutil.SetRawReads(itr.rangeQueryInfo, results)
 			}
 			if hash != nil {
-				itr.rangeQueryInfo.SetMerkelSummary(hash)
+				rwsetutil.SetMerkelSummary(itr.rangeQueryInfo, hash)
 			}
 			h.rwsetBuilder.AddToRangeQuerySet(itr.ns, itr.rangeQueryInfo)
 		}

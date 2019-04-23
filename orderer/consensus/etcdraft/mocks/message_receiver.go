@@ -11,11 +11,11 @@ type MessageReceiver struct {
 }
 
 
-func (_m *MessageReceiver) Step(req *orderer.StepRequest, sender uint64) error {
+func (_m *MessageReceiver) Consensus(req *orderer.ConsensusRequest, sender uint64) error {
 	ret := _m.Called(req, sender)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*orderer.StepRequest, uint64) error); ok {
+	if rf, ok := ret.Get(0).(func(*orderer.ConsensusRequest, uint64) error); ok {
 		r0 = rf(req, sender)
 	} else {
 		r0 = ret.Error(0)

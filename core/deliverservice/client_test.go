@@ -21,7 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/core/deliverservice/mocks"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
@@ -552,8 +552,8 @@ func testCloseWhileSleep(t *testing.T, bdc blocksDelivererConsumer) {
 type signerMock struct {
 }
 
-func (s *signerMock) NewSignatureHeader() (*common.SignatureHeader, error) {
-	return &common.SignatureHeader{}, nil
+func (s *signerMock) Serialize() ([]byte, error) {
+	return []byte("creator"), nil
 }
 
 func (s *signerMock) Sign(message []byte) ([]byte, error) {
@@ -577,7 +577,7 @@ func TestProductionUsage(t *testing.T) {
 		return orderer.NewAtomicBroadcastClient(cc)
 	}
 	onConnect := func(bd blocksprovider.BlocksDeliverer) error {
-		env, err := utils.CreateSignedEnvelope(common.HeaderType_CONFIG_UPDATE,
+		env, err := protoutil.CreateSignedEnvelope(common.HeaderType_CONFIG_UPDATE,
 			"TEST",
 			&signerMock{}, newTestSeekInfo(), 0, 0)
 		assert.NoError(t, err)
@@ -642,7 +642,7 @@ func TestDisconnect(t *testing.T) {
 		stopChan <- struct{}{}
 	}()
 	waitForConnectionToSomeOSN()
-	cl.Disconnect(false)
+	cl.Disconnect()
 
 	i := 0
 	os1Connected := false
@@ -662,7 +662,7 @@ func TestDisconnect(t *testing.T) {
 		if i == 100 {
 			assert.Fail(t, "Didn't switch to other instance after many attempts")
 		}
-		cl.Disconnect(false)
+		cl.Disconnect()
 		time.Sleep(time.Millisecond * 500)
 	}
 	cl.Close()
@@ -670,94 +670,6 @@ func TestDisconnect(t *testing.T) {
 	case <-stopChan:
 	case <-time.After(time.Second * 20):
 		assert.Fail(t, "Didn't stop within a timely manner")
-	}
-}
-
-func TestDisconnectAndDisableEndpoint(t *testing.T) {
-	
-	
-	
-	
-	
-	
-	
-
-	defer ensureNoGoroutineLeak(t)()
-	os1 := mocks.NewOrderer(5613, t)
-	os1.SetNextExpectedSeek(5)
-	os2 := mocks.NewOrderer(5614, t)
-	os2.SetNextExpectedSeek(5)
-
-	defer os1.Shutdown()
-	defer os2.Shutdown()
-
-	orgEndpointDisableInterval := comm.EndpointDisableInterval
-	comm.EndpointDisableInterval = time.Millisecond * 1500
-	defer func() { comm.EndpointDisableInterval = orgEndpointDisableInterval }()
-
-	connFact := func(endpoint string) (*grpc.ClientConn, error) {
-		return grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
-	}
-	prod := comm.NewConnectionProducer(connFact, []string{"localhost:5613", "localhost:5614"})
-	clFact := func(cc *grpc.ClientConn) orderer.AtomicBroadcastClient {
-		return orderer.NewAtomicBroadcastClient(cc)
-	}
-	onConnect := func(bd blocksprovider.BlocksDeliverer) error {
-		return nil
-	}
-
-	retryPol := func(attemptNum int, elapsedTime time.Duration) (time.Duration, bool) {
-		return time.Millisecond * 10, attemptNum < 10
-	}
-
-	cl := NewBroadcastClient(prod, clFact, onConnect, retryPol)
-	defer cl.Close()
-
-	
-	go func() {
-		cl.Recv()
-	}()
-
-	assert.True(t, waitForWithTimeout(time.Millisecond*100, func() bool {
-		return os1.ConnCount() == 1 || os2.ConnCount() == 1
-	}), "Didn't get connection to orderer")
-
-	connectedToOS1 := os1.ConnCount() == 1
-
-	
-	cl.Disconnect(true)
-
-	
-	assert.True(t, waitForWithTimeout(time.Millisecond*100, func() bool {
-		if connectedToOS1 {
-			return os1.ConnCount() == 0 && os2.ConnCount() == 1
-		}
-		return os2.ConnCount() == 0 && os1.ConnCount() == 1
-	}), "Didn't disconnect from orderer, or reconnected to a black-listed node")
-
-	
-	cl.Disconnect(true)
-
-	
-	assert.True(t, waitForWithTimeout(time.Millisecond*100, func() bool {
-		return os1.ConnCount() == 1 || os2.ConnCount() == 1
-	}), "Didn't got connection to orderer")
-}
-
-func waitForWithTimeout(timeout time.Duration, f func() bool) bool {
-
-	ctx, cancelation := context.WithTimeout(context.Background(), timeout)
-	defer cancelation()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-time.After(timeout / 10):
-			if f() {
-				return true
-			}
-		}
 	}
 }
 

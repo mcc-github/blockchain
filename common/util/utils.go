@@ -20,9 +20,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"math/big"
-	"reflect"
-	"strings"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/timestamp"
@@ -30,16 +27,6 @@ import (
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/metadata"
 )
-
-type alg struct {
-	hashFun func([]byte) string
-}
-
-const defaultAlg = "sha256"
-
-var availableIDgenAlgs = map[string]alg{
-	defaultAlg: {GenerateIDfromTxSHAHash},
-}
 
 
 func ComputeSHA256(data []byte) (hash []byte) {
@@ -77,13 +64,6 @@ func GenerateBytesUUID() []byte {
 }
 
 
-func GenerateIntUUID() *big.Int {
-	uuid := GenerateBytesUUID()
-	z := big.NewInt(0)
-	return z.SetBytes(uuid)
-}
-
-
 func GenerateUUID() string {
 	uuid := GenerateBytesUUID()
 	return idBytesToStr(uuid)
@@ -97,45 +77,8 @@ func CreateUtcTimestamp() *timestamp.Timestamp {
 	return &(timestamp.Timestamp{Seconds: secs, Nanos: nanos})
 }
 
-
-func GenerateHashFromSignature(path string, args []byte) []byte {
-	return ComputeSHA256(args)
-}
-
-
-func GenerateIDfromTxSHAHash(payload []byte) string {
-	return fmt.Sprintf("%x", ComputeSHA256(payload))
-}
-
-
-func GenerateIDWithAlg(customIDgenAlg string, payload []byte) (string, error) {
-	if customIDgenAlg == "" {
-		customIDgenAlg = defaultAlg
-	}
-	var alg = availableIDgenAlgs[customIDgenAlg]
-	if alg.hashFun != nil {
-		return alg.hashFun(payload), nil
-	}
-	return "", fmt.Errorf("Wrong ID generation algorithm was given: %s", customIDgenAlg)
-}
-
 func idBytesToStr(id []byte) string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:])
-}
-
-
-
-func FindMissingElements(all []string, some []string) (delta []string) {
-all:
-	for _, v1 := range all {
-		for _, v2 := range some {
-			if strings.Compare(v1, v2) == 0 {
-				continue all
-			}
-		}
-		delta = append(delta, v1)
-	}
-	return
 }
 
 
@@ -147,26 +90,11 @@ func ToChaincodeArgs(args ...string) [][]byte {
 	return bargs
 }
 
-
-func ArrayToChaincodeArgs(args []string) [][]byte {
-	bargs := make([][]byte, len(args))
-	for i, arg := range args {
-		bargs[i] = []byte(arg)
-	}
-	return bargs
-}
-
 const testchainid = "testchainid"
-const testorgid = "**TEST_ORGID**"
 
 
 func GetTestChainID() string {
 	return testchainid
-}
-
-
-func GetTestOrgID() string {
-	return testorgid
 }
 
 
@@ -193,60 +121,4 @@ func ConcatenateBytes(data ...[]byte) []byte {
 		last += len(slice)
 	}
 	return result
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-func Flatten(i interface{}) []string {
-	var res []string
-	flatten("", &res, reflect.ValueOf(i))
-	return res
-}
-
-const DELIMITER = "."
-
-func flatten(k string, m *[]string, v reflect.Value) {
-	delimiter := DELIMITER
-	if k == "" {
-		delimiter = ""
-	}
-
-	switch v.Kind() {
-	case reflect.Ptr:
-		if v.IsNil() {
-			*m = append(*m, fmt.Sprintf("%s =", k))
-			return
-		}
-		flatten(k, m, v.Elem())
-	case reflect.Struct:
-		if x, ok := v.Interface().(fmt.Stringer); ok {
-			*m = append(*m, fmt.Sprintf("%s = %v", k, x))
-			return
-		}
-
-		for i := 0; i < v.NumField(); i++ {
-			flatten(k+delimiter+v.Type().Field(i).Name, m, v.Field(i))
-		}
-	case reflect.String:
-		
-		*m = append(*m, fmt.Sprintf("%s = \"%s\"", k, v))
-	default:
-		*m = append(*m, fmt.Sprintf("%s = %v", k, v))
-	}
 }

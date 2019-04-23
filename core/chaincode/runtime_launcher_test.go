@@ -14,6 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/fake"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/core/container/ccintf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
@@ -28,6 +29,7 @@ var _ = Describe("RuntimeLauncher", func() {
 		fakeLaunchDuration  *metricsfakes.Histogram
 		fakeLaunchFailures  *metricsfakes.Counter
 		fakeLaunchTimeouts  *metricsfakes.Counter
+		exitedCh            chan int
 
 		ccci *ccprovider.ChaincodeContainerInfo
 
@@ -43,6 +45,11 @@ var _ = Describe("RuntimeLauncher", func() {
 		fakeRuntime.StartStub = func(*ccprovider.ChaincodeContainerInfo, []byte) error {
 			launchState.Notify(nil)
 			return nil
+		}
+		exitedCh = make(chan int)
+		waitExitCh := exitedCh 
+		fakeRuntime.WaitStub = func(*ccprovider.ChaincodeContainerInfo) (int, error) {
+			return <-waitExitCh, nil
 		}
 
 		fakePackageProvider = &mock.PackageProvider{}
@@ -66,6 +73,7 @@ var _ = Describe("RuntimeLauncher", func() {
 			Version:       "chaincode-version",
 			ContainerType: "chaincode-container-type",
 			Type:          "chaincode-type",
+			PackageID:     "chaincode-name:chaincode-version",
 		}
 
 		runtimeLauncher = &chaincode.RuntimeLauncher{
@@ -77,13 +85,17 @@ var _ = Describe("RuntimeLauncher", func() {
 		}
 	})
 
+	AfterEach(func() {
+		close(exitedCh)
+	})
+
 	It("registers the chaincode as launching", func() {
 		err := runtimeLauncher.Launch(ccci)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(fakeRegistry.LaunchingCallCount()).To(Equal(1))
 		cname := fakeRegistry.LaunchingArgsForCall(0)
-		Expect(cname).To(Equal("chaincode-name:chaincode-version"))
+		Expect(cname).To(Equal(ccintf.CCID("chaincode-name:chaincode-version")))
 	})
 
 	It("starts the runtime for the chaincode", func() {
@@ -168,7 +180,35 @@ var _ = Describe("RuntimeLauncher", func() {
 
 			Expect(fakeRegistry.DeregisterCallCount()).To(Equal(1))
 			cname := fakeRegistry.DeregisterArgsForCall(0)
-			Expect(cname).To(Equal("chaincode-name:chaincode-version"))
+			Expect(cname).To(Equal(ccintf.CCID("chaincode-name:chaincode-version")))
+		})
+	})
+
+	Context("when the contaienr terminates before registration", func() {
+		BeforeEach(func() {
+			fakeRuntime.StartReturns(nil)
+			fakeRuntime.WaitReturns(-99, nil)
+		})
+
+		It("returns an error", func() {
+			err := runtimeLauncher.Launch(ccci)
+			Expect(err).To(MatchError("chaincode registration failed: container exited with -99"))
+		})
+
+		It("attempts to stop the runtime", func() {
+			runtimeLauncher.Launch(ccci)
+
+			Expect(fakeRuntime.StopCallCount()).To(Equal(1))
+			ccciArg := fakeRuntime.StopArgsForCall(0)
+			Expect(ccciArg).To(Equal(ccci))
+		})
+
+		It("deregisters the chaincode", func() {
+			runtimeLauncher.Launch(ccci)
+
+			Expect(fakeRegistry.DeregisterCallCount()).To(Equal(1))
+			cname := fakeRegistry.DeregisterArgsForCall(0)
+			Expect(cname).To(Equal(ccintf.CCID("chaincode-name:chaincode-version")))
 		})
 	})
 
@@ -198,7 +238,7 @@ var _ = Describe("RuntimeLauncher", func() {
 
 			Expect(fakeRegistry.DeregisterCallCount()).To(Equal(1))
 			cname := fakeRegistry.DeregisterArgsForCall(0)
-			Expect(cname).To(Equal("chaincode-name:chaincode-version"))
+			Expect(cname).To(Equal(ccintf.CCID("chaincode-name:chaincode-version")))
 		})
 	})
 
@@ -243,7 +283,7 @@ var _ = Describe("RuntimeLauncher", func() {
 
 			Expect(fakeRegistry.DeregisterCallCount()).To(Equal(1))
 			cname := fakeRegistry.DeregisterArgsForCall(0)
-			Expect(cname).To(Equal("chaincode-name:chaincode-version"))
+			Expect(cname).To(Equal(ccintf.CCID("chaincode-name:chaincode-version")))
 		})
 	})
 

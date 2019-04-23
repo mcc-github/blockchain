@@ -11,36 +11,36 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/channelconfig"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/car"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
+	. "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
+	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/internal/car"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/scc/lscc"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
 
 func (vscc *Validator) checkInstantiationPolicy(chainName string, env *common.Envelope, instantiationPolicy []byte, payl *common.Payload) commonerrors.TxValidationError {
 	
-	shdr, err := utils.GetSignatureHeader(payl.Header.SignatureHeader)
+	shdr, err := protoutil.GetSignatureHeader(payl.Header.SignatureHeader)
 	if err != nil {
 		return policyErr(err)
 	}
 
 	
-	sd := []*common.SignedData{{
+	sd := []*protoutil.SignedData{{
 		Data:      env.Payload,
 		Identity:  shdr.Creator,
 		Signature: env.Signature,
@@ -92,7 +92,7 @@ func validateNewCollectionConfigs(newCollectionConfigs []*common.CollectionConfi
 		
 		err := validateSpOrConcat(newCollection.MemberOrgsPolicy.GetSignaturePolicy().Rule)
 		if err != nil {
-			return errors.WithMessage(err, fmt.Sprintf("collection-name: %s -- error in member org policy", collectionName))
+			return errors.WithMessagef(err, "collection-name: %s -- error in member org policy", collectionName)
 		}
 	}
 	return nil
@@ -219,7 +219,7 @@ func (vscc *Validator) validateRWSetAndCollection(
 	cdRWSet *ccprovider.ChaincodeData,
 	lsccArgs [][]byte,
 	lsccFunc string,
-	ac channelconfig.ApplicationCapabilities,
+	ac Capabilities,
 	channelName string,
 ) commonerrors.TxValidationError {
 	
@@ -339,9 +339,9 @@ func (vscc *Validator) ValidateLSCCInvocation(
 	env *common.Envelope,
 	cap *pb.ChaincodeActionPayload,
 	payl *common.Payload,
-	ac channelconfig.ApplicationCapabilities,
+	ac Capabilities,
 ) commonerrors.TxValidationError {
-	cpp, err := utils.GetChaincodeProposalPayload(cap.ChaincodeProposalPayload)
+	cpp, err := protoutil.GetChaincodeProposalPayload(cap.ChaincodeProposalPayload)
 	if err != nil {
 		logger.Errorf("VSCC error: GetChaincodeProposalPayload failed, err %s", err)
 		return policyErr(err)
@@ -379,7 +379,12 @@ func (vscc *Validator) ValidateLSCCInvocation(
 			return policyErr(fmt.Errorf("Wrong number of arguments for invocation lscc(%s): received %d", lsccFunc, len(lsccArgs)))
 		}
 
-		cdsArgs, err := utils.GetChaincodeDeploymentSpec(lsccArgs[1], platforms.NewRegistry(
+		cdsArgs, err := protoutil.GetChaincodeDeploymentSpec(lsccArgs[1])
+		if err != nil {
+			return policyErr(fmt.Errorf("GetChaincodeDeploymentSpec error %s", err))
+		}
+
+		err = platforms.NewRegistry(
 			
 			
 			
@@ -388,10 +393,9 @@ func (vscc *Validator) ValidateLSCCInvocation(
 			&node.Platform{},
 			&java.Platform{},
 			&car.Platform{},
-		))
-
+		).ValidateDeploymentSpec(cdsArgs.ChaincodeSpec.Type.String(), cdsArgs.CodePackage)
 		if err != nil {
-			return policyErr(fmt.Errorf("GetChaincodeDeploymentSpec error %s", err))
+			return policyErr(fmt.Errorf("failed to validate deployment spec: %s", err))
 		}
 
 		if cdsArgs == nil || cdsArgs.ChaincodeSpec == nil || cdsArgs.ChaincodeSpec.ChaincodeId == nil ||
@@ -400,14 +404,14 @@ func (vscc *Validator) ValidateLSCCInvocation(
 		}
 
 		
-		pRespPayload, err := utils.GetProposalResponsePayload(cap.Action.ProposalResponsePayload)
+		pRespPayload, err := protoutil.GetProposalResponsePayload(cap.Action.ProposalResponsePayload)
 		if err != nil {
 			return policyErr(fmt.Errorf("GetProposalResponsePayload error %s", err))
 		}
 		if pRespPayload.Extension == nil {
 			return policyErr(fmt.Errorf("nil pRespPayload.Extension"))
 		}
-		respPayload, err := utils.GetChaincodeAction(pRespPayload.Extension)
+		respPayload, err := protoutil.GetChaincodeAction(pRespPayload.Extension)
 		if err != nil {
 			return policyErr(fmt.Errorf("GetChaincodeAction error %s", err))
 		}

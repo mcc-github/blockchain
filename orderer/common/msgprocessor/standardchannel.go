@@ -8,11 +8,19 @@ package msgprocessor
 
 import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/policies"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
+
+	"github.com/pkg/errors"
 )
+
+
+
+type signerSerializer interface {
+	identity.SignerSerializer
+}
 
 
 type StandardChannelSupport interface {
@@ -23,7 +31,7 @@ type StandardChannelSupport interface {
 	ChainID() string
 
 	
-	Signer() crypto.LocalSigner
+	Signer() identity.SignerSerializer
 
 	
 	
@@ -98,10 +106,10 @@ func (s *StandardChannel) ProcessConfigUpdateMsg(env *cb.Envelope) (config *cb.E
 
 	configEnvelope, err := s.support.ProposeConfigUpdate(env)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, errors.WithMessagef(err, "error applying config update to existing channel '%s'", s.support.ChainID())
 	}
 
-	config, err = utils.CreateSignedEnvelope(cb.HeaderType_CONFIG, s.support.ChainID(), s.support.Signer(), configEnvelope, msgVersion, epoch)
+	config, err = protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG, s.support.ChainID(), s.support.Signer(), configEnvelope, msgVersion, epoch)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -125,7 +133,7 @@ func (s *StandardChannel) ProcessConfigMsg(env *cb.Envelope) (config *cb.Envelop
 	logger.Debugf("Processing config message for channel %s", s.support.ChainID())
 
 	configEnvelope := &cb.ConfigEnvelope{}
-	_, err = utils.UnmarshalEnvelopeOfType(env, cb.HeaderType_CONFIG, configEnvelope)
+	_, err = protoutil.UnmarshalEnvelopeOfType(env, cb.HeaderType_CONFIG, configEnvelope)
 	if err != nil {
 		return
 	}

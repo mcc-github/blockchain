@@ -237,38 +237,21 @@ func Test_WriteFolderToTarPackageFailure3(t *testing.T) {
 	gw.Close()
 }
 
-func Test_WriteJavaProjectToPackage(t *testing.T) {
-	inputbuf := bytes.NewBuffer(nil)
-	gw := gzip.NewWriter(inputbuf)
-	tw := tar.NewWriter(gw)
-
-	srcPath := filepath.Join("testdata", "sourcefiles")
-	assert.FileExists(t, filepath.Join(srcPath, "src", "Hello.class"))
-
-	err := WriteJavaProjectToPackage(tw, srcPath)
-	assert.NoError(t, err, "Error writing java project to package")
-
-	
-	
-	tw.Close()
-	gw.Close()
-
-	entries := tarContents(t, inputbuf.Bytes())
-	assert.Contains(t, entries, "META-INF/statedb/couchdb/indexes/indexOwner.json")
-	assert.Contains(t, entries, "src/artifact.xml")
-	assert.Contains(t, entries, "src/src/Hello.java")
-	assert.NotContains(t, entries, "src/src/Hello.class")
-
-	err = WriteJavaProjectToPackage(tw, srcPath)
-	assert.Error(t, err, "WriteJavaProjectToPackage was called with closed writer, should have failed")
-}
-
 func Test_WriteBytesToPackage(t *testing.T) {
 	inputbuf := bytes.NewBuffer(nil)
 	tw := tar.NewWriter(inputbuf)
 	defer tw.Close()
 	err := WriteBytesToPackage("foo", []byte("blah"), tw)
 	assert.NoError(t, err, "Error writing bytes to package")
+
+	tr := tar.NewReader(inputbuf)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF { 
+			break
+		}
+		assert.Equal(t, header.Mode, int64(0100644))
+	}
 }
 
 func createTestTar(t *testing.T, srcPath string, excludeDir []string, includeFileTypeMap map[string]bool, excludeFileTypeMap map[string]bool) []byte {

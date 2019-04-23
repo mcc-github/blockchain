@@ -32,10 +32,11 @@ type Block struct {
 
 
 type Transaction struct {
-	IndexInBlock   int
-	ID             string
-	RWSet          *rwsetutil.TxRwSet
-	ValidationCode peer.TxValidationCode
+	IndexInBlock            int
+	ID                      string
+	RWSet                   *rwsetutil.TxRwSet
+	ValidationCode          peer.TxValidationCode
+	ContainsPostOrderWrites bool
 }
 
 
@@ -86,7 +87,14 @@ func (t *Transaction) RetrieveHash(ns string, coll string) []byte {
 }
 
 
-func (u *PubAndHashUpdates) ApplyWriteSet(txRWSet *rwsetutil.TxRwSet, txHeight *version.Height, db privacyenabledstate.DB) error {
+func (u *PubAndHashUpdates) ApplyWriteSet(
+	txRWSet *rwsetutil.TxRwSet,
+	txHeight *version.Height,
+	db privacyenabledstate.DB,
+	containsPostOrderWrites bool,
+) error {
+	u.PubUpdates.ContainsPostOrderWrites =
+		u.PubUpdates.ContainsPostOrderWrites || containsPostOrderWrites
 	txops, err := prepareTxOps(txRWSet, txHeight, u, db)
 	logger.Debugf("txops=%#v", txops)
 	if err != nil {

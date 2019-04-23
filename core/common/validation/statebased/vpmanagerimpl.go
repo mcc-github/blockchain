@@ -7,11 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package statebased
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api/state"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
@@ -233,9 +232,19 @@ func (c *validationContext) waitForValidationResults(kid *ledgerKeyID, blockNum 
 
 
 
+
+
+type PolicyTranslator interface {
+	
+	
+	
+	Translate([]byte) ([]byte, error)
+}
+
 type KeyLevelValidationParameterManagerImpl struct {
-	StateFetcher  validation.StateFetcher
-	validationCtx validationContext
+	StateFetcher     validation.StateFetcher
+	validationCtx    validationContext
+	PolicyTranslator PolicyTranslator
 }
 
 
@@ -313,20 +322,29 @@ func (m *KeyLevelValidationParameterManagerImpl) GetValidationParameterForKey(cc
 	if coll == "" {
 		mdMap, err = state.GetStateMetadata(cc, key)
 		if err != nil {
-			err = errors.WithMessage(err, fmt.Sprintf("could not retrieve metadata for %s:%s", cc, key))
+			err = errors.WithMessagef(err, "could not retrieve metadata for %s:%s", cc, key)
 			logger.Errorf(err.Error())
 			return nil, err
 		}
 	} else {
 		mdMap, err = state.GetPrivateDataMetadataByHash(cc, coll, []byte(key))
 		if err != nil {
-			err = errors.WithMessage(err, fmt.Sprintf("could not retrieve metadata for %s:%s:%x", cc, coll, []byte(key)))
+			err = errors.WithMessagef(err, "could not retrieve metadata for %s:%s:%x", cc, coll, []byte(key))
 			logger.Errorf(err.Error())
 			return nil, err
 		}
 	}
 
-	return mdMap[pb.MetaDataKeys_VALIDATION_PARAMETER.String()], nil
+	policy, err := m.PolicyTranslator.Translate(mdMap[pb.MetaDataKeys_VALIDATION_PARAMETER.String()])
+	if err != nil {
+		if coll == "" {
+			return nil, errors.WithMessagef(err, "could not translate policy for %s:%s", cc, key)
+		} else {
+			return nil, errors.WithMessagef(err, "could not translate policy for %s:%s:%x", cc, coll, []byte(key))
+		}
+	}
+
+	return policy, nil
 }
 
 

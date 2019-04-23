@@ -18,9 +18,8 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
 var logger = flogging.MustGetLogger("common.deliverevents")
@@ -129,8 +128,7 @@ func (s *server) Deliver(srv peer.Deliver_DeliverServer) (err error) {
 
 
 
-func NewDeliverEventsServer(mutualTLS bool, policyCheckerProvider PolicyCheckerProvider, chainManager deliver.ChainManager, metricsProvider metrics.Provider) peer.DeliverServer {
-	timeWindow := viper.GetDuration("peer.authentication.timewindow")
+func NewDeliverEventsServer(timeWindow time.Duration, mutualTLS bool, policyCheckerProvider PolicyCheckerProvider, chainManager deliver.ChainManager, metricsProvider metrics.Provider) peer.DeliverServer {
 	if timeWindow == 0 {
 		defaultTimeWindow := 15 * time.Minute
 		logger.Warningf("`peer.authentication.timewindow` not set; defaulting to %s", defaultTimeWindow)
@@ -170,14 +168,14 @@ func (block *blockEvent) toFilteredBlock() (*peer.FilteredBlock, error) {
 			continue
 		}
 
-		env, err = utils.GetEnvelopeFromBlock(ebytes)
+		env, err = protoutil.GetEnvelopeFromBlock(ebytes)
 		if err != nil {
 			logger.Errorf("error getting tx from block, %s", err)
 			continue
 		}
 
 		
-		payload, err := utils.GetPayload(env)
+		payload, err := protoutil.GetPayload(env)
 		if err != nil {
 			return nil, errors.WithMessage(err, "could not extract payload from envelope")
 		}
@@ -187,7 +185,7 @@ func (block *blockEvent) toFilteredBlock() (*peer.FilteredBlock, error) {
 				txIndex, block.Header.Number)
 			continue
 		}
-		chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+		chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +199,7 @@ func (block *blockEvent) toFilteredBlock() (*peer.FilteredBlock, error) {
 		}
 
 		if filteredTransaction.Type == common.HeaderType_ENDORSER_TRANSACTION {
-			tx, err := utils.GetTransaction(payload.Data)
+			tx, err := protoutil.GetTransaction(payload.Data)
 			if err != nil {
 				return nil, errors.WithMessage(err, "error unmarshal transaction payload for block event")
 			}
@@ -222,7 +220,7 @@ func (block *blockEvent) toFilteredBlock() (*peer.FilteredBlock, error) {
 func (ta transactionActions) toFilteredActions() (*peer.FilteredTransaction_TransactionActions, error) {
 	transactionActions := &peer.FilteredTransactionActions{}
 	for _, action := range ta {
-		chaincodeActionPayload, err := utils.GetChaincodeActionPayload(action.Payload)
+		chaincodeActionPayload, err := protoutil.GetChaincodeActionPayload(action.Payload)
 		if err != nil {
 			return nil, errors.WithMessage(err, "error unmarshal transaction action payload for block event")
 		}
@@ -231,17 +229,17 @@ func (ta transactionActions) toFilteredActions() (*peer.FilteredTransaction_Tran
 			logger.Debugf("chaincode action, the payload action is nil, skipping")
 			continue
 		}
-		propRespPayload, err := utils.GetProposalResponsePayload(chaincodeActionPayload.Action.ProposalResponsePayload)
+		propRespPayload, err := protoutil.GetProposalResponsePayload(chaincodeActionPayload.Action.ProposalResponsePayload)
 		if err != nil {
 			return nil, errors.WithMessage(err, "error unmarshal proposal response payload for block event")
 		}
 
-		caPayload, err := utils.GetChaincodeAction(propRespPayload.Extension)
+		caPayload, err := protoutil.GetChaincodeAction(propRespPayload.Extension)
 		if err != nil {
 			return nil, errors.WithMessage(err, "error unmarshal chaincode action for block event")
 		}
 
-		ccEvent, err := utils.GetChaincodeEvents(caPayload.Events)
+		ccEvent, err := protoutil.GetChaincodeEvents(caPayload.Events)
 		if err != nil {
 			return nil, errors.WithMessage(err, "error unmarshal chaincode event for block event")
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/comm"
 	"github.com/mcc-github/blockchain/gossip/common"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
@@ -39,7 +40,7 @@ type packetMock struct {
 type channelMock struct {
 	accept common.MessageAcceptor
 
-	channel chan proto.ReceivedMessage
+	channel chan protoext.ReceivedMessage
 }
 
 type commMock struct {
@@ -77,7 +78,7 @@ func NewCommMock(id string, members map[string]*socketMock) comm.Comm {
 
 
 func (packet *packetMock) Respond(msg *proto.GossipMessage) {
-	sMsg, _ := msg.NoopSign()
+	sMsg, _ := protoext.NoopSign(msg)
 	packet.src.socket <- &packetMock{
 		src: packet.dst,
 		dst: packet.src,
@@ -97,13 +98,13 @@ func (packet *packetMock) GetSourceEnvelope() *proto.Envelope {
 }
 
 
-func (packet *packetMock) GetGossipMessage() *proto.SignedGossipMessage {
-	return packet.msg.(*proto.SignedGossipMessage)
+func (packet *packetMock) GetGossipMessage() *protoext.SignedGossipMessage {
+	return packet.msg.(*protoext.SignedGossipMessage)
 }
 
 
 
-func (packet *packetMock) GetConnectionInfo() *proto.ConnectionInfo {
+func (packet *packetMock) GetConnectionInfo() *protoext.ConnectionInfo {
 	return nil
 }
 
@@ -140,7 +141,7 @@ func (mock *commMock) GetPKIid() common.PKIidType {
 }
 
 
-func (mock *commMock) Send(msg *proto.SignedGossipMessage, peers ...*comm.RemotePeer) {
+func (mock *commMock) Send(msg *protoext.SignedGossipMessage, peers ...*comm.RemotePeer) {
 	for _, peer := range peers {
 		logger.Debug("Sending message to peer ", peer.Endpoint, "from ", mock.id)
 		mock.members[peer.Endpoint].socket <- &packetMock{
@@ -151,7 +152,7 @@ func (mock *commMock) Send(msg *proto.SignedGossipMessage, peers ...*comm.Remote
 	}
 }
 
-func (mock *commMock) SendWithAck(_ *proto.SignedGossipMessage, _ time.Duration, _ int, _ ...*comm.RemotePeer) comm.AggregatedSendResult {
+func (mock *commMock) SendWithAck(_ *protoext.SignedGossipMessage, _ time.Duration, _ int, _ ...*comm.RemotePeer) comm.AggregatedSendResult {
 	panic("not implemented")
 }
 
@@ -169,8 +170,8 @@ func (mock *commMock) Handshake(peer *comm.RemotePeer) (api.PeerIdentityType, er
 
 
 
-func (mock *commMock) Accept(accept common.MessageAcceptor) <-chan proto.ReceivedMessage {
-	ch := make(chan proto.ReceivedMessage)
+func (mock *commMock) Accept(accept common.MessageAcceptor) <-chan protoext.ReceivedMessage {
+	ch := make(chan protoext.ReceivedMessage)
 	mock.acceptors = append(mock.acceptors, &channelMock{accept, ch})
 	return ch
 }

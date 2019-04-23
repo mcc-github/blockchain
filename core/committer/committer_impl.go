@@ -10,7 +10,7 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -72,7 +72,7 @@ func NewLedgerCommitterReactive(ledger PeerLedgerSupport, eventer ConfigBlockEve
 
 func (lc *LedgerCommitter) preCommit(block *common.Block) error {
 	
-	if utils.IsConfigBlock(block) {
+	if protoutil.IsConfigBlock(block) {
 		logger.Debug("Received configuration update, calling CSCC ConfigUpdate")
 		if err := lc.eventer(block); err != nil {
 			return errors.WithMessage(err, "could not update CSCC with new configuration update")

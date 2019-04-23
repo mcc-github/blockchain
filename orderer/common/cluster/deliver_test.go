@@ -22,12 +22,13 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/flogging"
-	false_crypto "github.com/mcc-github/blockchain/common/mocks/crypto"
 	"github.com/mcc-github/blockchain/core/comm"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
+	"github.com/mcc-github/blockchain/orderer/common/cluster/mocks"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -43,6 +44,12 @@ var gRPCBalancerLock = sync.Mutex{}
 
 func init() {
 	factory.InitFactories(nil)
+}
+
+
+
+type signerSerializer interface {
+	identity.SignerSerializer
 }
 
 type wrappedBalancer struct {
@@ -107,7 +114,7 @@ func (d *countingDialer) Dial(address string) (*grpc.ClientConn, error) {
 	return grpc.DialContext(ctx, address, grpc.WithBlock(), grpc.WithInsecure(), balancer)
 }
 
-func noopBlockVerifierf(_ []*common.Block) error {
+func noopBlockVerifierf(_ []*common.Block, _ string) error {
 	return nil
 }
 
@@ -116,7 +123,7 @@ func readSeekEnvelope(stream orderer.AtomicBroadcast_DeliverServer) (*orderer.Se
 	if err != nil {
 		return nil, "", err
 	}
-	payload, err := utils.UnmarshalPayload(env.Payload)
+	payload, err := protoutil.UnmarshalPayload(env.Payload)
 	if err != nil {
 		return nil, "", err
 	}
@@ -241,7 +248,7 @@ func (ds *deliverServer) stop() {
 
 func (ds *deliverServer) enqueueResponse(seq uint64) {
 	ds.blocks() <- &orderer.DeliverResponse{
-		Type: &orderer.DeliverResponse_Block{Block: common.NewBlock(seq, nil)},
+		Type: &orderer.DeliverResponse_Block{Block: protoutil.NewBlock(seq, nil)},
 	}
 }
 
@@ -278,7 +285,7 @@ func newBlockPuller(dialer *countingDialer, orderers ...string) *cluster.BlockPu
 	return &cluster.BlockPuller{
 		Dialer:              dialer,
 		Channel:             "mychannel",
-		Signer:              &false_crypto.LocalSigner{},
+		Signer:              &mocks.SignerSerializer{},
 		Endpoints:           orderers,
 		FetchTimeout:        time.Second,
 		MaxTotalBufferBytes: 1024 * 1024, 
@@ -367,7 +374,7 @@ func TestBlockPullerHeavyBlocks(t *testing.T) {
 		for seq := start; seq <= end; seq++ {
 			resp := &orderer.DeliverResponse{
 				Type: &orderer.DeliverResponse_Block{
-					Block: common.NewBlock(seq, nil),
+					Block: protoutil.NewBlock(seq, nil),
 				},
 			}
 			data := resp.GetBlock().Data.Data
@@ -570,11 +577,11 @@ func TestBlockPullerFailover(t *testing.T) {
 	defer osn2.stop()
 
 	osn2.addExpectProbeAssert()
-	osn2.addExpectPullAssert(2)
+	osn2.addExpectPullAssert(1)
 	
 	osn2.enqueueResponse(3)
 	
-	
+	osn2.enqueueResponse(1)
 	osn2.enqueueResponse(2)
 	osn2.enqueueResponse(3)
 
@@ -592,9 +599,10 @@ func TestBlockPullerFailover(t *testing.T) {
 	
 	var pulledBlock1 sync.WaitGroup
 	pulledBlock1.Add(1)
+	var once sync.Once
 	bp.Logger = bp.Logger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
-		if strings.Contains(entry.Message, "Got block 1 of size") {
-			pulledBlock1.Done()
+		if strings.Contains(entry.Message, "Got block [1] of size") {
+			once.Do(pulledBlock1.Done)
 		}
 		return nil
 	}))
@@ -643,12 +651,13 @@ func TestBlockPullerNoneResponsiveOrderer(t *testing.T) {
 	
 	var waitForConnection sync.WaitGroup
 	waitForConnection.Add(1)
+	var once sync.Once
 	bp.Logger = bp.Logger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
-		if !strings.Contains(entry.Message, "Sending request for block 1") {
+		if !strings.Contains(entry.Message, "Sending request for block [1]") {
 			return nil
 		}
-		defer waitForConnection.Done()
-		s := entry.Message[len("Sending request for block 1 to 127.0.0.1:"):]
+		defer once.Do(waitForConnection.Done)
+		s := entry.Message[len("Sending request for block [1] to 127.0.0.1:"):]
 		port, err := strconv.ParseInt(s, 10, 32)
 		assert.NoError(t, err)
 		
@@ -673,7 +682,8 @@ func TestBlockPullerNoneResponsiveOrderer(t *testing.T) {
 		notInUseOrdererNode.enqueueResponse(3)
 		notInUseOrdererNode.addExpectProbeAssert()
 		
-		notInUseOrdererNode.addExpectPullAssert(2)
+		notInUseOrdererNode.addExpectPullAssert(1)
+		notInUseOrdererNode.enqueueResponse(1)
 		notInUseOrdererNode.enqueueResponse(2)
 		notInUseOrdererNode.enqueueResponse(3)
 	}()
@@ -738,14 +748,24 @@ func TestBlockPullerFailures(t *testing.T) {
 		osn.Unlock()
 	}
 
+	badSigErr := errors.New("bad signature")
 	malformBlockSignatureAndRecreateOSNBuffer := func(osn *deliverServer, bp *cluster.BlockPuller) {
-		bp.VerifyBlockSequence = func([]*common.Block) error {
+		bp.VerifyBlockSequence = func(_ []*common.Block, _ string) error {
 			close(osn.blocks())
-			osn.setBlocks(make(chan *orderer.DeliverResponse, 100))
-			osn.enqueueResponse(1)
-			osn.enqueueResponse(2)
-			osn.enqueueResponse(3)
-			return errors.New("bad signature")
+			
+			defer func() {
+				
+				if badSigErr == nil {
+					return
+				}
+				badSigErr = nil
+				osn.setBlocks(make(chan *orderer.DeliverResponse, 100))
+				osn.enqueueResponse(3)
+				osn.enqueueResponse(1)
+				osn.enqueueResponse(2)
+				osn.enqueueResponse(3)
+			}()
+			return badSigErr
 		}
 	}
 
@@ -799,7 +819,7 @@ func TestBlockPullerFailures(t *testing.T) {
 		},
 		{
 			name:       "failure at pull",
-			logTrigger: "Sending request for block 1",
+			logTrigger: "Sending request for block [1]",
 			beforeFunc: func(osn *deliverServer, bp *cluster.BlockPuller) {
 				
 				osn.addExpectProbeAssert()
@@ -814,7 +834,7 @@ func TestBlockPullerFailures(t *testing.T) {
 		},
 		{
 			name:       "failure at verifying pulled block",
-			logTrigger: "Sending request for block 1",
+			logTrigger: "Sending request for block [1]",
 			beforeFunc: func(osn *deliverServer, bp *cluster.BlockPuller) {
 				
 				osn.addExpectProbeAssert()
@@ -1069,7 +1089,7 @@ func TestBlockPullerMaxRetriesExhausted(t *testing.T) {
 	var exhaustedRetryAttemptsLogged bool
 
 	bp.Logger = bp.Logger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
-		if entry.Message == "Failed pulling block 3: retry count exhausted(2)" {
+		if entry.Message == "Failed pulling block [3]: retry count exhausted(2)" {
 			exhaustedRetryAttemptsLogged = true
 		}
 		return nil

@@ -15,6 +15,7 @@ import (
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/gossip/filter"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
 
@@ -25,13 +26,13 @@ type Gossip interface {
 	SelfMembershipInfo() discovery.NetworkMember
 
 	
-	SelfChannelInfo(common.ChainID) *proto.SignedGossipMessage
+	SelfChannelInfo(common.ChainID) *protoext.SignedGossipMessage
 
 	
 	Send(msg *proto.GossipMessage, peers ...*comm.RemotePeer)
 
 	
-	SendByCriteria(*proto.SignedGossipMessage, SendCriteria) error
+	SendByCriteria(*protoext.SignedGossipMessage, SendCriteria) error
 
 	
 	Peers() []discovery.NetworkMember
@@ -63,7 +64,7 @@ type Gossip interface {
 	
 	
 	
-	Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage)
+	Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage)
 
 	
 	JoinChan(joinMsg api.JoinChannelMessage, chainID common.ChainID)
@@ -88,7 +89,7 @@ type Gossip interface {
 
 
 type emittedGossipMessage struct {
-	*proto.SignedGossipMessage
+	*protoext.SignedGossipMessage
 	filter func(id common.PKIidType) bool
 }
 
@@ -134,4 +135,21 @@ type Config struct {
 	InternalEndpoint         string        
 	ExternalEndpoint         string        
 	TimeForMembershipTracker time.Duration 
+
+	DigestWaitTime   time.Duration 
+	RequestWaitTime  time.Duration 
+	ResponseWaitTime time.Duration 
+
+	DialTimeout  time.Duration 
+	ConnTimeout  time.Duration 
+	RecvBuffSize int           
+	SendBuffSize int           
+
+	MsgExpirationTimeout time.Duration 
+
+	AliveTimeInterval            time.Duration 
+	AliveExpirationTimeout       time.Duration 
+	AliveExpirationCheckInterval time.Duration 
+	ReconnectInterval            time.Duration 
+
 }

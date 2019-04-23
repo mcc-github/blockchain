@@ -76,46 +76,6 @@ func TestGetTotalLimit(t *testing.T) {
 	assert.Equal(t, 5000, updatedValue) 
 }
 
-func TestGetQueryLimitDefault(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defaultValue := GetInternalQueryLimit()
-	assert.Equal(t, 1000, defaultValue) 
-}
-
-func TestGetQueryLimitUnset(t *testing.T) {
-	viper.Reset()
-	defaultValue := GetInternalQueryLimit()
-	assert.Equal(t, 1000, defaultValue) 
-}
-
-func TestGetQueryLimit(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defer ledgertestutil.ResetConfigToDefaultValues()
-	viper.Set("ledger.state.couchDBConfig.internalQueryLimit", 5000)
-	updatedValue := GetInternalQueryLimit()
-	assert.Equal(t, 5000, updatedValue) 
-}
-
-func TestMaxBatchUpdateSizeDefault(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defaultValue := GetMaxBatchUpdateSize()
-	assert.Equal(t, 1000, defaultValue) 
-}
-
-func TestMaxBatchUpdateSizeUnset(t *testing.T) {
-	viper.Reset()
-	defaultValue := GetMaxBatchUpdateSize()
-	assert.Equal(t, 500, defaultValue) 
-}
-
-func TestMaxBatchUpdateSize(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defer ledgertestutil.ResetConfigToDefaultValues()
-	viper.Set("ledger.state.couchDBConfig.maxBatchUpdateSize", 2000)
-	updatedValue := GetMaxBatchUpdateSize()
-	assert.Equal(t, 2000, updatedValue) 
-}
-
 func TestPvtdataStorePurgeIntervalDefault(t *testing.T) {
 	setUpCoreYAMLConfig()
 	defaultValue := GetPvtdataStorePurgeInterval()
@@ -180,54 +140,6 @@ func TestIsHistoryDBEnabledFalse(t *testing.T) {
 	viper.Set("ledger.history.enableHistoryDatabase", false)
 	updatedValue := IsHistoryDBEnabled()
 	assert.False(t, updatedValue) 
-}
-
-func TestIsAutoWarmIndexesEnabledDefault(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defaultValue := IsAutoWarmIndexesEnabled()
-	assert.True(t, defaultValue) 
-}
-
-func TestIsAutoWarmIndexesEnabledUnset(t *testing.T) {
-	viper.Reset()
-	defaultValue := IsAutoWarmIndexesEnabled()
-	assert.True(t, defaultValue) 
-}
-
-func TestIsAutoWarmIndexesEnabledTrue(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defer ledgertestutil.ResetConfigToDefaultValues()
-	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", true)
-	updatedValue := IsAutoWarmIndexesEnabled()
-	assert.True(t, updatedValue) 
-}
-
-func TestIsAutoWarmIndexesEnabledFalse(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defer ledgertestutil.ResetConfigToDefaultValues()
-	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", false)
-	updatedValue := IsAutoWarmIndexesEnabled()
-	assert.False(t, updatedValue) 
-}
-
-func TestGetWarmIndexesAfterNBlocksDefault(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defaultValue := GetWarmIndexesAfterNBlocks()
-	assert.Equal(t, 1, defaultValue) 
-}
-
-func TestGetWarmIndexesAfterNBlocksUnset(t *testing.T) {
-	viper.Reset()
-	defaultValue := GetWarmIndexesAfterNBlocks()
-	assert.Equal(t, 1, defaultValue) 
-}
-
-func TestGetWarmIndexesAfterNBlocks(t *testing.T) {
-	setUpCoreYAMLConfig()
-	defer ledgertestutil.ResetConfigToDefaultValues()
-	viper.Set("ledger.state.couchDBConfig.warmIndexesAfterNBlocks", 10)
-	updatedValue := GetWarmIndexesAfterNBlocks()
-	assert.Equal(t, 10, updatedValue)
 }
 
 func TestGetMaxBlockfileSize(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
 )
@@ -113,7 +114,7 @@ func (ps PrincipalSet) UniqueSet() map[*msp.MSPPrincipal]int {
 
 type Policy interface {
 	
-	Evaluate(signatureSet []*cb.SignedData) error
+	Evaluate(signatureSet []*protoutil.SignedData) error
 }
 
 
@@ -219,7 +220,7 @@ func NewManagerImpl(path string, providers map[int32]Provider, root *cb.ConfigGr
 
 type rejectPolicy string
 
-func (rp rejectPolicy) Evaluate(signedData []*cb.SignedData) error {
+func (rp rejectPolicy) Evaluate(signedData []*protoutil.SignedData) error {
 	return fmt.Errorf("No such policy: '%s'", rp)
 }
 
@@ -246,7 +247,7 @@ type policyLogger struct {
 	policyName string
 }
 
-func (pl *policyLogger) Evaluate(signatureSet []*cb.SignedData) error {
+func (pl *policyLogger) Evaluate(signatureSet []*protoutil.SignedData) error {
 	if logger.IsEnabledFor(zapcore.DebugLevel) {
 		logger.Debugf("== Evaluating %T Policy %s ==", pl.policy, pl.policyName)
 		defer logger.Debugf("== Done Evaluating %T Policy %s", pl.policy, pl.policyName)

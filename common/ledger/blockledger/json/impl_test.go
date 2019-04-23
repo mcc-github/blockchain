@@ -14,13 +14,14 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
-var genesisBlock = cb.NewBlock(0, nil)
+var genesisBlock = protoutil.NewBlock(0, nil)
 
 func init() {
 	flogging.ActivateSpec("common.ledger.blockledger.json=DEBUG")
@@ -61,7 +62,7 @@ func TestInitialization(t *testing.T) {
 	block, found := fl.readBlock(0)
 	assert.NotNil(t, block, "Error retrieving genesis block")
 	assert.True(t, found, "Error retrieving genesis block")
-	assert.Equal(t, fl.lastHash, block.Header.Hash(), "Block hashes did no match")
+	assert.Equal(t, fl.lastHash, protoutil.BlockHeaderHash(block.Header), "Block hashes did no match")
 
 }
 
@@ -82,7 +83,7 @@ func TestReinitialization(t *testing.T) {
 	block, found := fl.readBlock(1)
 	assert.NotNil(t, block, "Error retrieving block")
 	assert.True(t, found, "Error retrieving block")
-	assert.Equal(t, fl.lastHash, block.Header.Hash(), "Block hashes did no match")
+	assert.Equal(t, fl.lastHash, protoutil.BlockHeaderHash(block.Header), "Block hashes did no match")
 }
 
 func TestMultiReinitialization(t *testing.T) {

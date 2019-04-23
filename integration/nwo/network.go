@@ -20,7 +20,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/integration/helpers"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	"github.com/mcc-github/blockchain/integration/nwo/blockchainconfig"
@@ -73,8 +73,9 @@ type SystemChannel struct {
 
 
 type Channel struct {
-	Name    string `yaml:"name,omitempty"`
-	Profile string `yaml:"profile,omitempty"`
+	Name        string `yaml:"name,omitempty"`
+	Profile     string `yaml:"profile,omitempty"`
+	BaseProfile string `yaml:"baseprofile,omitempty"`
 }
 
 
@@ -120,10 +121,11 @@ func (p *Peer) Anchor() bool {
 
 
 type Profile struct {
-	Name          string   `yaml:"name,omitempty"`
-	Orderers      []string `yaml:"orderers,omitempty"`
-	Consortium    string   `yaml:"consortium,omitempty"`
-	Organizations []string `yaml:"organizations,omitempty"`
+	Name            string   `yaml:"name,omitempty"`
+	Orderers        []string `yaml:"orderers,omitempty"`
+	Consortium      string   `yaml:"consortium,omitempty"`
+	Organizations   []string `yaml:"organizations,omitempty"`
+	AppCapabilities []string `yaml:"appcapabilities,omitempty"`
 }
 
 
@@ -575,6 +577,7 @@ func (n *Network) Bootstrap() {
 		sess, err := n.ConfigTxGen(commands.CreateChannelTx{
 			ChannelID:             c.Name,
 			Profile:               c.Profile,
+			BaseProfile:           c.BaseProfile,
 			ConfigPath:            n.RootDir,
 			OutputCreateChannelTx: n.CreateChannelTxPath(c.Name),
 		})
@@ -714,22 +717,97 @@ func (n *Network) UpdateChannelAnchors(o *Orderer, channelName string) {
 
 
 
+func (n *Network) VerifyMembership(expectedPeers []*Peer, channel string, chaincodes ...string) {
+	expectedDiscoveredPeers := make([]DiscoveredPeer, len(expectedPeers))
+	for i, peer := range expectedPeers {
+		expectedDiscoveredPeers[i] = n.DiscoveredPeer(peer, chaincodes...)
+	}
+	for _, peer := range expectedPeers {
+		Eventually(DiscoverPeers(n, peer, "User1", channel), n.EventuallyTimeout).Should(ConsistOf(expectedDiscoveredPeers))
+	}
+}
 
 
 
-func (n *Network) CreateChannel(channelName string, o *Orderer, p *Peer) {
+
+
+
+
+
+func (n *Network) CreateChannel(channelName string, o *Orderer, p *Peer, additionalSigners ...interface{}) {
+	channelCreateTxPath := n.CreateChannelTxPath(channelName)
+
+	for _, signer := range additionalSigners {
+		switch t := signer.(type) {
+		case *Peer:
+			sess, err := n.PeerAdminSession(t, commands.SignConfigTx{
+				File: channelCreateTxPath,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+		case *Orderer:
+			sess, err := n.OrdererAdminSession(t, p, commands.SignConfigTx{
+				File: channelCreateTxPath,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+		default:
+			panic("unknown signer type, expect Peer or Orderer")
+		}
+	}
+
 	createChannel := func() int {
 		sess, err := n.PeerAdminSession(p, commands.ChannelCreate{
 			ChannelID:   channelName,
 			Orderer:     n.OrdererAddress(o, ListenPort),
-			File:        n.CreateChannelTxPath(channelName),
+			File:        channelCreateTxPath,
+			OutputBlock: "/dev/null",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return sess.Wait(n.EventuallyTimeout).ExitCode()
+	}
+	Eventually(createChannel, n.EventuallyTimeout).Should(Equal(0))
+}
+
+
+
+
+
+
+func (n *Network) CreateChannelFail(channelName string, o *Orderer, p *Peer, additionalSigners ...interface{}) {
+	channelCreateTxPath := n.CreateChannelTxPath(channelName)
+
+	for _, signer := range additionalSigners {
+		switch t := signer.(type) {
+		case *Peer:
+			sess, err := n.PeerAdminSession(t, commands.SignConfigTx{
+				File: channelCreateTxPath,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+		case *Orderer:
+			sess, err := n.OrdererAdminSession(t, p, commands.SignConfigTx{
+				File: channelCreateTxPath,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+		default:
+			panic("unknown signer type, expect Peer or Orderer")
+		}
+	}
+
+	createChannelFail := func() int {
+		sess, err := n.PeerAdminSession(p, commands.ChannelCreate{
+			ChannelID:   channelName,
+			Orderer:     n.OrdererAddress(o, ListenPort),
+			File:        channelCreateTxPath,
 			OutputBlock: "/dev/null",
 		})
 		Expect(err).NotTo(HaveOccurred())
 		return sess.Wait(n.EventuallyTimeout).ExitCode()
 	}
 
-	Eventually(createChannel, n.EventuallyTimeout).Should(Equal(0))
+	Eventually(createChannelFail, n.EventuallyTimeout).ShouldNot(Equal(0))
 }
 
 
@@ -780,6 +858,12 @@ func (n *Network) ConfigTxGen(command Command) (*gexec.Session, error) {
 func (n *Network) Discover(command Command) (*gexec.Session, error) {
 	cmd := NewCommand(n.Components.Discover(), command)
 	cmd.Args = append(cmd.Args, "--peerTLSCA", n.CACertsBundlePath())
+	return n.StartSession(cmd, command.SessionName())
+}
+
+
+func (n *Network) Token(command Command) (*gexec.Session, error) {
+	cmd := NewCommand(n.Components.Token(), command)
 	return n.StartSession(cmd, command.SessionName())
 }
 
@@ -879,7 +963,8 @@ func (n *Network) OrdererRunner(o *Orderer) *ginkgomon.Runner {
 		StartCheckTimeout: 15 * time.Second,
 	}
 
-	if n.Consensus.Brokers != 0 {
+	
+	if n.Consensus.Type == "kafka" && n.Consensus.Brokers != 0 {
 		config.StartCheck = "Start phase completed successfully"
 		config.StartCheckTimeout = 30 * time.Second
 	}
@@ -899,11 +984,13 @@ func (n *Network) OrdererGroupRunner() ifrit.Runner {
 
 
 
-func (n *Network) PeerRunner(p *Peer) *ginkgomon.Runner {
+func (n *Network) PeerRunner(p *Peer, env ...string) *ginkgomon.Runner {
+
 	cmd := n.peerCommand(
 		commands.NodeStart{PeerID: p.ID()},
 		fmt.Sprintf("FABRIC_CFG_PATH=%s", n.PeerDir(p)),
 	)
+	cmd.Env = append(cmd.Env, env...)
 
 	return ginkgomon.New(ginkgomon.Config{
 		AnsiColorCode:     n.nextColor(),
@@ -990,7 +1077,7 @@ func (n *Network) PeerUserSession(p *Peer, user string, command Command) (*gexec
 func (n *Network) OrdererAdminSession(o *Orderer, p *Peer, command Command) (*gexec.Session, error) {
 	cmd := n.peerCommand(
 		command,
-		"CORE_PEER_LOCALMSPID=OrdererMSP",
+		fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", n.Organization(o.Organization).MSPID),
 		fmt.Sprintf("FABRIC_CFG_PATH=%s", n.PeerDir(p)),
 		fmt.Sprintf("CORE_PEER_MSPCONFIGPATH=%s", n.OrdererUserMSPDir(o, "Admin")),
 	)

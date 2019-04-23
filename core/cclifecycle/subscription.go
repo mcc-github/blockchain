@@ -21,7 +21,7 @@ type Subscription struct {
 	lc             *Lifecycle
 	channel        string
 	queryCreator   QueryCreator
-	pendingUpdates chan *cceventmgmt.ChaincodeDefinition
+	pendingUpdates []*cceventmgmt.ChaincodeDefinition
 }
 
 type depCCsRetriever func(Query, ChaincodePredicate, bool, ...string) (chaincode.MetadataSet, error)
@@ -30,7 +30,9 @@ type depCCsRetriever func(Query, ChaincodePredicate, bool, ...string) (chaincode
 
 func (sub *Subscription) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt.ChaincodeDefinition, dbArtifactsTar []byte) error {
 	Logger.Debug("Channel", sub.channel, "got a new deployment:", chaincodeDefinition)
-	sub.pendingUpdates <- chaincodeDefinition
+	sub.Lock()
+	defer sub.Unlock()
+	sub.pendingUpdates = append(sub.pendingUpdates, chaincodeDefinition)
 	return nil
 }
 
@@ -43,7 +45,7 @@ func (sub *Subscription) processPendingUpdate(ccDef *cceventmgmt.ChaincodeDefini
 	installedCC := []chaincode.InstalledChaincode{{
 		Name:    ccDef.Name,
 		Version: ccDef.Version,
-		Id:      ccDef.Hash,
+		Hash:    ccDef.Hash,
 	}}
 	ccs, err := queryChaincodeDefinitions(query, installedCC, DeployedChaincodes)
 	if err != nil {
@@ -64,14 +66,18 @@ func (sub *Subscription) ChaincodeDeployDone(succeeded bool) {
 	
 	sub.Lock()
 	go func() {
-		defer sub.Unlock()
-		update := <-sub.pendingUpdates
+		defer func() {
+			sub.pendingUpdates = nil
+			sub.Unlock()
+		}()
 		
 		if !succeeded {
-			Logger.Error("Chaincode deploy for", update.Name, "failed")
+			Logger.Errorf("Chaincode deploy for updates %v failed", sub.pendingUpdates)
 			return
 		}
-		sub.processPendingUpdate(update)
+		for _, update := range sub.pendingUpdates {
+			sub.processPendingUpdate(update)
+		}
 	}()
 }
 
@@ -80,8 +86,8 @@ func queryChaincodeDefinitions(query Query, ccs []chaincode.InstalledChaincode, 
 	installedCCsToIDs := make(map[nameVersion][]byte)
 	
 	for _, cc := range ccs {
-		Logger.Debug("Chaincode", cc, "'s version is", cc.Version, "and Id is", cc.Id)
-		installedCCsToIDs[installedCCToNameVersion(cc)] = cc.Id
+		Logger.Debug("Chaincode", cc, "'s version is", cc.Version, "and Id is", cc.Hash)
+		installedCCsToIDs[installedCCToNameVersion(cc)] = cc.Hash
 	}
 
 	filter := func(cc chaincode.Metadata) bool {

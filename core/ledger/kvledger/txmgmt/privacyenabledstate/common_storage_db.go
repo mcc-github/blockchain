@@ -21,7 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
+	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/pkg/errors"
 )
 
@@ -31,6 +31,7 @@ const (
 	nsJoiner       = "$$"
 	pvtDataPrefix  = "p"
 	hashDataPrefix = "h"
+	couchDB        = "CouchDB"
 )
 
 
@@ -41,11 +42,16 @@ type CommonStorageDBProvider struct {
 }
 
 
-func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider, metricsProvider metrics.Provider, healthCheckRegistry ledger.HealthCheckRegistry) (DBProvider, error) {
+func NewCommonStorageDBProvider(
+	bookkeeperProvider bookkeeping.Provider,
+	metricsProvider metrics.Provider,
+	healthCheckRegistry ledger.HealthCheckRegistry,
+	stateDBConf *ledger.StateDB,
+) (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
 	var err error
-	if ledgerconfig.IsCouchDBEnabled() {
-		if vdbProvider, err = statecouchdb.NewVersionedDBProvider(metricsProvider); err != nil {
+	if stateDBConf != nil && stateDBConf.StateDatabase == couchDB {
+		if vdbProvider, err = statecouchdb.NewVersionedDBProvider(stateDBConf.CouchDB, metricsProvider); err != nil {
 			return nil, err
 		}
 	} else {
@@ -156,6 +162,11 @@ func (s *CommonStorageDB) GetChaincodeEventListener() cceventmgmt.ChaincodeLifec
 
 func (s *CommonStorageDB) GetPrivateData(namespace, collection, key string) (*statedb.VersionedValue, error) {
 	return s.GetState(derivePvtDataNs(namespace, collection), key)
+}
+
+
+func (s *CommonStorageDB) GetPrivateDataHash(namespace, collection, key string) (*statedb.VersionedValue, error) {
+	return s.GetValueHash(namespace, collection, util.ComputeStringHash(key))
 }
 
 

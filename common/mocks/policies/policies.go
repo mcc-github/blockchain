@@ -18,7 +18,7 @@ package policies
 
 import (
 	"github.com/mcc-github/blockchain/common/policies"
-	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -28,7 +28,7 @@ type Policy struct {
 }
 
 
-func (p *Policy) Evaluate(signatureSet []*cb.SignedData) error {
+func (p *Policy) Evaluate(signatureSet []*protoutil.SignedData) error {
 	return p.Err
 }
 

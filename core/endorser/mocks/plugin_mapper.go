@@ -1,5 +1,4 @@
 
-
 package mocks
 
 import endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"

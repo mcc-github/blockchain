@@ -21,11 +21,6 @@ func NewProvider(cs *ChaincodeSupport) *CCProviderImpl {
 }
 
 
-func (c *CCProviderImpl) Execute(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
-	return c.cs.Execute(txParams, cccid, input)
-}
-
-
 func (c *CCProviderImpl) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, spec *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error) {
 	return c.cs.ExecuteLegacyInit(txParams, cccid, spec)
 }

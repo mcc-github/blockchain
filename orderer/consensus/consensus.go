@@ -8,10 +8,11 @@ package consensus
 
 import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/common/crypto"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -71,18 +72,21 @@ type Chain interface {
 
 
 type ConsenterSupport interface {
-	crypto.LocalSigner
+	identity.SignerSerializer
 	msgprocessor.Processor
 
 	
 	
-	VerifyBlockSignature([]*cb.SignedData, *cb.ConfigEnvelope) error
+	VerifyBlockSignature([]*protoutil.SignedData, *cb.ConfigEnvelope) error
 
 	
 	BlockCutter() blockcutter.Receiver
 
 	
 	SharedConfig() channelconfig.Orderer
+
+	
+	ChannelConfig() channelconfig.Channel
 
 	
 	
@@ -106,4 +110,8 @@ type ConsenterSupport interface {
 
 	
 	Height() uint64
+
+	
+	
+	Append(block *cb.Block) error
 }

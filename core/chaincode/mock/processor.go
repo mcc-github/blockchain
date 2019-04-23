@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	container "github.com/mcc-github/blockchain/core/container"
+	"github.com/mcc-github/blockchain/core/container"
 )
 
 type Processor struct {

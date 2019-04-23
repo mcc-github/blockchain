@@ -21,8 +21,7 @@ func TestCreateCouchDBConnectionAndDB(t *testing.T) {
 	cleanup(database)
 	defer cleanup(database)
 	
-	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
+	couchInstance, err := CreateCouchInstance(testConfig(), &disabled.Provider{})
 	assert.NoError(t, err, "Error when trying to CreateCouchInstance")
 
 	_, err = CreateCouchDatabase(couchInstance, database)
@@ -32,16 +31,14 @@ func TestCreateCouchDBConnectionAndDB(t *testing.T) {
 
 
 func TestNotCreateCouchGlobalChangesDB(t *testing.T) {
-	value := couchDBDef.CreateGlobalChangesDB
-	couchDBDef.CreateGlobalChangesDB = false
-	defer resetCreateGlobalChangesDBValue(value)
+	config := testConfig()
+	config.CreateGlobalChangesDB = false
 	database := "_global_changes"
 	cleanup(database)
 	defer cleanup(database)
 
 	
-	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
+	couchInstance, err := CreateCouchInstance(config, &disabled.Provider{})
 	assert.NoError(t, err, "Error when trying to CreateCouchInstance")
 
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
@@ -49,10 +46,6 @@ func TestNotCreateCouchGlobalChangesDB(t *testing.T) {
 	
 	_, _, errdb := db.GetDatabaseInfo()
 	assert.NotNil(t, errdb)
-}
-
-func resetCreateGlobalChangesDBValue(value bool) {
-	couchDBDef.CreateGlobalChangesDB = value
 }
 
 
@@ -63,8 +56,7 @@ func TestCreateCouchDBSystemDBs(t *testing.T) {
 	defer cleanup(database)
 
 	
-	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
+	couchInstance, err := CreateCouchInstance(testConfig(), &disabled.Provider{})
 
 	assert.NoError(t, err, "Error when trying to CreateCouchInstance")
 

@@ -66,6 +66,8 @@ type MockStub struct {
 	
 	ChaincodeEventsChannel chan *pb.ChaincodeEvent
 
+	Creator []byte
+
 	Decorations map[string][]byte
 }
 
@@ -119,7 +121,12 @@ func (stub *MockStub) MockTransactionEnd(uuid string) {
 
 
 
-func (stub *MockStub) MockPeerChaincode(invokableChaincodeName string, otherStub *MockStub) {
+
+func (stub *MockStub) MockPeerChaincode(invokableChaincodeName string, otherStub *MockStub, channel string) {
+	
+	if channel != "" {
+		invokableChaincodeName = invokableChaincodeName + "/" + channel
+	}
 	stub.Invokables[invokableChaincodeName] = otherStub
 }
 
@@ -355,9 +362,8 @@ func (stub *MockStub) InvokeChaincode(chaincodeName string, args [][]byte, chann
 	return res
 }
 
-
 func (stub *MockStub) GetCreator() ([]byte, error) {
-	return nil, nil
+	return stub.Creator, nil
 }
 
 

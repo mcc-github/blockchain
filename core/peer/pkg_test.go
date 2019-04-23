@@ -169,7 +169,7 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 		viper.Set("peer.tls.key.file", filepath.Join("testdata", "Org1-server1-key.pem"))
 		viper.Set("peer.tls.rootcert.file", filepath.Join("testdata", "Org1-cert.pem"))
 		viper.Set("peer.fileSystemPath", testDir)
-		err = peer.Default.CreateChainFromBlock(block, nil, nil, &mock.DeployedChaincodeInfoProvider{})
+		err = peer.Default.CreateChainFromBlock(block, nil, &mock.DeployedChaincodeInfoProvider{}, nil, nil)
 		if err != nil {
 			t.Fatalf("Failed to create config block (%s)", err)
 		}
@@ -312,11 +312,6 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 
 				
 				test.createChannel()
-
-				
-				appCAs, ordererCAs := comm.GetCredentialSupport().GetClientRootCAs()
-				assert.Equal(t, test.numAppCAs, len(appCAs), "Did not find expected number of app CAs for channel")
-				assert.Equal(t, test.numOrdererCAs, len(ordererCAs), "Did not find expected number of orderer CAs for channel")
 
 				
 				_, err = invokeEmptyCall(testAddress, test.goodOptions)

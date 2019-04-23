@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
@@ -144,4 +145,25 @@ func (b *PayloadsBufferImpl) Size() int {
 
 func (b *PayloadsBufferImpl) Close() {
 	close(b.readyChan)
+}
+
+type metricsBuffer struct {
+	PayloadsBuffer
+	sizeMetrics metrics.Gauge
+	chainID     string
+}
+
+func (mb *metricsBuffer) Push(payload *proto.Payload) {
+	mb.PayloadsBuffer.Push(payload)
+	mb.reportSize()
+}
+
+func (mb *metricsBuffer) Pop() *proto.Payload {
+	pl := mb.PayloadsBuffer.Pop()
+	mb.reportSize()
+	return pl
+}
+
+func (mb *metricsBuffer) reportSize() {
+	mb.sizeMetrics.With("channel", mb.chainID).Set(float64(mb.Size()))
 }

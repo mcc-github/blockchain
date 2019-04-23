@@ -7,6 +7,7 @@ package transaction_test
 
 import (
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/token/transaction"
@@ -34,8 +35,8 @@ var _ = Describe("Processor", func() {
 		fakeManager = &mock.TMSManager{}
 		txProcessor.TMSManager = fakeManager
 		validTtx = &token.TokenTransaction{
-			Action: &token.TokenTransaction_PlainAction{
-				PlainAction: &token.PlainTokenAction{},
+			Action: &token.TokenTransaction_TokenAction{
+				TokenAction: &token.TokenAction{},
 			},
 		}
 
@@ -44,18 +45,18 @@ var _ = Describe("Processor", func() {
 			TxId: "tx0",
 		}
 		marshaledChannelHeader, err := proto.Marshal(ch)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(err).NotTo(HaveOccurred())
 		hdr := &common.Header{
 			ChannelHeader: marshaledChannelHeader,
 		}
 		marshaledData, err := proto.Marshal(validTtx)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(err).NotTo(HaveOccurred())
 		payload := &common.Payload{
 			Header: hdr,
 			Data:   marshaledData,
 		}
 		marshaledPayload, err := proto.Marshal(payload)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(err).NotTo(HaveOccurred())
 		validEnvelope = &common.Envelope{
 			Payload:   marshaledPayload,
 			Signature: nil,
@@ -105,6 +106,29 @@ var _ = Describe("Processor", func() {
 			})
 		})
 
+		Context("when a call to the channel TxProcessor return InvalidTxError", func() {
+			var (
+				verifier *mock.TMSTxProcessor
+			)
+			BeforeEach(func() {
+				verifier = &mock.TMSTxProcessor{}
+				verifier.ProcessTxReturns(&customtx.InvalidTxError{Msg: "invalid transaction"})
+				fakeManager.GetTxProcessorReturns(verifier, nil)
+			})
+			It("InvalidTxError must be propagated", func() {
+				err := txProcessor.GenerateSimulationResults(validEnvelope, nil, false)
+				Expect(err).To(Equal(&customtx.InvalidTxError{Msg: "invalid transaction"}))
+				Expect(fakeManager.GetTxProcessorCallCount()).To(Equal(1))
+				Expect(fakeManager.GetTxProcessorArgsForCall(0)).To(Equal("wild_channel"))
+				Expect(verifier.ProcessTxCallCount()).To(Equal(1))
+				txID, creatorInfo, ttx, simulator := verifier.ProcessTxArgsForCall(0)
+				Expect(txID).To(Equal("tx0"))
+				Expect(creatorInfo.Public()).To(BeNil())
+				Expect(proto.Equal(ttx, validTtx)).To(BeTrue())
+				Expect(simulator).To(BeNil())
+			})
+		})
+
 		Context("when valid input is passed to an existing channel TxProcessor", func() {
 			var (
 				verifier *mock.TMSTxProcessor
@@ -116,7 +140,7 @@ var _ = Describe("Processor", func() {
 			})
 			It("succeeds", func() {
 				err := txProcessor.GenerateSimulationResults(validEnvelope, nil, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(err).NotTo(HaveOccurred())
 				Expect(fakeManager.GetTxProcessorCallCount()).To(Equal(1))
 				Expect(fakeManager.GetTxProcessorArgsForCall(0)).To(Equal("wild_channel"))
 				Expect(verifier.ProcessTxCallCount()).To(Equal(1))

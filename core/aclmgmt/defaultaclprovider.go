@@ -16,6 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 const (
@@ -23,9 +24,14 @@ const (
 	CHANNELWRITERS = policies.ChannelApplicationWriters
 )
 
+type defaultACLProvider interface {
+	ACLProvider
+	IsPtypePolicy(resName string) bool
+}
 
 
-type defaultACLProvider struct {
+
+type defaultACLProviderImpl struct {
 	policyChecker policy.PolicyChecker
 
 	
@@ -35,14 +41,14 @@ type defaultACLProvider struct {
 	cResourcePolicyMap map[string]string
 }
 
-func NewDefaultACLProvider() ACLProvider {
-	d := &defaultACLProvider{}
+func newDefaultACLProvider() defaultACLProvider {
+	d := &defaultACLProviderImpl{}
 	d.initialize()
 
 	return d
 }
 
-func (d *defaultACLProvider) initialize() {
+func (d *defaultACLProviderImpl) initialize() {
 	d.policyChecker = policy.NewPolicyChecker(
 		peer.NewChannelPolicyManagerGetter(),
 		mgmt.GetLocalMSP(),
@@ -53,9 +59,20 @@ func (d *defaultACLProvider) initialize() {
 	d.cResourcePolicyMap = make(map[string]string)
 
 	
+	d.pResourcePolicyMap[resources.Lifecycle_InstallChaincode] = mgmt.Admins
+	d.pResourcePolicyMap[resources.Lifecycle_QueryInstalledChaincode] = mgmt.Admins
+	d.pResourcePolicyMap[resources.Lifecycle_QueryInstalledChaincodes] = mgmt.Admins
+	d.pResourcePolicyMap[resources.Lifecycle_ApproveChaincodeDefinitionForMyOrg] = mgmt.Admins
+
+	d.cResourcePolicyMap[resources.Lifecycle_CommitChaincodeDefinition] = CHANNELWRITERS
+	d.cResourcePolicyMap[resources.Lifecycle_QueryChaincodeDefinition] = CHANNELWRITERS
+	d.cResourcePolicyMap[resources.Lifecycle_QueryNamespaceDefinitions] = CHANNELWRITERS
+	d.cResourcePolicyMap[resources.Lifecycle_QueryApprovalStatus] = CHANNELWRITERS
+
 	
-	d.pResourcePolicyMap[resources.Lscc_Install] = ""
-	d.pResourcePolicyMap[resources.Lscc_GetInstalledChaincodes] = ""
+	
+	d.pResourcePolicyMap[resources.Lscc_Install] = mgmt.Admins
+	d.pResourcePolicyMap[resources.Lscc_GetInstalledChaincodes] = mgmt.Admins
 
 	
 	d.cResourcePolicyMap[resources.Lscc_Deploy] = ""  
@@ -78,8 +95,8 @@ func (d *defaultACLProvider) initialize() {
 
 	
 	
-	d.pResourcePolicyMap[resources.Cscc_JoinChain] = ""
-	d.pResourcePolicyMap[resources.Cscc_GetChannels] = ""
+	d.pResourcePolicyMap[resources.Cscc_JoinChain] = mgmt.Admins
+	d.pResourcePolicyMap[resources.Cscc_GetChannels] = mgmt.Members
 
 	
 	d.cResourcePolicyMap[resources.Cscc_GetConfigBlock] = CHANNELREADERS
@@ -99,35 +116,35 @@ func (d *defaultACLProvider) initialize() {
 	d.cResourcePolicyMap[resources.Event_FilteredBlock] = CHANNELREADERS
 }
 
-
-func (d *defaultACLProvider) defaultPolicy(resName string, cprovider bool) string {
-	var pol string
-	if cprovider {
-		pol = d.cResourcePolicyMap[resName]
-	} else {
-		pol = d.pResourcePolicyMap[resName]
-	}
-	return pol
+func (d *defaultACLProviderImpl) IsPtypePolicy(resName string) bool {
+	_, ok := d.pResourcePolicyMap[resName]
+	return ok
 }
 
 
-func (d *defaultACLProvider) CheckACL(resName string, channelID string, idinfo interface{}) error {
-	policy := d.defaultPolicy(resName, true)
-	if policy == "" {
-		aclLogger.Errorf("Unmapped policy for %s", resName)
-		return fmt.Errorf("Unmapped policy for %s", resName)
+func (d *defaultACLProviderImpl) CheckACL(resName string, channelID string, idinfo interface{}) error {
+	
+	policy := d.pResourcePolicyMap[resName]
+	if policy != "" {
+		channelID = ""
+	} else {
+		policy = d.cResourcePolicyMap[resName]
+		if policy == "" {
+			aclLogger.Errorf("Unmapped policy for %s", resName)
+			return fmt.Errorf("Unmapped policy for %s", resName)
+		}
 	}
 
 	switch typedData := idinfo.(type) {
 	case *pb.SignedProposal:
 		return d.policyChecker.CheckPolicy(channelID, policy, typedData)
 	case *common.Envelope:
-		sd, err := typedData.AsSignedData()
+		sd, err := protoutil.EnvelopeAsSignedData(typedData)
 		if err != nil {
 			return err
 		}
 		return d.policyChecker.CheckPolicyBySignedData(channelID, policy, sd)
-	case []*common.SignedData:
+	case []*protoutil.SignedData:
 		return d.policyChecker.CheckPolicyBySignedData(channelID, policy, typedData)
 	default:
 		aclLogger.Errorf("Unmapped id on checkACL %s", resName)

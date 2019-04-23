@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/util"
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -29,7 +29,7 @@ var (
 type acSupport interface {
 	
 	
-	EligibleForService(channel string, data common.SignedData) error
+	EligibleForService(channel string, data protoutil.SignedData) error
 
 	
 	ConfigSequence(channel string) uint64
@@ -64,7 +64,7 @@ func newAuthCache(s acSupport, conf authCacheConfig) *authCache {
 
 
 
-func (ac *authCache) EligibleForService(channel string, data common.SignedData) error {
+func (ac *authCache) EligibleForService(channel string, data protoutil.SignedData) error {
 	if !ac.conf.enabled {
 		return ac.acSupport.EligibleForService(channel, data)
 	}
@@ -99,7 +99,7 @@ func (ac *authCache) newAccessCache(channel string) *accessCache {
 	}
 }
 
-func (cache *accessCache) EligibleForService(data common.SignedData) error {
+func (cache *accessCache) EligibleForService(data protoutil.SignedData) error {
 	key, err := signedDataToKey(data)
 	if err != nil {
 		logger.Warningf("Failed computing key of signed data: +%v", err)
@@ -187,7 +187,7 @@ func (cache *accessCache) lookup(key string) (cacheHit bool, lookupResult error)
 	return
 }
 
-func signedDataToKey(data common.SignedData) (string, error) {
+func signedDataToKey(data protoutil.SignedData) (string, error) {
 	b, err := asBytes(data)
 	if err != nil {
 		return "", errors.Wrap(err, "failed marshaling signed data")

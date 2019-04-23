@@ -10,13 +10,14 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
+	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
+	mmsp "github.com/mcc-github/blockchain/common/mocks/msp"
 	lutils "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	protopeer "github.com/mcc-github/blockchain/protos/peer"
-	prototestutils "github.com/mcc-github/blockchain/protos/testutils"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 var logger = flogging.MustGetLogger("test2")
@@ -97,8 +98,47 @@ func constructTransaction(txid string, simulationResults []byte) (*common.Envelo
 		Name:    "dummyCC",
 		Version: "dummyVer",
 	}
-	txenv, _, err := prototestutils.ConstructUnsignedTxEnv(channelid, ccid, &protopeer.Response{Status: 200}, simulationResults, txid, nil, nil)
+	txenv, _, err := constructUnsignedTxEnv(channelid, ccid, &protopeer.Response{Status: 200}, simulationResults, txid, nil, nil)
 	return txenv, err
+}
+
+
+func constructUnsignedTxEnv(chainID string, ccid *protopeer.ChaincodeID, response *protopeer.Response, simulationResults []byte, txid string, events []byte, visibility []byte) (*common.Envelope, string, error) {
+	mspLcl := mmsp.NewNoopMsp()
+	sigId, _ := mspLcl.GetDefaultSigningIdentity()
+
+	ss, err := sigId.Serialize()
+	if err != nil {
+		return nil, "", err
+	}
+
+	var prop *protopeer.Proposal
+	if txid == "" {
+		
+		prop, txid, err = protoutil.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, chainID, &protopeer.ChaincodeInvocationSpec{ChaincodeSpec: &protopeer.ChaincodeSpec{ChaincodeId: ccid}}, ss)
+
+	} else {
+		
+		nonce, err := crypto.GetRandomNonce()
+		if err != nil {
+			return nil, "", err
+		}
+		prop, txid, err = protoutil.CreateChaincodeProposalWithTxIDNonceAndTransient(txid, common.HeaderType_ENDORSER_TRANSACTION, chainID, &protopeer.ChaincodeInvocationSpec{ChaincodeSpec: &protopeer.ChaincodeSpec{ChaincodeId: ccid}}, nonce, ss, nil)
+	}
+	if err != nil {
+		return nil, "", err
+	}
+
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response, simulationResults, nil, ccid, nil, sigId)
+	if err != nil {
+		return nil, "", err
+	}
+
+	env, err := protoutil.CreateSignedTx(prop, sigId, presp)
+	if err != nil {
+		return nil, "", err
+	}
+	return env, txid, nil
 }
 
 func constructTestGenesisBlock(channelid string) (*common.Block, error) {
@@ -111,7 +151,7 @@ func constructTestGenesisBlock(channelid string) (*common.Block, error) {
 }
 
 func setBlockFlagsToValid(block *common.Block) {
-	utils.InitBlockMetadata(block)
+	protoutil.InitBlockMetadata(block)
 	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] =
 		lutils.NewTxValidationFlagsSetValue(len(block.Data.Data), protopeer.TxValidationCode_VALID)
 }

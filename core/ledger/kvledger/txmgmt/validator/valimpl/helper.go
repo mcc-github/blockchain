@@ -23,7 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -110,9 +110,9 @@ func preprocessProtoBlock(txMgr txmgr.TxMgr,
 		var err error
 		txStatInfo := &txmgr.TxStatInfo{TxType: -1}
 		txsStatInfo = append(txsStatInfo, txStatInfo)
-		if env, err = utils.GetEnvelopeFromBlock(envBytes); err == nil {
-			if payload, err = utils.GetPayload(env); err == nil {
-				chdr, err = utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+		if env, err = protoutil.GetEnvelopeFromBlock(envBytes); err == nil {
+			if payload, err = protoutil.GetPayload(env); err == nil {
+				chdr, err = protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 			}
 		}
 		if txsFilter.IsInvalid(txIndex) {
@@ -128,12 +128,13 @@ func preprocessProtoBlock(txMgr txmgr.TxMgr,
 		}
 
 		var txRWSet *rwsetutil.TxRwSet
+		var containsPostOrderWrites bool
 		txType := common.HeaderType(chdr.Type)
 		logger.Debugf("txType=%s", txType)
 		txStatInfo.TxType = txType
 		if txType == common.HeaderType_ENDORSER_TRANSACTION {
 			
-			respPayload, err := utils.GetActionFromEnvelope(envBytes)
+			respPayload, err := protoutil.GetActionFromEnvelope(envBytes)
 			if err != nil {
 				txsFilter.SetFlag(txIndex, peer.TxValidationCode_NIL_TXACTION)
 				continue
@@ -158,6 +159,7 @@ func preprocessProtoBlock(txMgr txmgr.TxMgr,
 					return nil, nil, err
 				}
 			}
+			containsPostOrderWrites = true
 		}
 		if txRWSet != nil {
 			txStatInfo.NumCollections = txRWSet.NumCollections()
@@ -168,7 +170,12 @@ func preprocessProtoBlock(txMgr txmgr.TxMgr,
 				txsFilter.SetFlag(txIndex, peer.TxValidationCode_INVALID_WRITESET)
 				continue
 			}
-			b.Txs = append(b.Txs, &internal.Transaction{IndexInBlock: txIndex, ID: chdr.TxId, RWSet: txRWSet})
+			b.Txs = append(b.Txs, &internal.Transaction{
+				IndexInBlock:            txIndex,
+				ID:                      chdr.TxId,
+				RWSet:                   txRWSet,
+				ContainsPostOrderWrites: containsPostOrderWrites,
+			})
 		}
 	}
 	return b, txsStatInfo, nil

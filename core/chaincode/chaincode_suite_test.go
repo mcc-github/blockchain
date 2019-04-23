@@ -9,6 +9,7 @@ package chaincode_test
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/common/privdata"
@@ -65,10 +66,6 @@ type packageProvider interface {
 
 
 
-
-type lifecycleIface interface {
-	chaincode.Lifecycle
-}
 
 
 type chaincodeStream interface {
@@ -145,4 +142,14 @@ type applicationConfigRetriever interface {
 
 type collectionStore interface {
 	privdata.CollectionStore
+}
+
+
+type applicationCapabilities interface {
+	channelconfig.ApplicationCapabilities
+}
+
+
+type applicationConfig interface {
+	channelconfig.Application
 }

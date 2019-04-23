@@ -11,6 +11,7 @@ import (
 
 	"github.com/mcc-github/blockchain/gossip/comm"
 	"github.com/mcc-github/blockchain/gossip/common"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/assert"
 )
@@ -27,19 +28,19 @@ func TestMockComm(t *testing.T) {
 	defer comm1.Stop()
 
 	msgCh := comm1.Accept(func(message interface{}) bool {
-		return message.(proto.ReceivedMessage).GetGossipMessage().GetStateRequest() != nil ||
-			message.(proto.ReceivedMessage).GetGossipMessage().GetStateResponse() != nil
+		return message.(protoext.ReceivedMessage).GetGossipMessage().GetStateRequest() != nil ||
+			message.(protoext.ReceivedMessage).GetGossipMessage().GetStateResponse() != nil
 	})
 
 	comm2 := NewCommMock(second.endpoint, members)
 	defer comm2.Stop()
 
-	sMsg, _ := (&proto.GossipMessage{
+	sMsg, _ := protoext.NoopSign(&proto.GossipMessage{
 		Content: &proto.GossipMessage_StateRequest{StateRequest: &proto.RemoteStateRequest{
 			StartSeqNum: 1,
 			EndSeqNum:   3,
 		}},
-	}).NoopSign()
+	})
 	comm2.Send(sMsg, &comm.RemotePeer{Endpoint: "first", PKIID: common.PKIidType("first")})
 
 	msg := <-msgCh
@@ -64,7 +65,7 @@ func TestMockComm_PingPong(t *testing.T) {
 	rcvChA := peerA.Accept(all)
 	rcvChB := peerB.Accept(all)
 
-	sMsg, _ := (&proto.GossipMessage{
+	sMsg, _ := protoext.NoopSign(&proto.GossipMessage{
 		Content: &proto.GossipMessage_DataMsg{
 			DataMsg: &proto.DataMessage{
 				Payload: &proto.Payload{
@@ -72,7 +73,7 @@ func TestMockComm_PingPong(t *testing.T) {
 					Data:   []byte("Ping"),
 				},
 			}},
-	}).NoopSign()
+	})
 	peerA.Send(sMsg, &comm.RemotePeer{Endpoint: "peerB", PKIID: common.PKIidType("peerB")})
 
 	msg := <-rcvChB

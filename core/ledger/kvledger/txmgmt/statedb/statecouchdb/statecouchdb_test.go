@@ -35,25 +35,24 @@ func testMain(m *testing.M) int {
 	
 	ledgertestutil.SetupCoreYAMLConfig()
 	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/kvledger/txmgmt/statedb/statecouchdb")
+	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", false)
 
 	
 	couchAddress, cleanup := couchDBSetup()
 	defer cleanup()
-	viper.Set("ledger.state.stateDatabase", "CouchDB")
-	defer viper.Set("ledger.state.stateDatabase", "goleveldb")
 
-	viper.Set("ledger.state.couchDBConfig.couchDBAddress", couchAddress)
-	
-	
-	viper.Set("ledger.state.couchDBConfig.username", "")
-	viper.Set("ledger.state.couchDBConfig.password", "")
-	viper.Set("ledger.state.couchDBConfig.maxRetries", 3)
-	viper.Set("ledger.state.couchDBConfig.maxRetriesOnStartup", 20)
-	viper.Set("ledger.state.couchDBConfig.requestTimeout", time.Second*35)
-	
-	viper.Set("ledger.state.couchDBConfig.autoWarmIndexes", false)
+	testConfig = &couchdb.Config{
+		Address:             couchAddress,
+		Username:            "",
+		Password:            "",
+		InternalQueryLimit:  1000,
+		MaxBatchUpdateSize:  1000,
+		MaxRetries:          3,
+		MaxRetriesOnStartup: 20,
+		RequestTimeout:      35 * time.Second,
+	}
 
-	flogging.ActivateSpec("statecouchdb,couchdb=debug")
+	flogging.ActivateSpec("statecouchdb=debug")
 	
 	return m.Run()
 }

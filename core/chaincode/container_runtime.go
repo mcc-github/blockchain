@@ -45,14 +45,14 @@ type ContainerRuntime struct {
 
 
 func (c *ContainerRuntime) Start(ccci *ccprovider.ChaincodeContainerInfo, codePackage []byte) error {
-	cname := ccci.Name + ":" + ccci.Version
+	packageID := ccci.PackageID.String()
 
-	lc, err := c.LaunchConfig(cname, ccci.Type)
+	lc, err := c.LaunchConfig(packageID, ccci.Type)
 	if err != nil {
 		return err
 	}
 
-	chaincodeLogger.Debugf("start container: %s", cname)
+	chaincodeLogger.Debugf("start container: %s", packageID)
 	chaincodeLogger.Debugf("start container with args: %s", strings.Join(lc.Args, " "))
 	chaincodeLogger.Debugf("start container with env:\n\t%s", strings.Join(lc.Envs, "\n\t"))
 
@@ -68,10 +68,7 @@ func (c *ContainerRuntime) Start(ccci *ccprovider.ChaincodeContainerInfo, codePa
 		Args:          lc.Args,
 		Env:           lc.Envs,
 		FilesToUpload: lc.Files,
-		CCID: ccintf.CCID{
-			Name:    ccci.Name,
-			Version: ccci.Version,
-		},
+		CCID:          ccintf.New(ccci.PackageID),
 	}
 
 	if err := c.Processor.Process(ccci.ContainerType, scr); err != nil {
@@ -84,10 +81,7 @@ func (c *ContainerRuntime) Start(ccci *ccprovider.ChaincodeContainerInfo, codePa
 
 func (c *ContainerRuntime) Stop(ccci *ccprovider.ChaincodeContainerInfo) error {
 	scr := container.StopContainerReq{
-		CCID: ccintf.CCID{
-			Name:    ccci.Name,
-			Version: ccci.Version,
-		},
+		CCID:       ccintf.New(ccci.PackageID),
 		Timeout:    0,
 		Dontremove: false,
 	}
@@ -97,6 +91,30 @@ func (c *ContainerRuntime) Stop(ccci *ccprovider.ChaincodeContainerInfo) error {
 	}
 
 	return nil
+}
+
+
+func (c *ContainerRuntime) Wait(ccci *ccprovider.ChaincodeContainerInfo) (int, error) {
+	type result struct {
+		exitCode int
+		err      error
+	}
+
+	resultCh := make(chan result, 1)
+	wcr := container.WaitContainerReq{
+		CCID: ccintf.New(ccci.PackageID),
+		Exited: func(exitCode int, err error) {
+			resultCh <- result{exitCode: exitCode, err: err}
+			close(resultCh)
+		},
+	}
+
+	if err := c.Processor.Process(ccci.ContainerType, wcr); err != nil {
+		return -1, err
+	}
+	r := <-resultCh
+
+	return r.exitCode, r.err
 }
 
 const (
@@ -126,11 +144,16 @@ type LaunchConfig struct {
 }
 
 
-func (c *ContainerRuntime) LaunchConfig(cname string, ccType string) (*LaunchConfig, error) {
+func (c *ContainerRuntime) LaunchConfig(packageID string, ccType string) (*LaunchConfig, error) {
 	var lc LaunchConfig
 
 	
-	lc.Envs = append(c.CommonEnv, "CORE_CHAINCODE_ID_NAME="+cname)
+	
+	
+	
+	
+	
+	lc.Envs = append(c.CommonEnv, "CORE_CHAINCODE_ID_NAME="+packageID)
 
 	
 	switch ccType {
@@ -146,13 +169,13 @@ func (c *ContainerRuntime) LaunchConfig(cname string, ccType string) (*LaunchCon
 
 	
 	if c.CertGenerator != nil {
-		certKeyPair, err := c.CertGenerator.Generate(cname)
+		certKeyPair, err := c.CertGenerator.Generate(packageID)
 		if err != nil {
-			return nil, errors.WithMessage(err, fmt.Sprintf("failed to generate TLS certificates for %s", cname))
+			return nil, errors.WithMessagef(err, "failed to generate TLS certificates for %s", packageID)
 		}
 		lc.Files = c.getTLSFiles(certKeyPair)
 		if lc.Files == nil {
-			return nil, errors.Errorf("failed to acquire TLS certificates for %s", cname)
+			return nil, errors.Errorf("failed to acquire TLS certificates for %s", packageID)
 		}
 
 		lc.Envs = append(lc.Envs, "CORE_PEER_TLS_ENABLED=true")

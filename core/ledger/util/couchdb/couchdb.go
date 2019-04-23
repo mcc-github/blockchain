@@ -28,7 +28,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
 )
@@ -45,15 +44,13 @@ type DBOperationResponse struct {
 
 
 type DBInfo struct {
-	DbName    string `json:"db_name"`
-	UpdateSeq string `json:"update_seq"`
-	Sizes     struct {
+	DbName string `json:"db_name"`
+	Sizes  struct {
 		File     int `json:"file"`
 		External int `json:"external"`
 		Active   int `json:"active"`
 	} `json:"sizes"`
-	PurgeSeq int `json:"purge_seq"`
-	Other    struct {
+	Other struct {
 		DataSize int `json:"data_size"`
 	} `json:"other"`
 	DocDelCount       int    `json:"doc_del_count"`
@@ -117,20 +114,40 @@ type QueryResult struct {
 }
 
 
-type CouchConnectionDef struct {
-	URL                   string
-	Username              string
-	Password              string
-	MaxRetries            int
-	MaxRetriesOnStartup   int
-	RequestTimeout        time.Duration
+type Config struct {
+	
+	Address string
+	
+	
+	Username string
+	
+	Password string
+	
+	
+	MaxRetries int
+	
+	
+	MaxRetriesOnStartup int
+	
+	RequestTimeout time.Duration
+	
+	
+	InternalQueryLimit int
+	
+	
+	MaxBatchUpdateSize int
+	
+	
+	WarmIndexesAfterNBlocks int
+	
+	
 	CreateGlobalChangesDB bool
 }
 
 
 type CouchInstance struct {
-	conf   CouchConnectionDef 
-	client *http.Client       
+	conf   *Config
+	client *http.Client 
 	stats  *stats
 }
 
@@ -232,33 +249,6 @@ func closeResponseBody(resp *http.Response) {
 }
 
 
-func CreateConnectionDefinition(couchDBAddress, username, password string, maxRetries,
-	maxRetriesOnStartup int, requestTimeout time.Duration, createGlobalChangesDB bool) (*CouchConnectionDef, error) {
-
-	logger.Debugf("Entering CreateConnectionDefinition()")
-
-	connectURL := &url.URL{
-		Host:   couchDBAddress,
-		Scheme: "http",
-	}
-
-	
-	finalURL, err := url.Parse(connectURL.String())
-	if err != nil {
-		logger.Errorf("URL parse error: %s", err)
-		return nil, errors.Wrapf(err, "error parsing connect URL: %s", connectURL)
-	}
-
-	logger.Debugf("Created database configuration  URL=[%s]", finalURL.String())
-	logger.Debugf("Exiting CreateConnectionDefinition()")
-
-	
-	return &CouchConnectionDef{finalURL.String(), username, password, maxRetries,
-		maxRetriesOnStartup, requestTimeout, createGlobalChangesDB}, nil
-
-}
-
-
 func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 
 	logger.Debugf("[%s] Entering CreateDatabaseIfNotExist()", dbclient.DBName)
@@ -288,10 +278,10 @@ func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 
 	logger.Debugf("[%s] Database does not exist.", dbclient.DBName)
 
-	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	connectURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -363,10 +353,10 @@ func (dbclient *CouchDatabase) applyDatabasePermissions() error {
 
 func (dbclient *CouchDatabase) GetDatabaseInfo() (*DBInfo, *DBReturn, error) {
 
-	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	connectURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -397,10 +387,10 @@ func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, *DBRet
 	logger.Debugf("Entering VerifyCouchConfig()")
 	defer logger.Debugf("Exiting VerifyCouchConfig()")
 
-	connectURL, err := url.Parse(couchInstance.conf.URL)
+	connectURL, err := url.Parse(couchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, nil, errors.Wrapf(err, "error parsing couch instance URL: %s", couchInstance.conf.URL)
+		return nil, nil, errors.Wrapf(err, "error parsing couch instance URL: %s", couchInstance.URL())
 	}
 	connectURL.Path = "/"
 
@@ -439,10 +429,10 @@ func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, *DBRet
 
 
 func (couchInstance *CouchInstance) HealthCheck(ctx context.Context) error {
-	connectURL, err := url.Parse(couchInstance.conf.URL)
+	connectURL, err := url.Parse(couchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return errors.Wrapf(err, "error parsing CouchDB URL: %s", couchInstance.conf.URL)
+		return errors.Wrapf(err, "error parsing CouchDB URL: %s", couchInstance.URL())
 	}
 	_, _, err = couchInstance.handleRequest(ctx, http.MethodHead, "", "HealthCheck", connectURL, nil, "", "", 0, true, nil)
 	if err != nil {
@@ -452,15 +442,36 @@ func (couchInstance *CouchInstance) HealthCheck(ctx context.Context) error {
 }
 
 
+
+func (couchInstance *CouchInstance) InternalQueryLimit() int32 {
+	return int32(couchInstance.conf.InternalQueryLimit)
+}
+
+
+
+func (couchInstance *CouchInstance) MaxBatchUpdateSize() int {
+	return couchInstance.conf.MaxBatchUpdateSize
+}
+
+
+func (couchInstance *CouchInstance) URL() string {
+	URL := &url.URL{
+		Host:   couchInstance.conf.Address,
+		Scheme: "http",
+	}
+	return URL.String()
+}
+
+
 func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
 	dbName := dbclient.DBName
 
 	logger.Debugf("[%s] Entering DropDatabase()", dbName)
 
-	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	connectURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -500,10 +511,10 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) 
 
 	logger.Debugf("[%s] Entering EnsureFullCommit()", dbName)
 
-	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	connectURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -523,18 +534,14 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) 
 	}
 
 	
-	
-	
-	
-	
-	if ledgerconfig.IsAutoWarmIndexesEnabled() {
-
-		if dbclient.IndexWarmCounter >= ledgerconfig.GetWarmIndexesAfterNBlocks() {
+	if dbclient.CouchInstance.conf.WarmIndexesAfterNBlocks > 0 {
+		
+		if dbclient.IndexWarmCounter >= dbclient.CouchInstance.conf.WarmIndexesAfterNBlocks {
+			
 			go dbclient.runWarmIndexAllIndexes()
 			dbclient.IndexWarmCounter = 0
 		}
 		dbclient.IndexWarmCounter++
-
 	}
 
 	logger.Debugf("[%s] Exiting EnsureFullCommit()", dbclient.DBName)
@@ -558,10 +565,10 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 		return "", errors.Errorf("doc id [%x] not a valid utf8 string", id)
 	}
 
-	saveURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	saveURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return "", errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return "", errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -753,10 +760,10 @@ func (dbclient *CouchDatabase) ReadDoc(id string) (*CouchDoc, string, error) {
 		return nil, "", errors.Errorf("doc id [%x] not a valid utf8 string", id)
 	}
 
-	readURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	readURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, "", errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, "", errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	query := readURL.Query()
@@ -883,10 +890,10 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit int32
 
 	var results []*QueryResult
 
-	rangeURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	rangeURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, "", errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, "", errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	queryParms := rangeURL.Query()
@@ -1005,10 +1012,10 @@ func (dbclient *CouchDatabase) DeleteDoc(id, rev string) error {
 
 	logger.Debugf("[%s] Entering DeleteDoc()  id=%s", dbName, id)
 
-	deleteURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	deleteURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -1043,10 +1050,10 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, str
 
 	var results []*QueryResult
 
-	queryURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	queryURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, "", errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, "", errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -1139,10 +1146,10 @@ func (dbclient *CouchDatabase) ListIndex() ([]*IndexResult, error) {
 	dbName := dbclient.DBName
 	logger.Debug("[%s] Entering ListIndex()", dbName)
 
-	indexURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	indexURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -1202,10 +1209,10 @@ func (dbclient *CouchDatabase) CreateIndex(indexdefinition string) (*CreateIndex
 		return nil, errors.New("JSON format is not valid")
 	}
 
-	indexURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	indexURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -1256,10 +1263,10 @@ func (dbclient *CouchDatabase) DeleteIndex(designdoc, indexname string) error {
 
 	logger.Debugf("[%s] Entering DeleteIndex()  designdoc=%s  indexname=%s", dbName, designdoc, indexname)
 
-	indexURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	indexURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -1281,10 +1288,10 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 
 	logger.Debugf("[%s] Entering WarmIndex()  designdoc=%s  indexname=%s", dbName, designdoc, indexname)
 
-	indexURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	indexURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	queryParms := indexURL.Query()
@@ -1348,10 +1355,10 @@ func (dbclient *CouchDatabase) GetDatabaseSecurity() (*DatabaseSecurity, error) 
 
 	logger.Debugf("[%s] Entering GetDatabaseSecurity()", dbName)
 
-	securityURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	securityURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -1389,10 +1396,10 @@ func (dbclient *CouchDatabase) ApplyDatabaseSecurity(databaseSecurity *DatabaseS
 
 	logger.Debugf("[%s] Entering ApplyDatabaseSecurity()", dbName)
 
-	securityURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	securityURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	
@@ -1438,10 +1445,10 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 
 	logger.Debugf("[%s] Entering BatchRetrieveDocumentMetadata()  keys=%s", dbclient.DBName, keys)
 
-	batchRetrieveURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	batchRetrieveURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	queryParms := batchRetrieveURL.Query()
@@ -1517,10 +1524,10 @@ func (dbclient *CouchDatabase) BatchUpdateDocuments(documents []*CouchDoc) ([]*B
 		}
 	}
 
-	batchUpdateURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	batchUpdateURL, err := url.Parse(dbclient.CouchInstance.URL())
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err)
-		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.conf.URL)
+		return nil, errors.Wrapf(err, "error parsing CouchDB URL: %s", dbclient.CouchInstance.URL())
 	}
 
 	documentMap := make(map[string]interface{})

@@ -29,11 +29,12 @@ import (
 	"github.com/mcc-github/blockchain/gossip/api"
 	gossipcommon "github.com/mcc-github/blockchain/gossip/common"
 	gdisc "github.com/mcc-github/blockchain/gossip/discovery"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/msp"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -712,7 +713,7 @@ func TestAddEndorsersQueryInvalidInput(t *testing.T) {
 
 func TestValidateAliveMessage(t *testing.T) {
 	am := aliveMessage(1)
-	msg, _ := am.ToGossipMessage()
+	msg, _ := protoext.EnvelopeToGossipMessage(am)
 
 	
 	assert.NoError(t, validateAliveMessage(msg))
@@ -836,7 +837,7 @@ type inquireablePolicy struct {
 func (ip *inquireablePolicy) appendPrincipal(orgName string) {
 	ip.principals = append(ip.principals, &msp.MSPPrincipal{
 		PrincipalClassification: msp.MSPPrincipal_ROLE,
-		Principal:               utils.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_MEMBER, MspIdentifier: orgName})})
+		Principal:               protoutil.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_MEMBER, MspIdentifier: orgName})})
 }
 
 func (ip *inquireablePolicy) SatisfiedBy() []policies.PrincipalSet {
@@ -885,7 +886,7 @@ func aliveMessage(id int) *gossip.Envelope {
 			},
 		},
 	}
-	sMsg, _ := g.NoopSign()
+	sMsg, _ := protoext.NoopSign(g)
 	return sMsg.Envelope
 }
 
@@ -908,7 +909,7 @@ func stateInfoMessageWithHeight(ledgerHeight uint64, chaincodes ...*gossip.Chain
 			},
 		},
 	}
-	sMsg, _ := g.NoopSign()
+	sMsg, _ := protoext.NoopSign(g)
 	return sMsg.Envelope
 }
 
@@ -963,7 +964,7 @@ func (ms *mockSupport) PeersAuthorizedByCriteria(channel gossipcommon.ChainID, i
 	return ms.endorsementAnalyzer.PeersAuthorizedByCriteria(channel, interest)
 }
 
-func (*mockSupport) EligibleForService(channel string, data common.SignedData) error {
+func (*mockSupport) EligibleForService(channel string, data protoutil.SignedData) error {
 	return nil
 }
 
@@ -1055,13 +1056,13 @@ func buildCollectionConfig(col2principals map[string][]*msp.MSPPrincipal) []byte
 			},
 		})
 	}
-	return utils.MarshalOrPanic(collections)
+	return protoutil.MarshalOrPanic(collections)
 }
 
 func memberPrincipal(mspID string) *msp.MSPPrincipal {
 	return &msp.MSPPrincipal{
 		PrincipalClassification: msp.MSPPrincipal_ROLE,
-		Principal: utils.MarshalOrPanic(&msp.MSPRole{
+		Principal: protoutil.MarshalOrPanic(&msp.MSPRole{
 			MspIdentifier: mspID,
 			Role:          msp.MSPRole_MEMBER,
 		}),

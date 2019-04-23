@@ -9,7 +9,7 @@ package configtx
 import (
 	"github.com/golang/protobuf/proto"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -94,7 +94,7 @@ func UnmarshalConfigUpdateFromPayload(payload *cb.Payload) (*cb.ConfigUpdate, er
 	if err != nil {
 		return nil, err
 	}
-	configUpdateEnv, err := utils.EnvelopeToConfigUpdate(configEnv.LastUpdate)
+	configUpdateEnv, err := protoutil.EnvelopeToConfigUpdate(configEnv.LastUpdate)
 	if err != nil {
 		return nil, err
 	}

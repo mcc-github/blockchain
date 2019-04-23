@@ -24,7 +24,7 @@ func (bb *baseBuilder) Build(cc balancer.ClientConn, opt balancer.BuildOptions) 
 
 		subConns: make(map[resolver.Address]balancer.SubConn),
 		scStates: make(map[balancer.SubConn]connectivity.State),
-		csEvltr:  &connectivityStateEvaluator{},
+		csEvltr:  &balancer.ConnectivityStateEvaluator{},
 		
 		
 		
@@ -41,7 +41,7 @@ type baseBalancer struct {
 	cc            balancer.ClientConn
 	pickerBuilder PickerBuilder
 
-	csEvltr *connectivityStateEvaluator
+	csEvltr *balancer.ConnectivityStateEvaluator
 	state   connectivity.State
 
 	subConns map[resolver.Address]balancer.SubConn
@@ -121,7 +121,7 @@ func (b *baseBalancer) HandleSubConnStateChange(sc balancer.SubConn, s connectiv
 	}
 
 	oldAggrState := b.state
-	b.state = b.csEvltr.recordTransition(oldS, s)
+	b.state = b.csEvltr.RecordTransition(oldS, s)
 
 	
 	
@@ -152,45 +152,4 @@ type errPicker struct {
 
 func (p *errPicker) Pick(ctx context.Context, opts balancer.PickOptions) (balancer.SubConn, func(balancer.DoneInfo), error) {
 	return nil, nil, p.err
-}
-
-
-
-
-type connectivityStateEvaluator struct {
-	numReady            uint64 
-	numConnecting       uint64 
-	numTransientFailure uint64 
-}
-
-
-
-
-
-
-
-
-
-func (cse *connectivityStateEvaluator) recordTransition(oldState, newState connectivity.State) connectivity.State {
-	
-	for idx, state := range []connectivity.State{oldState, newState} {
-		updateVal := 2*uint64(idx) - 1 
-		switch state {
-		case connectivity.Ready:
-			cse.numReady += updateVal
-		case connectivity.Connecting:
-			cse.numConnecting += updateVal
-		case connectivity.TransientFailure:
-			cse.numTransientFailure += updateVal
-		}
-	}
-
-	
-	if cse.numReady > 0 {
-		return connectivity.Ready
-	}
-	if cse.numConnecting > 0 {
-		return connectivity.Connecting
-	}
-	return connectivity.TransientFailure
 }

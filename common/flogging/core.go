@@ -15,6 +15,7 @@ type Encoding int8
 const (
 	CONSOLE = iota
 	JSON
+	LOGFMT
 )
 
 

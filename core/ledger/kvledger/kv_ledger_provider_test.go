@@ -1,17 +1,7 @@
 /*
 Copyright IBM Corp. 2016 All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package kvledger
@@ -33,7 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
-	putils "github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -193,7 +183,7 @@ func TestLedgerBackup(t *testing.T) {
 	env := createTestEnv(t, originalPath)
 	provider := testutilNewProvider(t)
 	bg, gb := testutil.NewBlockGenerator(t, ledgerid, false)
-	gbHash := gb.Header.Hash()
+	gbHash := protoutil.BlockHeaderHash(gb.Header)
 	ledger, _ := provider.Create(gb)
 
 	txid := util.GenerateUUID()
@@ -242,8 +232,8 @@ func TestLedgerBackup(t *testing.T) {
 	ledger, _ = provider.Open(ledgerid)
 	defer ledger.Close()
 
-	block1Hash := block1.Header.Hash()
-	block2Hash := block2.Header.Hash()
+	block1Hash := protoutil.BlockHeaderHash(block1.Header)
+	block2Hash := protoutil.BlockHeaderHash(block2.Header)
 	bcInfo, _ := ledger.GetBlockchainInfo()
 	assert.Equal(t, &common.BlockchainInfo{
 		Height: 3, CurrentBlockHash: block2Hash, PreviousBlockHash: block1Hash,
@@ -269,11 +259,11 @@ func TestLedgerBackup(t *testing.T) {
 
 	
 	txEnvBytes2 := block1.Data.Data[0]
-	txEnv2, err := putils.GetEnvelopeFromBlock(txEnvBytes2)
+	txEnv2, err := protoutil.GetEnvelopeFromBlock(txEnvBytes2)
 	assert.NoError(t, err, "Error upon GetEnvelopeFromBlock")
-	payload2, err := putils.GetPayload(txEnv2)
+	payload2, err := protoutil.GetPayload(txEnv2)
 	assert.NoError(t, err, "Error upon GetPayload")
-	chdr, err := putils.UnmarshalChannelHeader(payload2.Header.ChannelHeader)
+	chdr, err := protoutil.UnmarshalChannelHeader(payload2.Header.ChannelHeader)
 	assert.NoError(t, err, "Error upon GetChannelHeaderFromBytes")
 	txID2 := chdr.TxId
 	processedTran2, err := ledger.GetTransactionByID(txID2)
@@ -310,6 +300,7 @@ func testutilNewProvider(t *testing.T) lgr.PeerLedgerProvider {
 	provider.Initialize(&lgr.Initializer{
 		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
 		MetricsProvider:               &disabled.Provider{},
+		Config:                        &lgr.Config{},
 	})
 	return provider
 }
@@ -331,7 +322,7 @@ func testutilNewProviderWithCollectionConfig(t *testing.T, namespace string, btl
 	mockCCInfoProvider.ChaincodeInfoStub = func(channelName, ccName string, qe lgr.SimpleQueryExecutor) (*lgr.DeployedChaincodeInfo, error) {
 		if ccName == namespace {
 			return &lgr.DeployedChaincodeInfo{
-				Name: namespace, CollectionConfigPkg: collectionConfPkg}, nil
+				Name: namespace, ExplicitCollectionConfigPkg: collectionConfPkg}, nil
 		}
 		return nil, nil
 	}

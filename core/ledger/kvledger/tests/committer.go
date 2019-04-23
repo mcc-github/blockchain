@@ -12,6 +12,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -77,7 +78,7 @@ func newBlockGenerator(lgr ledger.PeerLedger, t *testing.T) *blkGenerator {
 
 
 func (g *blkGenerator) nextBlockAndPvtdata(trans ...*txAndPvtdata) *ledger.BlockAndPvtData {
-	block := common.NewBlock(g.lastNum+1, g.lastHash)
+	block := protoutil.NewBlock(g.lastNum+1, g.lastHash)
 	blockPvtdata := make(map[uint64]*ledger.TxPvtData)
 	for i, tran := range trans {
 		seq := uint64(i)
@@ -87,9 +88,9 @@ func (g *blkGenerator) nextBlockAndPvtdata(trans ...*txAndPvtdata) *ledger.Block
 			blockPvtdata[seq] = &ledger.TxPvtData{SeqInBlock: seq, WriteSet: tran.Pvtws}
 		}
 	}
-	block.Header.DataHash = block.Data.Hash()
+	block.Header.DataHash = protoutil.BlockDataHash(block.Data)
 	g.lastNum++
-	g.lastHash = block.Header.Hash()
+	g.lastHash = protoutil.BlockHeaderHash(block.Header)
 	setBlockFlagsToValid(block)
 	return &ledger.BlockAndPvtData{Block: block, PvtData: blockPvtdata,
 		MissingPvtData: make(ledger.TxMissingPvtDataMap)}

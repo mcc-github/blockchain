@@ -9,6 +9,7 @@ package inproccontroller
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
@@ -51,8 +52,10 @@ func (s SysCCRegisteredErr) Error() string {
 
 
 type Registry struct {
-	typeRegistry     map[string]*inprocContainer
-	instRegistry     map[string]*inprocContainer
+	mutex        sync.Mutex
+	typeRegistry map[ccintf.CCID]*inprocContainer
+	instRegistry map[string]*inprocContainer
+
 	ChaincodeSupport ccintf.CCSupport
 }
 
@@ -63,27 +66,53 @@ type Registry struct {
 
 func NewRegistry() *Registry {
 	return &Registry{
-		typeRegistry: make(map[string]*inprocContainer),
+		typeRegistry: make(map[ccintf.CCID]*inprocContainer),
 		instRegistry: make(map[string]*inprocContainer),
 	}
 }
 
 
 func (r *Registry) NewVM() container.VM {
-	return NewInprocVM(r)
+	return &InprocVM{registry: r}
 }
 
 
-func (r *Registry) Register(ccid *ccintf.CCID, cc shim.Chaincode) error {
-	name := ccid.GetName()
-	inprocLogger.Debugf("Registering chaincode instance: %s", name)
-	tmp := r.typeRegistry[name]
+func (r *Registry) Register(ccid ccintf.CCID, cc shim.Chaincode) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	inprocLogger.Debugf("Registering chaincode instance: %s", ccid)
+	tmp := r.typeRegistry[ccid]
 	if tmp != nil {
-		return SysCCRegisteredErr(name)
+		return SysCCRegisteredErr(ccid.String())
 	}
 
-	r.typeRegistry[name] = &inprocContainer{chaincode: cc}
+	r.typeRegistry[ccid] = &inprocContainer{chaincode: cc}
 	return nil
+}
+
+func (r *Registry) getType(ccid ccintf.CCID) *inprocContainer {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return r.typeRegistry[ccid]
+}
+
+func (r *Registry) getInstance(name string) *inprocContainer {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return r.instRegistry[name]
+}
+
+func (r *Registry) setInstance(name string, inst *inprocContainer) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.instRegistry[name] = inst
+}
+
+func (r *Registry) removeInstance(name string) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	delete(r.instRegistry, name)
 }
 
 
@@ -91,15 +120,8 @@ type InprocVM struct {
 	registry *Registry
 }
 
-
-func NewInprocVM(r *Registry) *InprocVM {
-	return &InprocVM{
-		registry: r,
-	}
-}
-
 func (vm *InprocVM) getInstance(ipctemplate *inprocContainer, instName string, args []string, env []string) (*inprocContainer, error) {
-	ipc := vm.registry.instRegistry[instName]
+	ipc := vm.registry.getInstance(instName)
 	if ipc != nil {
 		inprocLogger.Warningf("chaincode instance exists for %s", instName)
 		return ipc, nil
@@ -111,7 +133,7 @@ func (vm *InprocVM) getInstance(ipctemplate *inprocContainer, instName string, a
 		chaincode:        ipctemplate.chaincode,
 		stopChan:         make(chan struct{}),
 	}
-	vm.registry.instRegistry[instName] = ipc
+	vm.registry.setInstance(instName, ipc)
 	inprocLogger.Debugf("chaincode instance created for %s", instName)
 	return ipc, nil
 }
@@ -175,12 +197,9 @@ func (ipc *inprocContainer) launchInProc(id string, args []string, env []string)
 
 
 func (vm *InprocVM) Start(ccid ccintf.CCID, args []string, env []string, filesToUpload map[string][]byte, builder container.Builder) error {
-	path := ccid.GetName()
-
-	ipctemplate := vm.registry.typeRegistry[path]
-
+	ipctemplate := vm.registry.getType(ccid)
 	if ipctemplate == nil {
-		return fmt.Errorf(fmt.Sprintf("%s not registered", path))
+		return fmt.Errorf(fmt.Sprintf("%s not registered", ccid))
 	}
 
 	instName := vm.GetVMName(ccid)
@@ -192,7 +211,7 @@ func (vm *InprocVM) Start(ccid ccintf.CCID, args []string, env []string, filesTo
 	}
 
 	if ipc.running {
-		return fmt.Errorf(fmt.Sprintf("chaincode running %s", path))
+		return fmt.Errorf(fmt.Sprintf("chaincode running %s", ccid))
 	}
 
 	ipc.running = true
@@ -211,17 +230,14 @@ func (vm *InprocVM) Start(ccid ccintf.CCID, args []string, env []string, filesTo
 
 
 func (vm *InprocVM) Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error {
-	path := ccid.GetName()
-
-	ipctemplate := vm.registry.typeRegistry[path]
+	ipctemplate := vm.registry.getType(ccid)
 	if ipctemplate == nil {
-		return fmt.Errorf("%s not registered", path)
+		return fmt.Errorf("%s not registered", ccid)
 	}
 
 	instName := vm.GetVMName(ccid)
 
-	ipc := vm.registry.instRegistry[instName]
-
+	ipc := vm.registry.getInstance(instName)
 	if ipc == nil {
 		return fmt.Errorf("%s not found", instName)
 	}
@@ -230,9 +246,10 @@ func (vm *InprocVM) Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremo
 		return fmt.Errorf("%s not running", instName)
 	}
 
-	ipc.stopChan <- struct{}{}
+	ipc.running = false
+	close(ipc.stopChan)
+	vm.registry.removeInstance(instName)
 
-	delete(vm.registry.instRegistry, instName)
 	
 	return nil
 }
@@ -244,8 +261,21 @@ func (vm *InprocVM) HealthCheck(ctx context.Context) error {
 }
 
 
+func (vm *InprocVM) Wait(ccid ccintf.CCID) (int, error) {
+	instName := vm.GetVMName(ccid)
+	ipc := vm.registry.getInstance(instName)
+	if ipc == nil {
+		return 0, fmt.Errorf("%s not found", instName)
+	}
+
+	<-ipc.stopChan
+
+	return 0, nil
+}
+
+
 
 
 func (vm *InprocVM) GetVMName(ccid ccintf.CCID) string {
-	return ccid.GetName()
+	return ccid.String()
 }

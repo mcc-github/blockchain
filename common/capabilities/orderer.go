@@ -28,8 +28,8 @@ const (
 
 type OrdererProvider struct {
 	*registry
-	v11BugFixes   bool
-	kafka2RaftMig bool
+	v11BugFixes bool
+	V20         bool
 }
 
 
@@ -37,7 +37,7 @@ func NewOrdererProvider(capabilities map[string]*cb.Capability) *OrdererProvider
 	cp := &OrdererProvider{}
 	cp.registry = newRegistry(cp, capabilities)
 	_, cp.v11BugFixes = capabilities[OrdererV1_1]
-	_, cp.kafka2RaftMig = capabilities[OrdererV2_0]
+	_, cp.V20 = capabilities[OrdererV2_0]
 	return cp
 }
 
@@ -62,22 +62,28 @@ func (cp *OrdererProvider) HasCapability(capability string) bool {
 
 
 func (cp *OrdererProvider) PredictableChannelTemplate() bool {
-	return cp.v11BugFixes
+	return cp.v11BugFixes || cp.V20
 }
 
 
 
 func (cp *OrdererProvider) Resubmission() bool {
-	return cp.v11BugFixes
+	return cp.v11BugFixes || cp.V20
 }
 
 
 
 func (cp *OrdererProvider) ExpirationCheck() bool {
-	return cp.v11BugFixes
+	return cp.v11BugFixes || cp.V20
 }
 
 
 func (cp *OrdererProvider) Kafka2RaftMigration() bool {
-	return cp.kafka2RaftMig
+	return cp.V20
+}
+
+
+
+func (cp *OrdererProvider) UseChannelCreationPolicyAsAdmins() bool {
+	return cp.V20
 }

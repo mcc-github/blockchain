@@ -17,6 +17,7 @@ import (
 
 type TransactionContext struct {
 	ChainID              string
+	NamespaceID          string
 	SignedProp           *pb.SignedProposal
 	Proposal             *pb.Proposal
 	ResponseNotifier     chan *pb.ChaincodeMessage
@@ -36,7 +37,27 @@ type TransactionContext struct {
 	
 	
 	
-	AllowedCollectionAccess map[string]bool
+	CollectionACLCache CollectionACLCache
+}
+
+
+
+type CollectionACLCache map[string]*readWritePermission
+
+type readWritePermission struct {
+	read, write bool
+}
+
+func (c CollectionACLCache) put(collection string, rwPermission *readWritePermission) {
+	c[collection] = rwPermission
+}
+
+func (c CollectionACLCache) get(collection string) *readWritePermission {
+	return c[collection]
+}
+
+func (t *TransactionContext) InitializeCollectionACLCache() {
+	t.CollectionACLCache = make(CollectionACLCache)
 }
 
 func (t *TransactionContext) InitializeQueryContext(queryID string, iter commonledger.ResultsIterator) {

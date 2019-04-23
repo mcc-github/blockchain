@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode"
@@ -21,6 +20,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/scc"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
@@ -30,7 +30,7 @@ import (
 
 type SupportImpl struct {
 	*PluginEndorser
-	crypto.SignerSupport
+	identity.SignerSerializer
 	Peer             peer.Operations
 	PeerSupport      peer.Support
 	ChaincodeSupport *chaincode.ChaincodeSupport
@@ -47,7 +47,7 @@ func (s *SupportImpl) NewQueryCreator(channel string) (QueryCreator, error) {
 }
 
 func (s *SupportImpl) SigningIdentityForRequest(*pb.SignedProposal) (SigningIdentity, error) {
-	return s.SignerSupport, nil
+	return s.SignerSerializer, nil
 }
 
 
@@ -132,10 +132,11 @@ func (s *SupportImpl) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, 
 }
 
 
-func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, cid, name, version, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
+func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, cid, name, txid string, idBytes []byte, requiresInit bool, signedProp *pb.SignedProposal, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
 	cccid := &ccprovider.CCContext{
-		Name:    name,
-		Version: version,
+		Name:         name,
+		InitRequired: requiresInit,
+		ID:           idBytes,
 	}
 
 	
@@ -148,8 +149,8 @@ func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, cid, name,
 }
 
 
-func (s *SupportImpl) GetChaincodeDefinition(chaincodeName string, txsim ledger.QueryExecutor) (ccprovider.ChaincodeDefinition, error) {
-	return s.ChaincodeSupport.Lifecycle.ChaincodeDefinition(chaincodeName, txsim)
+func (s *SupportImpl) GetChaincodeDefinition(channelID, chaincodeName string, txsim ledger.QueryExecutor) (ccprovider.ChaincodeDefinition, error) {
+	return s.ChaincodeSupport.Lifecycle.ChaincodeDefinition(channelID, chaincodeName, txsim)
 }
 
 
@@ -172,8 +173,12 @@ func (s *SupportImpl) IsJavaCC(buf []byte) (bool, error) {
 
 
 
+
 func (s *SupportImpl) CheckInstantiationPolicy(name, version string, cd ccprovider.ChaincodeDefinition) error {
-	return ccprovider.CheckInstantiationPolicy(name, version, cd.(*ccprovider.ChaincodeData))
+	if cData, ok := cd.(*ccprovider.ChaincodeData); ok {
+		return ccprovider.CheckInstantiationPolicy(name, version, cData)
+	}
+	return nil
 }
 
 

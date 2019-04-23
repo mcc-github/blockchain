@@ -7,8 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package validation
 
 import (
-	"github.com/mcc-github/blockchain/core/handlers/validation/api"
-	"github.com/mcc-github/blockchain/protos/common"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -17,7 +17,7 @@ type PolicyEvaluator interface {
 
 	
 	
-	Evaluate(policyBytes []byte, signatureSet []*common.SignedData) error
+	Evaluate(policyBytes []byte, signatureSet []*protoutil.SignedData) error
 }
 
 

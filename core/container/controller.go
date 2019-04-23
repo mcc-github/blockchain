@@ -30,6 +30,7 @@ type Builder interface {
 type VM interface {
 	Start(ccid ccintf.CCID, args []string, env []string, filesToUpload map[string][]byte, builder Builder) error
 	Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error
+	Wait(ccid ccintf.CCID) (int, error)
 	HealthCheck(context.Context) error
 }
 
@@ -44,7 +45,7 @@ type refCountedLock struct {
 
 type VMController struct {
 	sync.RWMutex
-	containerLocks map[string]*refCountedLock
+	containerLocks map[ccintf.CCID]*refCountedLock
 	vmProviders    map[string]VMProvider
 }
 
@@ -53,7 +54,7 @@ var vmLogger = flogging.MustGetLogger("container")
 
 func NewVMController(vmProviders map[string]VMProvider) *VMController {
 	return &VMController{
-		containerLocks: make(map[string]*refCountedLock),
+		containerLocks: make(map[ccintf.CCID]*refCountedLock),
 		vmProviders:    vmProviders,
 	}
 }
@@ -66,7 +67,7 @@ func (vmc *VMController) newVM(typ string) VM {
 	return v.NewVM()
 }
 
-func (vmc *VMController) lockContainer(id string) {
+func (vmc *VMController) lockContainer(id ccintf.CCID) {
 	
 	vmc.Lock()
 	var refLck *refCountedLock
@@ -84,7 +85,7 @@ func (vmc *VMController) lockContainer(id string) {
 	vmLogger.Debugf("got container (%s) lock", id)
 }
 
-func (vmc *VMController) unlockContainer(id string) {
+func (vmc *VMController) unlockContainer(id ccintf.CCID) {
 	vmc.Lock()
 	if refLck, ok := vmc.containerLocks[id]; ok {
 		if refLck.refCount <= 0 {
@@ -172,13 +173,37 @@ func (si StopContainerReq) GetCCID() ccintf.CCID {
 	return si.CCID
 }
 
+
+
+
+type ExitedFunc func(exitCode int, err error)
+
+
+
+type WaitContainerReq struct {
+	CCID   ccintf.CCID
+	Exited ExitedFunc
+}
+
+func (w WaitContainerReq) Do(v VM) error {
+	exited := w.Exited
+	go func() {
+		exitCode, err := v.Wait(w.CCID)
+		exited(exitCode, err)
+	}()
+	return nil
+}
+
+func (w WaitContainerReq) GetCCID() ccintf.CCID {
+	return w.CCID
+}
+
 func (vmc *VMController) Process(vmtype string, req VMCReq) error {
 	v := vmc.newVM(vmtype)
 	ccid := req.GetCCID()
-	id := ccid.GetName()
 
-	vmc.lockContainer(id)
-	defer vmc.unlockContainer(id)
+	vmc.lockContainer(ccid)
+	defer vmc.unlockContainer(ccid)
 	return req.Do(v)
 }
 
@@ -188,5 +213,5 @@ func GetChaincodePackageBytes(pr *platforms.Registry, spec *pb.ChaincodeSpec) ([
 		return nil, fmt.Errorf("invalid chaincode spec")
 	}
 
-	return pr.GetDeploymentPayload(spec.CCType(), spec.Path())
+	return pr.GetDeploymentPayload(spec.Type.String(), spec.ChaincodeId.Path)
 }

@@ -18,7 +18,6 @@ ENV EXECUTABLES go git curl
 RUN make gotools
 
 FROM golang:${GO_VER}-alpine
-
 RUN apk add --no-cache \
 	gcc \
 	musl-dev \

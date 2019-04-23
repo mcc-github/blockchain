@@ -96,13 +96,13 @@ func (b *recvBuffer) get() <-chan recvMsg {
 
 
 
-
 type recvBufferReader struct {
-	ctx     context.Context
-	ctxDone <-chan struct{} 
-	recv    *recvBuffer
-	last    []byte 
-	err     error
+	closeStream func(error) 
+	ctx         context.Context
+	ctxDone     <-chan struct{} 
+	recv        *recvBuffer
+	last        []byte 
+	err         error
 }
 
 
@@ -112,29 +112,51 @@ func (r *recvBufferReader) Read(p []byte) (n int, err error) {
 	if r.err != nil {
 		return 0, r.err
 	}
-	n, r.err = r.read(p)
-	return n, r.err
-}
-
-func (r *recvBufferReader) read(p []byte) (n int, err error) {
 	if r.last != nil && len(r.last) > 0 {
 		
 		copied := copy(p, r.last)
 		r.last = r.last[copied:]
 		return copied, nil
 	}
+	if r.closeStream != nil {
+		n, r.err = r.readClient(p)
+	} else {
+		n, r.err = r.read(p)
+	}
+	return n, r.err
+}
+
+func (r *recvBufferReader) read(p []byte) (n int, err error) {
 	select {
 	case <-r.ctxDone:
 		return 0, ContextErr(r.ctx.Err())
 	case m := <-r.recv.get():
-		r.recv.load()
-		if m.err != nil {
-			return 0, m.err
-		}
-		copied := copy(p, m.data)
-		r.last = m.data[copied:]
-		return copied, nil
+		return r.readAdditional(m, p)
 	}
+}
+
+func (r *recvBufferReader) readClient(p []byte) (n int, err error) {
+	
+	
+	
+	select {
+	case <-r.ctxDone:
+		r.closeStream(ContextErr(r.ctx.Err()))
+		m := <-r.recv.get()
+		return r.readAdditional(m, p)
+	case m := <-r.recv.get():
+		return r.readAdditional(m, p)
+	}
+}
+
+func (r *recvBufferReader) readAdditional(m recvMsg, p []byte) (n int, err error) {
+	r.recv.load()
+	if m.err != nil {
+		return 0, m.err
+	}
+	copied := copy(p, m.data)
+	r.last = m.data[copied:]
+	return copied, nil
 }
 
 type streamState uint32
@@ -495,8 +517,8 @@ type TargetInfo struct {
 
 
 
-func NewClientTransport(connectCtx, ctx context.Context, target TargetInfo, opts ConnectOptions, onSuccess func(), onGoAway func(GoAwayReason), onClose func()) (ClientTransport, error) {
-	return newHTTP2Client(connectCtx, ctx, target, opts, onSuccess, onGoAway, onClose)
+func NewClientTransport(connectCtx, ctx context.Context, target TargetInfo, opts ConnectOptions, onPrefaceReceipt func(), onGoAway func(GoAwayReason), onClose func()) (ClientTransport, error) {
+	return newHTTP2Client(connectCtx, ctx, target, opts, onPrefaceReceipt, onGoAway, onClose)
 }
 
 

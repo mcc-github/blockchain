@@ -12,6 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -40,7 +41,7 @@ func (exp *expirationRejectRule) Apply(message *common.Envelope) error {
 	if !ordererConf.Capabilities().ExpirationCheck() {
 		return nil
 	}
-	signedData, err := message.AsSignedData()
+	signedData, err := protoutil.EnvelopeAsSignedData(message)
 
 	if err != nil {
 		return errors.Errorf("could not convert message to signedData: %s", err)

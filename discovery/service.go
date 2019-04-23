@@ -15,10 +15,11 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/comm"
+	"github.com/mcc-github/blockchain/discovery/protoext"
 	common2 "github.com/mcc-github/blockchain/gossip/common"
 	discovery2 "github.com/mcc-github/blockchain/gossip/discovery"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/discovery"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -37,8 +38,8 @@ type dispatcher func(q *discovery.Query) *discovery.QueryResult
 
 type service struct {
 	config             Config
-	channelDispatchers map[discovery.QueryType]dispatcher
-	localDispatchers   map[discovery.QueryType]dispatcher
+	channelDispatchers map[protoext.QueryType]dispatcher
+	localDispatchers   map[protoext.QueryType]dispatcher
 	auth               *authCache
 	Support
 }
@@ -72,13 +73,13 @@ func NewService(config Config, sup Support) *service {
 		}),
 		Support: sup,
 	}
-	s.channelDispatchers = map[discovery.QueryType]dispatcher{
-		discovery.ConfigQueryType:         s.configQuery,
-		discovery.ChaincodeQueryType:      s.chaincodeQuery,
-		discovery.PeerMembershipQueryType: s.channelMembershipResponse,
+	s.channelDispatchers = map[protoext.QueryType]dispatcher{
+		protoext.ConfigQueryType:         s.configQuery,
+		protoext.ChaincodeQueryType:      s.chaincodeQuery,
+		protoext.PeerMembershipQueryType: s.channelMembershipResponse,
 	}
-	s.localDispatchers = map[discovery.QueryType]dispatcher{
-		discovery.LocalMembershipQueryType: s.localMembershipResponse,
+	s.localDispatchers = map[protoext.QueryType]dispatcher{
+		protoext.LocalMembershipQueryType: s.localMembershipResponse,
 	}
 	logger.Info("Created with config", config)
 	return s
@@ -107,7 +108,7 @@ func (s *service) processQuery(query *discovery.Query, request *discovery.Signed
 		logger.Warning("got query for channel", query.Channel, "from", addr, "but it doesn't exist")
 		return accessDenied
 	}
-	if err := s.auth.EligibleForService(query.Channel, common.SignedData{
+	if err := s.auth.EligibleForService(query.Channel, protoutil.SignedData{
 		Data:      request.Payload,
 		Signature: request.Signature,
 		Identity:  identity,
@@ -124,7 +125,7 @@ func (s *service) dispatch(q *discovery.Query) *discovery.QueryResult {
 	if q.Channel == "" {
 		dispatchers = s.localDispatchers
 	}
-	dispatchQuery, exists := dispatchers[q.GetType()]
+	dispatchQuery, exists := dispatchers[protoext.GetQueryType(q)]
 	if !exists {
 		return wrapError(errors.New("unknown or missing request type"))
 	}
@@ -237,7 +238,7 @@ func validateStructure(ctx context.Context, request *discovery.SignedRequest, tl
 	if request == nil {
 		return nil, errors.New("nil request")
 	}
-	req, err := request.ToRequest()
+	req, err := protoext.SignedRequestToRequest(request)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed parsing request")
 	}

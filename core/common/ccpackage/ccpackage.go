@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016-2017 All Rights Reserved.
+Copyright IBM Corp. 2016-2019 All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package ccpackage
@@ -22,10 +12,10 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/msp"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -103,16 +93,16 @@ func createSignedCCDepSpec(cdsbytes []byte, instpolicybytes []byte, endorsements
 	cip := &peer.SignedChaincodeDeploymentSpec{ChaincodeDeploymentSpec: cdsbytes, InstantiationPolicy: instpolicybytes, OwnerEndorsements: endorsements}
 
 	
-	cipbytes := utils.MarshalOrPanic(cip)
+	cipbytes := protoutil.MarshalOrPanic(cip)
 
 	
 	msgVersion := int32(0)
 	epoch := uint64(0)
-	chdr := utils.MakeChannelHeader(common.HeaderType_CHAINCODE_PACKAGE, msgVersion, "", epoch)
+	chdr := protoutil.MakeChannelHeader(common.HeaderType_CHAINCODE_PACKAGE, msgVersion, "", epoch)
 
 	
-	payl := &common.Payload{Header: &common.Header{ChannelHeader: utils.MarshalOrPanic(chdr)}, Data: cipbytes}
-	paylBytes, err := utils.GetBytesPayload(payl)
+	payl := &common.Payload{Header: &common.Header{ChannelHeader: protoutil.MarshalOrPanic(chdr)}, Data: cipbytes}
+	paylBytes, err := protoutil.GetBytesPayload(payl)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +161,7 @@ func CreateSignedCCDepSpecForInstall(pack []*common.Envelope) (*common.Envelope,
 
 
 
-func OwnerCreateSignedCCDepSpec(cds *peer.ChaincodeDeploymentSpec, instPolicy *common.SignaturePolicyEnvelope, owner msp.SigningIdentity) (*common.Envelope, error) {
+func OwnerCreateSignedCCDepSpec(cds *peer.ChaincodeDeploymentSpec, instPolicy *common.SignaturePolicyEnvelope, owner identity.SignerSerializer) (*common.Envelope, error) {
 	if cds == nil {
 		return nil, fmt.Errorf("invalid chaincode deployment spec")
 	}
@@ -180,9 +170,9 @@ func OwnerCreateSignedCCDepSpec(cds *peer.ChaincodeDeploymentSpec, instPolicy *c
 		return nil, fmt.Errorf("must provide an instantiation policy")
 	}
 
-	cdsbytes := utils.MarshalOrPanic(cds)
+	cdsbytes := protoutil.MarshalOrPanic(cds)
 
-	instpolicybytes := utils.MarshalOrPanic(instPolicy)
+	instpolicybytes := protoutil.MarshalOrPanic(instPolicy)
 
 	var endorsements []*peer.Endorsement
 	
@@ -192,7 +182,7 @@ func OwnerCreateSignedCCDepSpec(cds *peer.ChaincodeDeploymentSpec, instPolicy *c
 		
 		endorser, err := owner.Serialize()
 		if err != nil {
-			return nil, fmt.Errorf("Could not serialize the signing identity for %s, err %s", owner.GetIdentifier(), err)
+			return nil, fmt.Errorf("Could not serialize the signing identity: %s", err)
 		}
 
 		
@@ -213,7 +203,7 @@ func OwnerCreateSignedCCDepSpec(cds *peer.ChaincodeDeploymentSpec, instPolicy *c
 }
 
 
-func SignExistingPackage(env *common.Envelope, owner msp.SigningIdentity) (*common.Envelope, error) {
+func SignExistingPackage(env *common.Envelope, owner identity.SignerSerializer) (*common.Envelope, error) {
 	if owner == nil {
 		return nil, fmt.Errorf("owner not provided")
 	}
@@ -234,7 +224,7 @@ func SignExistingPackage(env *common.Envelope, owner msp.SigningIdentity) (*comm
 	
 	endorser, err := owner.Serialize()
 	if err != nil {
-		return nil, fmt.Errorf("Could not serialize the signing identity for %s, err %s", owner.GetIdentifier(), err)
+		return nil, fmt.Errorf("Could not serialize the signing identity: %s", err)
 	}
 
 	

@@ -42,8 +42,9 @@ var _ = Describe("Client", func() {
 		expectedTxid = "dummy-tx-id"
 
 		fakeProver = &mock.Prover{}
-		fakeProver.RequestImportReturns(payload.Data, nil) 
+		fakeProver.RequestIssueReturns(payload.Data, nil) 
 		fakeProver.RequestTransferReturns(payload.Data, nil)
+		fakeProver.RequestRedeemReturns(payload.Data, nil)
 
 		fakeSigningIdentity = &mock.SigningIdentity{}
 		fakeSigningIdentity.SerializeReturns([]byte("creator"), nil) 
@@ -63,16 +64,16 @@ var _ = Describe("Client", func() {
 
 	Describe("Issue", func() {
 		var (
-			tokensToIssue []*token.TokenToIssue
+			tokensToIssue []*token.Token
 		)
 
 		BeforeEach(func() {
 			
-			tokensToIssue = []*token.TokenToIssue{
+			tokensToIssue = []*token.Token{
 				{
-					Type:      "type",
-					Quantity:  1,
-					Recipient: []byte("alice"),
+					Type:     "type",
+					Quantity: ToHex(1),
+					Owner:    &token.TokenOwner{Raw: []byte("alice")},
 				},
 			}
 		})
@@ -85,8 +86,8 @@ var _ = Describe("Client", func() {
 			Expect(*ordererStatus).To(Equal(common.Status_SUCCESS))
 			Expect(committed).To(Equal(true))
 
-			Expect(fakeProver.RequestImportCallCount()).To(Equal(1))
-			tokens, signingIdentity := fakeProver.RequestImportArgsForCall(0)
+			Expect(fakeProver.RequestIssueCallCount()).To(Equal(1))
+			tokens, signingIdentity := fakeProver.RequestIssueArgsForCall(0)
 			Expect(tokens).To(Equal(tokensToIssue))
 			Expect(signingIdentity).To(Equal(fakeSigningIdentity))
 
@@ -100,9 +101,9 @@ var _ = Describe("Client", func() {
 			Expect(waitTime).To(Equal(10 * time.Second))
 		})
 
-		Context("when prover.RequestImport fails", func() {
+		Context("when prover.RequestIssue fails", func() {
 			BeforeEach(func() {
-				fakeProver.RequestImportReturns(nil, errors.New("wild-banana"))
+				fakeProver.RequestIssueReturns(nil, errors.New("wild-banana"))
 			})
 
 			It("returns an error", func() {
@@ -113,7 +114,7 @@ var _ = Describe("Client", func() {
 				Expect(ordererStatus).To(BeNil())
 				Expect(committed).To(Equal(false))
 
-				Expect(fakeProver.RequestImportCallCount()).To(Equal(1))
+				Expect(fakeProver.RequestIssueCallCount()).To(Equal(1))
 				Expect(fakeTxSubmitter.CreateTxEnvelopeCallCount()).To(Equal(0))
 				Expect(fakeTxSubmitter.SubmitCallCount()).To(Equal(0))
 			})
@@ -132,7 +133,7 @@ var _ = Describe("Client", func() {
 				Expect(ordererStatus).To(BeNil())
 				Expect(committed).To(Equal(false))
 
-				Expect(fakeProver.RequestImportCallCount()).To(Equal(1))
+				Expect(fakeProver.RequestIssueCallCount()).To(Equal(1))
 				Expect(fakeTxSubmitter.CreateTxEnvelopeCallCount()).To(Equal(1))
 				Expect(fakeTxSubmitter.SubmitCallCount()).To(Equal(0))
 			})
@@ -152,7 +153,7 @@ var _ = Describe("Client", func() {
 				Expect(*ordererStatus).To(Equal(common.Status_BAD_REQUEST))
 				Expect(committed).To(Equal(false))
 
-				Expect(fakeProver.RequestImportCallCount()).To(Equal(1))
+				Expect(fakeProver.RequestIssueCallCount()).To(Equal(1))
 				Expect(fakeTxSubmitter.CreateTxEnvelopeCallCount()).To(Equal(1))
 				Expect(fakeTxSubmitter.SubmitCallCount()).To(Equal(1))
 			})
@@ -161,16 +162,19 @@ var _ = Describe("Client", func() {
 
 	Describe("Transfer", func() {
 		var (
-			tokenIDs       [][]byte
-			transferShares []*token.RecipientTransferShare
+			tokenIDs       []*token.TokenId
+			transferShares []*token.RecipientShare
 		)
 
 		BeforeEach(func() {
 			
-			tokenIDs = [][]byte{[]byte("id1"), []byte("id2")}
-			transferShares = []*token.RecipientTransferShare{
-				{Recipient: []byte("alice"), Quantity: 100},
-				{Recipient: []byte("Bob"), Quantity: 50},
+			tokenIDs = []*token.TokenId{
+				{TxId: "id1", Index: 0},
+				{TxId: "id2", Index: 0},
+			}
+			transferShares = []*token.RecipientShare{
+				{Recipient: &token.TokenOwner{Raw: []byte("alice")}, Quantity: ToHex(100)},
+				{Recipient: &token.TokenOwner{Raw: []byte("bob")}, Quantity: ToHex(50)},
 			}
 		})
 
@@ -252,6 +256,143 @@ var _ = Describe("Client", func() {
 				Expect(fakeProver.RequestTransferCallCount()).To(Equal(1))
 				Expect(fakeTxSubmitter.CreateTxEnvelopeCallCount()).To(Equal(1))
 				Expect(fakeTxSubmitter.SubmitCallCount()).To(Equal(1))
+			})
+		})
+	})
+
+	Describe("Redeem", func() {
+		var (
+			tokenIDs []*token.TokenId
+			quantity uint64
+		)
+
+		BeforeEach(func() {
+			
+			tokenIDs = []*token.TokenId{
+				{TxId: "id1", Index: 0},
+				{TxId: "id2", Index: 0},
+			}
+			quantity = 100
+		})
+
+		It("returns tx envelope without error", func() {
+			txEnvelope, txid, ordererStatus, committed, err := tokenClient.Redeem(tokenIDs, ToHex(quantity), 10*time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(txEnvelope).To(Equal(envelope))
+			Expect(txid).To(Equal(expectedTxid))
+			Expect(*ordererStatus).To(Equal(common.Status_SUCCESS))
+			Expect(committed).To(Equal(true))
+
+			Expect(fakeProver.RequestRedeemCallCount()).To(Equal(1))
+			ids, num, signingIdentity := fakeProver.RequestRedeemArgsForCall(0)
+			Expect(ids).To(Equal(tokenIDs))
+			Expect(num).To(Equal(ToHex(quantity)))
+			Expect(signingIdentity).To(Equal(fakeSigningIdentity))
+
+			Expect(fakeTxSubmitter.CreateTxEnvelopeCallCount()).To(Equal(1))
+			txBytes := fakeTxSubmitter.CreateTxEnvelopeArgsForCall(0)
+			Expect(txBytes).To(Equal(payload.Data))
+
+			Expect(fakeTxSubmitter.SubmitCallCount()).To(Equal(1))
+			txEnvelope, waitTime := fakeTxSubmitter.SubmitArgsForCall(0)
+			Expect(txEnvelope).To(Equal(envelope))
+			Expect(waitTime).To(Equal(10 * time.Second))
+		})
+
+		Context("when prover.RequestRedeem fails", func() {
+			BeforeEach(func() {
+				fakeProver.RequestRedeemReturns(nil, errors.New("wild-banana"))
+			})
+
+			It("returns an error", func() {
+				envelope, txid, ordererStatus, committed, err := tokenClient.Redeem(tokenIDs, ToHex(quantity), 0)
+				Expect(err).To(MatchError("wild-banana"))
+				Expect(envelope).To(BeNil())
+				Expect(txid).To(Equal(""))
+				Expect(ordererStatus).To(BeNil())
+				Expect(committed).To(Equal(false))
+
+				Expect(fakeProver.RequestRedeemCallCount()).To(Equal(1))
+				Expect(fakeTxSubmitter.CreateTxEnvelopeCallCount()).To(Equal(0))
+				Expect(fakeTxSubmitter.SubmitCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("when TxSubmitter CreateTxEnvelope fails", func() {
+			BeforeEach(func() {
+				fakeTxSubmitter.CreateTxEnvelopeReturns(nil, "", errors.New("wild-banana"))
+			})
+
+			It("returns an error", func() {
+				envelope, txid, ordererStatus, committed, err := tokenClient.Redeem(tokenIDs, ToHex(quantity), 0)
+				Expect(err).To(MatchError("wild-banana"))
+				Expect(envelope).To(BeNil())
+				Expect(txid).To(Equal(""))
+				Expect(ordererStatus).To(BeNil())
+				Expect(committed).To(Equal(false))
+
+				Expect(fakeProver.RequestRedeemCallCount()).To(Equal(1))
+				Expect(fakeTxSubmitter.CreateTxEnvelopeCallCount()).To(Equal(1))
+				Expect(fakeTxSubmitter.SubmitCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("when TxSubmitter Submit fails", func() {
+			BeforeEach(func() {
+				fakeTxSubmitter.SubmitReturns(nil, false, errors.New("wild-banana"))
+			})
+
+			It("returns an error", func() {
+				txEnvelope, txid, ordererStatus, committed, err := tokenClient.Redeem(tokenIDs, ToHex(quantity), 0)
+				Expect(err).To(MatchError("wild-banana"))
+				Expect(txEnvelope).To(Equal(envelope))
+				Expect(txid).To(Equal(expectedTxid))
+				Expect(ordererStatus).To(BeNil())
+				Expect(committed).To(Equal(false))
+
+				Expect(fakeProver.RequestRedeemCallCount()).To(Equal(1))
+				Expect(fakeTxSubmitter.CreateTxEnvelopeCallCount()).To(Equal(1))
+				Expect(fakeTxSubmitter.SubmitCallCount()).To(Equal(1))
+			})
+		})
+	})
+
+	Describe("ListTokens", func() {
+		var (
+			expectedTokens []*token.UnspentToken
+		)
+
+		BeforeEach(func() {
+			
+			expectedTokens = []*token.UnspentToken{
+				{Id: &token.TokenId{TxId: "idaz", Index: 0}, Type: "typeaz", Quantity: ToHex(135)},
+				{Id: &token.TokenId{TxId: "idby", Index: 1}, Type: "typeby", Quantity: ToHex(79)},
+			}
+			fakeProver.ListTokensReturns(expectedTokens, nil)
+		})
+
+		It("returns tokens", func() {
+			tokens, err := tokenClient.ListTokens()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tokens).To(Equal(expectedTokens))
+
+			Expect(fakeProver.ListTokensCallCount()).To(Equal(1))
+			arg := fakeProver.ListTokensArgsForCall(0)
+			Expect(arg).To(Equal(tokenClient.SigningIdentity))
+		})
+
+		Context("when prover.ListTokens returns an error", func() {
+			BeforeEach(func() {
+				fakeProver.ListTokensReturns(nil, errors.New("banana-loop"))
+			})
+
+			It("returns an error", func() {
+				_, err := tokenClient.ListTokens()
+				Expect(err).To(MatchError("banana-loop"))
+
+				Expect(fakeProver.ListTokensCallCount()).To(Equal(1))
+				arg := fakeProver.ListTokensArgsForCall(0)
+				Expect(arg).To(Equal(tokenClient.SigningIdentity))
 			})
 		})
 	})

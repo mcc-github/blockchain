@@ -8,6 +8,7 @@ package token
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 
 	"github.com/mcc-github/blockchain/integration/nwo"
@@ -21,10 +22,10 @@ func TestEndToEnd(t *testing.T) {
 }
 
 var components *nwo.Components
+var suiteBase = 30000
 
 var _ = SynchronizedBeforeSuite(func() []byte {
 	components = &nwo.Components{}
-	components.Build()
 
 	payload, err := json.Marshal(components)
 	Expect(err).NotTo(HaveOccurred())
@@ -39,3 +40,25 @@ var _ = SynchronizedAfterSuite(func() {
 }, func() {
 	components.Cleanup()
 })
+
+func StartPort() int {
+	return suiteBase + (GinkgoParallelNode()-1)*100
+}
+
+func ToHex(q uint64) string {
+	return "0x" + strconv.FormatUint(q, 16)
+}
+
+func ToDecimal(q uint64) string {
+	return strconv.FormatUint(q, 10)
+}
+
+func BasicSoloV20() *nwo.Config {
+	basicSolo := nwo.BasicSolo()
+	for _, profile := range basicSolo.Profiles {
+		if profile.Consortium != "" {
+			profile.AppCapabilities = []string{"V2_0"}
+		}
+	}
+	return basicSolo
+}

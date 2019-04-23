@@ -18,7 +18,7 @@ import (
 	"github.com/mcc-github/blockchain/bccsp/utils"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/protos/msp"
-	proto_utils "github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -64,7 +64,7 @@ func serializeIdentity(clientCert string, mspID string) ([]byte, error) {
 		Mspid:   mspID,
 		IdBytes: b,
 	}
-	return proto_utils.MarshalOrPanic(sId), nil
+	return protoutil.MarshalOrPanic(sId), nil
 }
 
 func (si *Signer) Sign(msg []byte) ([]byte, error) {

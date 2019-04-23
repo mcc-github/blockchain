@@ -11,7 +11,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/pkg/errors"
 )
 
@@ -192,10 +191,9 @@ func (lc *Lifecycle) fireChangeListeners(channel string) {
 
 func (lc *Lifecycle) NewChannelSubscription(channel string, queryCreator QueryCreator) (*Subscription, error) {
 	sub := &Subscription{
-		lc:             lc,
-		channel:        channel,
-		queryCreator:   queryCreator,
-		pendingUpdates: make(chan *cceventmgmt.ChaincodeDefinition, 1),
+		lc:           lc,
+		channel:      channel,
+		queryCreator: queryCreator,
 	}
 	
 	

@@ -9,14 +9,21 @@ package chaincode
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/protos/gossip"
 )
 
 
 type InstalledChaincode struct {
+	PackageID persistence.PackageID
+	Hash      []byte
+	Label     string
+
+	
+	
+	
 	Name    string
 	Version string
-	Id      []byte
 }
 
 

@@ -1,17 +1,7 @@
 /*
 Copyright IBM Corp. 2017 All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package policy
@@ -22,9 +12,8 @@ import (
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/core/policy/mocks"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -95,11 +84,11 @@ func TestCheckPolicyBySignedDataInvalidArgs(t *testing.T) {
 	}
 	pc := &policyChecker{channelPolicyManagerGetter: policyManagerGetter}
 
-	err := pc.CheckPolicyBySignedData("", "admin", []*common.SignedData{{}})
+	err := pc.CheckPolicyBySignedData("", "admin", []*protoutil.SignedData{{}})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Invalid channel ID name during check policy on signed data. Name must be different from nil.")
 
-	err = pc.CheckPolicyBySignedData("A", "", []*common.SignedData{{}})
+	err = pc.CheckPolicyBySignedData("A", "", []*protoutil.SignedData{{}})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Invalid policy name during check policy on signed data on channel [A]. Name must be different from nil.")
 
@@ -107,11 +96,11 @@ func TestCheckPolicyBySignedDataInvalidArgs(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Invalid signed data during check policy on channel [A] with policy [admin]")
 
-	err = pc.CheckPolicyBySignedData("B", "admin", []*common.SignedData{{}})
+	err = pc.CheckPolicyBySignedData("B", "admin", []*protoutil.SignedData{{}})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Failed to get policy manager for channel [B]")
 
-	err = pc.CheckPolicyBySignedData("A", "admin", []*common.SignedData{{}})
+	err = pc.CheckPolicyBySignedData("A", "admin", []*protoutil.SignedData{{}})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Failed evaluating policy on signed data during check policy on channel [A] with policy [admin]")
 }
@@ -207,7 +196,7 @@ func TestPolicyChecker(t *testing.T) {
 	)
 
 	
-	sProp, _ := utils.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
+	sProp, _ := protoutil.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
 	policyManagerGetter.Managers["A"].(*mocks.MockChannelPolicyManager).MockPolicy.(*mocks.MockPolicy).Deserializer.(*mocks.MockIdentityDeserializer).Msg = sProp.ProposalBytes
 	sProp.Signature = sProp.ProposalBytes
 	err := pc.CheckPolicy("A", "readers", sProp)
@@ -228,7 +217,7 @@ func TestPolicyChecker(t *testing.T) {
 	err = pc.CheckPolicyNoChannel(mgmt.Members, sProp)
 	assert.NoError(t, err)
 
-	sProp, _ = utils.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("Bob"), []byte("msg2"))
+	sProp, _ = protoutil.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("Bob"), []byte("msg2"))
 	
 	err = pc.CheckPolicyNoChannel(mgmt.Members, sProp)
 	assert.Error(t, err)

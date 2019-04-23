@@ -1,17 +1,7 @@
 /*
 Copyright IBM Corp. 2016 All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package validation
@@ -28,10 +18,10 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -41,7 +31,7 @@ func getProposal(channel string) (*peer.Proposal, error) {
 			ChaincodeId: getChaincodeID(),
 			Type:        peer.ChaincodeSpec_GOLANG}}
 
-	proposal, _, err := utils.CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, channel, cis, signerSerialized)
+	proposal, _, err := protoutil.CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, channel, cis, signerSerialized)
 	return proposal, err
 }
 
@@ -55,13 +45,13 @@ func createSignedTxTwoActions(proposal *peer.Proposal, signer msp.SigningIdentit
 	}
 
 	
-	hdr, err := utils.GetHeader(proposal.Header)
+	hdr, err := protoutil.GetHeader(proposal.Header)
 	if err != nil {
 		return nil, fmt.Errorf("Could not unmarshal the proposal header")
 	}
 
 	
-	pPayl, err := utils.GetChaincodeProposalPayload(proposal.Payload)
+	pPayl, err := protoutil.GetChaincodeProposalPayload(proposal.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("Could not unmarshal the proposal payload")
 	}
@@ -76,14 +66,14 @@ func createSignedTxTwoActions(proposal *peer.Proposal, signer msp.SigningIdentit
 	cea := &peer.ChaincodeEndorsedAction{ProposalResponsePayload: resps[0].Payload, Endorsements: endorsements}
 
 	
-	propPayloadBytes, err := utils.GetBytesProposalPayloadForTx(pPayl, nil)
+	propPayloadBytes, err := protoutil.GetBytesProposalPayloadForTx(pPayl, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	
 	cap := &peer.ChaincodeActionPayload{ChaincodeProposalPayload: propPayloadBytes, Action: cea}
-	capBytes, err := utils.GetBytesChaincodeActionPayload(cap)
+	capBytes, err := protoutil.GetBytesChaincodeActionPayload(cap)
 	if err != nil {
 		return nil, err
 	}
@@ -96,14 +86,14 @@ func createSignedTxTwoActions(proposal *peer.Proposal, signer msp.SigningIdentit
 	tx := &peer.Transaction{Actions: taas}
 
 	
-	txBytes, err := utils.GetBytesTransaction(tx)
+	txBytes, err := protoutil.GetBytesTransaction(tx)
 	if err != nil {
 		return nil, err
 	}
 
 	
 	payl := &common.Payload{Header: hdr, Data: txBytes}
-	paylBytes, err := utils.GetBytesPayload(payl)
+	paylBytes, err := protoutil.GetBytesPayload(payl)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +117,7 @@ func TestGoodPath(t *testing.T) {
 	}
 
 	
-	sProp, err := utils.GetSignedProposal(prop, signer)
+	sProp, err := protoutil.GetSignedProposal(prop, signer)
 	if err != nil {
 		t.Fatalf("GetSignedProposal failed, err %s", err)
 		return
@@ -144,14 +134,14 @@ func TestGoodPath(t *testing.T) {
 	simRes := []byte("simulation_result")
 
 	
-	presp, err := utils.CreateProposalResponse(prop.Header, prop.Payload, response, simRes, nil, getChaincodeID(), nil, signer)
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response, simRes, nil, getChaincodeID(), nil, signer)
 	if err != nil {
 		t.Fatalf("CreateProposalResponse failed, err %s", err)
 		return
 	}
 
 	
-	tx, err := utils.CreateSignedTx(prop, signer, presp)
+	tx, err := protoutil.CreateSignedTx(prop, signer, presp)
 	if err != nil {
 		t.Fatalf("CreateSignedTx failed, err %s", err)
 		return
@@ -164,7 +154,7 @@ func TestGoodPath(t *testing.T) {
 		return
 	}
 
-	txx, err := utils.GetTransaction(payl.Data)
+	txx, err := protoutil.GetTransaction(payl.Data)
 	if err != nil {
 		t.Fatalf("GetTransaction failed, err %s", err)
 		return
@@ -179,7 +169,7 @@ func TestGoodPath(t *testing.T) {
 	}
 
 	
-	_, simResBack, err := utils.GetPayloads(act[0])
+	_, simResBack, err := protoutil.GetPayloads(act[0])
 	if err != nil {
 		t.Fatalf("GetPayloads failed, err %s", err)
 		return
@@ -204,7 +194,7 @@ func TestTXWithTwoActionsRejected(t *testing.T) {
 	simRes := []byte("simulation_result")
 
 	
-	presp, err := utils.CreateProposalResponse(prop.Header, prop.Payload, response, simRes, nil, &peer.ChaincodeID{Name: "somename", Version: "someversion"}, nil, signer)
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response, simRes, nil, &peer.ChaincodeID{Name: "somename", Version: "someversion"}, nil, signer)
 	if err != nil {
 		t.Fatalf("CreateProposalResponse failed, err %s", err)
 		return
@@ -234,7 +224,7 @@ func TestBadProp(t *testing.T) {
 	}
 
 	
-	sProp, err := utils.GetSignedProposal(prop, signer)
+	sProp, err := protoutil.GetSignedProposal(prop, signer)
 	if err != nil {
 		t.Fatalf("GetSignedProposal failed, err %s", err)
 		return
@@ -255,7 +245,7 @@ func TestBadProp(t *testing.T) {
 	}
 
 	
-	sProp, err = utils.GetSignedProposal(prop, signer)
+	sProp, err = protoutil.GetSignedProposal(prop, signer)
 	if err != nil {
 		t.Fatalf("GetSignedProposal failed, err %s", err)
 		return
@@ -283,7 +273,7 @@ func TestBadProp(t *testing.T) {
 	}
 
 	
-	sProp, err = utils.GetSignedProposal(prop, badSigner)
+	sProp, err = protoutil.GetSignedProposal(prop, badSigner)
 	if err != nil {
 		t.Fatalf("GetSignedProposal failed, err %s", err)
 		return
@@ -314,14 +304,14 @@ func TestBadTx(t *testing.T) {
 	simRes := []byte("simulation_result")
 
 	
-	presp, err := utils.CreateProposalResponse(prop.Header, prop.Payload, response, simRes, nil, getChaincodeID(), nil, signer)
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response, simRes, nil, getChaincodeID(), nil, signer)
 	if err != nil {
 		t.Fatalf("CreateProposalResponse failed, err %s", err)
 		return
 	}
 
 	
-	tx, err := utils.CreateSignedTx(prop, signer, presp)
+	tx, err := protoutil.CreateSignedTx(prop, signer, presp)
 	if err != nil {
 		t.Fatalf("CreateSignedTx failed, err %s", err)
 		return
@@ -342,7 +332,7 @@ func TestBadTx(t *testing.T) {
 	}
 
 	
-	tx, err = utils.CreateSignedTx(prop, signer, presp)
+	tx, err = protoutil.CreateSignedTx(prop, signer, presp)
 	if err != nil {
 		t.Fatalf("CreateSignedTx failed, err %s", err)
 		return
@@ -371,7 +361,7 @@ func Test2EndorsersAgree(t *testing.T) {
 	simRes1 := []byte("simulation_result")
 
 	
-	presp1, err := utils.CreateProposalResponse(prop.Header, prop.Payload, response1, simRes1, nil, getChaincodeID(), nil, signer)
+	presp1, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response1, simRes1, nil, getChaincodeID(), nil, signer)
 	if err != nil {
 		t.Fatalf("CreateProposalResponse failed, err %s", err)
 		return
@@ -381,14 +371,14 @@ func Test2EndorsersAgree(t *testing.T) {
 	simRes2 := []byte("simulation_result")
 
 	
-	presp2, err := utils.CreateProposalResponse(prop.Header, prop.Payload, response2, simRes2, nil, getChaincodeID(), nil, signer)
+	presp2, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response2, simRes2, nil, getChaincodeID(), nil, signer)
 	if err != nil {
 		t.Fatalf("CreateProposalResponse failed, err %s", err)
 		return
 	}
 
 	
-	tx, err := utils.CreateSignedTx(prop, signer, presp1, presp2)
+	tx, err := protoutil.CreateSignedTx(prop, signer, presp1, presp2)
 	if err != nil {
 		t.Fatalf("CreateSignedTx failed, err %s", err)
 		return
@@ -414,7 +404,7 @@ func Test2EndorsersDisagree(t *testing.T) {
 	simRes1 := []byte("simulation_result1")
 
 	
-	presp1, err := utils.CreateProposalResponse(prop.Header, prop.Payload, response1, simRes1, nil, getChaincodeID(), nil, signer)
+	presp1, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response1, simRes1, nil, getChaincodeID(), nil, signer)
 	if err != nil {
 		t.Fatalf("CreateProposalResponse failed, err %s", err)
 		return
@@ -424,14 +414,14 @@ func Test2EndorsersDisagree(t *testing.T) {
 	simRes2 := []byte("simulation_result2")
 
 	
-	presp2, err := utils.CreateProposalResponse(prop.Header, prop.Payload, response2, simRes2, nil, getChaincodeID(), nil, signer)
+	presp2, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response2, simRes2, nil, getChaincodeID(), nil, signer)
 	if err != nil {
 		t.Fatalf("CreateProposalResponse failed, err %s", err)
 		return
 	}
 
 	
-	_, err = utils.CreateSignedTx(prop, signer, presp1, presp2)
+	_, err = protoutil.CreateSignedTx(prop, signer, presp1, presp2)
 	if err == nil {
 		t.Fatal("CreateSignedTx should have failed")
 		return

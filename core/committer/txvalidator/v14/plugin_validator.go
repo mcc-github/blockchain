@@ -13,13 +13,14 @@ import (
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	ledger2 "github.com/mcc-github/blockchain/common/ledger"
 	vp "github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -151,10 +152,21 @@ func (pbc *pluginsByChannel) createPluginIfAbsent(channel string) (validation.Pl
 func (pbc *pluginsByChannel) initPlugin(plugin validation.Plugin, channel string) (validation.Plugin, error) {
 	pe := &PolicyEvaluator{IdentityDeserializer: pbc.pv.IdentityDeserializer}
 	sf := &StateFetcherImpl{QueryExecutorCreator: pbc.pv}
-	if err := plugin.Init(pe, sf, pbc.pv.capabilities); err != nil {
+	if err := plugin.Init(pe, sf, pbc.pv.capabilities, &legacyCollectionInfoProvider{}); err != nil {
 		return nil, errors.Wrap(err, "failed initializing plugin")
 	}
 	return plugin, nil
+}
+
+
+
+
+
+type legacyCollectionInfoProvider struct {
+}
+
+func (*legacyCollectionInfoProvider) CollectionValidationInfo(chaincodeName, collectionName string, state State) ([]byte, error, error) {
+	panic("programming error")
 }
 
 type PolicyEvaluator struct {
@@ -162,7 +174,7 @@ type PolicyEvaluator struct {
 }
 
 
-func (id *PolicyEvaluator) Evaluate(policyBytes []byte, signatureSet []*common.SignedData) error {
+func (id *PolicyEvaluator) Evaluate(policyBytes []byte, signatureSet []*protoutil.SignedData) error {
 	pp := cauthdsl.NewPolicyProvider(id.IdentityDeserializer)
 	policy, _, err := pp.NewPolicy(policyBytes)
 	if err != nil {

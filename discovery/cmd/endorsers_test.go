@@ -12,11 +12,11 @@ import (
 
 	"github.com/mcc-github/blockchain/cmd/common"
 	. "github.com/mcc-github/blockchain/discovery/client"
-	"github.com/mcc-github/blockchain/discovery/cmd"
+	discovery "github.com/mcc-github/blockchain/discovery/cmd"
 	"github.com/mcc-github/blockchain/discovery/cmd/mocks"
 	discprotos "github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/mcc-github/blockchain/protos/msp"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -214,7 +214,7 @@ var endorsersResponse = &discprotos.QueryResult_CcQueryRes{
 					"Org1MSP": {
 						Peers: []*discprotos.Peer{
 							{
-								Identity: utils.MarshalOrPanic(&msp.SerializedIdentity{
+								Identity: protoutil.MarshalOrPanic(&msp.SerializedIdentity{
 									Mspid:   "Org1MSP",
 									IdBytes: []byte("identity"),
 								}),

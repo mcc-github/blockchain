@@ -14,11 +14,10 @@ import (
 
 type Issuer interface {
 	
-	RequestImport(tokensToIssue []*token.TokenToIssue) (*token.TokenTransaction, error)
+	RequestIssue(tokensToIssue []*token.Token) (*token.TokenTransaction, error)
 
 	
-	
-	RequestExpectation(request *token.ExpectationRequest) (*token.TokenTransaction, error)
+	RequestTokenOperation(op *token.TokenOperation) (*token.TokenTransaction, error)
 }
 
 
@@ -40,17 +39,7 @@ type Transactor interface {
 	ListTokens() (*token.UnspentTokens, error)
 
 	
-	
-	RequestApprove(request *token.ApproveRequest) (*token.TokenTransaction, error)
-
-	
-	
-	
-	RequestTransferFrom(request *token.TransferRequest) (*token.TokenTransaction, error)
-
-	
-	
-	RequestExpectation(request *token.ExpectationRequest) (*token.TokenTransaction, error)
+	RequestTokenOperation(tokenIDs []*token.TokenId, op *token.TokenOperation) (*token.TokenTransaction, int, error)
 
 	
 	Done()

@@ -7,8 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package discovery
 
 import (
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/protos/discovery"
-	"github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -67,7 +67,7 @@ type Endorsers []*Peer
 
 type Peer struct {
 	MSPID            string
-	AliveMessage     *gossip.SignedGossipMessage
-	StateInfoMessage *gossip.SignedGossipMessage
+	AliveMessage     *protoext.SignedGossipMessage
+	StateInfoMessage *protoext.SignedGossipMessage
 	Identity         []byte
 }

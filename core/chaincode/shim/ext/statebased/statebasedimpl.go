@@ -14,7 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	mb "github.com/mcc-github/blockchain/protos/msp"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -111,7 +111,7 @@ func (s *stateEP) policyFromMSPIDs() *cb.SignaturePolicyEnvelope {
 	for i, id := range mspids {
 		principals[i] = &mb.MSPPrincipal{
 			PrincipalClassification: mb.MSPPrincipal_ROLE,
-			Principal:               utils.MarshalOrPanic(&mb.MSPRole{Role: s.orgs[id], MspIdentifier: id}),
+			Principal:               protoutil.MarshalOrPanic(&mb.MSPRole{Role: s.orgs[id], MspIdentifier: id}),
 		}
 		sigspolicy[i] = cauthdsl.SignedBy(int32(i))
 	}

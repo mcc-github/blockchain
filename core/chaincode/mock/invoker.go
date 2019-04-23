@@ -2,10 +2,10 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	ccprovider "github.com/mcc-github/blockchain/core/common/ccprovider"
-	peer "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 type Invoker struct {

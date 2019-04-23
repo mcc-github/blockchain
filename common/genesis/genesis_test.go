@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2017 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package genesis
@@ -19,22 +9,20 @@ package genesis
 import (
 	"testing"
 
-	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBasicSanity(t *testing.T) {
-	impl := NewFactoryImpl(cb.NewConfigGroup())
-	_, err := impl.Block("testchainid")
-	assert.NoError(t, err, "Basic sanity fails")
+	impl := NewFactoryImpl(protoutil.NewConfigGroup())
+	impl.Block("testchainid")
 }
 
 func TestForTransactionID(t *testing.T) {
-	impl := NewFactoryImpl(cb.NewConfigGroup())
-	block, _ := impl.Block("testchainid")
-	configEnv, _ := utils.ExtractEnvelope(block, 0)
-	configEnvPayload, _ := utils.ExtractPayload(configEnv)
-	configEnvPayloadChannelHeader, _ := utils.UnmarshalChannelHeader(configEnvPayload.GetHeader().ChannelHeader)
+	impl := NewFactoryImpl(protoutil.NewConfigGroup())
+	block := impl.Block("testchainid")
+	configEnv, _ := protoutil.ExtractEnvelope(block, 0)
+	configEnvPayload, _ := protoutil.ExtractPayload(configEnv)
+	configEnvPayloadChannelHeader, _ := protoutil.UnmarshalChannelHeader(configEnvPayload.GetHeader().ChannelHeader)
 	assert.NotEmpty(t, configEnvPayloadChannelHeader.TxId, "tx_id of configuration transaction should not be empty")
 }

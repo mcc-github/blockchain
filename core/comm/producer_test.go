@@ -9,7 +9,6 @@ package comm
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -96,39 +95,92 @@ func TestUpdateEndpoints(t *testing.T) {
 	
 	producer.UpdateEndpoints([]string{})
 	conn, _, err = producer.NewConnection()
+	assert.NoError(t, err)
 	assert.Equal(t, "b", conn2Endpoint[fmt.Sprintf("%p", conn)])
 }
 
-func TestDisableEndpoint(t *testing.T) {
-	orgEndpointDisableInterval := EndpointDisableInterval
-	EndpointDisableInterval = time.Millisecond * 100
-	defer func() { EndpointDisableInterval = orgEndpointDisableInterval }()
+func TestNewConnectionRoundRobin(t *testing.T) {
+	t.Parallel()
 
+	
+
+	totalEndpoints := []string{"a", "b", "c", "d"}
 	conn2Endpoint := make(map[string]string)
 	connFactory := func(endpoint string) (*grpc.ClientConn, error) {
 		conn := &grpc.ClientConn{}
 		conn2Endpoint[fmt.Sprintf("%p", conn)] = endpoint
 		return conn, nil
 	}
-	
-	producer := NewConnectionProducer(connFactory, []string{"a"})
-	conn, a, err := producer.NewConnection()
-	assert.NoError(t, err)
-	assert.Equal(t, "a", conn2Endpoint[fmt.Sprintf("%p", conn)])
-	assert.Equal(t, "a", a)
-	
-	producer.DisableEndpoint("a")
-	_, _, err = producer.NewConnection()
-	
-	assert.NoError(t, err)
-	
-	producer.UpdateEndpoints([]string{"a", "b"})
-	
-	producer.DisableEndpoint("a")
-	conn, a, err = producer.NewConnection()
-	assert.NoError(t, err)
-	
-	assert.Equal(t, "b", conn2Endpoint[fmt.Sprintf("%p", conn)])
-	assert.Equal(t, "b", a)
 
+	producer := NewConnectionProducer(connFactory, totalEndpoints)
+	connectedEndpoints := make(map[string]struct{})
+
+	assertAllEndpointsUsed := func() {
+		for i := 0; i < len(totalEndpoints); i++ {
+			_, endpoint, err := producer.NewConnection()
+			assert.NoError(t, err)
+			connectedEndpoints[endpoint] = struct{}{}
+		}
+		assert.Len(t, connectedEndpoints, 4)
+	}
+
+	assertAllEndpointsUsed()
+	
+	connectedEndpoints = make(map[string]struct{})
+	
+	assertAllEndpointsUsed()
+}
+
+func TestEndpointCriteria(t *testing.T) {
+	endpointCriteria := EndpointCriteria{
+		Endpoint:      "a",
+		Organizations: []string{"o1", "o2"},
+	}
+
+	for _, testCase := range []struct {
+		description           string
+		expectedEqual         bool
+		otherEndpointCriteria EndpointCriteria
+	}{
+		{
+			description: "different endpoint",
+			otherEndpointCriteria: EndpointCriteria{
+				Endpoint:      "b",
+				Organizations: []string{"o1", "o2"},
+			},
+		},
+		{
+			description: "more organizations",
+			otherEndpointCriteria: EndpointCriteria{
+				Endpoint:      "a",
+				Organizations: []string{"o1", "o2", "o3"},
+			},
+		},
+		{
+			description: "less organizations",
+			otherEndpointCriteria: EndpointCriteria{
+				Endpoint:      "a",
+				Organizations: []string{"o1"},
+			},
+		},
+		{
+			description: "different organizations",
+			otherEndpointCriteria: EndpointCriteria{
+				Endpoint:      "a",
+				Organizations: []string{"o1", "o3"},
+			},
+		},
+		{
+			description:   "permuted organizations",
+			expectedEqual: true,
+			otherEndpointCriteria: EndpointCriteria{
+				Endpoint:      "a",
+				Organizations: []string{"o2", "o1"},
+			},
+		},
+	} {
+		t.Run(testCase.description, func(t *testing.T) {
+			assert.Equal(t, testCase.expectedEqual, endpointCriteria.Equals(testCase.otherEndpointCriteria))
+		})
+	}
 }

@@ -16,7 +16,7 @@ import (
 	mockblockcutter "github.com/mcc-github/blockchain/orderer/mocks/common/blockcutter"
 	mockmultichannel "github.com/mcc-github/blockchain/orderer/mocks/common/multichannel"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,8 +25,8 @@ func init() {
 }
 
 var testMessage = &cb.Envelope{
-	Payload: utils.MarshalOrPanic(&cb.Payload{
-		Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{ChannelId: "foo"})},
+	Payload: protoutil.MarshalOrPanic(&cb.Payload{
+		Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{ChannelId: "foo"})},
 		Data:   []byte("TEST_MESSAGE"),
 	}),
 }

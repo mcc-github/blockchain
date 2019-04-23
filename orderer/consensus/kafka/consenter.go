@@ -7,17 +7,24 @@ SPDX-License-Identifier: Apache-2.0
 package kafka
 
 import (
+	"github.com/Shopify/sarama"
+	"github.com/mcc-github/blockchain-lib-go/healthz"
 	"github.com/mcc-github/blockchain/common/metrics"
-	localconfig "github.com/mcc-github/blockchain/orderer/common/localconfig"
+	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	cb "github.com/mcc-github/blockchain/protos/common"
-
-	"github.com/Shopify/sarama"
-	logging "github.com/op/go-logging"
+	"github.com/op/go-logging"
 )
 
 
-func New(config localconfig.Kafka, metricsProvider metrics.Provider) (consensus.Consenter, *Metrics) {
+
+
+type healthChecker interface {
+	RegisterChecker(component string, checker healthz.HealthChecker) error
+}
+
+
+func New(config localconfig.Kafka, metricsProvider metrics.Provider, healthChecker healthChecker) (consensus.Consenter, *Metrics) {
 	if config.Verbose {
 		logging.SetLevel(logging.DEBUG, "orderer.consensus.kafka.sarama")
 	}
@@ -38,6 +45,7 @@ func New(config localconfig.Kafka, metricsProvider metrics.Provider) (consensus.
 			NumPartitions:     1,
 			ReplicationFactor: config.Topic.ReplicationFactor,
 		},
+		healthChecker: healthChecker,
 	}, NewMetrics(metricsProvider, brokerConfig.MetricRegistry)
 }
 
@@ -50,6 +58,7 @@ type consenterImpl struct {
 	retryOptionsVal localconfig.Retry
 	kafkaVersionVal sarama.KafkaVersion
 	topicDetailVal  *sarama.TopicDetail
+	healthChecker   healthChecker
 }
 
 
@@ -59,7 +68,12 @@ type consenterImpl struct {
 
 func (consenter *consenterImpl) HandleChain(support consensus.ConsenterSupport, metadata *cb.Metadata) (consensus.Chain, error) {
 	lastOffsetPersisted, lastOriginalOffsetProcessed, lastResubmittedConfigOffset := getOffsets(metadata.Value, support.ChainID())
-	return newChain(consenter, support, lastOffsetPersisted, lastOriginalOffsetProcessed, lastResubmittedConfigOffset)
+	ch, err := newChain(consenter, support, lastOffsetPersisted, lastOriginalOffsetProcessed, lastResubmittedConfigOffset)
+	if err != nil {
+		return nil, err
+	}
+	consenter.healthChecker.RegisterChecker(ch.channel.String(), ch)
+	return ch, nil
 }
 
 

@@ -18,6 +18,7 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -135,7 +136,7 @@ func (jl *jsonLedger) Append(block *cb.Block) error {
 	}
 
 	jl.writeBlock(block)
-	jl.lastHash = block.Header.Hash()
+	jl.lastHash = protoutil.BlockHeaderHash(block.Header)
 	jl.height++
 
 	

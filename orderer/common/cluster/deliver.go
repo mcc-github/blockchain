@@ -15,12 +15,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -31,7 +31,7 @@ type BlockPuller struct {
 	
 	MaxPullBlockRetries uint64
 	MaxTotalBufferBytes int
-	Signer              crypto.LocalSigner
+	Signer              identity.SignerSerializer
 	TLSCert             []byte
 	Channel             string
 	FetchTimeout        time.Duration
@@ -78,6 +78,7 @@ func (p *BlockPuller) Close() {
 	p.conn = nil
 	p.endpoint = ""
 	p.latestSeq = 0
+	p.blockBuff = nil
 }
 
 
@@ -92,7 +93,7 @@ func (p *BlockPuller) PullBlock(seq uint64) *common.Block {
 		}
 		retriesLeft--
 		if retriesLeft == 0 && p.MaxPullBlockRetries > 0 {
-			p.Logger.Errorf("Failed pulling block %d: retry count exhausted(%d)", seq, p.MaxPullBlockRetries)
+			p.Logger.Errorf("Failed pulling block [%d]: retry count exhausted(%d)", seq, p.MaxPullBlockRetries)
 			return nil
 		}
 		time.Sleep(p.RetryTimeout)
@@ -138,7 +139,7 @@ func (p *BlockPuller) tryFetchBlock(seq uint64) *common.Block {
 		return nil
 	}
 
-	if err := p.VerifyBlockSequence(p.blockBuff); err != nil {
+	if err := p.VerifyBlockSequence(p.blockBuff, p.Channel); err != nil {
 		p.Close()
 		p.Logger.Errorf("Failed verifying received blocks: %v", err)
 		return nil
@@ -188,7 +189,7 @@ func (p *BlockPuller) pullBlocks(seq uint64, reConnected bool) error {
 		totalSize += size
 		p.blockBuff = append(p.blockBuff, block)
 		nextExpectedSequence++
-		p.Logger.Infof("Got block %d of size %dKB from %s", seq, size/1024, p.endpoint)
+		p.Logger.Infof("Got block [%d] of size %d KB from %s", seq, size/1024, p.endpoint)
 	}
 	return nil
 }
@@ -197,7 +198,7 @@ func (p *BlockPuller) obtainStream(reConnected bool, env *common.Envelope, seq u
 	var stream *ImpatientStream
 	var err error
 	if reConnected {
-		p.Logger.Infof("Sending request for block %d to %s", seq, p.endpoint)
+		p.Logger.Infof("Sending request for block [%d] to %s", seq, p.endpoint)
 		stream, err = p.requestBlocks(p.endpoint, NewImpatientStream(p.conn, p.FetchTimeout), env)
 		if err != nil {
 			return nil, err
@@ -360,7 +361,7 @@ func (p *BlockPuller) fetchLastBlockSeq(minRequestedSequence uint64, endpoint st
 
 	block, err := extractBlockFromResponse(resp)
 	if err != nil {
-		p.Logger.Errorf("Received %v from %s: %v", resp, endpoint, err)
+		p.Logger.Warningf("Received %v from %s: %v", resp, endpoint, err)
 		return 0, err
 	}
 	stream.CloseSend()
@@ -425,7 +426,7 @@ func extractBlockFromResponse(resp *orderer.DeliverResponse) (*common.Block, err
 }
 
 func (p *BlockPuller) seekLastEnvelope() (*common.Envelope, error) {
-	return utils.CreateSignedEnvelopeWithTLSBinding(
+	return protoutil.CreateSignedEnvelopeWithTLSBinding(
 		common.HeaderType_DELIVER_SEEK_INFO,
 		p.Channel,
 		p.Signer,
@@ -437,7 +438,7 @@ func (p *BlockPuller) seekLastEnvelope() (*common.Envelope, error) {
 }
 
 func (p *BlockPuller) seekNextEnvelope(startSeq uint64) (*common.Envelope, error) {
-	return utils.CreateSignedEnvelopeWithTLSBinding(
+	return protoutil.CreateSignedEnvelopeWithTLSBinding(
 		common.HeaderType_DELIVER_SEEK_INFO,
 		p.Channel,
 		p.Signer,
@@ -465,7 +466,7 @@ func nextSeekInfo(startSeq uint64) *orderer.SeekInfo {
 }
 
 func blockSize(block *common.Block) int {
-	return len(utils.MarshalOrPanic(block))
+	return len(protoutil.MarshalOrPanic(block))
 }
 
 type endpointInfo struct {

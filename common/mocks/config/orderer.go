@@ -33,7 +33,7 @@ type Orderer struct {
 	
 	MaxChannelsCountVal uint64
 	
-	OrganizationsVal map[string]channelconfig.Org
+	OrganizationsVal map[string]channelconfig.OrdererOrg
 	
 	CapabilitiesVal channelconfig.OrdererCapabilities
 }
@@ -79,7 +79,7 @@ func (o *Orderer) MaxChannelsCount() uint64 {
 }
 
 
-func (o *Orderer) Organizations() map[string]channelconfig.Org {
+func (o *Orderer) Organizations() map[string]channelconfig.OrdererOrg {
 	return o.OrganizationsVal
 }
 
@@ -103,6 +103,8 @@ type OrdererCapabilities struct {
 	ExpirationVal bool
 
 	Kafka2RaftMigVal bool
+
+	UseChannelCreationPolicyAsAdminsVal bool
 }
 
 
@@ -129,4 +131,8 @@ func (oc *OrdererCapabilities) ExpirationCheck() bool {
 
 func (oc *OrdererCapabilities) Kafka2RaftMigration() bool {
 	return oc.Kafka2RaftMigVal
+}
+
+func (oc *OrdererCapabilities) UseChannelCreationPolicyAsAdmins() bool {
+	return oc.UseChannelCreationPolicyAsAdminsVal
 }

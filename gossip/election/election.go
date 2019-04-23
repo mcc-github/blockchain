@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/gossip/util"
-	"github.com/spf13/viper"
 )
 
 
@@ -82,6 +81,9 @@ type LeaderElectionAdapter interface {
 
 	
 	Peers() []Peer
+
+	
+	ReportMetrics(isLeader bool)
 }
 
 type leadershipCallback func(isLeader bool)
@@ -127,8 +129,22 @@ type Msg interface {
 func noopCallback(_ bool) {
 }
 
+const (
+	DefStartupGracePeriod       = time.Second * 15
+	DefMembershipSampleInterval = time.Second
+	DefLeaderAliveThreshold     = time.Second * 10
+	DefLeaderElectionDuration   = time.Second * 5
+)
 
-func NewLeaderElectionService(adapter LeaderElectionAdapter, id string, callback leadershipCallback) LeaderElectionService {
+type ElectionConfig struct {
+	StartupGracePeriod       time.Duration
+	MembershipSampleInterval time.Duration
+	LeaderAliveThreshold     time.Duration
+	LeaderElectionDuration   time.Duration
+}
+
+
+func NewLeaderElectionService(adapter LeaderElectionAdapter, id string, callback leadershipCallback, config ElectionConfig) LeaderElectionService {
 	if len(id) == 0 {
 		panic("Empty id")
 	}
@@ -140,6 +156,7 @@ func NewLeaderElectionService(adapter LeaderElectionAdapter, id string, callback
 		interruptChan: make(chan struct{}, 1),
 		logger:        util.GetLogger(util.ElectionLogger, ""),
 		callback:      noopCallback,
+		config:        config,
 	}
 
 	if callback != nil {
@@ -167,12 +184,13 @@ type leaderElectionSvcImpl struct {
 	logger        util.Logger
 	callback      leadershipCallback
 	yieldTimer    *time.Timer
+	config        ElectionConfig
 }
 
 func (le *leaderElectionSvcImpl) start() {
 	le.stopWG.Add(2)
 	go le.handleMessages()
-	le.waitForMembershipStabilization(getStartupGracePeriod())
+	le.waitForMembershipStabilization(le.config.StartupGracePeriod)
 	go le.run()
 }
 
@@ -279,7 +297,7 @@ func (le *leaderElectionSvcImpl) leaderElection() {
 	
 	le.propose()
 	
-	le.waitForInterrupt(getLeaderElectionDuration())
+	le.waitForInterrupt(le.config.LeaderElectionDuration)
 	
 	
 	if le.isLeaderExists() {
@@ -319,8 +337,9 @@ func (le *leaderElectionSvcImpl) follower() {
 
 	le.proposals.Clear()
 	atomic.StoreInt32(&le.leaderExists, int32(0))
+	le.adapter.ReportMetrics(false)
 	select {
-	case <-time.After(getLeaderAliveThreshold()):
+	case <-time.After(le.config.LeaderAliveThreshold):
 	case <-le.stopChan:
 		le.stopChan <- struct{}{}
 	}
@@ -329,7 +348,8 @@ func (le *leaderElectionSvcImpl) follower() {
 func (le *leaderElectionSvcImpl) leader() {
 	leaderDeclaration := le.adapter.CreateMessage(true)
 	le.adapter.Gossip(leaderDeclaration)
-	le.waitForInterrupt(getLeadershipDeclarationInterval())
+	le.adapter.ReportMetrics(true)
+	le.waitForInterrupt(le.config.LeaderAliveThreshold / 2)
 }
 
 
@@ -340,7 +360,7 @@ func (le *leaderElectionSvcImpl) waitForMembershipStabilization(timeLimit time.D
 	endTime := time.Now().Add(timeLimit)
 	viewSize := len(le.adapter.Peers())
 	for !le.shouldStop() {
-		time.Sleep(getMembershipSampleInterval())
+		time.Sleep(le.config.MembershipSampleInterval)
 		newSize := len(le.adapter.Peers())
 		if newSize == viewSize || time.Now().After(endTime) || le.isLeaderExists() {
 			return
@@ -421,7 +441,7 @@ func (le *leaderElectionSvcImpl) Yield() {
 	
 	atomic.StoreInt32(&le.leaderExists, int32(0))
 	
-	le.yieldTimer = time.AfterFunc(getLeaderAliveThreshold()*6, func() {
+	le.yieldTimer = time.AfterFunc(le.config.LeaderAliveThreshold*6, func() {
 		atomic.StoreInt32(&le.yield, int32(0))
 	})
 }
@@ -433,52 +453,4 @@ func (le *leaderElectionSvcImpl) Stop() {
 	atomic.StoreInt32(&le.toDie, int32(1))
 	le.stopChan <- struct{}{}
 	le.stopWG.Wait()
-}
-
-
-
-func SetStartupGracePeriod(t time.Duration) {
-	viper.Set("peer.gossip.election.startupGracePeriod", t)
-}
-
-
-
-func SetMembershipSampleInterval(t time.Duration) {
-	viper.Set("peer.gossip.election.membershipSampleInterval", t)
-}
-
-
-func SetLeaderAliveThreshold(t time.Duration) {
-	viper.Set("peer.gossip.election.leaderAliveThreshold", t)
-}
-
-
-
-func SetLeaderElectionDuration(t time.Duration) {
-	viper.Set("peer.gossip.election.leaderElectionDuration", t)
-}
-
-func getStartupGracePeriod() time.Duration {
-	return util.GetDurationOrDefault("peer.gossip.election.startupGracePeriod", time.Second*15)
-}
-
-func getMembershipSampleInterval() time.Duration {
-	return util.GetDurationOrDefault("peer.gossip.election.membershipSampleInterval", time.Second)
-}
-
-func getLeaderAliveThreshold() time.Duration {
-	return util.GetDurationOrDefault("peer.gossip.election.leaderAliveThreshold", time.Second*10)
-}
-
-func getLeadershipDeclarationInterval() time.Duration {
-	return time.Duration(getLeaderAliveThreshold() / 2)
-}
-
-func getLeaderElectionDuration() time.Duration {
-	return util.GetDurationOrDefault("peer.gossip.election.leaderElectionDuration", time.Second*5)
-}
-
-
-func GetMsgExpirationTimeout() time.Duration {
-	return getLeaderAliveThreshold() * 10
 }

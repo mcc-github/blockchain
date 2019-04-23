@@ -45,6 +45,11 @@ func newMgr(ccInfoProvider ledger.DeployedChaincodeInfoProvider, dbPath string) 
 	return &mgr{ccInfoProvider, newDBProvider(dbPath)}
 }
 
+func (m *mgr) Initialize(ledgerID string, qe ledger.SimpleQueryExecutor) error {
+	
+	return nil
+}
+
 
 func (m *mgr) InterestedInNamespaces() []string {
 	return m.ccInfoProvider.Namespaces()
@@ -60,7 +65,7 @@ func (m *mgr) StateCommitDone(ledgerID string) {
 
 
 func (m *mgr) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
-	updatedCCs, err := m.ccInfoProvider.UpdatedChaincodes(convertToKVWrites(trigger.StateUpdates))
+	updatedCCs, err := m.ccInfoProvider.UpdatedChaincodes(extractPublicUpdates(trigger.StateUpdates))
 	if err != nil {
 		return err
 	}
@@ -75,10 +80,10 @@ func (m *mgr) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
 		if err != nil {
 			return err
 		}
-		if ccInfo.CollectionConfigPkg == nil {
+		if ccInfo.ExplicitCollectionConfigPkg == nil {
 			continue
 		}
-		updatedCollConfigs[ccInfo.Name] = ccInfo.CollectionConfigPkg
+		updatedCollConfigs[ccInfo.Name] = ccInfo.ExplicitCollectionConfigPkg
 	}
 	if len(updatedCollConfigs) == 0 {
 		return nil
@@ -93,7 +98,12 @@ func (m *mgr) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
 
 
 func (m *mgr) GetRetriever(ledgerID string, ledgerInfoRetriever LedgerInfoRetriever) ledger.ConfigHistoryRetriever {
-	return &retriever{dbHandle: m.dbProvider.getDB(ledgerID), ledgerInfoRetriever: ledgerInfoRetriever}
+	return &retriever{
+		ledgerInfoRetriever:    ledgerInfoRetriever,
+		ledgerID:               ledgerID,
+		deployedCCInfoProvider: m.ccInfoProvider,
+		dbHandle:               m.dbProvider.getDB(ledgerID),
+	}
 }
 
 
@@ -102,17 +112,24 @@ func (m *mgr) Close() {
 }
 
 type retriever struct {
-	ledgerInfoRetriever LedgerInfoRetriever
-	dbHandle            *db
+	ledgerInfoRetriever    LedgerInfoRetriever
+	ledgerID               string
+	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
+	dbHandle               *db
 }
 
 
 func (r *retriever) MostRecentCollectionConfigBelow(blockNum uint64, chaincodeName string) (*ledger.CollectionConfigInfo, error) {
 	compositeKV, err := r.dbHandle.mostRecentEntryBelow(blockNum, collectionConfigNamespace, constructCollectionConfigKey(chaincodeName))
-	if err != nil || compositeKV == nil {
+	if err != nil {
 		return nil, err
 	}
-	return compositeKVToCollectionConfig(compositeKV)
+	implicitColls, err := r.getImplicitCollection(chaincodeName)
+	if err != nil {
+		return nil, err
+	}
+
+	return constructCollectionConfigInfo(compositeKV, implicitColls)
 }
 
 
@@ -128,10 +145,23 @@ func (r *retriever) CollectionConfigAt(blockNum uint64, chaincodeName string) (*
 	}
 
 	compositeKV, err := r.dbHandle.entryAt(blockNum, collectionConfigNamespace, constructCollectionConfigKey(chaincodeName))
-	if err != nil || compositeKV == nil {
+	if err != nil {
 		return nil, err
 	}
-	return compositeKVToCollectionConfig(compositeKV)
+	implicitColls, err := r.getImplicitCollection(chaincodeName)
+	if err != nil {
+		return nil, err
+	}
+	return constructCollectionConfigInfo(compositeKV, implicitColls)
+}
+
+func (r *retriever) getImplicitCollection(chaincodeName string) ([]*common.StaticCollectionConfig, error) {
+	qe, err := r.ledgerInfoRetriever.NewQueryExecutor()
+	if err != nil {
+		return nil, err
+	}
+	defer qe.Done()
+	return r.deployedCCInfoProvider.ImplicitCollections(r.ledgerID, chaincodeName, qe)
 }
 
 func prepareDBBatch(chaincodeCollConfigs map[string]*common.CollectionConfigPackage, committingBlockNum uint64) (*batch, error) {
@@ -153,7 +183,10 @@ func compositeKVToCollectionConfig(compositeKV *compositeKV) (*ledger.Collection
 	if err := proto.Unmarshal(compositeKV.value, conf); err != nil {
 		return nil, errors.Wrap(err, "error unmarshalling compositeKV to collection config")
 	}
-	return &ledger.CollectionConfigInfo{CollectionConfig: conf, CommittingBlockNum: compositeKV.blockNum}, nil
+	return &ledger.CollectionConfigInfo{
+		CollectionConfig:   conf,
+		CommittingBlockNum: compositeKV.blockNum,
+	}, nil
 }
 
 func constructCollectionConfigKey(chaincodeName string) string {
@@ -164,15 +197,47 @@ func dbPath() string {
 	return ledgerconfig.GetConfigHistoryPath()
 }
 
-func convertToKVWrites(stateUpdates ledger.StateUpdates) map[string][]*kvrwset.KVWrite {
+func extractPublicUpdates(stateUpdates ledger.StateUpdates) map[string][]*kvrwset.KVWrite {
 	m := map[string][]*kvrwset.KVWrite{}
 	for ns, updates := range stateUpdates {
-		m[ns] = updates.([]*kvrwset.KVWrite)
+		m[ns] = updates.PublicUpdates
 	}
 	return m
+}
+
+func constructCollectionConfigInfo(
+	compositeKV *compositeKV,
+	implicitColls []*common.StaticCollectionConfig,
+) (*ledger.CollectionConfigInfo, error) {
+	var collConf *ledger.CollectionConfigInfo
+	var err error
+
+	if compositeKV == nil && len(implicitColls) == 0 {
+		return nil, nil
+	}
+
+	collConf = &ledger.CollectionConfigInfo{
+		CollectionConfig: &common.CollectionConfigPackage{},
+	}
+	if compositeKV != nil {
+		if collConf, err = compositeKVToCollectionConfig(compositeKV); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, implicitColl := range implicitColls {
+		cc := &common.CollectionConfig{}
+		cc.Payload = &common.CollectionConfig_StaticCollectionConfig{StaticCollectionConfig: implicitColl}
+		collConf.CollectionConfig.Config = append(
+			collConf.CollectionConfig.Config,
+			cc,
+		)
+	}
+	return collConf, nil
 }
 
 
 type LedgerInfoRetriever interface {
 	GetBlockchainInfo() (*common.BlockchainInfo, error)
+	NewQueryExecutor() (ledger.QueryExecutor, error)
 }

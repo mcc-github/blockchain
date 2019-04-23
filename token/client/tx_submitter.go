@@ -3,6 +3,7 @@ Copyright IBM Corp. All Rights Reserved.
 
 SPDX-License-Identifier: Apache-2.0
 */
+
 package client
 
 import (
@@ -12,14 +13,11 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/mcc-github/blockchain/common/crypto"
-	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	tk "github.com/mcc-github/blockchain/token"
 	"github.com/pkg/errors"
 )
-
-var logger = flogging.MustGetLogger("token.client")
 
 
 
@@ -160,7 +158,7 @@ func CreateHeader(txType common.HeaderType, channelId string, creator []byte, tl
 		return "", nil, err
 	}
 
-	txId, err := utils.ComputeTxID(nonce, creator)
+	txId, err := protoutil.ComputeTxID(nonce, creator)
 	if err != nil {
 		return "", nil, err
 	}

@@ -164,7 +164,7 @@ func parseHeaderMessageLengthConfig(c string) (hdrLenStr, msgLenStr uint64, err 
 		if s := match[1]; s != "" {
 			msgLenStr, err = strconv.ParseUint(s, 10, 64)
 			if err != nil {
-				return 0, 0, fmt.Errorf("Failed to convert %q to uint", s)
+				return 0, 0, fmt.Errorf("failed to convert %q to uint", s)
 			}
 			return 0, msgLenStr, nil
 		}
@@ -179,13 +179,13 @@ func parseHeaderMessageLengthConfig(c string) (hdrLenStr, msgLenStr uint64, err 
 		if s := match[1]; s != "" {
 			hdrLenStr, err = strconv.ParseUint(s, 10, 64)
 			if err != nil {
-				return 0, 0, fmt.Errorf("Failed to convert %q to uint", s)
+				return 0, 0, fmt.Errorf("failed to convert %q to uint", s)
 			}
 		}
 		if s := match[2]; s != "" {
 			msgLenStr, err = strconv.ParseUint(s, 10, 64)
 			if err != nil {
-				return 0, 0, fmt.Errorf("Failed to convert %q to uint", s)
+				return 0, 0, fmt.Errorf("failed to convert %q to uint", s)
 			}
 		}
 		return hdrLenStr, msgLenStr, nil

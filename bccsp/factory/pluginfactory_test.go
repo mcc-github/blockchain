@@ -29,7 +29,7 @@ func buildPlugin(lib string, t *testing.T) {
 		if raceEnabled {
 			cmd.Args = append(cmd.Args, "-race")
 		}
-		cmd.Args = append(cmd.Args, "github.com/mcc-github/blockchain/examples/plugins/bccsp")
+		cmd.Args = append(cmd.Args, "github.com/mcc-github/blockchain/bccsp/factory/test-plugin")
 		err := cmd.Run()
 		if err != nil {
 			t.Fatalf("Could not build plugin: [%s]", err)
@@ -59,7 +59,7 @@ func TestPluginFactoryInvalidConfig(t *testing.T) {
 
 func TestPluginFactoryValidConfig(t *testing.T) {
 	
-	lib := "./bccsp.so"
+	lib := "./test-plugin.so"
 	defer os.Remove(lib)
 	buildPlugin(lib, t)
 
@@ -80,7 +80,7 @@ func TestPluginFactoryValidConfig(t *testing.T) {
 
 func TestPluginFactoryFromOpts(t *testing.T) {
 	
-	lib := "./bccsp.so"
+	lib := "./test-plugin.so"
 	defer os.Remove(lib)
 	buildPlugin(lib, t)
 

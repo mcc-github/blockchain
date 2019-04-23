@@ -8,19 +8,22 @@ package integration
 
 import (
 	"bytes"
+	"io/ioutil"
 	"os"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/common/tools/protolator"
+	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
+	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func bidirectionalMarshal(t *testing.T, doc proto.Message) {
@@ -52,7 +55,7 @@ func TestConfigUpdate(t *testing.T) {
 	assert.NoError(t, err)
 
 	bidirectionalMarshal(t, &cb.ConfigUpdateEnvelope{
-		ConfigUpdate: utils.MarshalOrPanic(&cb.ConfigUpdate{
+		ConfigUpdate: protoutil.MarshalOrPanic(&cb.ConfigUpdate{
 			ReadSet:  cg,
 			WriteSet: cg,
 		}),
@@ -62,7 +65,7 @@ func TestConfigUpdate(t *testing.T) {
 func TestIdemix(t *testing.T) {
 	bidirectionalMarshal(t, &msp.MSPConfig{
 		Type: 1,
-		Config: utils.MarshalOrPanic(&msp.IdemixMSPConfig{
+		Config: protoutil.MarshalOrPanic(&msp.IdemixMSPConfig{
 			Name: "fooo",
 		}),
 	})
@@ -82,10 +85,10 @@ func TestEmitDefaultsBug(t *testing.T) {
 		},
 		Data: &cb.BlockData{
 			Data: [][]byte{
-				utils.MarshalOrPanic(&cb.Envelope{
-					Payload: utils.MarshalOrPanic(&cb.Payload{
+				protoutil.MarshalOrPanic(&cb.Envelope{
+					Payload: protoutil.MarshalOrPanic(&cb.Payload{
 						Header: &cb.Header{
-							ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+							ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 								Type: int32(cb.HeaderType_CONFIG),
 							}),
 						},
@@ -229,4 +232,26 @@ func TestChannelCreationPolicy(t *testing.T) {
 	}
 
 	bidirectionalMarshal(t, cu)
+}
+
+func TestStaticMarshal(t *testing.T) {
+	
+	
+	
+
+	blockBin, err := ioutil.ReadFile("testdata/block.pb")
+	require.NoError(t, err)
+
+	block := &cb.Block{}
+	err = proto.Unmarshal(blockBin, block)
+	require.NoError(t, err)
+
+	jsonBin, err := ioutil.ReadFile("testdata/block.json")
+	require.NoError(t, err)
+
+	buf := &bytes.Buffer{}
+	require.NoError(t, protolator.DeepMarshalJSON(buf, block))
+
+	gt := NewGomegaWithT(t)
+	gt.Expect(buf).To(MatchJSON(jsonBin))
 }

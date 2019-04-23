@@ -10,18 +10,28 @@ import (
 	"encoding/base64"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
+	"github.com/mcc-github/blockchain/orderer/common/cluster/mocks"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	"github.com/mcc-github/blockchain/orderer/mocks/common/multichannel"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
+	"github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"go.etcd.io/etcd/raft/raftpb"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestIsConsenterOfChannel(t *testing.T) {
@@ -69,7 +79,7 @@ func TestIsConsenterOfChannel(t *testing.T) {
 				" error unmarshaling Payload: proto: common.Payload: illegal tag 0 (wire type 1)",
 			configBlock: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
 						Payload: []byte{1, 2, 3},
 					})},
 				},
@@ -98,88 +108,6 @@ func TestIsConsenterOfChannel(t *testing.T) {
 	}
 }
 
-func TestLastConfigBlock(t *testing.T) {
-	for _, testCase := range []struct {
-		name          string
-		block         *common.Block
-		support       consensus.ConsenterSupport
-		expectedError string
-	}{
-		{
-			name:          "nil block",
-			expectedError: "nil block",
-		},
-		{
-			name:          "nil support",
-			expectedError: "nil support",
-			block:         &common.Block{},
-		},
-		{
-			name:          "nil metadata",
-			expectedError: "no metadata in block",
-			block:         &common.Block{},
-			support:       &multichannel.ConsenterSupport{},
-		},
-		{
-			name:          "no last config block metadata",
-			expectedError: "no metadata in block",
-			block: &common.Block{
-				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{}},
-				},
-			},
-			support: &multichannel.ConsenterSupport{},
-		},
-		{
-			name: "bad metadata in block",
-			expectedError: "error unmarshaling metadata from block at index " +
-				"[LAST_CONFIG]: proto: common.Metadata: illegal tag 0 (wire type 1)",
-			block: &common.Block{
-				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{}, {1, 2, 3}},
-				},
-			},
-			support: &multichannel.ConsenterSupport{},
-		},
-		{
-			name: "no block with index",
-			block: &common.Block{
-				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{}, utils.MarshalOrPanic(&common.Metadata{
-						Value: utils.MarshalOrPanic(&common.LastConfig{Index: 666}),
-					})},
-				},
-			},
-			expectedError: "unable to retrieve last config block 666",
-			support:       &multichannel.ConsenterSupport{},
-		},
-		{
-			name: "valid last config block",
-			block: &common.Block{
-				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{}, utils.MarshalOrPanic(&common.Metadata{
-						Value: utils.MarshalOrPanic(&common.LastConfig{Index: 42}),
-					})},
-				},
-			},
-			support: &multichannel.ConsenterSupport{
-				BlockByIndex: map[uint64]*common.Block{42: {}},
-			},
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			block, err := LastConfigBlock(testCase.block, testCase.support)
-			if testCase.expectedError == "" {
-				assert.NoError(t, err)
-				assert.NotNil(t, block)
-				return
-			}
-			assert.EqualError(t, err, testCase.expectedError)
-			assert.Nil(t, block)
-		})
-	}
-}
-
 func TestEndpointconfigFromFromSupport(t *testing.T) {
 	blockBytes, err := ioutil.ReadFile("testdata/mychannel.block")
 	assert.NoError(t, err)
@@ -196,7 +124,7 @@ func TestEndpointconfigFromFromSupport(t *testing.T) {
 	}{
 		{
 			name:          "Block returns nil",
-			expectedError: "unable to retrieve block 99",
+			expectedError: "unable to retrieve block [99]",
 			height:        100,
 		},
 		{
@@ -209,20 +137,20 @@ func TestEndpointconfigFromFromSupport(t *testing.T) {
 			name: "Last config block cannot be retrieved",
 			blockAtHeight: &common.Block{
 				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{}, utils.MarshalOrPanic(&common.Metadata{
-						Value: utils.MarshalOrPanic(&common.LastConfig{Index: 42}),
+					Metadata: [][]byte{{}, protoutil.MarshalOrPanic(&common.Metadata{
+						Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 42}),
 					})},
 				},
 			},
-			expectedError: "unable to retrieve last config block 42",
+			expectedError: "unable to retrieve last config block [42]",
 			height:        100,
 		},
 		{
 			name: "Last config block is retrieved but it is invalid",
 			blockAtHeight: &common.Block{
 				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{}, utils.MarshalOrPanic(&common.Metadata{
-						Value: utils.MarshalOrPanic(&common.LastConfig{Index: 42}),
+					Metadata: [][]byte{{}, protoutil.MarshalOrPanic(&common.Metadata{
+						Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 42}),
 					})},
 				},
 			},
@@ -234,8 +162,8 @@ func TestEndpointconfigFromFromSupport(t *testing.T) {
 			name: "Last config block is retrieved and is valid",
 			blockAtHeight: &common.Block{
 				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{}, utils.MarshalOrPanic(&common.Metadata{
-						Value: utils.MarshalOrPanic(&common.LastConfig{Index: 42}),
+					Metadata: [][]byte{{}, protoutil.MarshalOrPanic(&common.Metadata{
+						Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 42}),
 					})},
 				},
 			},
@@ -275,8 +203,8 @@ func TestNewBlockPuller(t *testing.T) {
 
 	lastBlock := &common.Block{
 		Metadata: &common.BlockMetadata{
-			Metadata: [][]byte{{}, utils.MarshalOrPanic(&common.Metadata{
-				Value: utils.MarshalOrPanic(&common.LastConfig{Index: 42}),
+			Metadata: [][]byte{{}, protoutil.MarshalOrPanic(&common.Metadata{
+				Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 42}),
 			})},
 		},
 	}
@@ -321,7 +249,7 @@ func TestNewBlockPuller(t *testing.T) {
 				HeightVal: 100,
 			},
 			certificate:   ca.CertBytes(),
-			expectedError: "unable to retrieve block 99",
+			expectedError: "unable to retrieve block [99]",
 			dialer:        dialer,
 		},
 		{
@@ -343,4 +271,252 @@ func TestNewBlockPuller(t *testing.T) {
 			assert.EqualError(t, err, testCase.expectedError)
 		})
 	}
+}
+
+func TestPeriodicCheck(t *testing.T) {
+	t.Parallel()
+
+	g := gomega.NewGomegaWithT(t)
+
+	var cond uint32
+	var checkNum uint32
+
+	fiveChecks := func() bool {
+		return atomic.LoadUint32(&checkNum) > uint32(5)
+	}
+
+	condition := func() bool {
+		atomic.AddUint32(&checkNum, 1)
+		return atomic.LoadUint32(&cond) == uint32(1)
+	}
+
+	reports := make(chan time.Duration, 1000)
+
+	report := func(duration time.Duration) {
+		reports <- duration
+	}
+
+	check := &PeriodicCheck{
+		Logger:        flogging.MustGetLogger("test"),
+		Condition:     condition,
+		CheckInterval: time.Millisecond,
+		Report:        report,
+	}
+
+	go check.Run()
+
+	g.Eventually(fiveChecks, time.Minute, time.Millisecond).Should(gomega.BeTrue())
+	
+	atomic.StoreUint32(&cond, 1)
+	g.Eventually(reports, time.Minute, time.Millisecond).Should(gomega.Not(gomega.BeEmpty()))
+	
+	firstReport := <-reports
+	g.Eventually(reports, time.Minute, time.Millisecond).Should(gomega.Not(gomega.BeEmpty()))
+	
+	secondReport := <-reports
+	
+	g.Expect(secondReport).To(gomega.BeNumerically(">", firstReport))
+	
+	g.Eventually(func() int { return len(reports) }, time.Minute, time.Millisecond).Should(gomega.BeNumerically("==", 1000))
+
+	
+	atomic.StoreUint32(&cond, 0)
+
+	var lastReport time.Duration
+	
+	for len(reports) > 0 {
+		select {
+		case report := <-reports:
+			lastReport = report
+		default:
+			break
+		}
+	}
+
+	
+	checksDoneSoFar := atomic.LoadUint32(&checkNum)
+	g.Consistently(reports, time.Second*2, time.Millisecond).Should(gomega.BeEmpty())
+	checksDoneAfter := atomic.LoadUint32(&checkNum)
+	g.Expect(checksDoneAfter).To(gomega.BeNumerically(">", checksDoneSoFar))
+	
+	g.Expect(reports).To(gomega.BeEmpty())
+
+	
+	atomic.StoreUint32(&cond, 1)
+	g.Eventually(reports, time.Minute, time.Millisecond).Should(gomega.Not(gomega.BeEmpty()))
+	
+	
+	firstReport = <-reports
+	g.Expect(lastReport).To(gomega.BeNumerically(">", firstReport))
+	
+	check.Stop()
+	checkCountAfterStop := atomic.LoadUint32(&checkNum)
+	
+	time.Sleep(check.CheckInterval * 50)
+	
+	g.Expect(atomic.LoadUint32(&checkNum)).To(gomega.BeNumerically("<", checkCountAfterStop+2))
+}
+
+func TestEvictionSuspector(t *testing.T) {
+	configBlock := &common.Block{
+		Header: &common.BlockHeader{Number: 9},
+		Metadata: &common.BlockMetadata{
+			Metadata: [][]byte{{}, {}, {}, {}},
+		},
+	}
+	configBlock.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = protoutil.MarshalOrPanic(&common.Metadata{
+		Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 9}),
+	})
+
+	puller := &mocks.ChainPuller{}
+	puller.On("Close")
+	puller.On("HeightsByEndpoints").Return(map[string]uint64{"foo": 10}, nil)
+	puller.On("PullBlock", uint64(9)).Return(configBlock)
+
+	for _, testCase := range []struct {
+		description                 string
+		expectedPanic               string
+		expectedLog                 string
+		expectedCommittedBlockCount int
+		amIInChannelReturns         error
+		evictionSuspicionThreshold  time.Duration
+		blockPuller                 BlockPuller
+		blockPullerErr              error
+		height                      uint64
+		halt                        func()
+	}{
+		{
+			description:                "suspected time is lower than threshold",
+			evictionSuspicionThreshold: 11 * time.Minute,
+			halt:                       t.Fail,
+		},
+		{
+			description:                "puller creation fails",
+			evictionSuspicionThreshold: 10*time.Minute - time.Second,
+			blockPullerErr:             errors.New("oops"),
+			expectedPanic:              "Failed creating a block puller",
+			halt:                       t.Fail,
+		},
+		{
+			description:                "our height is the highest",
+			expectedLog:                "Our height is higher or equal than the height of the orderer we pulled the last block from, aborting",
+			evictionSuspicionThreshold: 10*time.Minute - time.Second,
+			blockPuller:                puller,
+			height:                     10,
+			halt:                       t.Fail,
+		},
+		{
+			description:                "failed pulling the block",
+			expectedLog:                "Cannot confirm our own eviction from the channel: bad block",
+			evictionSuspicionThreshold: 10*time.Minute - time.Second,
+			amIInChannelReturns:        errors.New("bad block"),
+			blockPuller:                puller,
+			height:                     9,
+			halt:                       t.Fail,
+		},
+		{
+			description:                "we are still in the channel",
+			expectedLog:                "Cannot confirm our own eviction from the channel, our certificate was found in config block with sequence 9",
+			evictionSuspicionThreshold: 10*time.Minute - time.Second,
+			amIInChannelReturns:        nil,
+			blockPuller:                puller,
+			height:                     9,
+			halt:                       t.Fail,
+		},
+		{
+			description:                 "we are not in the channel",
+			expectedLog:                 "Detected our own eviction from the channel in block [9]",
+			evictionSuspicionThreshold:  10*time.Minute - time.Second,
+			amIInChannelReturns:         cluster.ErrNotInChannel,
+			blockPuller:                 puller,
+			height:                      8,
+			expectedCommittedBlockCount: 2,
+			halt: func() {
+				puller.On("PullBlock", uint64(8)).Return(&common.Block{
+					Header: &common.BlockHeader{Number: 8},
+					Metadata: &common.BlockMetadata{
+						Metadata: [][]byte{{}, {}, {}, {}},
+					},
+				})
+			},
+		},
+	} {
+		testCase := testCase
+		t.Run(testCase.description, func(t *testing.T) {
+			committedBlocks := make(chan *common.Block, 2)
+
+			commitBlock := func(block *common.Block) error {
+				committedBlocks <- block
+				return nil
+			}
+
+			es := &evictionSuspector{
+				halt: testCase.halt,
+				amIInChannel: func(_ *common.Block) error {
+					return testCase.amIInChannelReturns
+				},
+				evictionSuspicionThreshold: testCase.evictionSuspicionThreshold,
+				createPuller: func() (BlockPuller, error) {
+					return testCase.blockPuller, testCase.blockPullerErr
+				},
+				writeBlock: commitBlock,
+				height: func() uint64 {
+					return testCase.height
+				},
+				logger:         flogging.MustGetLogger("test"),
+				triggerCatchUp: func(sn *raftpb.Snapshot) { return },
+			}
+
+			foundExpectedLog := testCase.expectedLog == ""
+			es.logger = es.logger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+				if strings.Contains(entry.Message, testCase.expectedLog) {
+					foundExpectedLog = true
+				}
+				return nil
+			}))
+
+			runTestCase := func() {
+				es.confirmSuspicion(time.Minute * 10)
+			}
+
+			if testCase.expectedPanic != "" {
+				assert.PanicsWithValue(t, testCase.expectedPanic, runTestCase)
+			} else {
+				runTestCase()
+				
+				
+				
+				
+				
+				runTestCase()
+			}
+
+			assert.True(t, foundExpectedLog, "expected to find %s but didn't", testCase.expectedLog)
+			assert.Equal(t, testCase.expectedCommittedBlockCount, len(committedBlocks))
+		})
+	}
+}
+
+func TestLedgerBlockPuller(t *testing.T) {
+	currHeight := func() uint64 {
+		return 1
+	}
+
+	genesisBlock := &common.Block{Header: &common.BlockHeader{Number: 0}}
+	notGenesisBlock := &common.Block{Header: &common.BlockHeader{Number: 1}}
+
+	blockRetriever := &mocks.BlockRetriever{}
+	blockRetriever.On("Block", uint64(0)).Return(genesisBlock)
+
+	puller := &mocks.ChainPuller{}
+	puller.On("PullBlock", uint64(1)).Return(notGenesisBlock)
+
+	lbp := &LedgerBlockPuller{
+		Height:         currHeight,
+		BlockRetriever: blockRetriever,
+		BlockPuller:    puller,
+	}
+
+	assert.Equal(t, genesisBlock, lbp.PullBlock(0))
+	assert.Equal(t, notGenesisBlock, lbp.PullBlock(1))
 }

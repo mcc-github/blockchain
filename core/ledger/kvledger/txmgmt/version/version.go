@@ -16,7 +16,11 @@ limitations under the License.
 
 package version
 
-import "github.com/mcc-github/blockchain/common/ledger/util"
+import (
+	"fmt"
+
+	"github.com/mcc-github/blockchain/common/ledger/util"
+)
 
 
 type Height struct {
@@ -61,6 +65,11 @@ func (h *Height) Compare(h1 *Height) int {
 		return 1
 	}
 	return -1
+}
+
+
+func (h *Height) String() string {
+	return fmt.Sprintf("{BlockNum: %d, TxNum: %d}", h.BlockNum, h.TxNum)
 }
 
 

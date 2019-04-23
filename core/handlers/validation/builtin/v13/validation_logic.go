@@ -20,7 +20,7 @@ import (
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 var logger = flogging.MustGetLogger("vscc")
@@ -35,9 +35,24 @@ var validCollectionNameRegex = regexp.MustCompile(ccmetadata.AllowedCharsCollect
 
 
 
+
+
+
+type noopTranslator struct{}
+
+func (n *noopTranslator) Translate(b []byte) ([]byte, error) {
+	return b, nil
+}
+
+
+
 func New(c Capabilities, s StateFetcher, d IdentityDeserializer, pe PolicyEvaluator) *Validator {
-	vpmgr := &KeyLevelValidationParameterManagerImpl{StateFetcher: s}
-	sbv := NewKeyLevelValidator(pe, vpmgr)
+	vpmgr := &KeyLevelValidationParameterManagerImpl{
+		StateFetcher:     s,
+		PolicyTranslator: &noopTranslator{},
+	}
+	eval := NewV13Evaluator(pe, vpmgr)
+	sbv := NewKeyLevelValidator(eval, vpmgr)
 
 	return &Validator{
 		capabilities:        c,
@@ -76,20 +91,20 @@ func (vscc *Validator) extractValidationArtifacts(
 	actionPosition int,
 ) (*validationArtifacts, error) {
 	
-	env, err := utils.GetEnvelopeFromBlock(block.Data.Data[txPosition])
+	env, err := protoutil.GetEnvelopeFromBlock(block.Data.Data[txPosition])
 	if err != nil {
 		logger.Errorf("VSCC error: GetEnvelope failed, err %s", err)
 		return nil, err
 	}
 
 	
-	payl, err := utils.GetPayload(env)
+	payl, err := protoutil.GetPayload(env)
 	if err != nil {
 		logger.Errorf("VSCC error: GetPayload failed, err %s", err)
 		return nil, err
 	}
 
-	chdr, err := utils.UnmarshalChannelHeader(payl.Header.ChannelHeader)
+	chdr, err := protoutil.UnmarshalChannelHeader(payl.Header.ChannelHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -102,19 +117,19 @@ func (vscc *Validator) extractValidationArtifacts(
 	}
 
 	
-	tx, err := utils.GetTransaction(payl.Data)
+	tx, err := protoutil.GetTransaction(payl.Data)
 	if err != nil {
 		logger.Errorf("VSCC error: GetTransaction failed, err %s", err)
 		return nil, err
 	}
 
-	cap, err := utils.GetChaincodeActionPayload(tx.Actions[actionPosition].Payload)
+	cap, err := protoutil.GetChaincodeActionPayload(tx.Actions[actionPosition].Payload)
 	if err != nil {
 		logger.Errorf("VSCC error: GetChaincodeActionPayload failed, err %s", err)
 		return nil, err
 	}
 
-	pRespPayload, err := utils.GetProposalResponsePayload(cap.Action.ProposalResponsePayload)
+	pRespPayload, err := protoutil.GetProposalResponsePayload(cap.Action.ProposalResponsePayload)
 	if err != nil {
 		err = fmt.Errorf("GetProposalResponsePayload error %s", err)
 		return nil, err
@@ -123,7 +138,7 @@ func (vscc *Validator) extractValidationArtifacts(
 		err = fmt.Errorf("nil pRespPayload.Extension")
 		return nil, err
 	}
-	respPayload, err := utils.GetChaincodeAction(pRespPayload.Extension)
+	respPayload, err := protoutil.GetChaincodeAction(pRespPayload.Extension)
 	if err != nil {
 		err = fmt.Errorf("GetChaincodeAction error %s", err)
 		return nil, err

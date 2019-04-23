@@ -36,7 +36,7 @@ func TestSpawnEtcdRaft(t *testing.T) {
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	configtxgen, err := gexec.Build("github.com/mcc-github/blockchain/common/tools/configtxgen")
+	configtxgen, err := gexec.Build("github.com/mcc-github/blockchain/cmd/configtxgen")
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
@@ -45,6 +45,20 @@ func TestSpawnEtcdRaft(t *testing.T) {
 
 	defer gexec.CleanupBuildArtifacts()
 
+	t.Run("Invalid bootstrap block", func(t *testing.T) {
+		testEtcdRaftOSNFailureInvalidBootstrapBlock(gt, tempDir, orderer, blockchainRootDir)
+	})
+
+	t.Run("No TLS", func(t *testing.T) {
+		testEtcdRaftOSNNoTLS(gt, tempDir, orderer, blockchainRootDir, configtxgen)
+	})
+
+	t.Run("EtcdRaft launch success", func(t *testing.T) {
+		testEtcdRaftOSNSuccess(gt, tempDir, configtxgen, cwd, orderer, blockchainRootDir)
+	})
+}
+
+func createBootstrapBlock(gt *GomegaWithT, tempDir, configtxgen, cwd string) string {
 	
 	genesisBlockPath := filepath.Join(tempDir, "genesis.block")
 	cmd := exec.Command(configtxgen, "-channelID", "system", "-profile", "SampleDevModeEtcdRaft",
@@ -52,28 +66,87 @@ func TestSpawnEtcdRaft(t *testing.T) {
 	cmd.Env = append(cmd.Env, fmt.Sprintf("FABRIC_CFG_PATH=%s", filepath.Join(cwd, "testdata")))
 	configtxgenProcess, err := gexec.Start(cmd, nil, nil)
 	gt.Expect(err).NotTo(HaveOccurred())
-
 	gt.Eventually(configtxgenProcess, time.Minute).Should(gexec.Exit(0))
 	gt.Expect(configtxgenProcess.Err).To(gbytes.Say("Writing genesis block"))
 
+	return genesisBlockPath
+}
+
+func testEtcdRaftOSNSuccess(gt *GomegaWithT, tempDir, configtxgen, cwd, orderer, blockchainRootDir string) {
+	genesisBlockPath := createBootstrapBlock(gt, tempDir, configtxgen, cwd)
+
 	
-	ordererProcess := launchOrderer(gt, cmd, orderer, tempDir, genesisBlockPath, blockchainRootDir)
+	ordererProcess := launchOrderer(gt, orderer, tempDir, genesisBlockPath, blockchainRootDir)
 	defer ordererProcess.Kill()
 	
 	
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.DialTimeout = 5s"))
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.RPCTimeout = 7s"))
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.ReplicationBufferSize = 20971520"))
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.ReplicationPullTimeout = 5s"))
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.ReplicationRetryTimeout = 5s"))
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.ReplicationBackgroundRefreshInterval = 5m0s"))
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.ReplicationMaxRetries = 12"))
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.SendBufferSize = 10"))
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("General.Cluster.CertExpirationWarningThreshold = 168h0m0s"))
+
+	
+	
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("EvictionSuspicion not set, defaulting to 10m"))
 	
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("Starting cluster listener on 127.0.0.1:5612"))
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("Beginning to serve requests"))
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("becomeLeader"))
 }
 
-func launchOrderer(gt *GomegaWithT, cmd *exec.Cmd, orderer, tempDir, genesisBlockPath, blockchainRootDir string) *gexec.Session {
+func testEtcdRaftOSNFailureInvalidBootstrapBlock(gt *GomegaWithT, tempDir, orderer, blockchainRootDir string) {
+	
+	genesisBlockPath := filepath.Join(filepath.Join("testdata", "mychannel.block"))
+	genesisBlockBytes, err := ioutil.ReadFile(genesisBlockPath)
+	gt.Expect(err).NotTo(HaveOccurred())
+
+	
+	genesisBlockPath = filepath.Join(tempDir, "genesis.block")
+	err = ioutil.WriteFile(genesisBlockPath, genesisBlockBytes, 0644)
+	gt.Expect(err).NotTo(HaveOccurred())
+
+	
+	ordererProcess := launchOrderer(gt, orderer, tempDir, genesisBlockPath, blockchainRootDir)
+	defer ordererProcess.Kill()
+
+	expectedErr := "Failed validating bootstrap block: the block isn't a system channel block because it lacks ConsortiumsConfig"
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say(expectedErr))
+}
+
+func testEtcdRaftOSNNoTLS(gt *GomegaWithT, tempDir, orderer, blockchainRootDir string, configtxgen string) {
+	cwd, err := filepath.Abs(".")
+	gt.Expect(err).NotTo(HaveOccurred())
+
+	genesisBlockPath := createBootstrapBlock(gt, tempDir, configtxgen, cwd)
+
+	cmd := exec.Command(orderer)
+	cmd.Env = []string{
+		"ORDERER_GENERAL_LISTENPORT=5611",
+		"ORDERER_GENERAL_GENESISMETHOD=file",
+		"ORDERER_GENERAL_SYSTEMCHANNEL=system",
+		fmt.Sprintf("ORDERER_FILELEDGER_LOCATION=%s", filepath.Join(tempDir, "ledger")),
+		fmt.Sprintf("ORDERER_GENERAL_GENESISFILE=%s", genesisBlockPath),
+		fmt.Sprintf("FABRIC_CFG_PATH=%s", filepath.Join(blockchainRootDir, "sampleconfig")),
+	}
+	ordererProcess, err := gexec.Start(cmd, nil, nil)
+	gt.Expect(err).NotTo(HaveOccurred())
+	defer ordererProcess.Kill()
+
+	expectedErr := "TLS is required for running ordering nodes of type etcdraft."
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say(expectedErr))
+}
+
+func launchOrderer(gt *GomegaWithT, orderer, tempDir, genesisBlockPath, blockchainRootDir string) *gexec.Session {
 	cwd, err := filepath.Abs(".")
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	cmd = exec.Command(orderer)
+	cmd := exec.Command(orderer)
 	cmd.Env = []string{
 		"ORDERER_GENERAL_LISTENPORT=5611",
 		"ORDERER_GENERAL_GENESISMETHOD=file",

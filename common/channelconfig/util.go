@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package channelconfig
 
 import (
+	"fmt"
+	"io/ioutil"
 	"math"
 
 	"github.com/golang/protobuf/proto"
@@ -14,7 +16,10 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	mspprotos "github.com/mcc-github/blockchain/protos/msp"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protoutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -190,6 +195,17 @@ func CapabilitiesValue(capabilities map[string]bool) *StandardConfigValue {
 
 
 
+func EndpointsValue(addresses []string) *StandardConfigValue {
+	return &StandardConfigValue{
+		key: EndpointsKey,
+		value: &cb.OrdererAddresses{
+			Addresses: addresses,
+		},
+	}
+}
+
+
+
 func AnchorPeersValue(anchorPeers []*pb.AnchorPeer) *StandardConfigValue {
 	return &StandardConfigValue{
 		key:   AnchorPeersKey,
@@ -221,4 +237,74 @@ func ACLValues(acls map[string]string) *StandardConfigValue {
 		key:   ACLsKey,
 		value: a,
 	}
+}
+
+
+func ValidateCapabilities(block *cb.Block) error {
+	envelopeConfig, err := protoutil.ExtractEnvelope(block, 0)
+	if err != nil {
+		return errors.Errorf("failed to %s", err)
+	}
+
+	configEnv := &cb.ConfigEnvelope{}
+	_, err = protoutil.UnmarshalEnvelopeOfType(envelopeConfig, cb.HeaderType_CONFIG, configEnv)
+	if err != nil {
+		return errors.Errorf("malformed configuration envelope: %s", err)
+	}
+
+	if configEnv.Config == nil {
+		return errors.New("nil config envelope Config")
+	}
+
+	if configEnv.Config.ChannelGroup == nil {
+		return errors.New("no channel configuration was found in the config block")
+	}
+
+	if configEnv.Config.ChannelGroup.Groups == nil {
+		return errors.New("no channel configuration groups are available")
+	}
+
+	_, exists := configEnv.Config.ChannelGroup.Groups[ApplicationGroupKey]
+	if !exists {
+		return errors.Errorf("invalid configuration block, missing %s "+
+			"configuration group", ApplicationGroupKey)
+	}
+
+	cc, err := NewChannelConfig(configEnv.Config.ChannelGroup)
+	if err != nil {
+		return errors.Errorf("no valid channel configuration found due to %s", err)
+	}
+
+	
+	if err := cc.Capabilities().Supported(); err != nil {
+		return err
+	}
+
+	
+	if err := cc.ApplicationConfig().Capabilities().Supported(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
+func MarshalEtcdRaftMetadata(md *etcdraft.ConfigMetadata) ([]byte, error) {
+	copyMd := proto.Clone(md).(*etcdraft.ConfigMetadata)
+	for _, c := range copyMd.Consenters {
+		
+		
+		clientCert, err := ioutil.ReadFile(string(c.GetClientTlsCert()))
+		if err != nil {
+			return nil, fmt.Errorf("cannot load client cert for consenter %s:%d: %s", c.GetHost(), c.GetPort(), err)
+		}
+		c.ClientTlsCert = clientCert
+
+		serverCert, err := ioutil.ReadFile(string(c.GetServerTlsCert()))
+		if err != nil {
+			return nil, fmt.Errorf("cannot load server cert for consenter %s:%d: %s", c.GetHost(), c.GetPort(), err)
+		}
+		c.ServerTlsCert = serverCert
+	}
+	return proto.Marshal(copyMd)
 }

@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/internal"
 	"google.golang.org/grpc/internal/backoff"
 	"google.golang.org/grpc/internal/envconfig"
@@ -44,6 +45,7 @@ type dialOptions struct {
 	disableServiceConfig bool
 	disableRetry         bool
 	disableHealthCheck   bool
+	healthCheckFunc      internal.HealthChecker
 }
 
 
@@ -74,8 +76,6 @@ func newFuncDialOption(f func(*dialOptions)) *funcDialOption {
 		f: f,
 	}
 }
-
-
 
 
 
@@ -313,26 +313,32 @@ func WithTimeout(d time.Duration) DialOption {
 	})
 }
 
-func withContextDialer(f func(context.Context, string) (net.Conn, error)) DialOption {
+
+
+
+
+func WithContextDialer(f func(context.Context, string) (net.Conn, error)) DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
 		o.copts.Dialer = f
 	})
 }
 
 func init() {
-	internal.WithContextDialer = withContextDialer
 	internal.WithResolverBuilder = withResolverBuilder
+	internal.WithHealthCheckFunc = withHealthCheckFunc
 }
 
 
 
 
 
+
+
 func WithDialer(f func(string, time.Duration) (net.Conn, error)) DialOption {
-	return withContextDialer(
+	return WithContextDialer(
 		func(ctx context.Context, addr string) (net.Conn, error) {
 			if deadline, ok := ctx.Deadline(); ok {
-				return f(addr, deadline.Sub(time.Now()))
+				return f(addr, time.Until(deadline))
 			}
 			return f(addr, 0)
 		})
@@ -372,6 +378,10 @@ func WithUserAgent(s string) DialOption {
 
 
 func WithKeepaliveParams(kp keepalive.ClientParameters) DialOption {
+	if kp.Time < internal.KeepaliveMinPingTime {
+		grpclog.Warningf("Adjusting keepalive ping interval to minimum period of %v", internal.KeepaliveMinPingTime)
+		kp.Time = internal.KeepaliveMinPingTime
+	}
 	return newFuncDialOption(func(o *dialOptions) {
 		o.copts.KeepaliveParams = kp
 	})
@@ -452,10 +462,22 @@ func WithDisableHealthCheck() DialOption {
 		o.disableHealthCheck = true
 	})
 }
+
+
+
+
+
+func withHealthCheckFunc(f internal.HealthChecker) DialOption {
+	return newFuncDialOption(func(o *dialOptions) {
+		o.healthCheckFunc = f
+	})
+}
+
 func defaultDialOptions() dialOptions {
 	return dialOptions{
-		disableRetry: !envconfig.Retry,
-		reqHandshake: envconfig.RequireHandshake,
+		disableRetry:    !envconfig.Retry,
+		reqHandshake:    envconfig.RequireHandshake,
+		healthCheckFunc: internal.HealthCheckFunc,
 		copts: transport.ConnectOptions{
 			WriteBufferSize: defaultWriteBufSize,
 			ReadBufferSize:  defaultReadBufSize,

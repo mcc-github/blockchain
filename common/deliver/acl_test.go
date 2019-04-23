@@ -12,7 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/common/deliver"
 	"github.com/mcc-github/blockchain/common/deliver/mock"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
@@ -28,7 +28,7 @@ var _ = Describe("SessionAccessControl", func() {
 
 	BeforeEach(func() {
 		envelope = &cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{},
 			}),
 		}
@@ -126,7 +126,7 @@ var _ = Describe("SessionAccessControl", func() {
 		})
 
 		It("returns an error", func() {
-			_, expectedError := envelope.AsSignedData()
+			_, expectedError := protoutil.EnvelopeAsSignedData(envelope)
 			Expect(expectedError).To(HaveOccurred())
 
 			_, err := deliver.NewSessionAC(fakeChain, envelope, fakePolicyChecker, "chain-id", expiresAt)

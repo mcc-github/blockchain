@@ -13,7 +13,7 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -40,7 +40,7 @@ func (v *validator) validate(ctx context.Context, env *common.Envelope) (*peer.A
 	return op, nil
 }
 
-func validateStructure(ctx context.Context, env *common.Envelope) (*peer.AdminOperation, []*common.SignedData, error) {
+func validateStructure(ctx context.Context, env *common.Envelope) (*peer.AdminOperation, []*protoutil.SignedData, error) {
 	if ctx == nil {
 		return nil, nil, errors.New("nil context")
 	}
@@ -49,7 +49,7 @@ func validateStructure(ctx context.Context, env *common.Envelope) (*peer.AdminOp
 	}
 	addr := util.ExtractRemoteAddress(ctx)
 	op := &peer.AdminOperation{}
-	ch, err := utils.UnmarshalEnvelopeOfType(env, common.HeaderType_PEER_ADMIN_OPERATION, op)
+	ch, err := protoutil.UnmarshalEnvelopeOfType(env, common.HeaderType_PEER_ADMIN_OPERATION, op)
 	if err != nil {
 		logger.Warningf("Request from %s is badly formed: +%v", addr, err)
 		return nil, nil, errors.Wrap(err, "bad request")
@@ -66,7 +66,7 @@ func validateStructure(ctx context.Context, env *common.Envelope) (*peer.AdminOp
 		logger.Warningf("Request from %s unauthorized due to incorrect time: %s", addr, reqTs.String())
 		return nil, nil, accessDenied
 	}
-	sd, err := env.AsSignedData()
+	sd, err := protoutil.EnvelopeAsSignedData(env)
 	if err != nil {
 		return nil, nil, errors.Errorf("bad request, cannot extract signed data: %v", err)
 	}

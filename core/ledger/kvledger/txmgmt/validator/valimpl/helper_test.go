@@ -17,22 +17,26 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/ledger/customtx"
+	"github.com/mcc-github/blockchain/core/ledger/customtx/mock"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
+	mocktxmgr "github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr/mock"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/internal"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
+	mocklgr "github.com/mcc-github/blockchain/core/ledger/mock"
 	lutils "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	putils "github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
-	flogging.ActivateSpec("internal=debug")
+	flogging.ActivateSpec("valimpl,statebasedval,internal=debug")
 	viper.Set("peer.fileSystemPath", "/tmp/blockchain/ledgertests/kvledger/txmgmt/validator/internal")
 	os.Exit(m.Run())
 }
@@ -158,17 +162,17 @@ func TestPreprocessProtoBlock(t *testing.T) {
 	t.Log(err)
 	
 	gb = testutil.ConstructTestBlock(t, 12, 1, 1)
-	envBytes, _ := putils.GetBytesEnvelope(&common.Envelope{Payload: []byte{123}})
+	envBytes, _ := protoutil.GetBytesEnvelope(&common.Envelope{Payload: []byte{123}})
 	gb.Data = &common.BlockData{Data: [][]byte{envBytes}}
 	_, _, err = preprocessProtoBlock(nil, allwaysValidKVfunc, gb, false)
 	assert.Error(t, err)
 	t.Log(err)
 	
 	gb = testutil.ConstructTestBlock(t, 13, 1, 1)
-	payloadBytes, _ := putils.GetBytesPayload(&common.Payload{
+	payloadBytes, _ := protoutil.GetBytesPayload(&common.Payload{
 		Header: &common.Header{ChannelHeader: []byte{123}},
 	})
-	envBytes, _ = putils.GetBytesEnvelope(&common.Envelope{Payload: payloadBytes})
+	envBytes, _ = protoutil.GetBytesEnvelope(&common.Envelope{Payload: payloadBytes})
 	gb.Data = &common.BlockData{Data: [][]byte{envBytes}}
 	_, _, err = preprocessProtoBlock(nil, allwaysValidKVfunc, gb, false)
 	assert.Error(t, err)
@@ -176,10 +180,10 @@ func TestPreprocessProtoBlock(t *testing.T) {
 
 	
 	gb = testutil.ConstructTestBlock(t, 14, 1, 1)
-	payloadBytes, _ = putils.GetBytesPayload(&common.Payload{
+	payloadBytes, _ = protoutil.GetBytesPayload(&common.Payload{
 		Header: &common.Header{ChannelHeader: []byte{123}},
 	})
-	envBytes, _ = putils.GetBytesEnvelope(&common.Envelope{Payload: payloadBytes})
+	envBytes, _ = protoutil.GetBytesEnvelope(&common.Envelope{Payload: payloadBytes})
 	gb.Data = &common.BlockData{Data: [][]byte{envBytes}}
 	flags := lutils.NewTxValidationFlags(len(gb.Data.Data))
 	flags.SetFlag(0, peer.TxValidationCode_BAD_CHANNEL_HEADER)
@@ -315,6 +319,55 @@ func TestTxStatsInfoWithConfigTx(t *testing.T) {
 	}
 	t.Logf("txStatsInfo=%s\n", spew.Sdump(txStatsInfo))
 	assert.Equal(t, expectedTxStatInfo, txStatsInfo)
+}
+
+func TestContainsPostOrderWrites(t *testing.T) {
+	testDBEnv := &privacyenabledstate.LevelDBCommonStorageTestEnv{}
+	testDBEnv.Init(t)
+	defer testDBEnv.Cleanup()
+	testDB := testDBEnv.GetDBHandle("emptydb")
+	mockSimulator := &mocklgr.TxSimulator{}
+	mockTxmgr := &mocktxmgr.TxMgr{}
+	mockTxmgr.NewTxSimulatorReturns(mockSimulator, nil)
+
+	fakeTxProcessor := &mock.Processor{}
+	customtx.InitializeTestEnv(
+		customtx.Processors{
+			common.HeaderType_CONFIG: fakeTxProcessor,
+		},
+	)
+
+	v := NewStatebasedValidator(mockTxmgr, testDB)
+	blocks := testutil.ConstructTestBlocks(t, 2)
+
+	
+	fakeTxProcessor.GenerateSimulationResultsStub =
+		func(txEnvelop *common.Envelope, s ledger.TxSimulator, initializingLedger bool) error {
+			rwSetBuilder := rwsetutil.NewRWSetBuilder()
+			rwSetBuilder.AddToWriteSet("ns1", "key1", []byte("value1"))
+			rwSetBuilder.GetTxSimulationResults()
+			s.(*mocklgr.TxSimulator).GetTxSimulationResultsReturns(
+				rwSetBuilder.GetTxSimulationResults())
+			return nil
+		}
+	batch, _, err := v.ValidateAndPrepareBatch(&ledger.BlockAndPvtData{Block: blocks[0]}, true)
+	assert.NoError(t, err)
+	assert.True(t, batch.PubUpdates.ContainsPostOrderWrites)
+
+	
+	batch, _, err = v.ValidateAndPrepareBatch(&ledger.BlockAndPvtData{Block: blocks[1]}, true)
+	assert.NoError(t, err)
+	assert.False(t, batch.PubUpdates.ContainsPostOrderWrites)
+
+	
+	fakeTxProcessor.GenerateSimulationResultsStub =
+		func(txEnvelop *common.Envelope, s ledger.TxSimulator, initializingLedger bool) error {
+			s.(*mocklgr.TxSimulator).GetTxSimulationResultsReturns(nil, nil)
+			return &customtx.InvalidTxError{Msg: "fake-message"}
+		}
+	batch, _, err = v.ValidateAndPrepareBatch(&ledger.BlockAndPvtData{Block: blocks[0]}, true)
+	assert.NoError(t, err)
+	assert.False(t, batch.PubUpdates.ContainsPostOrderWrites)
 }
 
 func TestTxStatsInfo(t *testing.T) {

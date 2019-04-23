@@ -13,7 +13,11 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/container"
+	"github.com/mcc-github/blockchain/core/container/ccintf"
+	"github.com/mcc-github/blockchain/core/container/mock"
 	pb "github.com/mcc-github/blockchain/protos/peer"
+	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,4 +35,33 @@ func TestVM_GetChaincodePackageBytes(t *testing.T) {
 	_, err = container.GetChaincodePackageBytes(platforms.NewRegistry(&golang.Platform{}), spec)
 	assert.Error(t, err,
 		"GetChaincodePackageBytes did not return error when chaincode ID is nil")
+}
+
+func TestWaitContainerReq(t *testing.T) {
+	gt := NewGomegaWithT(t)
+
+	exited := &mock.ExitedFunc{}
+	done := make(chan struct{})
+	exited.Stub = func(int, error) { close(done) }
+
+	req := container.WaitContainerReq{
+		CCID:   ccintf.CCID("the-name:the-version"),
+		Exited: exited.Spy,
+	}
+	gt.Expect(req.GetCCID()).To(Equal(ccintf.CCID("the-name:the-version")))
+
+	fakeVM := &mock.VM{}
+	fakeVM.WaitReturns(99, errors.New("boing-boing"))
+
+	err := req.Do(fakeVM)
+	gt.Expect(err).NotTo(HaveOccurred())
+	gt.Eventually(done).Should(BeClosed())
+
+	gt.Expect(fakeVM.WaitCallCount()).To(Equal(1))
+	ccid := fakeVM.WaitArgsForCall(0)
+	gt.Expect(ccid).To(Equal(ccintf.CCID("the-name:the-version")))
+
+	ec, exitErr := exited.ArgsForCall(0)
+	gt.Expect(ec).To(Equal(99))
+	gt.Expect(exitErr).To(MatchError("boing-boing"))
 }

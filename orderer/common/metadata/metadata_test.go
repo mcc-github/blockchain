@@ -17,13 +17,6 @@ import (
 )
 
 func TestGetVersionInfo(t *testing.T) {
-	
-	
-	
-	if common.Version == "" {
-		common.Version = "testVersion"
-	}
-
 	expected := fmt.Sprintf(
 		"%s:\n Version: %s\n Commit SHA: %s\n Go version: %s\n OS/Arch: %s\n",
 		metadata.ProgramName, common.Version,

@@ -13,7 +13,7 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	mockblockcutter "github.com/mcc-github/blockchain/orderer/mocks/common/blockcutter"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -21,6 +21,9 @@ import (
 type ConsenterSupport struct {
 	
 	SharedConfigVal *mockconfig.Orderer
+
+	
+	ChannelConfigVal *mockconfig.Channel
 
 	
 	BlockCutterVal *mockblockcutter.Receiver
@@ -84,11 +87,16 @@ func (mcs *ConsenterSupport) SharedConfig() channelconfig.Orderer {
 }
 
 
+func (mcs *ConsenterSupport) ChannelConfig() channelconfig.Channel {
+	return mcs.ChannelConfigVal
+}
+
+
 func (mcs *ConsenterSupport) CreateNextBlock(data []*cb.Envelope) *cb.Block {
-	block := cb.NewBlock(0, nil)
+	block := protoutil.NewBlock(0, nil)
 	mtxs := make([][]byte, len(data))
 	for i := range data {
-		mtxs[i] = utils.MarshalOrPanic(data[i])
+		mtxs[i] = protoutil.MarshalOrPanic(data[i])
 	}
 	block.Data = &cb.BlockData{Data: mtxs}
 	mcs.NextBlockVal = block
@@ -98,10 +106,9 @@ func (mcs *ConsenterSupport) CreateNextBlock(data []*cb.Envelope) *cb.Block {
 
 func (mcs *ConsenterSupport) WriteBlock(block *cb.Block, encodedMetadataValue []byte) {
 	if encodedMetadataValue != nil {
-		block.Metadata.Metadata[cb.BlockMetadataIndex_ORDERER] = utils.MarshalOrPanic(&cb.Metadata{Value: encodedMetadataValue})
+		block.Metadata.Metadata[cb.BlockMetadataIndex_ORDERER] = protoutil.MarshalOrPanic(&cb.Metadata{Value: encodedMetadataValue})
 	}
-	mcs.HeightVal++
-	mcs.Blocks <- block
+	mcs.Append(block)
 }
 
 
@@ -122,6 +129,11 @@ func (mcs *ConsenterSupport) Height() uint64 {
 
 func (mcs *ConsenterSupport) Sign(message []byte) ([]byte, error) {
 	return message, nil
+}
+
+
+func (mcs *ConsenterSupport) Serialize() ([]byte, error) {
+	return []byte("creator"), nil
 }
 
 
@@ -155,6 +167,14 @@ func (mcs *ConsenterSupport) Sequence() uint64 {
 }
 
 
-func (mcs *ConsenterSupport) VerifyBlockSignature(_ []*cb.SignedData, _ *cb.ConfigEnvelope) error {
+func (mcs *ConsenterSupport) VerifyBlockSignature(_ []*protoutil.SignedData, _ *cb.ConfigEnvelope) error {
 	return mcs.BlockVerificationErr
+}
+
+
+
+func (mcs *ConsenterSupport) Append(block *cb.Block) error {
+	mcs.HeightVal++
+	mcs.Blocks <- block
+	return nil
 }

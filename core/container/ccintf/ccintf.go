@@ -11,8 +11,7 @@ package ccintf
 
 
 import (
-	"fmt"
-
+	"github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
@@ -29,20 +28,14 @@ type CCSupport interface {
 }
 
 
-func GetCCHandlerKey() string {
-	return "CCHANDLER"
+type CCID string
+
+
+func (c CCID) String() string {
+	return string(c)
 }
 
 
-type CCID struct {
-	Name    string
-	Version string
-}
-
-
-func (ccid *CCID) GetName() string {
-	if ccid.Version != "" {
-		return fmt.Sprintf("%s-%s", ccid.Name, ccid.Version)
-	}
-	return ccid.Name
+func New(packageID persistence.PackageID) CCID {
+	return CCID(packageID.String())
 }

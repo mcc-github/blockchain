@@ -11,12 +11,13 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
-var genesisBlock = cb.NewBlock(0, nil)
+var genesisBlock = protoutil.NewBlock(0, nil)
 
 func init() {
 	flogging.ActivateSpec("common.ledger.blockledger.ram=DEBUG")

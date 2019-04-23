@@ -10,24 +10,24 @@ import (
 	"sync"
 
 	"github.com/mcc-github/blockchain/gossip/common"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 )
 
 
 
 type MembershipStore struct {
-	m map[string]*proto.SignedGossipMessage
+	m map[string]*protoext.SignedGossipMessage
 	sync.RWMutex
 }
 
 
 func NewMembershipStore() *MembershipStore {
-	return &MembershipStore{m: make(map[string]*proto.SignedGossipMessage)}
+	return &MembershipStore{m: make(map[string]*protoext.SignedGossipMessage)}
 }
 
 
 
-func (m *MembershipStore) MsgByID(pkiID common.PKIidType) *proto.SignedGossipMessage {
+func (m *MembershipStore) MsgByID(pkiID common.PKIidType) *protoext.SignedGossipMessage {
 	m.RLock()
 	defer m.RUnlock()
 	if msg, exists := m.m[string(pkiID)]; exists {
@@ -44,7 +44,7 @@ func (m *MembershipStore) Size() int {
 }
 
 
-func (m *MembershipStore) Put(pkiID common.PKIidType, msg *proto.SignedGossipMessage) {
+func (m *MembershipStore) Put(pkiID common.PKIidType, msg *protoext.SignedGossipMessage) {
 	m.Lock()
 	defer m.Unlock()
 	m.m[string(pkiID)] = msg
@@ -59,10 +59,10 @@ func (m *MembershipStore) Remove(pkiID common.PKIidType) {
 
 
 
-func (m *MembershipStore) ToSlice() []*proto.SignedGossipMessage {
+func (m *MembershipStore) ToSlice() []*protoext.SignedGossipMessage {
 	m.RLock()
 	defer m.RUnlock()
-	members := make([]*proto.SignedGossipMessage, len(m.m))
+	members := make([]*protoext.SignedGossipMessage, len(m.m))
 	i := 0
 	for _, member := range m.m {
 		members[i] = member

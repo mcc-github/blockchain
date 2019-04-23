@@ -1,113 +1,26 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package util
 
 import (
-	"archive/tar"
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
+	"runtime"
+	"strings"
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/common/util"
-	cutil "github.com/mcc-github/blockchain/core/container/util"
+	"github.com/mcc-github/blockchain/common/metadata"
+	"github.com/mcc-github/blockchain/core/config"
+	"github.com/spf13/viper"
 )
 
 var logger = flogging.MustGetLogger("chaincode.platform.util")
-
-
-func ComputeHash(contents []byte, hash []byte) []byte {
-	newSlice := make([]byte, len(hash)+len(contents))
-
-	
-	copy(newSlice[0:len(contents)], contents[:])
-
-	
-	copy(newSlice[len(contents):], hash[:])
-
-	
-	hash = util.ComputeSHA256(newSlice)
-
-	return hash
-}
-
-
-
-
-func HashFilesInDir(rootDir string, dir string, hash []byte, tw *tar.Writer) ([]byte, error) {
-	currentDir := filepath.Join(rootDir, dir)
-	logger.Debugf("hashFiles %s", currentDir)
-	
-	fis, err := ioutil.ReadDir(currentDir)
-	if err != nil {
-		return hash, fmt.Errorf("ReadDir failed %s\n", err)
-	}
-	for _, fi := range fis {
-		name := filepath.Join(dir, fi.Name())
-		if fi.IsDir() {
-			var err error
-			hash, err = HashFilesInDir(rootDir, name, hash, tw)
-			if err != nil {
-				return hash, err
-			}
-			continue
-		}
-		fqp := filepath.Join(rootDir, name)
-		buf, err := ioutil.ReadFile(fqp)
-		if err != nil {
-			logger.Errorf("Error reading %s\n", err)
-			return hash, err
-		}
-
-		
-		hash = ComputeHash(buf, hash)
-
-		if tw != nil {
-			is := bytes.NewReader(buf)
-			if err = cutil.WriteStreamToPackage(is, fqp, filepath.Join("src", name), tw); err != nil {
-				return hash, fmt.Errorf("Error adding file to tar %s", err)
-			}
-		}
-	}
-	return hash, nil
-}
-
-
-func IsCodeExist(tmppath string) error {
-	file, err := os.Open(tmppath)
-	if err != nil {
-		return fmt.Errorf("Could not open file %s", err)
-	}
-
-	fi, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("Could not stat file %s", err)
-	}
-
-	if !fi.IsDir() {
-		return fmt.Errorf("File %s is not dir\n", file.Name())
-	}
-
-	return nil
-}
 
 type DockerBuildOptions struct {
 	Image        string
@@ -142,12 +55,24 @@ type DockerBuildOptions struct {
 
 
 func DockerBuild(opts DockerBuildOptions) error {
-	client, err := cutil.NewDockerClient()
+	var client *docker.Client
+	var err error
+	endpoint := viper.GetString("vm.endpoint")
+	tlsEnabled := viper.GetBool("vm.docker.tls.enabled")
+	if tlsEnabled {
+		cert := config.GetPath("vm.docker.tls.cert.file")
+		key := config.GetPath("vm.docker.tls.key.file")
+		ca := config.GetPath("vm.docker.tls.ca.file")
+		client, err = docker.NewTLSClient(endpoint, cert, key, ca)
+	} else {
+		client, err = docker.NewClient(endpoint)
+	}
+
 	if err != nil {
 		return fmt.Errorf("Error creating docker client: %s", err)
 	}
 	if opts.Image == "" {
-		opts.Image = cutil.GetDockerfileFromConfig("chaincode.builder")
+		opts.Image = GetDockerfileFromConfig("chaincode.builder")
 		if opts.Image == "" {
 			return fmt.Errorf("No image provided and \"chaincode.builder\" default does not exist")
 		}
@@ -255,4 +180,14 @@ func DockerBuild(opts DockerBuildOptions) error {
 	}
 
 	return nil
+}
+
+func GetDockerfileFromConfig(path string) string {
+	r := strings.NewReplacer(
+		"$(ARCH)", runtime.GOARCH,
+		"$(PROJECT_VERSION)", metadata.Version,
+		"$(DOCKER_NS)", metadata.DockerNamespace,
+		"$(BASE_DOCKER_NS)", metadata.BaseDockerNamespace)
+
+	return r.Replace(viper.GetString(path))
 }

@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/util"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
@@ -25,8 +24,7 @@ import (
 var logger = flogging.MustGetLogger("chaincode.platform.node")
 
 
-type Platform struct {
-}
+type Platform struct{}
 
 
 func pathExists(path string) (bool, error) {
@@ -41,12 +39,12 @@ func pathExists(path string) (bool, error) {
 }
 
 
-func (nodePlatform *Platform) Name() string {
+func (p *Platform) Name() string {
 	return pb.ChaincodeSpec_NODE.String()
 }
 
 
-func (nodePlatform *Platform) ValidatePath(rawPath string) error {
+func (p *Platform) ValidatePath(rawPath string) error {
 	path, err := url.Parse(rawPath)
 	if err != nil || path == nil {
 		return fmt.Errorf("invalid path: %s", err)
@@ -70,13 +68,7 @@ func (nodePlatform *Platform) ValidatePath(rawPath string) error {
 	return nil
 }
 
-func (nodePlatform *Platform) ValidateCodePackage(code []byte) error {
-
-	if len(code) == 0 {
-		
-		return nil
-	}
-
+func (p *Platform) ValidateCodePackage(code []byte) error {
 	
 	
 	
@@ -130,7 +122,7 @@ func (nodePlatform *Platform) ValidateCodePackage(code []byte) error {
 }
 
 
-func (nodePlatform *Platform) GetDeploymentPayload(path string) ([]byte, error) {
+func (p *Platform) GetDeploymentPayload(path string) ([]byte, error) {
 
 	var err error
 
@@ -170,11 +162,11 @@ func (nodePlatform *Platform) GetDeploymentPayload(path string) ([]byte, error) 
 	return payload.Bytes(), nil
 }
 
-func (nodePlatform *Platform) GenerateDockerfile() (string, error) {
+func (p *Platform) GenerateDockerfile() (string, error) {
 
 	var buf []string
 
-	buf = append(buf, "FROM "+cutil.GetDockerfileFromConfig("chaincode.node.runtime"))
+	buf = append(buf, "FROM "+util.GetDockerfileFromConfig("chaincode.node.runtime"))
 	buf = append(buf, "ADD binpackage.tar /usr/local/src")
 
 	dockerFileContents := strings.Join(buf, "\n")
@@ -182,11 +174,12 @@ func (nodePlatform *Platform) GenerateDockerfile() (string, error) {
 	return dockerFileContents, nil
 }
 
-func (nodePlatform *Platform) GenerateDockerBuild(path string, code []byte, tw *tar.Writer) error {
+func (p *Platform) GenerateDockerBuild(path string, code []byte, tw *tar.Writer) error {
 
 	codepackage := bytes.NewReader(code)
 	binpackage := bytes.NewBuffer(nil)
 	err := util.DockerBuild(util.DockerBuildOptions{
+		Image:        util.GetDockerfileFromConfig("chaincode.node.runtime"),
 		Cmd:          fmt.Sprint("cp -R /chaincode/input/src/. /chaincode/output && cd /chaincode/output && npm install --production"),
 		InputStream:  codepackage,
 		OutputStream: binpackage,
@@ -199,6 +192,7 @@ func (nodePlatform *Platform) GenerateDockerBuild(path string, code []byte, tw *
 }
 
 
-func (nodePlatform *Platform) GetMetadataProvider(code []byte) platforms.MetadataProvider {
-	return &ccmetadata.TargzMetadataProvider{Code: code}
+func (p *Platform) GetMetadataAsTarEntries(code []byte) ([]byte, error) {
+	metadataProvider := &ccmetadata.TargzMetadataProvider{Code: code}
+	return metadataProvider.GetMetadataAsTarEntries()
 }

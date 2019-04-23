@@ -247,6 +247,13 @@ func (o PeerCallOption) after(c *callInfo) {
 
 
 
+func WaitForReady(waitForReady bool) CallOption {
+	return FailFastCallOption{FailFast: !waitForReady}
+}
+
+
+
+
 func FailFast(failFast bool) CallOption {
 	return FailFastCallOption{FailFast: failFast}
 }
@@ -385,9 +392,34 @@ func (o ContentSubtypeCallOption) after(c *callInfo) {}
 
 
 
+
+
+func ForceCodec(codec encoding.Codec) CallOption {
+	return ForceCodecCallOption{Codec: codec}
+}
+
+
+
+
+
+type ForceCodecCallOption struct {
+	Codec encoding.Codec
+}
+
+func (o ForceCodecCallOption) before(c *callInfo) error {
+	c.codec = o.Codec
+	return nil
+}
+func (o ForceCodecCallOption) after(c *callInfo) {}
+
+
+
+
+
 func CallCustomCodec(codec Codec) CallOption {
 	return CustomCodecCallOption{Codec: codec}
 }
+
 
 
 
@@ -613,7 +645,9 @@ func recvAndDecompress(p *parser, s *transport.Stream, dc Decompressor, maxRecei
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "grpc: failed to decompress the received message %v", err)
 			}
-			d, err = ioutil.ReadAll(dcReader)
+			
+			
+			d, err = ioutil.ReadAll(io.LimitReader(dcReader, int64(maxReceiveMessageSize)+1))
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "grpc: failed to decompress the received message %v", err)
 			}
@@ -664,10 +698,7 @@ func rpcInfoFromContext(ctx context.Context) (s *rpcInfo, ok bool) {
 
 
 func Code(err error) codes.Code {
-	if s, ok := status.FromError(err); ok {
-		return s.Code()
-	}
-	return codes.Unknown
+	return status.Code(err)
 }
 
 
@@ -675,10 +706,7 @@ func Code(err error) codes.Code {
 
 
 func ErrorDesc(err error) string {
-	if s, ok := status.FromError(err); ok {
-		return s.Message()
-	}
-	return err.Error()
+	return status.Convert(err).Message()
 }
 
 

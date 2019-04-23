@@ -22,7 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/discovery"
 	pm "github.com/mcc-github/blockchain/protos/msp"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -55,7 +55,7 @@ var _ = Describe("DiscoveryService", func() {
 		err = yaml.Unmarshal(configBytes, &networkConfig)
 		Expect(err).NotTo(HaveOccurred())
 
-		network = nwo.New(networkConfig, testDir, client, 35000+1000*GinkgoParallelNode(), components)
+		network = nwo.New(networkConfig, testDir, client, StartPort(), components)
 		network.GenerateConfigTree()
 		network.Bootstrap()
 
@@ -108,7 +108,7 @@ var _ = Describe("DiscoveryService", func() {
 		}
 		nwo.DeployChaincode(network, "testchannel", orderer, chaincode, org1Peer0)
 
-		By("discovering endorsers for chaincode that has not been installed to enough orgs to satisy endorsement policy")
+		By("discovering endorsers for chaincode that has not been installed to enough orgs to satisfy endorsement policy")
 		sess, err = network.Discover(endorsers)
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit(1))
@@ -179,8 +179,8 @@ var _ = Describe("DiscoveryService", func() {
 		By("changing the channel policy")
 		currentConfig := nwo.GetConfig(network, network.Peer("org3", "peer0"), orderer, "testchannel")
 		updatedConfig := proto.Clone(currentConfig).(*common.Config)
-		updatedConfig.ChannelGroup.Groups["Application"].Groups["org3"].Policies["Writers"].Policy.Value = utils.MarshalOrPanic(cauthdsl.SignedByMspAdmin("Org3MSP"))
-		nwo.UpdateConfig(network, orderer, "testchannel", currentConfig, updatedConfig, network.Peer("org3", "peer0"))
+		updatedConfig.ChannelGroup.Groups["Application"].Groups["org3"].Policies["Writers"].Policy.Value = protoutil.MarshalOrPanic(cauthdsl.SignedByMspAdmin("Org3MSP"))
+		nwo.UpdateConfig(network, orderer, "testchannel", currentConfig, updatedConfig, true, network.Peer("org3", "peer0"))
 
 		By("trying to discover peers as an org 3 member")
 		endorsers = commands.Endorsers{

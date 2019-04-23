@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"net"
 	"path/filepath"
+	"time"
 
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config"
@@ -33,95 +34,116 @@ import (
 	"github.com/spf13/viper"
 )
 
-
-var configurationCached = false
-
-
-
-var localAddress string
-var localAddressError error
-var peerEndpoint *pb.PeerEndpoint
-var peerEndpointError error
-
-
-
-
-
-
-func CacheConfiguration() (err error) {
+type Config struct {
 	
-	getLocalAddress := func() (string, error) {
-		peerAddress := viper.GetString("peer.address")
-		if peerAddress == "" {
-			return "", fmt.Errorf("peer.address isn't set")
-		}
-		host, port, err := net.SplitHostPort(peerAddress)
-		if err != nil {
-			return "", errors.Errorf("peer.address isn't in host:port format: %s", peerAddress)
-		}
-
-		autoDetectedIPAndPort := net.JoinHostPort(GetLocalIP(), port)
-		peerLogger.Info("Auto-detected peer address:", autoDetectedIPAndPort)
-		
-		
-		if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
-			peerLogger.Info("Host is", host, ", falling back to auto-detected address:", autoDetectedIPAndPort)
-			return autoDetectedIPAndPort, nil
-		}
-
-		if viper.GetBool("peer.addressAutoDetect") {
-			peerLogger.Info("Auto-detect flag is set, returning", autoDetectedIPAndPort)
-			return autoDetectedIPAndPort, nil
-		}
-		peerLogger.Info("Returning", peerAddress)
-		return peerAddress, nil
-
-	}
+	LocalMspID                            string
+	ListenAddress                         string
+	AuthenticationTimeWindow              time.Duration
+	PeerTLSEnabled                        bool
+	PeerID                                string
+	PeerAddress                           string
+	PeerEndpoint                          *pb.PeerEndpoint
+	NetworkID                             string
+	LimitsConcurrencyQSCC                 int
+	DiscoveryEnabled                      bool
+	ProfileEnabled                        bool
+	ProfileListenAddress                  string
+	DiscoveryOrgMembersAllowed            bool
+	DiscoveryAuthCacheEnabled             bool
+	DiscoveryAuthCacheMaxSize             int
+	DiscoveryAuthCachePurgeRetentionRatio float64
+	ChaincodeListenAddr                   string
+	ChaincodeAddr                         string
+	AdminListenAddr                       string
 
 	
-	getPeerEndpoint := func() (*pb.PeerEndpoint, error) {
-		var peerAddress string
-		peerAddress, err := getLocalAddress()
-		if err != nil {
-			return nil, err
-		}
-		return &pb.PeerEndpoint{Id: &pb.PeerID{Name: viper.GetString("peer.id")}, Address: peerAddress}, nil
+	VMEndpoint           string
+	VMDockerTLSEnabled   bool
+	VMDockerAttachStdout bool
+
+	
+	ChaincodePull bool
+}
+
+func GlobalConfig() (*Config, error) {
+	c := &Config{}
+	if err := c.load(); err != nil {
+		return nil, err
 	}
+	return c, nil
+}
 
-	localAddress, localAddressError = getLocalAddress()
-	peerEndpoint, peerEndpointError = getPeerEndpoint()
-
-	configurationCached = true
-
-	if localAddressError != nil {
-		return localAddressError
+func (c *Config) load() error {
+	preeAddress, err := getLocalAddress()
+	if err != nil {
+		return err
 	}
-	return
+	c.PeerAddress = preeAddress
+	c.PeerID = viper.GetString("peer.id")
+	c.PeerEndpoint = &pb.PeerEndpoint{
+		Id: &pb.PeerID{
+			Name: c.PeerID,
+		},
+		Address: c.PeerAddress,
+	}
+	c.LocalMspID = viper.GetString("peer.localMspId")
+	c.ListenAddress = viper.GetString("peer.listenAddress")
+	c.AuthenticationTimeWindow = viper.GetDuration("peer.authentication.timewindow")
+	c.PeerTLSEnabled = viper.GetBool("peer.tls.enabled")
+	c.NetworkID = viper.GetString("peer.networkId")
+	c.LimitsConcurrencyQSCC = viper.GetInt("peer.limits.concurrency.qscc")
+	c.DiscoveryEnabled = viper.GetBool("peer.discovery.enabled")
+	c.ProfileEnabled = viper.GetBool("peer.profile.enabled")
+	c.ProfileListenAddress = viper.GetString("peer.profile.listenAddress")
+	c.DiscoveryOrgMembersAllowed = viper.GetBool("peer.discovery.orgMembersAllowedAccess")
+	c.DiscoveryAuthCacheEnabled = viper.GetBool("peer.discovery.authCacheEnabled")
+	c.DiscoveryAuthCacheMaxSize = viper.GetInt("peer.discovery.authCacheMaxSize")
+	c.DiscoveryAuthCachePurgeRetentionRatio = viper.GetFloat64("peer.discovery.authCachePurgeRetentionRatio")
+	c.ChaincodeListenAddr = viper.GetString("peer.chaincodeListenAddress")
+	c.ChaincodeAddr = viper.GetString("peer.chaincodeAddress")
+	c.AdminListenAddr = viper.GetString("peer.adminService.listenAddress")
+
+	c.VMEndpoint = viper.GetString("vm.endpoint")
+	c.VMDockerTLSEnabled = viper.GetBool("vm.docker.tls.enabled")
+	c.VMDockerAttachStdout = viper.GetBool("vm.docker.attachStdout")
+
+	c.ChaincodePull = viper.GetBool("chaincode.pull")
+
+	return nil
 }
 
 
-func cacheConfiguration() {
-	if err := CacheConfiguration(); err != nil {
-		peerLogger.Errorf("Execution continues after CacheConfiguration() failure : %s", err)
+func getLocalAddress() (string, error) {
+	peerAddress := viper.GetString("peer.address")
+	if peerAddress == "" {
+		return "", fmt.Errorf("peer.address isn't set")
 	}
-}
-
-
-
-
-func GetLocalAddress() (string, error) {
-	if !configurationCached {
-		cacheConfiguration()
+	host, port, err := net.SplitHostPort(peerAddress)
+	if err != nil {
+		return "", errors.Errorf("peer.address isn't in host:port format: %s", peerAddress)
 	}
-	return localAddress, localAddressError
-}
 
-
-func GetPeerEndpoint() (*pb.PeerEndpoint, error) {
-	if !configurationCached {
-		cacheConfiguration()
+	localIP, err := GetLocalIP()
+	if err != nil {
+		peerLogger.Errorf("Local ip address not auto-detectable: %s", err)
+		return "", err
 	}
-	return peerEndpoint, peerEndpointError
+	autoDetectedIPAndPort := net.JoinHostPort(localIP, port)
+	peerLogger.Info("Auto-detected peer address:", autoDetectedIPAndPort)
+	
+	
+	if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
+		peerLogger.Info("Host is", host, ", falling back to auto-detected address:", autoDetectedIPAndPort)
+		return autoDetectedIPAndPort, nil
+	}
+
+	if viper.GetBool("peer.addressAutoDetect") {
+		peerLogger.Info("Auto-detect flag is set, returning", autoDetectedIPAndPort)
+		return autoDetectedIPAndPort, nil
+	}
+	peerLogger.Info("Returning", peerAddress)
+	return peerAddress, nil
+
 }
 
 

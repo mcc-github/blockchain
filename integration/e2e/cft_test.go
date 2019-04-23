@@ -20,6 +20,7 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/integration/nwo"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
+	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -95,7 +96,7 @@ var _ = Describe("EndToEnd Crash Fault Tolerance", func() {
 
 	When("orderer stops and restarts", func() {
 		It("keeps network up and running", func() {
-			network = nwo.New(nwo.MultiNodeEtcdRaft(), testDir, client, 33000, components)
+			network = nwo.New(nwo.MultiNodeEtcdRaft(), testDir, client, StartPort(), components)
 
 			o1, o2, o3 := network.Orderer("orderer1"), network.Orderer("orderer2"), network.Orderer("orderer3")
 			peer = network.Peer("Org1", "peer1")
@@ -142,14 +143,19 @@ var _ = Describe("EndToEnd Crash Fault Tolerance", func() {
 			fetchLatestBlock(o2, blockFile2)
 			b1 := nwo.UnmarshalBlockFromFile(blockFile1)
 			b2 := nwo.UnmarshalBlockFromFile(blockFile2)
-			Expect(b1.Header.Bytes()).To(Equal(b2.Header.Bytes()))
+			Expect(protoutil.BlockHeaderBytes(b1.Header)).To(Equal(protoutil.BlockHeaderBytes(b2.Header)))
 		})
 	})
 
 	When("an orderer is behind the latest snapshot on leader", func() {
 		It("catches up using the block stored in snapshot", func() {
-			network = nwo.New(nwo.MultiNodeEtcdRaft(), testDir, client, 33000, components)
-
+			
+			
+			
+			
+			
+			
+			network = nwo.New(nwo.MultiNodeEtcdRaft(), testDir, client, StartPort(), components)
 			o1, o2, o3 := network.Orderer("orderer1"), network.Orderer("orderer2"), network.Orderer("orderer3")
 
 			peer = network.Peer("Org1", "peer1")
@@ -166,17 +172,21 @@ var _ = Describe("EndToEnd Crash Fault Tolerance", func() {
 			ordererGroup := grouper.NewParallel(syscall.SIGTERM, orderers)
 			peerGroup := network.PeerGroupRunner()
 
+			By("Starting 2/3 of cluster")
 			ordererProc = ifrit.Invoke(ordererGroup)
 			Eventually(ordererProc.Ready()).Should(BeClosed())
 			peerProc = ifrit.Invoke(peerGroup)
 			Eventually(peerProc.Ready()).Should(BeClosed())
 
+			By("Creating channel and submitting several transactions to take snapshot")
 			network.CreateAndJoinChannel(o2, "testchannel")
 			nwo.DeployChaincode(network, "testchannel", o2, chaincode)
 
 			for i := 1; i <= 6; i++ {
 				RunInvoke(network, o2, peer, "testchannel")
-				RunQuery(network, o2, peer, "testchannel", 100-i*10)
+				Eventually(func() int {
+					return RunQuery(network, o2, peer, "testchannel")
+				}, network.EventuallyTimeout).Should(Equal(100 - i*10))
 			}
 
 			o2SnapDir := path.Join(network.RootDir, "orderers", o2.ID(), "etcdraft", "snapshot")
@@ -184,49 +194,54 @@ var _ = Describe("EndToEnd Crash Fault Tolerance", func() {
 				files, err := ioutil.ReadDir(path.Join(o2SnapDir, "testchannel"))
 				Expect(err).NotTo(HaveOccurred())
 				return len(files)
-			}).Should(Equal(1))
+			}).Should(Equal(5)) 
 
+			By("Killing orderers so they don't have blocks prior to latest snapshot in the memory")
 			ordererProc.Signal(syscall.SIGKILL)
 			Eventually(ordererProc.Wait(), network.EventuallyTimeout).Should(Receive())
 
-			o1Runner := network.OrdererRunner(o1)
+			By("Starting lagged orderer and one of up-to-date orderers")
 			orderers = grouper.Members{
+				{Name: o1.ID(), Runner: network.OrdererRunner(o1)},
 				{Name: o2.ID(), Runner: network.OrdererRunner(o2)},
-				{Name: o3.ID(), Runner: network.OrdererRunner(o3)},
 			}
 			ordererGroup = grouper.NewParallel(syscall.SIGTERM, orderers)
 			ordererProc = ifrit.Invoke(ordererGroup)
 			Eventually(ordererProc.Ready()).Should(BeClosed())
 
-			o1Proc = ifrit.Invoke(o1Runner)
-			Eventually(o1Proc.Ready()).Should(BeClosed())
-
 			o1SnapDir := path.Join(network.RootDir, "orderers", o1.ID(), "etcdraft", "snapshot")
+
+			By("Asserting that orderer1 has snapshot dir for both system and application channel")
 			Eventually(func() int {
 				files, err := ioutil.ReadDir(o1SnapDir)
 				Expect(err).NotTo(HaveOccurred())
 				return len(files)
 			}, network.EventuallyTimeout).Should(Equal(2))
+
+			By("Asserting that orderer1 receives and persists snapshot")
 			Eventually(func() int {
 				files, err := ioutil.ReadDir(path.Join(o1SnapDir, "testchannel"))
 				Expect(err).NotTo(HaveOccurred())
 				return len(files)
 			}, network.EventuallyTimeout).Should(Equal(1))
 
+			By("Asserting cluster is still functional")
 			RunInvoke(network, o1, peer, "testchannel")
-			RunQuery(network, o1, peer, "testchannel", 30)
+			Eventually(func() int {
+				return RunQuery(network, o1, peer, "testchannel")
+			}, network.EventuallyTimeout).Should(Equal(30))
 
 			fetchLatestBlock(o1, blockFile1)
 			fetchLatestBlock(o2, blockFile2)
 			b1 := nwo.UnmarshalBlockFromFile(blockFile1)
 			b2 := nwo.UnmarshalBlockFromFile(blockFile2)
-			Expect(b1.Header.Bytes()).To(Equal(b2.Header.Bytes()))
+			Expect(protoutil.BlockHeaderBytes(b1.Header)).To(Equal(protoutil.BlockHeaderBytes(b2.Header)))
 		})
 	})
 
 	When("The leader dies", func() {
 		It("Elects a new leader", func() {
-			network = nwo.New(nwo.MultiNodeEtcdRaft(), testDir, client, 33000, components)
+			network = nwo.New(nwo.MultiNodeEtcdRaft(), testDir, client, StartPort(), components)
 
 			o1, o2, o3 := network.Orderer("orderer1"), network.Orderer("orderer2"), network.Orderer("orderer3")
 
@@ -265,6 +280,77 @@ var _ = Describe("EndToEnd Crash Fault Tolerance", func() {
 			By(fmt.Sprintf("Orderer %d took over as a leader", leader))
 		})
 	})
+
+	When("Leader cannot reach quorum", func() {
+		It("Steps down", func() {
+			network = nwo.New(nwo.MultiNodeEtcdRaft(), testDir, client, StartPort(), components)
+
+			o1, o2, o3 := network.Orderer("orderer1"), network.Orderer("orderer2"), network.Orderer("orderer3")
+			orderers := []*nwo.Orderer{o1, o2, o3}
+			peer = network.Peer("Org1", "peer1")
+			network.GenerateConfigTree()
+			network.Bootstrap()
+
+			By("Running the orderer nodes")
+			o1Runner := network.OrdererRunner(o1)
+			o2Runner := network.OrdererRunner(o2)
+			o3Runner := network.OrdererRunner(o3)
+			oRunners := []*ginkgomon.Runner{o1Runner, o2Runner, o3Runner}
+
+			o1Proc = ifrit.Invoke(o1Runner)
+			o2Proc = ifrit.Invoke(o2Runner)
+			o3Proc = ifrit.Invoke(o3Runner)
+
+			Eventually(o1Proc.Ready()).Should(BeClosed())
+			Eventually(o2Proc.Ready()).Should(BeClosed())
+			Eventually(o3Proc.Ready()).Should(BeClosed())
+
+			peerGroup := network.PeerGroupRunner()
+			peerProc = ifrit.Invoke(peerGroup)
+			Eventually(peerProc.Ready()).Should(BeClosed())
+
+			By("Waiting for them to elect a leader")
+			ordererProcesses := []ifrit.Process{o1Proc, o2Proc, o3Proc}
+			remainingAliveRunners := []*ginkgomon.Runner{o1Runner, o2Runner, o3Runner}
+			leaderID := findLeader(remainingAliveRunners)
+			leaderIndex := leaderID - 1
+			leader := orderers[leaderIndex]
+
+			followerIndices := func() []int {
+				f := []int{}
+				for i := range ordererProcesses {
+					if leaderIndex != i {
+						f = append(f, i)
+					}
+				}
+
+				return f
+			}()
+
+			By(fmt.Sprintf("Killing two followers (%d and %d)", followerIndices[0]+1, followerIndices[1]+1))
+			ordererProcesses[followerIndices[0]].Signal(syscall.SIGTERM)
+			ordererProcesses[followerIndices[1]].Signal(syscall.SIGTERM)
+
+			By("Waiting for followers to die")
+			Eventually(ordererProcesses[followerIndices[0]].Wait(), network.EventuallyTimeout).Should(Receive())
+			Eventually(ordererProcesses[followerIndices[1]].Wait(), network.EventuallyTimeout).Should(Receive())
+
+			By("Waiting for leader to step down")
+			Eventually(oRunners[leaderIndex].Err(), time.Minute, time.Second).Should(gbytes.Say(fmt.Sprintf("%d stepped down to follower since quorum is not active", leaderID)))
+
+			By("Failing to perform operation on leader due to its resignation")
+			
+			
+			sess, err := network.PeerAdminSession(peer, commands.ChannelCreate{
+				ChannelID:   "testchannel",
+				Orderer:     network.OrdererAddress(leader, nwo.ListenPort),
+				File:        network.CreateChannelTxPath("testchannel"),
+				OutputBlock: "/dev/null",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sess.Wait(network.EventuallyTimeout).ExitCode()).To(Equal(1))
+		})
+	})
 })
 
 func RunInvoke(n *nwo.Network, orderer *nwo.Orderer, peer *nwo.Peer, channel string) {
@@ -284,7 +370,7 @@ func RunInvoke(n *nwo.Network, orderer *nwo.Orderer, peer *nwo.Peer, channel str
 	Expect(sess.Err).To(gbytes.Say("Chaincode invoke successful. result: status:200"))
 }
 
-func RunQuery(n *nwo.Network, orderer *nwo.Orderer, peer *nwo.Peer, channel string, expect int) {
+func RunQuery(n *nwo.Network, orderer *nwo.Orderer, peer *nwo.Peer, channel string) int {
 	sess, err := n.PeerUserSession(peer, "User1", commands.ChaincodeQuery{
 		ChannelID: channel,
 		Name:      "mycc",
@@ -292,7 +378,12 @@ func RunQuery(n *nwo.Network, orderer *nwo.Orderer, peer *nwo.Peer, channel stri
 	})
 	Expect(err).NotTo(HaveOccurred())
 	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-	Expect(sess).To(gbytes.Say(strconv.Itoa(expect)))
+
+	var result int
+	i, err := fmt.Sscanf(string(sess.Out.Contents()), "%d", &result)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(i).To(Equal(1))
+	return int(result)
 }
 
 func findLeader(ordererRunners []*ginkgomon.Runner) int {
@@ -300,8 +391,7 @@ func findLeader(ordererRunners []*ginkgomon.Runner) int {
 	wg.Add(len(ordererRunners))
 
 	findLeader := func(runner *ginkgomon.Runner) int {
-		defer GinkgoRecover()
-		Eventually(runner.Err(), time.Minute, time.Second).Should(gbytes.Say("Raft leader changed: 0 -> "))
+		Eventually(runner.Err(), time.Minute, time.Second).Should(gbytes.Say("Raft leader changed: [0-9] -> "))
 
 		idBuff := make([]byte, 1)
 		runner.Err().Read(idBuff)
@@ -315,9 +405,16 @@ func findLeader(ordererRunners []*ginkgomon.Runner) int {
 
 	for _, runner := range ordererRunners {
 		go func(runner *ginkgomon.Runner) {
+			defer GinkgoRecover()
 			defer wg.Done()
-			leader := findLeader(runner)
-			leaders <- leader
+
+			for {
+				leader := findLeader(runner)
+				if leader != 0 {
+					leaders <- leader
+					break
+				}
+			}
 		}(runner)
 	}
 

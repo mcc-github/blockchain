@@ -14,7 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -60,7 +60,7 @@ func (c *simpleCollectionStore) retrieveCollectionConfigPackage(cc common.Collec
 	if qe == nil {
 		qe, err = c.s.GetQueryExecutorForLedger(cc.Channel)
 		if err != nil {
-			return nil, errors.WithMessage(err, fmt.Sprintf("could not retrieve query executor for collection criteria %#v", cc))
+			return nil, errors.WithMessagef(err, "could not retrieve query executor for collection criteria %#v", cc)
 		}
 		defer qe.Done()
 	}
@@ -71,7 +71,7 @@ func (c *simpleCollectionStore) retrieveCollectionConfigPackage(cc common.Collec
 	if ccInfo == nil {
 		return nil, errors.Errorf("Chaincode [%s] does not exist", cc.Namespace)
 	}
-	return ccInfo.CollectionConfigPkg, nil
+	return ccInfo.AllCollectionsConfigPkg(), nil
 }
 
 
@@ -79,7 +79,7 @@ func RetrieveCollectionConfigPackageFromState(cc common.CollectionCriteria, stat
 
 	cb, err := state.GetState("lscc", BuildCollectionKVSKey(cc.Namespace))
 	if err != nil {
-		return nil, errors.WithMessage(err, fmt.Sprintf("error while retrieving collection for collection criteria %#v", cc))
+		return nil, errors.WithMessagef(err, "error while retrieving collection for collection criteria %#v", cc)
 	}
 	if cb == nil {
 		return nil, NoSuchCollectionError(cc)
@@ -107,7 +107,7 @@ func (c *simpleCollectionStore) retrieveCollectionConfig(cc common.CollectionCri
 	if qe == nil {
 		qe, err = c.s.GetQueryExecutorForLedger(cc.Channel)
 		if err != nil {
-			return nil, errors.WithMessage(err, fmt.Sprintf("could not retrieve query executor for collection criteria %#v", cc))
+			return nil, errors.WithMessagef(err, "could not retrieve query executor for collection criteria %#v", cc)
 		}
 		defer qe.Done()
 	}
@@ -129,7 +129,7 @@ func (c *simpleCollectionStore) retrieveSimpleCollection(cc common.CollectionCri
 	sc := &SimpleCollection{}
 	err = sc.Setup(staticCollectionConfig, c.s.GetIdentityDeserializer(cc.Channel))
 	if err != nil {
-		return nil, errors.WithMessage(err, fmt.Sprintf("error setting up collection for collection criteria %#v", cc))
+		return nil, errors.WithMessagef(err, "error setting up collection for collection criteria %#v", cc)
 	}
 	return sc, nil
 }
@@ -164,37 +164,60 @@ func (c *simpleCollectionStore) RetrieveCollectionPersistenceConfigs(cc common.C
 	return &SimpleCollectionPersistenceConfigs{staticCollectionConfig.BlockToLive}, nil
 }
 
-func (c *simpleCollectionStore) HasReadAccess(cc common.CollectionCriteria, signedProposal *pb.SignedProposal, qe ledger.QueryExecutor) (bool, error) {
-	accessPolicy, err := c.retrieveSimpleCollection(cc, qe)
+
+
+
+func (c *simpleCollectionStore) RetrieveReadWritePermission(cc common.CollectionCriteria, signedProposal *pb.SignedProposal,
+	qe ledger.QueryExecutor) (bool, bool, error) {
+
+	collection, err := c.retrieveSimpleCollection(cc, qe)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
-	if !accessPolicy.IsMemberOnlyRead() {
-		return true, nil
+	if canAnyoneReadAndWrite(collection) {
+		return true, true, nil
 	}
 
+	
+	if isAMember, err := isCreatorOfProposalAMember(signedProposal, collection); err != nil {
+		return false, false, err
+	} else if isAMember {
+		return true, true, nil
+	}
+
+	return !collection.IsMemberOnlyRead(), !collection.IsMemberOnlyWrite(), nil
+}
+
+func canAnyoneReadAndWrite(collection *SimpleCollection) bool {
+	if !collection.IsMemberOnlyRead() && !collection.IsMemberOnlyWrite() {
+		return true
+	}
+	return false
+}
+
+func isCreatorOfProposalAMember(signedProposal *pb.SignedProposal, collection *SimpleCollection) (bool, error) {
 	signedData, err := getSignedData(signedProposal)
 	if err != nil {
 		return false, err
 	}
 
-	hasReadAccess := accessPolicy.AccessFilter()
-	return hasReadAccess(signedData), nil
+	accessFilter := collection.AccessFilter()
+	return accessFilter(signedData), nil
 }
 
-func getSignedData(signedProposal *pb.SignedProposal) (common.SignedData, error) {
-	proposal, err := utils.GetProposal(signedProposal.ProposalBytes)
+func getSignedData(signedProposal *pb.SignedProposal) (protoutil.SignedData, error) {
+	proposal, err := protoutil.GetProposal(signedProposal.ProposalBytes)
 	if err != nil {
-		return common.SignedData{}, err
+		return protoutil.SignedData{}, err
 	}
 
-	creator, _, err := utils.GetChaincodeProposalContext(proposal)
+	creator, _, err := protoutil.GetChaincodeProposalContext(proposal)
 	if err != nil {
-		return common.SignedData{}, err
+		return protoutil.SignedData{}, err
 	}
 
-	return common.SignedData{
+	return protoutil.SignedData{
 		Data:      signedProposal.ProposalBytes,
 		Identity:  creator,
 		Signature: signedProposal.Signature,

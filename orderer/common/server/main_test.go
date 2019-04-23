@@ -18,26 +18,37 @@ import (
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
+	deliver_mocks "github.com/mcc-github/blockchain/common/deliver/mock"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
+	ledger_mocks "github.com/mcc-github/blockchain/common/ledger/blockledger/mocks"
 	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
-	"github.com/mcc-github/blockchain/common/localmsp"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/metrics/prometheus"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config/configtest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/multichannel"
+	server_mocks "github.com/mcc-github/blockchain/orderer/common/server/mocks"
 	"github.com/mcc-github/blockchain/orderer/consensus"
+	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+
+
+type signerSerializer interface {
+	identity.SignerSerializer
+}
 
 func TestInitializeLogging(t *testing.T) {
 	origEnvValue := os.Getenv("FABRIC_LOGGING_SPEC")
@@ -163,7 +174,7 @@ func TestInitializeServerConfig(t *testing.T) {
 				if tc.clusterCert == "" {
 					initializeServerConfig(conf, nil)
 				} else {
-					initializeClusterClientConfig(conf)
+					initializeClusterClientConfig(conf, false, nil)
 				}
 			},
 			)
@@ -269,9 +280,10 @@ func TestInitializeMultiChainManager(t *testing.T) {
 	conf := genesisConfig(t)
 	assert.NotPanics(t, func() {
 		initializeLocalMsp(conf)
+		signer := &server_mocks.SignerSerializer{}
 		lf, _ := createLedgerFactory(conf)
 		bootBlock := encoder.New(genesisconfig.Load(genesisconfig.SampleDevModeSoloProfile)).GenesisBlockForChannel("system")
-		initializeMultichannelRegistrar(bootBlock, &replicationInitiator{}, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, conf, localmsp.NewSigner(), &disabled.Provider{}, lf)
+		initializeMultichannelRegistrar(bootBlock, &replicationInitiator{}, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, conf, signer, &disabled.Provider{}, &server_mocks.HealthChecker{}, lf)
 	})
 }
 
@@ -322,24 +334,37 @@ func TestUpdateTrustedRoots(t *testing.T) {
 		},
 	}
 	grpcServer := initializeGrpcServer(conf, initializeServerConfig(conf, nil))
-	caSupport := &comm.CASupport{
-		AppRootCAsByChain:     make(map[string][][]byte),
-		OrdererRootCAsByChain: make(map[string][][]byte),
+	caMgr := &caManager{
+		appRootCAsByChain:     make(map[string][][]byte),
+		ordererRootCAsByChain: make(map[string][][]byte),
 	}
 	callback := func(bundle *channelconfig.Bundle) {
 		if grpcServer.MutualTLSRequired() {
 			t.Log("callback called")
-			updateTrustedRoots(caSupport, bundle, grpcServer)
+			caMgr.updateTrustedRoots(bundle, grpcServer)
 		}
 	}
 	lf, _ := createLedgerFactory(conf)
 	bootBlock := encoder.New(genesisconfig.Load(genesisconfig.SampleDevModeSoloProfile)).GenesisBlockForChannel("system")
-	initializeMultichannelRegistrar(bootBlock, &replicationInitiator{}, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, genesisConfig(t), localmsp.NewSigner(), &disabled.Provider{}, lf, callback)
-	t.Logf("# app CAs: %d", len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
-	t.Logf("# orderer CAs: %d", len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
+	signer := &server_mocks.SignerSerializer{}
+	initializeMultichannelRegistrar(
+		bootBlock,
+		&replicationInitiator{},
+		&cluster.PredicateDialer{},
+		comm.ServerConfig{},
+		nil,
+		genesisConfig(t),
+		signer,
+		&disabled.Provider{},
+		&server_mocks.HealthChecker{},
+		lf,
+		callback,
+	)
+	t.Logf("# app CAs: %d", len(caMgr.appRootCAsByChain[genesisconfig.TestChainID]))
+	t.Logf("# orderer CAs: %d", len(caMgr.ordererRootCAsByChain[genesisconfig.TestChainID]))
 	
-	assert.Equal(t, 0, len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
-	assert.Equal(t, 0, len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
+	assert.Equal(t, 0, len(caMgr.appRootCAsByChain[genesisconfig.TestChainID]))
+	assert.Equal(t, 0, len(caMgr.ordererRootCAsByChain[genesisconfig.TestChainID]))
 	grpcServer.Listener().Close()
 
 	conf = &localconfig.TopLevel{
@@ -355,29 +380,41 @@ func TestUpdateTrustedRoots(t *testing.T) {
 		},
 	}
 	grpcServer = initializeGrpcServer(conf, initializeServerConfig(conf, nil))
-	caSupport = &comm.CASupport{
-		AppRootCAsByChain:     make(map[string][][]byte),
-		OrdererRootCAsByChain: make(map[string][][]byte),
+	caMgr = &caManager{
+		appRootCAsByChain:     make(map[string][][]byte),
+		ordererRootCAsByChain: make(map[string][][]byte),
 	}
 
 	predDialer := &cluster.PredicateDialer{}
-	clusterConf := initializeClusterClientConfig(conf)
+	clusterConf := initializeClusterClientConfig(conf, true, nil)
 	predDialer.SetConfig(clusterConf)
 
 	callback = func(bundle *channelconfig.Bundle) {
 		if grpcServer.MutualTLSRequired() {
 			t.Log("callback called")
-			updateTrustedRoots(caSupport, bundle, grpcServer)
-			updateClusterDialer(caSupport, predDialer, clusterConf.SecOpts.ServerRootCAs)
+			caMgr.updateTrustedRoots(bundle, grpcServer)
+			caMgr.updateClusterDialer(predDialer, clusterConf.SecOpts.ServerRootCAs)
 		}
 	}
-	initializeMultichannelRegistrar(bootBlock, &replicationInitiator{}, &cluster.PredicateDialer{}, comm.ServerConfig{}, nil, genesisConfig(t), localmsp.NewSigner(), &disabled.Provider{}, lf, callback)
-	t.Logf("# app CAs: %d", len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
-	t.Logf("# orderer CAs: %d", len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
+	initializeMultichannelRegistrar(
+		bootBlock,
+		&replicationInitiator{},
+		&cluster.PredicateDialer{},
+		comm.ServerConfig{},
+		nil,
+		genesisConfig(t),
+		signer,
+		&disabled.Provider{},
+		&server_mocks.HealthChecker{},
+		lf,
+		callback,
+	)
+	t.Logf("# app CAs: %d", len(caMgr.appRootCAsByChain[genesisconfig.TestChainID]))
+	t.Logf("# orderer CAs: %d", len(caMgr.ordererRootCAsByChain[genesisconfig.TestChainID]))
 	
 	
-	assert.Equal(t, 2, len(caSupport.AppRootCAsByChain[genesisconfig.TestChainID]))
-	assert.Equal(t, 2, len(caSupport.OrdererRootCAsByChain[genesisconfig.TestChainID]))
+	assert.Equal(t, 2, len(caMgr.appRootCAsByChain[genesisconfig.TestChainID]))
+	assert.Equal(t, 2, len(caMgr.ordererRootCAsByChain[genesisconfig.TestChainID]))
 	assert.Len(t, predDialer.Config.Load().(comm.ClientConfig).SecOpts.ServerRootCAs, 2)
 	grpcServer.Listener().Close()
 }
@@ -599,7 +636,7 @@ func TestInitializeEtcdraftConsenter(t *testing.T) {
 				Key:         crt.Key,
 				UseTLS:      true,
 			},
-		}, srv, &multichannel.Registrar{})
+		}, srv, &multichannel.Registrar{}, &disabled.Provider{})
 	assert.NotNil(t, consenters["etcdraft"])
 }
 
@@ -640,4 +677,31 @@ func panicMsg(f func()) string {
 
 	return message.(string)
 
+}
+
+func TestCreateReplicator(t *testing.T) {
+	cleanup := configtest.SetDevFabricConfigPath(t)
+	defer cleanup()
+	bootBlock := encoder.New(genesisconfig.Load(genesisconfig.SampleDevModeSoloProfile)).GenesisBlockForChannel("system")
+
+	iterator := &deliver_mocks.BlockIterator{}
+	iterator.NextReturnsOnCall(0, bootBlock, common.Status_SUCCESS)
+	iterator.NextReturnsOnCall(1, bootBlock, common.Status_SUCCESS)
+
+	ledger := &ledger_mocks.ReadWriter{}
+	ledger.On("Height").Return(uint64(1))
+	ledger.On("Iterator", mock.Anything).Return(iterator, uint64(1))
+
+	ledgerFactory := &server_mocks.Factory{}
+	ledgerFactory.On("GetOrCreate", "mychannel").Return(ledger, nil)
+	ledgerFactory.On("ChainIDs").Return([]string{"mychannel"})
+
+	signer := &server_mocks.SignerSerializer{}
+	r := createReplicator(ledgerFactory, bootBlock, &localconfig.TopLevel{}, &comm.SecureOptions{}, signer)
+
+	err := r.verifierRetriever.RetrieveVerifier("mychannel").VerifyBlockSignature(nil, nil)
+	assert.EqualError(t, err, "implicit policy evaluation failed - 0 sub-policies were satisfied, but this policy requires 1 of the 'Writers' sub-policies to be satisfied")
+
+	err = r.verifierRetriever.RetrieveVerifier("system").VerifyBlockSignature(nil, nil)
+	assert.NoError(t, err)
 }

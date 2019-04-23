@@ -14,11 +14,11 @@ import (
 	"github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	ledger2 "github.com/mcc-github/blockchain/core/ledger"
 	cut "github.com/mcc-github/blockchain/core/ledger/util"
+	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
+	"github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
@@ -119,21 +119,6 @@ func (m *mockLedger) CommitPvtDataOfOldBlocks(blockPvtData []*ledger2.BlockPvtDa
 
 func (m *mockLedger) GetMissingPvtDataTracker() (ledger2.MissingPvtDataTracker, error) {
 	panic("implement me")
-}
-
-func (m *mockLedger) PurgePrivateData(maxBlockNumToRetain uint64) error {
-	args := m.Called(maxBlockNumToRetain)
-	return args.Error(0)
-}
-
-func (m *mockLedger) PrivateDataMinBlockNum() (uint64, error) {
-	args := m.Called()
-	return args.Get(0).(uint64), args.Error(1)
-}
-
-func (m *mockLedger) Prune(policy ledger.PrunePolicy) error {
-	args := m.Called(policy)
-	return args.Error(0)
 }
 
 func createLedger(channelID string) (*common.Block, *mockLedger) {

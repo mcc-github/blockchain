@@ -19,15 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-var _ = platforms.Platform(&Platform{})
 
 func testerr(err error, succ bool) error {
 	if succ && err != nil {
@@ -97,7 +94,7 @@ func TestValidateCDS(t *testing.T) {
 	for _, s := range specs {
 		cds, err := generateFakeCDS(s.CCName, s.Path, s.File, s.Mode)
 
-		err = platform.ValidateCodePackage(cds.Bytes())
+		err = platform.ValidateCodePackage(cds.CodePackage)
 		if s.SuccessExpected == true && err != nil {
 			t.Errorf("Unexpected failure: %s", err)
 		}
@@ -128,12 +125,12 @@ func Test_findSource(t *testing.T) {
 
 	var source SourceMap
 
-	source, err = findSource(gopath, "github.com/mcc-github/blockchain/peer")
+	source, err = findSource(gopath, "github.com/mcc-github/blockchain/cmd/peer")
 	if err != nil {
 		t.Errorf("failed to find source: %s", err)
 	}
 
-	if _, ok := source["src/github.com/mcc-github/blockchain/peer/main.go"]; !ok {
+	if _, ok := source["src/github.com/mcc-github/blockchain/cmd/peer/main.go"]; !ok {
 		t.Errorf("Failed to find expected source file: %v", source)
 	}
 
@@ -146,7 +143,7 @@ func Test_findSource(t *testing.T) {
 func Test_DeploymentPayload(t *testing.T) {
 	platform := &Platform{}
 
-	payload, err := platform.GetDeploymentPayload("github.com/mcc-github/blockchain/examples/chaincode/go/example02/cmd")
+	payload, err := platform.GetDeploymentPayload("github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop")
 	assert.NoError(t, err)
 
 	t.Logf("payload size: %d", len(payload))
@@ -171,7 +168,7 @@ func Test_DeploymentPayload(t *testing.T) {
 func Test_DeploymentPayloadWithStateDBArtifacts(t *testing.T) {
 	platform := &Platform{}
 
-	payload, err := platform.GetDeploymentPayload("github.com/mcc-github/blockchain/examples/chaincode/go/marbles02")
+	payload, err := platform.GetDeploymentPayload("github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noopWithMETA")
 	assert.NoError(t, err)
 
 	t.Logf("payload size: %d", len(payload))
@@ -194,12 +191,12 @@ func Test_DeploymentPayloadWithStateDBArtifacts(t *testing.T) {
 				foundIndexArtifact = true
 			}
 		}
-		assert.Equal(t, true, foundIndexArtifact, "should have found statedb index artifact in marbles02 META-INF directory")
+		assert.Equal(t, true, foundIndexArtifact, "should have found statedb index artifact in noopWithMETA META-INF directory")
 	}
 }
 
 func Test_decodeUrl(t *testing.T) {
-	path := "http://github.com/mcc-github/blockchain/examples/chaincode/go/map"
+	path := "http://example.com/foo/bar"
 	if _, err := decodeUrl(path); err != nil {
 		t.Fail()
 		t.Logf("Error to decodeUrl unsuccessfully with valid path: %s, %s", path, err)
@@ -229,11 +226,11 @@ func TestValidatePath(t *testing.T) {
 		path string
 		succ bool
 	}{
-		{path: "http://github.com/mcc-github/blockchain/examples/chaincode/go/map", succ: true},
-		{path: "https://github.com/mcc-github/blockchain/examples/chaincode/go/map", succ: true},
-		{path: "github.com/mcc-github/blockchain/examples/chaincode/go/map", succ: true},
-		{path: "github.com/mcc-github/blockchain/bad/chaincode/go/map", succ: false},
-		{path: ":github.com/mcc-github/blockchain/examples/chaincode/go/map", succ: false},
+		{path: "http://github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: true},
+		{path: "https://github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: true},
+		{path: "github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: true},
+		{path: "github.com/mcc-github/blockchain/bad/chaincode/golang/testdata/src/chaincodes/noop", succ: false},
+		{path: ":github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: false},
 	}
 
 	for _, tst := range tests {
@@ -262,7 +259,6 @@ func updateGopath(t *testing.T, path string) func() {
 }
 
 func TestGetDeploymentPayload(t *testing.T) {
-	defaultGopath := os.Getenv("GOPATH")
 	testdataPath, err := filepath.Abs("testdata")
 	require.NoError(t, err)
 
@@ -273,8 +269,8 @@ func TestGetDeploymentPayload(t *testing.T) {
 		path   string
 		succ   bool
 	}{
-		{gopath: defaultGopath, path: "github.com/mcc-github/blockchain/examples/chaincode/go/map", succ: true},
-		{gopath: defaultGopath, path: "github.com/mcc-github/blockchain/examples/bad/go/map", succ: false},
+		{gopath: testdataPath, path: "chaincodes/noop", succ: true},
+		{gopath: testdataPath, path: "bad/chaincodes/noop", succ: false},
 		{gopath: testdataPath, path: "chaincodes/BadImport", succ: false},
 		{gopath: testdataPath, path: "chaincodes/BadMetadataInvalidIndex", succ: false},
 		{gopath: testdataPath, path: "chaincodes/BadMetadataUnexpectedFolderContent", succ: false},
@@ -317,9 +313,9 @@ func TestGenerateDockerBuild(t *testing.T) {
 	}{
 		{gopath: defaultGopath, spec: spec{CCName: "NoCode", Path: "path/to/nowhere", File: "/bin/warez", Mode: 0100400, SuccessExpected: false}},
 		{gopath: defaultGopath, spec: spec{CCName: "invalidhttp", Path: "https://not/a/valid/path", SuccessExpected: false, RealGen: true}},
-		{gopath: defaultGopath, spec: spec{CCName: "map", Path: "github.com/mcc-github/blockchain/examples/chaincode/go/map", SuccessExpected: true, RealGen: true}},
-		{gopath: defaultGopath, spec: spec{CCName: "mapBadPath", Path: "github.com/mcc-github/blockchain/examples/chaincode/go/map", File: "/src/github.com/mcc-github/blockchain/examples/bad/path/to/map.go", Mode: 0100400, SuccessExpected: false}},
-		{gopath: defaultGopath, spec: spec{CCName: "mapBadMode", Path: "github.com/mcc-github/blockchain/examples/chaincode/go/map", File: "/src/github.com/mcc-github/blockchain/examples/chaincode/go/map/map.go", Mode: 0100555, SuccessExpected: false}},
+		{gopath: testdataPath, spec: spec{CCName: "noop", Path: "chaincodes/noop", SuccessExpected: true, RealGen: true}},
+		{gopath: testdataPath, spec: spec{CCName: "noopBadPath", Path: "chaincodes/noop", File: "bad/path/to/chaincode.go", Mode: 0100400, SuccessExpected: false}},
+		{gopath: testdataPath, spec: spec{CCName: "noopBadMode", Path: "chaincodes/noop", File: "chaincodes/noop/chaincode.go", Mode: 0100555, SuccessExpected: false}},
 		{gopath: testdataPath, spec: spec{CCName: "AutoVendor", Path: "chaincodes/AutoVendor/chaincode", SuccessExpected: true, RealGen: true}},
 	}
 
@@ -354,7 +350,7 @@ func TestGenerateDockerBuild(t *testing.T) {
 		if _, err = platform.GenerateDockerfile(); err != nil {
 			t.Errorf("could not generate docker file for a valid spec: %s, %s", cds.ChaincodeSpec.ChaincodeId.Path, err)
 		}
-		err = platform.GenerateDockerBuild(cds.Path(), cds.Bytes(), tw)
+		err = platform.GenerateDockerBuild(cds.ChaincodeSpec.ChaincodeId.Path, cds.CodePackage, tw)
 		if err = testerr(err, tst.SuccessExpected); err != nil {
 			t.Errorf("Error validating chaincode spec: %s, %s", cds.ChaincodeSpec.ChaincodeId.Path, err)
 		}

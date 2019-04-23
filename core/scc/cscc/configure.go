@@ -21,7 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/core/committer/txvalidator/v20/plugindispatcher"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/util"
@@ -30,14 +30,15 @@ import (
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
 
 
-func New(ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider,
-	aclProvider aclmgmt.ACLProvider, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider) *PeerConfiger {
+func New(sccp sysccprovider.SystemChaincodeProvider,
+	aclProvider aclmgmt.ACLProvider, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
+	lr plugindispatcher.LifecycleResources, nr plugindispatcher.CollectionAndLifecycleResources) *PeerConfiger {
 	return &PeerConfiger{
 		policyChecker: policy.NewPolicyChecker(
 			peer.NewChannelPolicyManagerGetter(),
@@ -45,10 +46,11 @@ func New(ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodePro
 			mgmt.NewLocalMSPPrincipalGetter(),
 		),
 		configMgr:              peer.NewConfigSupport(),
-		ccp:                    ccp,
 		sccp:                   sccp,
 		aclProvider:            aclProvider,
 		deployedCCInfoProvider: deployedCCInfoProvider,
+		legacyLifecycle:        lr,
+		newLifecycle:           nr,
 	}
 }
 
@@ -66,10 +68,11 @@ func (e *PeerConfiger) Enabled() bool             { return true }
 type PeerConfiger struct {
 	policyChecker          policy.PolicyChecker
 	configMgr              config.Manager
-	ccp                    ccprovider.ChaincodeProvider
 	sccp                   sysccprovider.SystemChaincodeProvider
 	aclProvider            aclmgmt.ACLProvider
 	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
+	legacyLifecycle        plugindispatcher.LifecycleResources
+	newLifecycle           plugindispatcher.CollectionAndLifecycleResources
 }
 
 var cnflogger = flogging.MustGetLogger("cscc")
@@ -134,25 +137,25 @@ func (e *PeerConfiger) InvokeNoShim(args [][]byte, sp *pb.SignedProposal) pb.Res
 			return shim.Error("Cannot join the channel <nil> configuration block provided")
 		}
 
-		block, err := utils.GetBlockFromBlockBytes(args[1])
+		block, err := protoutil.GetBlockFromBlockBytes(args[1])
 		if err != nil {
 			return shim.Error(fmt.Sprintf("Failed to reconstruct the genesis block, %s", err))
 		}
 
-		cid, err := utils.GetChainIDFromBlock(block)
+		cid, err := protoutil.GetChainIDFromBlock(block)
 		if err != nil {
 			return shim.Error(fmt.Sprintf("\"JoinChain\" request failed to extract "+
 				"channel id from the block due to [%s]", err))
 		}
 
+		
 		if err := validateConfigBlock(block); err != nil {
 			return shim.Error(fmt.Sprintf("\"JoinChain\" for chainID = %s failed because of validation "+
 				"of configuration block, because of %s", cid, err))
 		}
 
 		
-		
-		if err = e.policyChecker.CheckPolicyNoChannel(mgmt.Admins, sp); err != nil {
+		if err = e.aclProvider.CheckACL(resources.Cscc_JoinChain, "", sp); err != nil {
 			return shim.Error(fmt.Sprintf("access denied for [%s][%s]: [%s]", fname, cid, err))
 		}
 
@@ -165,7 +168,7 @@ func (e *PeerConfiger) InvokeNoShim(args [][]byte, sp *pb.SignedProposal) pb.Res
 			block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
 		}
 
-		return joinChain(cid, block, e.ccp, e.sccp, e.deployedCCInfoProvider)
+		return joinChain(cid, block, e.sccp, e.deployedCCInfoProvider, e.legacyLifecycle, e.newLifecycle)
 	case GetConfigBlock:
 		
 		if err = e.aclProvider.CheckACL(resources.Cscc_GetConfigBlock, string(args[1]), sp); err != nil {
@@ -188,8 +191,7 @@ func (e *PeerConfiger) InvokeNoShim(args [][]byte, sp *pb.SignedProposal) pb.Res
 		return e.simulateConfigTreeUpdate(args[1], args[2])
 	case GetChannels:
 		
-		
-		if err = e.policyChecker.CheckPolicyNoChannel(mgmt.Members, sp); err != nil {
+		if err = e.aclProvider.CheckACL(resources.Cscc_GetChannels, "", sp); err != nil {
 			return shim.Error(fmt.Sprintf("access denied for [%s]: %s", fname, err))
 		}
 
@@ -201,13 +203,13 @@ func (e *PeerConfiger) InvokeNoShim(args [][]byte, sp *pb.SignedProposal) pb.Res
 
 
 func validateConfigBlock(block *common.Block) error {
-	envelopeConfig, err := utils.ExtractEnvelope(block, 0)
+	envelopeConfig, err := protoutil.ExtractEnvelope(block, 0)
 	if err != nil {
 		return errors.Errorf("Failed to %s", err)
 	}
 
 	configEnv := &common.ConfigEnvelope{}
-	_, err = utils.UnmarshalEnvelopeOfType(envelopeConfig, common.HeaderType_CONFIG, configEnv)
+	_, err = protoutil.UnmarshalEnvelopeOfType(envelopeConfig, common.HeaderType_CONFIG, configEnv)
 	if err != nil {
 		return errors.Errorf("Bad configuration envelope: %s", err)
 	}
@@ -230,14 +232,19 @@ func validateConfigBlock(block *common.Block) error {
 			"configuration group", channelconfig.ApplicationGroupKey)
 	}
 
+	
+	if err = channelconfig.ValidateCapabilities(block); err != nil {
+		return errors.Errorf("Failed capabilities check: [%s]", err)
+	}
+
 	return nil
 }
 
 
 
 
-func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider) pb.Response {
-	if err := peer.CreateChainFromBlock(block, ccp, sccp, deployedCCInfoProvider); err != nil {
+func joinChain(chainID string, block *common.Block, sccp sysccprovider.SystemChaincodeProvider, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, lr plugindispatcher.LifecycleResources, nr plugindispatcher.CollectionAndLifecycleResources) pb.Response {
+	if err := peer.CreateChainFromBlock(block, sccp, deployedCCInfoProvider, lr, nr); err != nil {
 		return shim.Error(err.Error())
 	}
 
@@ -256,7 +263,7 @@ func getConfigBlock(chainID []byte) pb.Response {
 	if block == nil {
 		return shim.Error(fmt.Sprintf("Unknown chain ID, %s", string(chainID)))
 	}
-	blockBytes, err := utils.Marshal(block)
+	blockBytes, err := protoutil.Marshal(block)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -275,7 +282,7 @@ func (e *PeerConfiger) getConfigTree(chainID []byte) pb.Response {
 		return shim.Error(fmt.Sprintf("Unknown chain ID, %s", string(chainID)))
 	}
 	agCfg := &pb.ConfigTree{ChannelConfig: channelCfg}
-	configBytes, err := utils.Marshal(agCfg)
+	configBytes, err := protoutil.Marshal(agCfg)
 	if err != nil {
 		return shim.Error(err.Error())
 	}

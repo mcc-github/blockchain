@@ -16,14 +16,14 @@ import (
 	"github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
 func createEnvelope(t *testing.T, serializedIdentity []byte) *common.Envelope {
-	sHdr := utils.MakeSignatureHeader(serializedIdentity, nil)
-	hdr := utils.MakePayloadHeader(&common.ChannelHeader{}, sHdr)
+	sHdr := protoutil.MakeSignatureHeader(serializedIdentity, nil)
+	hdr := protoutil.MakePayloadHeader(&common.ChannelHeader{}, sHdr)
 	payload := &common.Payload{
 		Header: hdr,
 	}

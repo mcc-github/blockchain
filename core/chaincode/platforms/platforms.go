@@ -11,16 +11,17 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metadata"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
 )
 
 
-
-
-
-
-type MetadataProvider interface {
-	GetMetadataAsTarEntries() ([]byte, error)
+var SupportedPlatforms = []Platform{
+	&java.Platform{},
+	&golang.Platform{},
+	&node.Platform{},
 }
 
 
@@ -32,7 +33,7 @@ type Platform interface {
 	GetDeploymentPayload(path string) ([]byte, error)
 	GenerateDockerfile() (string, error)
 	GenerateDockerBuild(path string, code []byte, tw *tar.Writer) error
-	GetMetadataProvider(code []byte) MetadataProvider
+	GetMetadataAsTarEntries(code []byte) ([]byte, error)
 }
 
 type PackageWriter interface {
@@ -79,15 +80,21 @@ func (r *Registry) ValidateDeploymentSpec(ccType string, codePackage []byte) err
 	if !ok {
 		return fmt.Errorf("Unknown chaincodeType: %s", ccType)
 	}
+
+	
+	if len(codePackage) == 0 {
+		return nil
+	}
+
 	return platform.ValidateCodePackage(codePackage)
 }
 
-func (r *Registry) GetMetadataProvider(ccType string, codePackage []byte) (MetadataProvider, error) {
+func (r *Registry) GetMetadataProvider(ccType string, codePackage []byte) ([]byte, error) {
 	platform, ok := r.Platforms[ccType]
 	if !ok {
 		return nil, fmt.Errorf("Unknown chaincodeType: %s", ccType)
 	}
-	return platform.GetMetadataProvider(codePackage), nil
+	return platform.GetMetadataAsTarEntries(codePackage)
 }
 
 func (r *Registry) GetDeploymentPayload(ccType, path string) ([]byte, error) {
@@ -119,8 +126,11 @@ func (r *Registry) GenerateDockerfile(ccType, name, version string) (string, err
 	
 	
 	
+	
+	
 	buf = append(buf, fmt.Sprintf(`LABEL %s.chaincode.id.name="%s" \`, metadata.BaseDockerLabel, name))
-	buf = append(buf, fmt.Sprintf(`      %s.chaincode.id.version="%s" \`, metadata.BaseDockerLabel, version))
+	 buf = append(buf, fmt.Sprintf(`      %s.chaincode.id.version="%s" \`, metadata.BaseDockerLabel, version))
+
 	buf = append(buf, fmt.Sprintf(`      %s.chaincode.type="%s" \`, metadata.BaseDockerLabel, ccType))
 	buf = append(buf, fmt.Sprintf(`      %s.version="%s"`, metadata.BaseDockerLabel, metadata.Version))
 	

@@ -18,10 +18,10 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx/test"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/discovery/support/config"
 	"github.com/mcc-github/blockchain/discovery/support/mocks"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/onsi/gomega/gexec"
 	"github.com/stretchr/testify/assert"
@@ -66,11 +66,11 @@ func TestMSPIDMapping(t *testing.T) {
 	os.Mkdir(dir, 0700)
 	defer os.RemoveAll(dir)
 
-	cryptogen, err := gexec.Build(filepath.Join("github.com", "mcc-github", "blockchain", "common", "tools", "cryptogen"))
+	cryptogen, err := gexec.Build("github.com/mcc-github/blockchain/cmd/cryptogen")
 	assert.NoError(t, err)
 	defer os.Remove(cryptogen)
 
-	idemixgen, err := gexec.Build(filepath.Join("github.com", "mcc-github", "blockchain", "common", "tools", "idemixgen"))
+	idemixgen, err := gexec.Build("github.com/mcc-github/blockchain/common/tools/idemixgen")
 	assert.NoError(t, err)
 	defer os.Remove(idemixgen)
 

@@ -21,20 +21,22 @@ import (
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/gossip/filter"
 	gossip2 "github.com/mcc-github/blockchain/gossip/gossip"
+	"github.com/mcc-github/blockchain/gossip/metrics"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/transientstore"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
 
 type gossipAdapter interface {
 	
-	SendByCriteria(message *proto.SignedGossipMessage, criteria gossip2.SendCriteria) error
+	SendByCriteria(message *protoext.SignedGossipMessage, criteria gossip2.SendCriteria) error
 
 	
 	
@@ -68,6 +70,7 @@ type distributorImpl struct {
 	gossipAdapter
 	CollectionAccessFactory
 	pushAckTimeout time.Duration
+	metrics        *metrics.PrivdataMetrics
 }
 
 
@@ -87,7 +90,7 @@ func (p *policyAccessFactory) AccessPolicy(config *common.CollectionConfig, chai
 	case *common.CollectionConfig_StaticCollectionConfig:
 		err := colAP.Setup(cconf.StaticCollectionConfig, p.GetIdentityDeserializer(chainID))
 		if err != nil {
-			return nil, errors.WithMessage(err, fmt.Sprintf("error setting up collection  %#v", cconf.StaticCollectionConfig.Name))
+			return nil, errors.WithMessagef(err, "error setting up collection  %#v", cconf.StaticCollectionConfig.Name)
 		}
 	default:
 		return nil, errors.New("unexpected collection type")
@@ -104,12 +107,14 @@ func NewCollectionAccessFactory(factory IdentityDeserializerFactory) CollectionA
 
 
 
-func NewDistributor(chainID string, gossip gossipAdapter, factory CollectionAccessFactory) PvtDataDistributor {
+func NewDistributor(chainID string, gossip gossipAdapter, factory CollectionAccessFactory,
+	metrics *metrics.PrivdataMetrics, pushAckTimeout time.Duration) PvtDataDistributor {
 	return &distributorImpl{
 		chainID:                 chainID,
 		gossipAdapter:           gossip,
 		CollectionAccessFactory: factory,
-		pushAckTimeout:          viper.GetDuration("peer.gossip.pvtData.pushAckTimeout"),
+		pushAckTimeout:          pushAckTimeout,
+		metrics:                 metrics,
 	}
 }
 
@@ -123,7 +128,7 @@ func (d *distributorImpl) Distribute(txID string, privData *transientstore.TxPvt
 }
 
 type dissemination struct {
-	msg      *proto.SignedGossipMessage
+	msg      *protoext.SignedGossipMessage
 	criteria gossip2.SendCriteria
 }
 
@@ -186,11 +191,11 @@ func (d *distributorImpl) getCollectionConfig(config *common.CollectionConfigPac
 	return nil, errors.New(fmt.Sprint("no configuration for collection", collection.CollectionName, "found"))
 }
 
-func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAccessPolicy, colFilter privdata.Filter, pvtDataMsg *proto.SignedGossipMessage) ([]*dissemination, error) {
+func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAccessPolicy, colFilter privdata.Filter, pvtDataMsg *protoext.SignedGossipMessage) ([]*dissemination, error) {
 	var disseminationPlan []*dissemination
 
 	routingFilter, err := d.gossipAdapter.PeerFilter(gossipCommon.ChainID(d.chainID), func(signature api.PeerSignature) bool {
-		return colFilter(common.SignedData{
+		return colFilter(protoutil.SignedData{
 			Data:      signature.Message,
 			Signature: signature.Signature,
 			Identity:  []byte(signature.PeerIdentity),
@@ -227,7 +232,7 @@ func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAcces
 			}
 			disseminationPlan = append(disseminationPlan, &dissemination{
 				criteria: sc,
-				msg: &proto.SignedGossipMessage{
+				msg: &protoext.SignedGossipMessage{
 					Envelope:      proto2.Clone(pvtDataMsg.Envelope).(*proto.Envelope),
 					GossipMessage: proto2.Clone(pvtDataMsg.GossipMessage).(*proto.GossipMessage),
 				},
@@ -299,9 +304,11 @@ func (d *distributorImpl) disseminate(disseminationPlan []*dissemination) error 
 	var failures uint32
 	var wg sync.WaitGroup
 	wg.Add(len(disseminationPlan))
+	start := time.Now()
 	for _, dis := range disseminationPlan {
 		go func(dis *dissemination) {
 			defer wg.Done()
+			defer d.reportSendDuration(start)
 			err := d.SendByCriteria(dis.msg, dis.criteria)
 			if err != nil {
 				atomic.AddUint32(&failures, 1)
@@ -318,10 +325,14 @@ func (d *distributorImpl) disseminate(disseminationPlan []*dissemination) error 
 	return nil
 }
 
+func (d *distributorImpl) reportSendDuration(startTime time.Time) {
+	d.metrics.SendDuration.With("channel", d.chainID).Observe(time.Since(startTime).Seconds())
+}
+
 func (d *distributorImpl) createPrivateDataMessage(txID, namespace string,
 	collection *rwset.CollectionPvtReadWriteSet,
 	ccp *common.CollectionConfigPackage,
-	blkHt uint64) (*proto.SignedGossipMessage, error) {
+	blkHt uint64) (*protoext.SignedGossipMessage, error) {
 	msg := &proto.GossipMessage{
 		Channel: []byte(d.chainID),
 		Nonce:   util.RandomUInt64(),
@@ -340,7 +351,7 @@ func (d *distributorImpl) createPrivateDataMessage(txID, namespace string,
 		},
 	}
 
-	pvtDataMsg, err := msg.NoopSign()
+	pvtDataMsg, err := protoext.NoopSign(msg)
 	if err != nil {
 		return nil, err
 	}

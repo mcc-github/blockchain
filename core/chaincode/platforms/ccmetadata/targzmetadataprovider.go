@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/pkg/errors"
 )
 
@@ -17,6 +18,9 @@ import (
 const (
 	ccPackageStatedbDir = "META-INF/statedb/"
 )
+
+
+var logger = flogging.MustGetLogger("chaincode.platform.metadata")
 
 
 

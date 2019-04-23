@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
+	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
 	"github.com/mcc-github/blockchain/integration/runner"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +51,12 @@ func (env *LevelDBCommonStorageTestEnv) Init(t testing.TB) {
 	viper.Set("ledger.state.stateDatabase", "")
 	removeDBPath(t)
 	env.bookkeeperTestEnv = bookkeeping.NewTestEnv(t)
-	dbProvider, err := NewCommonStorageDBProvider(env.bookkeeperTestEnv.TestProvider, &disabled.Provider{}, &mock.HealthCheckRegistry{})
+	dbProvider, err := NewCommonStorageDBProvider(
+		env.bookkeeperTestEnv.TestProvider,
+		&disabled.Provider{},
+		&mock.HealthCheckRegistry{},
+		nil,
+	)
 	assert.NoError(t, err)
 	env.t = t
 	env.provider = dbProvider
@@ -102,19 +109,32 @@ func (env *CouchDBCommonStorageTestEnv) setupCouch() string {
 
 
 func (env *CouchDBCommonStorageTestEnv) Init(t testing.TB) {
+	redologsPath := ledgerconfig.GetCouchdbRedologsPath()
+	assert.NoError(t, os.RemoveAll(redologsPath))
 	viper.Set("ledger.state.stateDatabase", "CouchDB")
-	couchAddr := env.setupCouch()
-	viper.Set("ledger.state.couchDBConfig.couchDBAddress", couchAddr)
-	
-	
-	viper.Set("ledger.state.couchDBConfig.username", "")
-	viper.Set("ledger.state.couchDBConfig.password", "")
-	viper.Set("ledger.state.couchDBConfig.maxRetries", 3)
-	viper.Set("ledger.state.couchDBConfig.maxRetriesOnStartup", 20)
-	viper.Set("ledger.state.couchDBConfig.requestTimeout", time.Second*35)
+	couchAddress := env.setupCouch()
+
+	stateDBConfig := &ledger.StateDB{
+		StateDatabase: "CouchDB",
+		CouchDB: &couchdb.Config{
+			Address:             couchAddress,
+			Username:            "",
+			Password:            "",
+			MaxRetries:          3,
+			MaxRetriesOnStartup: 20,
+			RequestTimeout:      35 * time.Second,
+			InternalQueryLimit:  1000,
+			MaxBatchUpdateSize:  1000,
+		},
+	}
 
 	env.bookkeeperTestEnv = bookkeeping.NewTestEnv(t)
-	dbProvider, err := NewCommonStorageDBProvider(env.bookkeeperTestEnv.TestProvider, &disabled.Provider{}, &mock.HealthCheckRegistry{})
+	dbProvider, err := NewCommonStorageDBProvider(
+		env.bookkeeperTestEnv.TestProvider,
+		&disabled.Provider{},
+		&mock.HealthCheckRegistry{},
+		stateDBConfig,
+	)
 	assert.NoError(t, err)
 	env.t = t
 	env.provider = dbProvider
@@ -136,7 +156,8 @@ func (env *CouchDBCommonStorageTestEnv) GetName() string {
 func (env *CouchDBCommonStorageTestEnv) Cleanup() {
 	csdbProvider, _ := env.provider.(*CommonStorageDBProvider)
 	statecouchdb.CleanupDB(env.t, csdbProvider.VersionedDBProvider)
-
+	redologsPath := ledgerconfig.GetCouchdbRedologsPath()
+	assert.NoError(env.t, os.RemoveAll(redologsPath))
 	env.bookkeeperTestEnv.Cleanup()
 	env.provider.Close()
 	env.couchCleanup()

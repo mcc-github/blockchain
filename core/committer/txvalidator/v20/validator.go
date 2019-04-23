@@ -16,8 +16,9 @@ import (
 	"github.com/mcc-github/blockchain/common/configtx"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
-	"github.com/mcc-github/blockchain/core/common/sysccprovider"
+	"github.com/mcc-github/blockchain/core/committer/txvalidator/v20/plugindispatcher"
 	"github.com/mcc-github/blockchain/core/common/validation"
 	"github.com/mcc-github/blockchain/core/ledger"
 	ledgerUtil "github.com/mcc-github/blockchain/core/ledger/util"
@@ -25,7 +26,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	mspprotos "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -42,9 +43,6 @@ type Semaphore interface {
 
 type ChannelResources interface {
 	
-	Ledger() ledger.PeerLedger
-
-	
 	MSPManager() msp.MSPManager
 
 	
@@ -60,10 +58,29 @@ type ChannelResources interface {
 
 
 
+type LedgerResources interface {
+	
+	GetTransactionByID(txID string) (*peer.ProcessedTransaction, error)
 
-type vsccValidator interface {
-	VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode)
+	
+	
+	
+	NewQueryExecutor() (ledger.QueryExecutor, error)
 }
+
+
+
+type Dispatcher interface {
+	
+	Dispatch(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode)
+}
+
+
+
+
+
+
+
 
 
 
@@ -72,7 +89,8 @@ type TxValidator struct {
 	ChainID          string
 	Semaphore        Semaphore
 	ChannelResources ChannelResources
-	Vscc             vsccValidator
+	LedgerResources  LedgerResources
+	Dispatcher       Dispatcher
 }
 
 var logger = flogging.MustGetLogger("committer.txvalidator")
@@ -91,14 +109,25 @@ type blockValidationResult struct {
 }
 
 
-func NewTxValidator(chainID string, sem Semaphore, cr ChannelResources, sccp sysccprovider.SystemChaincodeProvider, pm plugin.Mapper) *TxValidator {
+func NewTxValidator(
+	chainID string,
+	sem Semaphore,
+	cr ChannelResources,
+	ler LedgerResources,
+	lcr plugindispatcher.LifecycleResources,
+	cor plugindispatcher.CollectionResources,
+	pm plugin.Mapper,
+	channelPolicyManagerGetter policies.ChannelPolicyManagerGetter,
+) *TxValidator {
 	
-	pluginValidator := NewPluginValidator(pm, cr.Ledger(), &dynamicDeserializer{cr: cr}, &dynamicCapabilities{cr: cr})
+	pluginValidator := plugindispatcher.NewPluginValidator(pm, ler, &dynamicDeserializer{cr: cr}, &dynamicCapabilities{cr: cr}, channelPolicyManagerGetter, cor)
 	return &TxValidator{
 		ChainID:          chainID,
 		Semaphore:        sem,
 		ChannelResources: cr,
-		Vscc:             newVSCCValidator(chainID, cr, sccp, pluginValidator)}
+		LedgerResources:  ler,
+		Dispatcher:       plugindispatcher.New(chainID, cr, ler, lcr, pluginValidator),
+	}
 }
 
 func (v *TxValidator) chainExists(chain string) bool {
@@ -194,9 +223,7 @@ func (v *TxValidator) Validate(block *common.Block) error {
 
 	
 	
-	if v.ChannelResources.Capabilities().ForbidDuplicateTXIdInBlock() {
-		markTXIdDuplicates(txidArray, txsfltr)
-	}
+	markTXIdDuplicates(txidArray, txsfltr)
 
 	
 	err = v.allValidated(txsfltr, block)
@@ -205,7 +232,7 @@ func (v *TxValidator) Validate(block *common.Block) error {
 	}
 
 	
-	utils.InitBlockMetadata(block)
+	protoutil.InitBlockMetadata(block)
 
 	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsfltr
 
@@ -258,7 +285,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 		return
 	}
 
-	if env, err := utils.GetEnvelopeFromBlock(d); err != nil {
+	if env, err := protoutil.GetEnvelopeFromBlock(d); err != nil {
 		logger.Warningf("Error getting tx from block: %+v", err)
 		results <- &blockValidationResult{
 			tIdx:           tIdx,
@@ -286,7 +313,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 			return
 		}
 
-		chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+		chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 		if err != nil {
 			logger.Warningf("Could not unmarshal channel header, err %s, skipping", err)
 			results <- &blockValidationResult{
@@ -313,17 +340,17 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 			txID = chdr.TxId
 
 			
-			erroneousResultEntry := v.checkTxIdDupsLedger(tIdx, chdr, v.ChannelResources.Ledger())
+			erroneousResultEntry := v.checkTxIdDupsLedger(tIdx, chdr, v.LedgerResources)
 			if erroneousResultEntry != nil {
 				results <- erroneousResultEntry
 				return
 			}
 
 			
-			logger.Debug("Validating transaction vscc tx validate")
-			err, cde := v.Vscc.VSCCValidateTx(tIdx, payload, d, block)
+			logger.Debug("Validating transaction with plugins")
+			err, cde := v.Dispatcher.Dispatch(tIdx, payload, d, block)
 			if err != nil {
-				logger.Errorf("VSCCValidateTx for transaction txId = %s returned error: %s", txID, err)
+				logger.Errorf("Dispatch for transaction txId = %s returned error: %s", txID, err)
 				switch err.(type) {
 				case *commonerrors.VSCCExecutionFailureError:
 					results <- &blockValidationResult{
@@ -360,7 +387,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 
 			
 			
-			erroneousResultEntry := v.checkTxIdDupsLedger(tIdx, chdr, v.ChannelResources.Ledger())
+			erroneousResultEntry := v.checkTxIdDupsLedger(tIdx, chdr, v.LedgerResources)
 			if erroneousResultEntry != nil {
 				results <- erroneousResultEntry
 				return
@@ -427,7 +454,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 
 
 
-func (v *TxValidator) checkTxIdDupsLedger(tIdx int, chdr *common.ChannelHeader, ldgr ledger.PeerLedger) *blockValidationResult {
+func (v *TxValidator) checkTxIdDupsLedger(tIdx int, chdr *common.ChannelHeader, ldgr LedgerResources) *blockValidationResult {
 
 	
 	txID := chdr.TxId
@@ -501,7 +528,8 @@ func (ds *dynamicCapabilities) KeyLevelEndorsement() bool {
 }
 
 func (ds *dynamicCapabilities) MetadataLifecycle() bool {
-	return ds.cr.Capabilities().MetadataLifecycle()
+	
+	return false
 }
 
 func (ds *dynamicCapabilities) PrivateChannelData() bool {

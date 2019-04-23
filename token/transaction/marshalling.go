@@ -11,7 +11,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/token"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/mcc-github/blockchain/token/identity"
 	"github.com/pkg/errors"
 )
@@ -25,13 +25,13 @@ func UnmarshalTokenTransaction(raw []byte) (*cb.ChannelHeader, *token.TokenTrans
 	}
 
 	
-	sh, err := utils.GetSignatureHeader(payload.Header.SignatureHeader)
+	sh, err := protoutil.GetSignatureHeader(payload.Header.SignatureHeader)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	creatorInfo := &TxCreatorInfo{public: sh.Creator}
 
-	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 	if err != nil {
 		return nil, nil, nil, err
 	}

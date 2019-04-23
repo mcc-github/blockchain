@@ -72,6 +72,8 @@ type Cluster struct {
 	ReplicationRetryTimeout              time.Duration
 	ReplicationBackgroundRefreshInterval time.Duration
 	ReplicationMaxRetries                int
+	SendBufferSize                       int
+	CertExpirationWarningThreshold       time.Duration
 }
 
 
@@ -220,7 +222,15 @@ var Defaults = TopLevel{
 			Address: "0.0.0.0:6060",
 		},
 		Cluster: Cluster{
-			ReplicationMaxRetries: 12,
+			ReplicationMaxRetries:                12,
+			RPCTimeout:                           time.Second * 7,
+			DialTimeout:                          time.Second * 5,
+			ReplicationBufferSize:                20971520,
+			SendBufferSize:                       10,
+			ReplicationBackgroundRefreshInterval: time.Minute * 5,
+			ReplicationRetryTimeout:              time.Second * 5,
+			ReplicationPullTimeout:               time.Second * 5,
+			CertExpirationWarningThreshold:       time.Hour * 24 * 7,
 		},
 		LocalMSPDir: "msp",
 		LocalMSPID:  "SampleOrg",
@@ -343,9 +353,24 @@ func (c *TopLevel) completeInitialization(configDir string) {
 			c.General.GenesisProfile = Defaults.General.GenesisProfile
 		case c.General.SystemChannel == "":
 			c.General.SystemChannel = Defaults.General.SystemChannel
+		case c.General.Cluster.RPCTimeout == 0:
+			c.General.Cluster.RPCTimeout = Defaults.General.Cluster.RPCTimeout
+		case c.General.Cluster.DialTimeout == 0:
+			c.General.Cluster.DialTimeout = Defaults.General.Cluster.DialTimeout
 		case c.General.Cluster.ReplicationMaxRetries == 0:
-			c.General.Cluster.ReplicationMaxRetries = 12
-
+			c.General.Cluster.ReplicationMaxRetries = Defaults.General.Cluster.ReplicationMaxRetries
+		case c.General.Cluster.SendBufferSize == 0:
+			c.General.Cluster.SendBufferSize = Defaults.General.Cluster.SendBufferSize
+		case c.General.Cluster.ReplicationBufferSize == 0:
+			c.General.Cluster.ReplicationBufferSize = Defaults.General.Cluster.ReplicationBufferSize
+		case c.General.Cluster.ReplicationPullTimeout == 0:
+			c.General.Cluster.ReplicationPullTimeout = Defaults.General.Cluster.ReplicationPullTimeout
+		case c.General.Cluster.ReplicationRetryTimeout == 0:
+			c.General.Cluster.ReplicationRetryTimeout = Defaults.General.Cluster.ReplicationRetryTimeout
+		case c.General.Cluster.ReplicationBackgroundRefreshInterval == 0:
+			c.General.Cluster.ReplicationBackgroundRefreshInterval = Defaults.General.Cluster.ReplicationBackgroundRefreshInterval
+		case c.General.Cluster.CertExpirationWarningThreshold == 0:
+			c.General.Cluster.CertExpirationWarningThreshold = Defaults.General.Cluster.CertExpirationWarningThreshold
 		case c.Kafka.TLS.Enabled && c.Kafka.TLS.Certificate == "":
 			logger.Panicf("General.Kafka.TLS.Certificate must be set if General.Kafka.TLS.Enabled is set to true.")
 		case c.Kafka.TLS.Enabled && c.Kafka.TLS.PrivateKey == "":

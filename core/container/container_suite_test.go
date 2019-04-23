@@ -8,30 +8,14 @@ package container_test
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/container"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 
-type vmProvider interface {
-	container.VMProvider
-}
 
 
-type vm interface {
-	container.VM
-}
 
-
-type vmcReq interface {
-	container.VMCReq
-}
-
-
-type builder interface {
-	container.Builder
-}
 
 func TestContainer(t *testing.T) {
 	RegisterFailHandler(Fail)

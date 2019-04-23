@@ -13,7 +13,7 @@ import (
 
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/common"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 )
 
 
@@ -24,10 +24,10 @@ type Comm interface {
 	GetPKIid() common.PKIidType
 
 	
-	Send(msg *proto.SignedGossipMessage, peers ...*RemotePeer)
+	Send(msg *protoext.SignedGossipMessage, peers ...*RemotePeer)
 
 	
-	SendWithAck(msg *proto.SignedGossipMessage, timeout time.Duration, minAck int, peers ...*RemotePeer) AggregatedSendResult
+	SendWithAck(msg *protoext.SignedGossipMessage, timeout time.Duration, minAck int, peers ...*RemotePeer) AggregatedSendResult
 
 	
 	
@@ -39,7 +39,7 @@ type Comm interface {
 
 	
 	
-	Accept(common.MessageAcceptor) <-chan proto.ReceivedMessage
+	Accept(common.MessageAcceptor) <-chan protoext.ReceivedMessage
 
 	
 	PresumedDead() <-chan common.PKIidType

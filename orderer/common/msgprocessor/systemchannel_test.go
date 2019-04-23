@@ -13,14 +13,14 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/capabilities"
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/common/crypto"
 	mockchannelconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	mockconfigtx "github.com/mcc-github/blockchain/common/mocks/configtx"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
+	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -47,9 +47,9 @@ func TestProcessSystemChannelNormalMsg(t *testing.T) {
 		mscs := &mockSystemChannelSupport{}
 		ms := &mockSystemChannelFilterSupport{}
 		_, err := NewSystemChannel(ms, mscs, nil).ProcessNormalMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID + ".different",
 					}),
 				},
@@ -63,9 +63,9 @@ func TestProcessSystemChannelNormalMsg(t *testing.T) {
 			SequenceVal: 7,
 		}
 		cs, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessNormalMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID,
 					}),
 				},
@@ -92,9 +92,9 @@ func TestSystemChannelConfigUpdateMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		config, cs, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigUpdateMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID,
 					}),
 				},
@@ -112,9 +112,9 @@ func TestSystemChannelConfigUpdateMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		_, _, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigUpdateMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID + "different",
 					}),
 				},
@@ -132,15 +132,15 @@ func TestSystemChannelConfigUpdateMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		_, _, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigUpdateMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID + "different",
 					}),
 				},
 			}),
 		})
-		assert.Equal(t, mscs.NewChannelConfigVal.ProposeConfigUpdateError, err)
+		assert.EqualError(t, err, "error validating channel creation transaction for new channel 'foodifferent', could not succesfully apply update to template configuration: An error")
 	})
 	t.Run("BadSignEnvelope", func(t *testing.T) {
 		mscs := &mockSystemChannelSupport{
@@ -150,9 +150,9 @@ func TestSystemChannelConfigUpdateMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		_, _, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigUpdateMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID + "different",
 					}),
 				},
@@ -171,9 +171,9 @@ func TestSystemChannelConfigUpdateMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		_, _, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{RejectRule})).ProcessConfigUpdateMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID + "different",
 					}),
 				},
@@ -192,9 +192,9 @@ func TestSystemChannelConfigUpdateMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		config, cs, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigUpdateMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID + "different",
 					}),
 				},
@@ -219,9 +219,9 @@ func TestSystemChannelConfigMsg(t *testing.T) {
 				ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 			}
 			_, _, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigMsg(&cb.Envelope{
-				Payload: utils.MarshalOrPanic(&cb.Payload{
+				Payload: protoutil.MarshalOrPanic(&cb.Payload{
 					Header: &cb.Header{
-						ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+						ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 							ChannelId: testChannelID,
 							Type:      int32(cb.HeaderType_CONFIG),
 						}),
@@ -243,9 +243,9 @@ func TestSystemChannelConfigMsg(t *testing.T) {
 				ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 			}
 			config, seq, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigMsg(&cb.Envelope{
-				Payload: utils.MarshalOrPanic(&cb.Payload{
+				Payload: protoutil.MarshalOrPanic(&cb.Payload{
 					Header: &cb.Header{
-						ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+						ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 							ChannelId: testChannelID,
 							Type:      int32(cb.HeaderType_CONFIG),
 						}),
@@ -255,7 +255,7 @@ func TestSystemChannelConfigMsg(t *testing.T) {
 			assert.Equal(t, seq, ms.SequenceVal)
 			assert.NotNil(t, config)
 			assert.Nil(t, err)
-			hdr, err := utils.ChannelHeader(config)
+			hdr, err := protoutil.ChannelHeader(config)
 			assert.Equal(
 				t,
 				int32(cb.HeaderType_CONFIG),
@@ -276,9 +276,9 @@ func TestSystemChannelConfigMsg(t *testing.T) {
 				ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 			}
 			_, _, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigMsg(&cb.Envelope{
-				Payload: utils.MarshalOrPanic(&cb.Payload{
+				Payload: protoutil.MarshalOrPanic(&cb.Payload{
 					Header: &cb.Header{
-						ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+						ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 							ChannelId: testChannelID,
 							Type:      int32(cb.HeaderType_ORDERER_TRANSACTION),
 						}),
@@ -300,17 +300,17 @@ func TestSystemChannelConfigMsg(t *testing.T) {
 				ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 			}
 			_, _, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigMsg(&cb.Envelope{
-				Payload: utils.MarshalOrPanic(&cb.Payload{
+				Payload: protoutil.MarshalOrPanic(&cb.Payload{
 					Header: &cb.Header{
-						ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+						ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 							ChannelId: testChannelID,
 							Type:      int32(cb.HeaderType_ORDERER_TRANSACTION),
 						}),
 					},
-					Data: utils.MarshalOrPanic(&cb.Envelope{
-						Payload: utils.MarshalOrPanic(&cb.Payload{
+					Data: protoutil.MarshalOrPanic(&cb.Envelope{
+						Payload: protoutil.MarshalOrPanic(&cb.Payload{
 							Header: &cb.Header{
-								ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 									ChannelId: testChannelID,
 									Type:      int32(cb.HeaderType_MESSAGE),
 								}),
@@ -333,26 +333,26 @@ func TestSystemChannelConfigMsg(t *testing.T) {
 				ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 			}
 			config, seq, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigMsg(&cb.Envelope{
-				Payload: utils.MarshalOrPanic(&cb.Payload{
+				Payload: protoutil.MarshalOrPanic(&cb.Payload{
 					Header: &cb.Header{
-						ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+						ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 							ChannelId: testChannelID,
 							Type:      int32(cb.HeaderType_ORDERER_TRANSACTION),
 						}),
 					},
-					Data: utils.MarshalOrPanic(&cb.Envelope{
-						Payload: utils.MarshalOrPanic(&cb.Payload{
+					Data: protoutil.MarshalOrPanic(&cb.Envelope{
+						Payload: protoutil.MarshalOrPanic(&cb.Payload{
 							Header: &cb.Header{
-								ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 									ChannelId: testChannelID,
 									Type:      int32(cb.HeaderType_CONFIG),
 								}),
 							},
-							Data: utils.MarshalOrPanic(&cb.ConfigEnvelope{
+							Data: protoutil.MarshalOrPanic(&cb.ConfigEnvelope{
 								LastUpdate: &cb.Envelope{
-									Payload: utils.MarshalOrPanic(&cb.Payload{
+									Payload: protoutil.MarshalOrPanic(&cb.Payload{
 										Header: &cb.Header{
-											ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+											ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 												ChannelId: testChannelID + "different",
 												Type:      int32(cb.HeaderType_CONFIG_UPDATE),
 											}),
@@ -367,7 +367,7 @@ func TestSystemChannelConfigMsg(t *testing.T) {
 			assert.Equal(t, seq, ms.SequenceVal)
 			assert.NotNil(t, config)
 			assert.Nil(t, err)
-			hdr, err := utils.ChannelHeader(config)
+			hdr, err := protoutil.ChannelHeader(config)
 			assert.Equal(
 				t,
 				int32(cb.HeaderType_ORDERER_TRANSACTION),
@@ -387,9 +387,9 @@ func TestSystemChannelConfigMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		_, _, err := NewSystemChannel(ms, mscs, NewRuleSet([]Rule{AcceptRule})).ProcessConfigMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID,
 						Type:      int32(cb.HeaderType_MESSAGE),
 					}),
@@ -404,7 +404,7 @@ type mockDefaultTemplatorSupport struct {
 	channelconfig.Resources
 }
 
-func (mdts *mockDefaultTemplatorSupport) Signer() crypto.LocalSigner {
+func (mdts *mockDefaultTemplatorSupport) Signer() identity.SignerSerializer {
 	return nil
 }
 
@@ -412,7 +412,7 @@ func TestNewChannelConfig(t *testing.T) {
 	channelID := "foo"
 	gConf := configtxgentest.Load(genesisconfig.SampleSingleMSPSoloProfile)
 	gConf.Orderer.Capabilities = map[string]bool{
-		capabilities.OrdererV1_1: true,
+		capabilities.OrdererV2_0: true,
 	}
 	channelGroup, err := encoder.NewChannelGroup(gConf)
 	assert.NoError(t, err)
@@ -444,8 +444,8 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"BadConfigUpdate",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
 					ConfigUpdate: []byte("bad config update envelope data"),
 				}),
 			},
@@ -454,9 +454,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"MismatchedChannelID",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							ChannelId: "foo",
 						},
@@ -468,9 +468,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"EmptyConfigUpdateWriteSet",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{},
 					),
 				}),
@@ -480,9 +480,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"WriteSetNoGroups",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							WriteSet: &cb.ConfigGroup{},
 						},
@@ -494,9 +494,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"WriteSetNoApplicationGroup",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							WriteSet: &cb.ConfigGroup{
 								Groups: map[string]*cb.ConfigGroup{},
@@ -510,9 +510,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"BadWriteSetApplicationGroupVersion",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							WriteSet: &cb.ConfigGroup{
 								Groups: map[string]*cb.ConfigGroup{
@@ -530,9 +530,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"MissingWriteSetConsortiumValue",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							WriteSet: &cb.ConfigGroup{
 								Groups: map[string]*cb.ConfigGroup{
@@ -551,9 +551,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"BadWriteSetConsortiumValueValue",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							WriteSet: &cb.ConfigGroup{
 								Groups: map[string]*cb.ConfigGroup{
@@ -576,9 +576,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"UnknownConsortiumName",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							WriteSet: &cb.ConfigGroup{
 								Groups: map[string]*cb.ConfigGroup{
@@ -588,7 +588,7 @@ func TestNewChannelConfig(t *testing.T) {
 								},
 								Values: map[string]*cb.ConfigValue{
 									channelconfig.ConsortiumKey: {
-										Value: utils.MarshalOrPanic(
+										Value: protoutil.MarshalOrPanic(
 											&cb.Consortium{
 												Name: "NotTheNameYouAreLookingFor",
 											},
@@ -605,9 +605,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"Missing consortium members",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							WriteSet: &cb.ConfigGroup{
 								Groups: map[string]*cb.ConfigGroup{
@@ -617,7 +617,7 @@ func TestNewChannelConfig(t *testing.T) {
 								},
 								Values: map[string]*cb.ConfigValue{
 									channelconfig.ConsortiumKey: {
-										Value: utils.MarshalOrPanic(
+										Value: protoutil.MarshalOrPanic(
 											&cb.Consortium{
 												Name: genesisconfig.SampleConsortiumName,
 											},
@@ -634,9 +634,9 @@ func TestNewChannelConfig(t *testing.T) {
 		{
 			"Member not in consortium",
 			&cb.Payload{
-				Header: &cb.Header{ChannelHeader: utils.MarshalOrPanic(utils.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
-				Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-					ConfigUpdate: utils.MarshalOrPanic(
+				Header: &cb.Header{ChannelHeader: protoutil.MarshalOrPanic(protoutil.MakeChannelHeader(cb.HeaderType_CONFIG_UPDATE, 0, "", epoch))},
+				Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+					ConfigUpdate: protoutil.MarshalOrPanic(
 						&cb.ConfigUpdate{
 							WriteSet: &cb.ConfigGroup{
 								Groups: map[string]*cb.ConfigGroup{
@@ -649,7 +649,7 @@ func TestNewChannelConfig(t *testing.T) {
 								},
 								Values: map[string]*cb.ConfigValue{
 									channelconfig.ConsortiumKey: {
-										Value: utils.MarshalOrPanic(
+										Value: protoutil.MarshalOrPanic(
 											&cb.Consortium{
 												Name: genesisconfig.SampleConsortiumName,
 											},
@@ -665,7 +665,7 @@ func TestNewChannelConfig(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := templator.NewChannelConfig(&cb.Envelope{Payload: utils.MarshalOrPanic(tc.payload)})
+			_, err := templator.NewChannelConfig(&cb.Envelope{Payload: protoutil.MarshalOrPanic(tc.payload)})
 			if assert.Error(t, err) {
 				assert.Regexp(t, tc.regex, err.Error())
 			}
@@ -680,6 +680,14 @@ func TestNewChannelConfig(t *testing.T) {
 		assert.Nil(t, err)
 		assert.NotEmpty(t, res.ConfigtxValidator().ConfigProto().ChannelGroup.ModPolicy)
 		assert.True(t, proto.Equal(originalCG, ctxm.ConfigtxValidator().ConfigProto().ChannelGroup), "Underlying system channel config proto was mutated")
+	})
+
+	
+	t.Run("SuccessWithNewCreateType", func(t *testing.T) {
+		createTx, err := encoder.MakeChannelCreationTransactionWithSystemChannelContext("foo", nil, configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile), configtxgentest.Load(genesisconfig.SampleSingleMSPSoloProfile))
+		assert.Nil(t, err)
+		_, err = templator.NewChannelConfig(createTx)
+		assert.Nil(t, err)
 	})
 }
 

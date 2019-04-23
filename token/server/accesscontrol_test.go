@@ -7,8 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package server_test
 
 import (
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/token"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/mcc-github/blockchain/token/server"
 	"github.com/mcc-github/blockchain/token/server/mock"
 	. "github.com/onsi/ginkgo"
@@ -41,8 +41,8 @@ var _ = Describe("AccessControl", func() {
 		}
 		command = &token.Command{
 			Header: header,
-			Payload: &token.Command_ImportRequest{
-				ImportRequest: &token.ImportRequest{},
+			Payload: &token.Command_IssueRequest{
+				IssueRequest: &token.IssueRequest{},
 			},
 		}
 
@@ -60,7 +60,7 @@ var _ = Describe("AccessControl", func() {
 		resourceName, channelID, signedData := fakeACLProvider.CheckACLArgsForCall(0)
 		Expect(resourceName).To(Equal(aclResources.IssueTokens))
 		Expect(channelID).To(Equal("channel-id"))
-		Expect(signedData).To(ConsistOf(&common.SignedData{
+		Expect(signedData).To(ConsistOf(&protoutil.SignedData{
 			Data:      signedCommand.Command,
 			Identity:  []byte("creator"),
 			Signature: []byte("signature"),
@@ -85,7 +85,7 @@ var _ = Describe("AccessControl", func() {
 		resourceName, channelID, signedData := fakeACLProvider.CheckACLArgsForCall(0)
 		Expect(resourceName).To(Equal(aclResources.IssueTokens))
 		Expect(channelID).To(Equal("channel-id"))
-		Expect(signedData).To(ConsistOf(&common.SignedData{
+		Expect(signedData).To(ConsistOf(&protoutil.SignedData{
 			Data:      signedTransferCommand.Command,
 			Identity:  []byte("creator"),
 			Signature: []byte("signature"),
@@ -110,7 +110,7 @@ var _ = Describe("AccessControl", func() {
 		resourceName, channelID, signedData := fakeACLProvider.CheckACLArgsForCall(0)
 		Expect(resourceName).To(Equal(aclResources.IssueTokens))
 		Expect(channelID).To(Equal("channel-id"))
-		Expect(signedData).To(ConsistOf(&common.SignedData{
+		Expect(signedData).To(ConsistOf(&protoutil.SignedData{
 			Data:      signedRedeemCommand.Command,
 			Identity:  []byte("creator"),
 			Signature: []byte("signature"),
@@ -144,26 +144,29 @@ var _ = Describe("AccessControl", func() {
 		})
 	})
 
-	It("validates the policy for expectation import command", func() {
-		importExpectationRequest := &token.ExpectationRequest{
-			Expectation: &token.TokenExpectation{
-				Expectation: &token.TokenExpectation_PlainExpectation{
-					PlainExpectation: &token.PlainExpectation{
-						Payload: &token.PlainExpectation_ImportExpectation{
-							ImportExpectation: &token.PlainTokenExpectation{},
+	It("validates the policy for operation issue command", func() {
+		issueOpRequest := &token.TokenOperationRequest{
+			Credential: []byte("credential"),
+			Operations: []*token.TokenOperation{{
+				Operation: &token.TokenOperation_Action{
+					Action: &token.TokenOperationAction{
+						Payload: &token.TokenOperationAction_Issue{
+							Issue: &token.TokenActionTerms{},
 						},
 					},
 				},
 			},
+			},
 		}
-		expectationCommand := &token.Command{
+
+		tokenOperationCommand := &token.Command{
 			Header: header,
-			Payload: &token.Command_ExpectationRequest{
-				ExpectationRequest: importExpectationRequest,
+			Payload: &token.Command_TokenOperationRequest{
+				TokenOperationRequest: issueOpRequest,
 			},
 		}
 		signedExpectationCommand := &token.SignedCommand{
-			Command:   ProtoMarshal(expectationCommand),
+			Command:   ProtoMarshal(tokenOperationCommand),
 			Signature: []byte("signature"),
 		}
 		err := pbac.Check(signedExpectationCommand, command)
@@ -173,33 +176,34 @@ var _ = Describe("AccessControl", func() {
 		resourceName, channelID, signedData := fakeACLProvider.CheckACLArgsForCall(0)
 		Expect(resourceName).To(Equal(aclResources.IssueTokens))
 		Expect(channelID).To(Equal("channel-id"))
-		Expect(signedData).To(ConsistOf(&common.SignedData{
+		Expect(signedData).To(ConsistOf(&protoutil.SignedData{
 			Data:      signedExpectationCommand.Command,
 			Identity:  []byte("creator"),
 			Signature: []byte("signature"),
 		}))
 	})
 
-	It("validates the policy for expectation transfer command", func() {
-		transferExpectationRequest := &token.ExpectationRequest{
-			Expectation: &token.TokenExpectation{
-				Expectation: &token.TokenExpectation_PlainExpectation{
-					PlainExpectation: &token.PlainExpectation{
-						Payload: &token.PlainExpectation_TransferExpectation{
-							TransferExpectation: &token.PlainTokenExpectation{},
-						},
+	It("validates the policy for operation transfer command", func() {
+		transferOpRequest := &token.TokenOperationRequest{
+			Credential: []byte("credential"),
+			Operations: []*token.TokenOperation{{
+				Operation: &token.TokenOperation_Action{
+					Action: &token.TokenOperationAction{
+						Payload: &token.TokenOperationAction_Transfer{
+							Transfer: &token.TokenActionTerms{}},
 					},
 				},
 			},
+			},
 		}
-		expectationCommand := &token.Command{
+		tokenOperationCommand := &token.Command{
 			Header: header,
-			Payload: &token.Command_ExpectationRequest{
-				ExpectationRequest: transferExpectationRequest,
+			Payload: &token.Command_TokenOperationRequest{
+				TokenOperationRequest: transferOpRequest,
 			},
 		}
 		signedExpectationCommand := &token.SignedCommand{
-			Command:   ProtoMarshal(expectationCommand),
+			Command:   ProtoMarshal(tokenOperationCommand),
 			Signature: []byte("signature"),
 		}
 		err := pbac.Check(signedExpectationCommand, command)
@@ -209,7 +213,7 @@ var _ = Describe("AccessControl", func() {
 		resourceName, channelID, signedData := fakeACLProvider.CheckACLArgsForCall(0)
 		Expect(resourceName).To(Equal(aclResources.IssueTokens))
 		Expect(channelID).To(Equal("channel-id"))
-		Expect(signedData).To(ConsistOf(&common.SignedData{
+		Expect(signedData).To(ConsistOf(&protoutil.SignedData{
 			Data:      signedExpectationCommand.Command,
 			Identity:  []byte("creator"),
 			Signature: []byte("signature"),
@@ -218,13 +222,13 @@ var _ = Describe("AccessControl", func() {
 
 	Context("when Expectationrequest has nil Expectation", func() {
 		BeforeEach(func() {
-			importExpectationRequest := &token.ExpectationRequest{
+			issueOpRequest := &token.TokenOperationRequest{
 				Credential: []byte("credential"),
 			}
 			command = &token.Command{
 				Header: header,
-				Payload: &token.Command_ExpectationRequest{
-					ExpectationRequest: importExpectationRequest,
+				Payload: &token.Command_TokenOperationRequest{
+					TokenOperationRequest: issueOpRequest,
 				},
 			}
 		})
@@ -235,20 +239,20 @@ var _ = Describe("AccessControl", func() {
 				Signature: []byte("signature"),
 			}
 			err := pbac.Check(signedCommand, command)
-			Expect(err).To(MatchError("ExpectationRequest has nil Expectation"))
+			Expect(err).To(MatchError("TokenOperationRequest has no operations"))
 		})
 	})
 
 	Context("when Expectationrequest has nil PlainExpectation", func() {
 		BeforeEach(func() {
-			importExpectationRequest := &token.ExpectationRequest{
-				Credential:  []byte("credential"),
-				Expectation: &token.TokenExpectation{},
+			issueOpRequest := &token.TokenOperationRequest{
+				Credential: []byte("credential"),
+				Operations: []*token.TokenOperation{},
 			}
 			command = &token.Command{
 				Header: header,
-				Payload: &token.Command_ExpectationRequest{
-					ExpectationRequest: importExpectationRequest,
+				Payload: &token.Command_TokenOperationRequest{
+					TokenOperationRequest: issueOpRequest,
 				},
 			}
 		})
@@ -259,7 +263,7 @@ var _ = Describe("AccessControl", func() {
 				Signature: []byte("signature"),
 			}
 			err := pbac.Check(signedCommand, command)
-			Expect(err).To(MatchError("ExpectationRequest has nil PlainExpectation"))
+			Expect(err).To(MatchError("TokenOperationRequest has no operations"))
 		})
 	})
 })

@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/crypto"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,7 +32,7 @@ func (ms *mockSystemChannelFilterSupport) Sequence() uint64 {
 	return ms.SequenceVal
 }
 
-func (ms *mockSystemChannelFilterSupport) Signer() crypto.LocalSigner {
+func (ms *mockSystemChannelFilterSupport) Signer() identity.SignerSerializer {
 	return nil
 }
 
@@ -69,6 +69,16 @@ func TestProcessNormalMsg(t *testing.T) {
 }
 
 func TestConfigUpdateMsg(t *testing.T) {
+	t.Run("BadUpdate", func(t *testing.T) {
+		ms := &mockSystemChannelFilterSupport{
+			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
+			ProposeConfigUpdateErr: fmt.Errorf("An error"),
+		}
+		config, cs, err := NewStandardChannel(ms, NewRuleSet(nil)).ProcessConfigUpdateMsg(&cb.Envelope{})
+		assert.Nil(t, config)
+		assert.Equal(t, uint64(0), cs)
+		assert.EqualError(t, err, "error applying config update to existing channel 'foo': An error")
+	})
 	t.Run("BadMsg", func(t *testing.T) {
 		ms := &mockSystemChannelFilterSupport{
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
@@ -106,9 +116,9 @@ func TestProcessConfigMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		_, _, err := NewStandardChannel(ms, NewRuleSet([]Rule{AcceptRule})).ProcessConfigMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID,
 						Type:      int32(cb.HeaderType_ORDERER_TRANSACTION),
 					}),
@@ -124,9 +134,9 @@ func TestProcessConfigMsg(t *testing.T) {
 			ProposeConfigUpdateVal: &cb.ConfigEnvelope{},
 		}
 		config, cs, err := NewStandardChannel(ms, NewRuleSet([]Rule{AcceptRule})).ProcessConfigMsg(&cb.Envelope{
-			Payload: utils.MarshalOrPanic(&cb.Payload{
+			Payload: protoutil.MarshalOrPanic(&cb.Payload{
 				Header: &cb.Header{
-					ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+					ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 						ChannelId: testChannelID,
 						Type:      int32(cb.HeaderType_CONFIG),
 					}),
@@ -136,7 +146,7 @@ func TestProcessConfigMsg(t *testing.T) {
 		assert.NotNil(t, config)
 		assert.Equal(t, cs, ms.SequenceVal)
 		assert.Nil(t, err)
-		hdr, err := utils.ChannelHeader(config)
+		hdr, err := protoutil.ChannelHeader(config)
 		assert.Equal(
 			t,
 			int32(cb.HeaderType_CONFIG),

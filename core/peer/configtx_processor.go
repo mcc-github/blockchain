@@ -12,7 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 const (
@@ -38,8 +38,8 @@ func newConfigTxProcessor() customtx.Processor {
 
 
 func (tp *configtxProcessor) GenerateSimulationResults(txEnv *common.Envelope, simulator ledger.TxSimulator, initializingLedger bool) error {
-	payload := utils.UnmarshalPayloadOrPanic(txEnv.Payload)
-	channelHdr := utils.UnmarshalChannelHeaderOrPanic(payload.Header.ChannelHeader)
+	payload := protoutil.UnmarshalPayloadOrPanic(txEnv.Payload)
+	channelHdr := protoutil.UnmarshalChannelHeaderOrPanic(payload.Header.ChannelHeader)
 	txType := common.HeaderType(channelHdr.GetType())
 
 	switch txType {
@@ -54,19 +54,19 @@ func (tp *configtxProcessor) GenerateSimulationResults(txEnv *common.Envelope, s
 
 func processChannelConfigTx(txEnv *common.Envelope, simulator ledger.TxSimulator) error {
 	configEnvelope := &common.ConfigEnvelope{}
-	if _, err := utils.UnmarshalEnvelopeOfType(txEnv, common.HeaderType_CONFIG, configEnvelope); err != nil {
+	if _, err := protoutil.UnmarshalEnvelopeOfType(txEnv, common.HeaderType_CONFIG, configEnvelope); err != nil {
 		return err
 	}
 	channelConfig := configEnvelope.Config
+	if channelConfig == nil {
+		return fmt.Errorf("Channel config found nil")
+	}
 
 	if err := persistConf(simulator, channelConfigKey, channelConfig); err != nil {
 		return err
 	}
 
 	peerLogger.Debugf("channelConfig=%s", channelConfig)
-	if channelConfig == nil {
-		return fmt.Errorf("Channel config found nil")
-	}
 
 	return nil
 }

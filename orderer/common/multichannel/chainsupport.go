@@ -8,14 +8,14 @@ package multichannel
 
 import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	"github.com/mcc-github/blockchain/common/policies"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -26,20 +26,19 @@ type ChainSupport struct {
 	*BlockWriter
 	consensus.Chain
 	cutter blockcutter.Receiver
-	crypto.LocalSigner
+	identity.SignerSerializer
 }
 
 func newChainSupport(
 	registrar *Registrar,
 	ledgerResources *ledgerResources,
 	consenters map[string]consensus.Consenter,
-	signer crypto.LocalSigner,
+	signer identity.SignerSerializer,
 	blockcutterMetrics *blockcutter.Metrics,
 ) *ChainSupport {
 	
 	lastBlock := blockledger.GetBlock(ledgerResources, ledgerResources.Height()-1)
-
-	metadata, err := utils.GetMetadataFromBlock(lastBlock, cb.BlockMetadataIndex_ORDERER)
+	metadata, err := protoutil.GetMetadataFromBlock(lastBlock, cb.BlockMetadataIndex_ORDERER)
 	
 	
 	if err != nil {
@@ -48,8 +47,8 @@ func newChainSupport(
 
 	
 	cs := &ChainSupport{
-		ledgerResources: ledgerResources,
-		LocalSigner:     signer,
+		ledgerResources:  ledgerResources,
+		SignerSerializer: signer,
 		cutter: blockcutter.NewReceiverImpl(
 			ledgerResources.ConfigtxValidator().ChainID(),
 			ledgerResources,
@@ -94,7 +93,7 @@ func (cs *ChainSupport) Reader() blockledger.Reader {
 }
 
 
-func (cs *ChainSupport) Signer() crypto.LocalSigner {
+func (cs *ChainSupport) Signer() identity.SignerSerializer {
 	return cs
 }
 
@@ -148,11 +147,17 @@ func (cs *ChainSupport) Sequence() uint64 {
 
 
 
+func (cs *ChainSupport) Append(block *cb.Block) error {
+	return cs.ledgerResources.ReadWriter.Append(block)
+}
 
 
 
 
-func (cs *ChainSupport) VerifyBlockSignature(sd []*cb.SignedData, envelope *cb.ConfigEnvelope) error {
+
+
+
+func (cs *ChainSupport) VerifyBlockSignature(sd []*protoutil.SignedData, envelope *cb.ConfigEnvelope) error {
 	policyMgr := cs.PolicyManager()
 	
 	if envelope != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
+	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/stretchr/testify/assert"
 )
@@ -21,7 +22,6 @@ func TestStateListener(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
 	provider, _ := NewProvider()
-	defer provider.Close()
 
 	
 	channelid := "testLedger"
@@ -31,12 +31,11 @@ func TestStateListener(t *testing.T) {
 		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
 		StateListeners:                []ledger.StateListener{mockListener},
 		MetricsProvider:               &disabled.Provider{},
+		Config:                        &ledger.Config{},
 	})
 
 	bg, gb := testutil.NewBlockGenerator(t, channelid, false)
 	lgr, err := provider.Create(gb)
-	defer lgr.Close()
-
 	
 	sim1, err := lgr.NewTxSimulator("test_tx_1")
 	assert.NoError(t, err)
@@ -90,12 +89,73 @@ func TestStateListener(t *testing.T) {
 	assert.Equal(t, []*kvrwset.KVWrite{
 		{Key: "key4", Value: []byte("value4")},
 	}, mockListener.kvWrites)
+
+	provider.Close()
+	provider, _ = NewProvider()
+	provider.Initialize(&ledger.Initializer{
+		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+		StateListeners:                []ledger.StateListener{mockListener},
+		MetricsProvider:               &disabled.Provider{},
+		Config:                        &ledger.Config{},
+	})
+	defer provider.Close()
+	lgr, err = provider.Open(channelid)
+	assert.NoError(t, err)
+	defer lgr.Close()
+	assert.NoError(t, err)
+	assert.Equal(t,
+		[]*queryresult.KV{
+			{
+				Namespace: namespace,
+				Key:       "key1",
+				Value:     []byte("value1"),
+			},
+			{
+				Namespace: namespace,
+				Key:       "key2",
+				Value:     []byte("value2"),
+			},
+			{
+				Namespace: namespace,
+				Key:       "key4",
+				Value:     []byte("value4"),
+			},
+		},
+		mockListener.queryResultsInInitializeFunc,
+	)
 }
 
 type mockStateListener struct {
-	channelName string
-	namespace   string
-	kvWrites    []*kvrwset.KVWrite
+	channelName                  string
+	namespace                    string
+	kvWrites                     []*kvrwset.KVWrite
+	queryResultsInInitializeFunc []*queryresult.KV
+}
+
+func (l *mockStateListener) Initialize(ledgerID string, qe ledger.SimpleQueryExecutor) error {
+	_, err := qe.GetPrivateDataHash(l.namespace, "random-coll", "random-key")
+	if err != nil {
+		return err
+	}
+	l.channelName = ledgerID
+	itr, err := qe.GetStateRangeScanIterator(l.namespace, "", "")
+	if err != nil {
+		return err
+	}
+	for {
+		res, err := itr.Next()
+		if err != nil {
+			return err
+		}
+		if res == nil {
+			break
+		}
+		kv := res.(*queryresult.KV)
+		l.queryResultsInInitializeFunc = append(l.queryResultsInInitializeFunc,
+			kv,
+		)
+	}
+	return nil
 }
 
 func (l *mockStateListener) InterestedInNamespaces() []string {
@@ -105,7 +165,7 @@ func (l *mockStateListener) InterestedInNamespaces() []string {
 func (l *mockStateListener) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
 	channelName, stateUpdates := trigger.LedgerID, trigger.StateUpdates
 	l.channelName = channelName
-	l.kvWrites = stateUpdates[l.namespace].([]*kvrwset.KVWrite)
+	l.kvWrites = stateUpdates[l.namespace].PublicUpdates
 	return nil
 }
 
@@ -116,4 +176,5 @@ func (l *mockStateListener) StateCommitDone(channelID string) {
 func (l *mockStateListener) reset() {
 	l.channelName = ""
 	l.kvWrites = nil
+	l.queryResultsInInitializeFunc = nil
 }

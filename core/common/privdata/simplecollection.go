@@ -14,6 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 	m "github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -46,6 +47,8 @@ func (sc *SimpleCollection) RequiredPeerCount() int {
 	return int(sc.conf.RequiredPeerCount)
 }
 
+
+
 func (sc *SimpleCollection) MaximumPeerCount() int {
 	return int(sc.conf.MaximumPeerCount)
 }
@@ -53,16 +56,24 @@ func (sc *SimpleCollection) MaximumPeerCount() int {
 
 
 func (sc *SimpleCollection) AccessFilter() Filter {
-	return func(sd common.SignedData) bool {
-		if err := sc.accessPolicy.Evaluate([]*common.SignedData{&sd}); err != nil {
+	return func(sd protoutil.SignedData) bool {
+		if err := sc.accessPolicy.Evaluate([]*protoutil.SignedData{&sd}); err != nil {
 			return false
 		}
 		return true
 	}
 }
 
+
+
 func (sc *SimpleCollection) IsMemberOnlyRead() bool {
 	return sc.conf.MemberOnlyRead
+}
+
+
+
+func (sc *SimpleCollection) IsMemberOnlyWrite() bool {
+	return sc.conf.MemberOnlyWrite
 }
 
 

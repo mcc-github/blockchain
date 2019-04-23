@@ -8,7 +8,7 @@ package policies
 
 import (
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
@@ -39,7 +39,7 @@ func (scv *StandardConfigPolicy) Value() *cb.Policy {
 func makeImplicitMetaPolicy(subPolicyName string, rule cb.ImplicitMetaPolicy_Rule) *cb.Policy {
 	return &cb.Policy{
 		Type: int32(cb.Policy_IMPLICIT_META),
-		Value: utils.MarshalOrPanic(&cb.ImplicitMetaPolicy{
+		Value: protoutil.MarshalOrPanic(&cb.ImplicitMetaPolicy{
 			Rule:      rule,
 			SubPolicy: subPolicyName,
 		}),
@@ -76,7 +76,7 @@ func SignaturePolicy(policyName string, sigPolicy *cb.SignaturePolicyEnvelope) *
 		key: policyName,
 		value: &cb.Policy{
 			Type:  int32(cb.Policy_SIGNATURE),
-			Value: utils.MarshalOrPanic(sigPolicy),
+			Value: protoutil.MarshalOrPanic(sigPolicy),
 		},
 	}
 }

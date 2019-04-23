@@ -12,11 +12,12 @@ import (
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMembershipInfoProvider(t *testing.T) {
-	peerSelfSignedData := common.SignedData{
+	peerSelfSignedData := protoutil.SignedData{
 		Identity:  []byte("peer0"),
 		Signature: []byte{1, 2, 3},
 		Data:      []byte{4, 5, 6},

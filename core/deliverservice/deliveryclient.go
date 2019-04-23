@@ -19,6 +19,7 @@ import (
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/util"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
@@ -90,6 +91,52 @@ type Config struct {
 	Gossip blocksprovider.GossipServiceAdapter
 	
 	Endpoints []string
+	
+	Signer identity.SignerSerializer
+}
+
+
+type ConnectionCriteria struct {
+	
+	OrdererEndpoints []string
+	
+	Organizations []string
+	
+	OrdererEndpointsByOrg map[string][]string
+}
+
+func (cc ConnectionCriteria) toEndpointCriteria() []comm.EndpointCriteria {
+	var res []comm.EndpointCriteria
+
+	
+	for _, org := range cc.Organizations {
+		endpoints := cc.OrdererEndpointsByOrg[org]
+		if len(endpoints) == 0 {
+			
+			continue
+		}
+
+		for _, endpoint := range endpoints {
+			res = append(res, comm.EndpointCriteria{
+				Organizations: []string{org},
+				Endpoint:      endpoint,
+			})
+		}
+	}
+
+	
+	if len(res) > 0 {
+		return res
+	}
+
+	for _, endpoint := range cc.OrdererEndpoints {
+		res = append(res, comm.EndpointCriteria{
+			Organizations: cc.Organizations,
+			Endpoint:      endpoint,
+		})
+	}
+
+	return res
 }
 
 
@@ -214,6 +261,7 @@ func (d *deliverServiceImpl) newClient(chainID string, ledgerInfoProvider blocks
 	requester := &blocksRequester{
 		tls:     viper.GetBool("peer.tls.enabled"),
 		chainID: chainID,
+		signer:  d.conf.Signer,
 	}
 	broadcastSetup := func(bd blocksprovider.BlocksDeliverer) error {
 		return requester.RequestBlocks(ledgerInfoProvider)

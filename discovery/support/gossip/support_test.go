@@ -13,6 +13,7 @@ import (
 	"github.com/mcc-github/blockchain/discovery/support/mocks"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/assert"
 )
@@ -54,7 +55,7 @@ func TestPeersOfChannel(t *testing.T) {
 			},
 		},
 	}
-	sMsg, _ := stateInfo.NoopSign()
+	sMsg, _ := protoext.NoopSign(stateInfo)
 	g := &mocks.Gossip{}
 	g.SelfChannelInfoReturnsOnCall(0, nil)
 	g.SelfChannelInfoReturnsOnCall(1, sMsg)

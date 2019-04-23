@@ -12,8 +12,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -69,42 +67,6 @@ func TestMockStateRangeQueryIterator_openEnded(t *testing.T) {
 	}
 
 	if count != rqi.Stub.Keys.Len() {
-		t.FailNow()
-	}
-}
-
-
-
-func TestSetupChaincodeLogging_blankLevel(t *testing.T) {
-	
-	testLogLevelString := ""
-	testLogFormat := "%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}"
-
-	viper.Set("chaincode.logging.level", testLogLevelString)
-	viper.Set("chaincode.logging.format", testLogFormat)
-
-	SetupChaincodeLogging()
-
-	if !IsEnabledForLogLevel(flogging.DefaultLevel()) {
-		t.FailNow()
-	}
-}
-
-
-
-func TestSetupChaincodeLogging(t *testing.T) {
-	
-	testLogLevel := "debug"
-	testShimLogLevel := "warning"
-	testLogFormat := "%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}"
-
-	viper.Set("chaincode.logging.level", testLogLevel)
-	viper.Set("chaincode.logging.format", testLogFormat)
-	viper.Set("chaincode.logging.shim", testShimLogLevel)
-
-	SetupChaincodeLogging()
-
-	if !IsEnabledForLogLevel(testShimLogLevel) {
 		t.FailNow()
 	}
 }
@@ -305,7 +267,7 @@ func TestMockMock(t *testing.T) {
 	stub.GetStateByRange("start", "end")
 	stub.GetQueryResult("q")
 	stub2 := NewMockStub("othercc", &shimTestCC{})
-	stub.MockPeerChaincode("othercc/mychan", stub2)
+	stub.MockPeerChaincode("othercc", stub2, "mychan")
 	stub.InvokeChaincode("othercc", nil, "mychan")
 	stub.GetCreator()
 	stub.GetTransient()

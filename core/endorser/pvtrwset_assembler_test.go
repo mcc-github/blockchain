@@ -35,8 +35,8 @@ func TestAssemblePvtRWSet(t *testing.T) {
 	mockDeployedCCInfoProvider := &mock.DeployedChaincodeInfoProvider{}
 	mockDeployedCCInfoProvider.ChaincodeInfoReturns(
 		&ledger.DeployedChaincodeInfo{
-			CollectionConfigPkg: collectionsConfigCC1,
-			Name:                "myCC",
+			ExplicitCollectionConfigPkg: collectionsConfigCC1,
+			Name:                        "myCC",
 		},
 		nil,
 	)

@@ -16,6 +16,8 @@ import (
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/gossip/gossip/channel"
+	"github.com/mcc-github/blockchain/gossip/metrics"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
 
@@ -42,8 +44,8 @@ func (cs *channelState) isStopping() bool {
 	return atomic.LoadInt32(&cs.stopping) == int32(1)
 }
 
-func (cs *channelState) lookupChannelForMsg(msg proto.ReceivedMessage) channel.GossipChannel {
-	if msg.GetGossipMessage().IsStateInfoPullRequestMsg() {
+func (cs *channelState) lookupChannelForMsg(msg protoext.ReceivedMessage) channel.GossipChannel {
+	if protoext.IsStateInfoPullRequestMsg(msg.GetGossipMessage().GossipMessage) {
 		sipr := msg.GetGossipMessage().GetStateInfoPullReq()
 		mac := sipr.Channel_MAC
 		pkiID := msg.GetConnectionInfo().ID
@@ -53,7 +55,7 @@ func (cs *channelState) lookupChannelForMsg(msg proto.ReceivedMessage) channel.G
 }
 
 func (cs *channelState) lookupChannelForGossipMsg(msg *proto.GossipMessage) channel.GossipChannel {
-	if !msg.IsStateInfoMsg() {
+	if !protoext.IsStateInfoMsg(msg) {
 		
 		
 		
@@ -93,7 +95,8 @@ func (cs *channelState) getGossipChannelByChainID(chainID common.ChainID) channe
 	return cs.channels[string(chainID)]
 }
 
-func (cs *channelState) joinChannel(joinMsg api.JoinChannelMessage, chainID common.ChainID) {
+func (cs *channelState) joinChannel(joinMsg api.JoinChannelMessage, chainID common.ChainID,
+	metrics *metrics.MembershipMetrics) {
 	if cs.isStopping() {
 		return
 	}
@@ -102,7 +105,7 @@ func (cs *channelState) joinChannel(joinMsg api.JoinChannelMessage, chainID comm
 	if gc, exists := cs.channels[string(chainID)]; !exists {
 		pkiID := cs.g.comm.GetPKIid()
 		ga := &gossipAdapterImpl{gossipServiceImpl: cs.g, Discovery: cs.g.disc}
-		gc := channel.NewGossipChannel(pkiID, cs.g.selfOrg, cs.g.mcs, chainID, ga, joinMsg)
+		gc := channel.NewGossipChannel(pkiID, cs.g.selfOrg, cs.g.mcs, chainID, ga, joinMsg, metrics, nil)
 		cs.channels[string(chainID)] = gc
 	} else {
 		gc.ConfigureChannel(joinMsg)
@@ -125,28 +128,32 @@ func (ga *gossipAdapterImpl) GetConf() channel.Config {
 		BlockExpirationInterval:     ga.conf.PullInterval * 100,
 		StateInfoCacheSweepInterval: ga.conf.PullInterval * 5,
 		TimeForMembershipTracker:    ga.conf.TimeForMembershipTracker,
+		DigestWaitTime:              ga.conf.DigestWaitTime,
+		RequestWaitTime:             ga.conf.RequestWaitTime,
+		ResponseWaitTime:            ga.conf.ResponseWaitTime,
+		MsgExpirationTimeout:        ga.conf.MsgExpirationTimeout,
 	}
 }
 
-func (ga *gossipAdapterImpl) Sign(msg *proto.GossipMessage) (*proto.SignedGossipMessage, error) {
+func (ga *gossipAdapterImpl) Sign(msg *proto.GossipMessage) (*protoext.SignedGossipMessage, error) {
 	signer := func(msg []byte) ([]byte, error) {
 		return ga.mcs.Sign(msg)
 	}
-	sMsg := &proto.SignedGossipMessage{
+	sMsg := &protoext.SignedGossipMessage{
 		GossipMessage: msg,
 	}
 	e, err := sMsg.Sign(signer)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.SignedGossipMessage{
+	return &protoext.SignedGossipMessage{
 		Envelope:      e,
 		GossipMessage: msg,
 	}, nil
 }
 
 
-func (ga *gossipAdapterImpl) Gossip(msg *proto.SignedGossipMessage) {
+func (ga *gossipAdapterImpl) Gossip(msg *protoext.SignedGossipMessage) {
 	ga.gossipServiceImpl.emitter.Add(&emittedGossipMessage{
 		SignedGossipMessage: msg,
 		filter: func(_ common.PKIidType) bool {
@@ -156,20 +163,20 @@ func (ga *gossipAdapterImpl) Gossip(msg *proto.SignedGossipMessage) {
 }
 
 
-func (ga *gossipAdapterImpl) Forward(msg proto.ReceivedMessage) {
+func (ga *gossipAdapterImpl) Forward(msg protoext.ReceivedMessage) {
 	ga.gossipServiceImpl.emitter.Add(&emittedGossipMessage{
 		SignedGossipMessage: msg.GetGossipMessage(),
 		filter:              msg.GetConnectionInfo().ID.IsNotSameFilter,
 	})
 }
 
-func (ga *gossipAdapterImpl) Send(msg *proto.SignedGossipMessage, peers ...*comm.RemotePeer) {
+func (ga *gossipAdapterImpl) Send(msg *protoext.SignedGossipMessage, peers ...*comm.RemotePeer) {
 	ga.gossipServiceImpl.comm.Send(msg, peers...)
 }
 
 
 
-func (ga *gossipAdapterImpl) ValidateStateInfoMessage(msg *proto.SignedGossipMessage) error {
+func (ga *gossipAdapterImpl) ValidateStateInfoMessage(msg *protoext.SignedGossipMessage) error {
 	return ga.gossipServiceImpl.validateStateInfoMsg(msg)
 }
 

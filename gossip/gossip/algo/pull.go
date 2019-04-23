@@ -12,31 +12,15 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/gossip/util"
-	"github.com/spf13/viper"
 )
 
 
 
 const (
-	defDigestWaitTime   = time.Duration(1000) * time.Millisecond
-	defRequestWaitTime  = time.Duration(1500) * time.Millisecond
-	defResponseWaitTime = time.Duration(2000) * time.Millisecond
+	DefDigestWaitTime   = 1000 * time.Millisecond
+	DefRequestWaitTime  = 1500 * time.Millisecond
+	DefResponseWaitTime = 2000 * time.Millisecond
 )
-
-
-func SetDigestWaitTime(time time.Duration) {
-	viper.Set("peer.gossip.digestWaitTime", time)
-}
-
-
-func SetRequestWaitTime(time time.Duration) {
-	viper.Set("peer.gossip.requestWaitTime", time)
-}
-
-
-func SetResponseWaitTime(time time.Duration) {
-	viper.Set("peer.gossip.responseWaitTime", time)
-}
 
 
 
@@ -90,8 +74,16 @@ type PullEngine struct {
 }
 
 
+type PullEngineConfig struct {
+	DigestWaitTime   time.Duration
+	RequestWaitTime  time.Duration
+	ResponseWaitTime time.Duration
+}
 
-func NewPullEngineWithFilter(participant PullAdapter, sleepTime time.Duration, df DigestFilter) *PullEngine {
+
+
+func NewPullEngineWithFilter(participant PullAdapter, sleepTime time.Duration, df DigestFilter,
+	config PullEngineConfig) *PullEngine {
 	engine := &PullEngine{
 		PullAdapter:        participant,
 		stopFlag:           int32(0),
@@ -104,9 +96,9 @@ func NewPullEngineWithFilter(participant PullAdapter, sleepTime time.Duration, d
 		incomingNONCES:     util.NewSet(),
 		outgoingNONCES:     util.NewSet(),
 		digFilter:          df,
-		digestWaitTime:     util.GetDurationOrDefault("peer.gossip.digestWaitTime", defDigestWaitTime),
-		requestWaitTime:    util.GetDurationOrDefault("peer.gossip.requestWaitTime", defRequestWaitTime),
-		responseWaitTime:   util.GetDurationOrDefault("peer.gossip.responseWaitTime", defResponseWaitTime),
+		digestWaitTime:     config.DigestWaitTime,
+		requestWaitTime:    config.RequestWaitTime,
+		responseWaitTime:   config.ResponseWaitTime,
 	}
 
 	go func() {
@@ -124,13 +116,13 @@ func NewPullEngineWithFilter(participant PullAdapter, sleepTime time.Duration, d
 
 
 
-func NewPullEngine(participant PullAdapter, sleepTime time.Duration) *PullEngine {
+func NewPullEngine(participant PullAdapter, sleepTime time.Duration, config PullEngineConfig) *PullEngine {
 	acceptAllFilter := func(_ interface{}) func(string) bool {
 		return func(_ string) bool {
 			return true
 		}
 	}
-	return NewPullEngineWithFilter(participant, sleepTime, acceptAllFilter)
+	return NewPullEngineWithFilter(participant, sleepTime, acceptAllFilter, config)
 }
 
 func (engine *PullEngine) toDie() bool {

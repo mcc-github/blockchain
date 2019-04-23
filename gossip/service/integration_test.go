@@ -119,21 +119,24 @@ func TestLeaderYield(t *testing.T) {
 	viper.Set("peer.gossip.useLeaderElection", true)
 	viper.Set("peer.gossip.orgLeader", false)
 	n := 2
-	portPrefix := 30000
-	gossips := startPeers(t, n, portPrefix, 0, 1)
+	gossips := startPeers(t, n, 0, 1)
 	defer stopPeers(gossips)
 	channelName := "channelA"
 	peerIndexes := []int{0, 1}
 	
-	addPeersToChannel(t, n, portPrefix, channelName, gossips, peerIndexes)
+	addPeersToChannel(t, n, channelName, gossips, peerIndexes)
 	
 	waitForFullMembership(t, gossips, n, time.Second*30, time.Millisecond*100)
+
+	endpoint, socket := getAvailablePort(t)
+	socket.Close()
+
 	
 	newGossipService := func(i int) *gossipServiceImpl {
-		gs := gossips[i].(*gossipServiceImpl)
+		gs := gossips[i].(*gossipGRPC).gossipServiceImpl
 		gs.deliveryFactory = &embeddingDeliveryServiceFactory{&deliveryFactoryImpl{}}
 		gossipServiceInstance = gs
-		gs.InitializeChannel(channelName, []string{"localhost:7050"}, Support{
+		gs.InitializeChannel(channelName, []string{endpoint}, Support{
 			Committer: &mockLedgerInfo{1},
 			Store:     &transientStoreMock{},
 		})
@@ -176,7 +179,7 @@ func TestLeaderYield(t *testing.T) {
 	for getLeader() != 1 && time.Now().Before(timeLimit) {
 		time.Sleep(100 * time.Millisecond)
 	}
-	if time.Now().After(timeLimit) {
+	if time.Now().After(timeLimit) && getLeader() != 1 {
 		util.PrintStackTrace()
 		t.Fatalf("p1 hasn't taken over leadership within %v: %d", takeOverMaxTimeout, getLeader())
 	}

@@ -9,8 +9,11 @@ package cluster
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -18,6 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )
@@ -25,7 +29,13 @@ import (
 const (
 	
 	
-	DefaultRPCTimeout = time.Second * 5
+	MinimumExpirationWarningInterval = time.Minute * 5
+)
+
+var (
+	errOverflow = errors.New("send queue overflown")
+	errAborted  = errors.New("aborted")
+	errTimeout  = errors.New("rpc timeout expired")
 )
 
 
@@ -38,8 +48,8 @@ type ChannelExtractor interface {
 
 
 type Handler interface {
-	OnStep(channel string, sender uint64, req *orderer.StepRequest) (*orderer.StepResponse, error)
-	OnSubmit(channel string, sender uint64, req *orderer.SubmitRequest) (*orderer.SubmitResponse, error)
+	OnConsensus(channel string, sender uint64, req *orderer.ConsensusRequest) error
+	OnSubmit(channel string, sender uint64, req *orderer.SubmitRequest) error
 }
 
 
@@ -56,7 +66,7 @@ type RemoteNode struct {
 
 
 func (rm RemoteNode) String() string {
-	return fmt.Sprintf("ID: %d\nEndpoint: %s\nServerTLSCert:%s ClientTLSCert:%s",
+	return fmt.Sprintf("ID: %d,\nEndpoint: %s,\nServerTLSCert:%s, ClientTLSCert:%s",
 		rm.ID, rm.Endpoint, DERtoPEM(rm.ServerTLSCert), DERtoPEM(rm.ClientTLSCert))
 }
 
@@ -82,14 +92,18 @@ type MembersByChannel map[string]MemberMapping
 
 
 type Comm struct {
-	shutdown     bool
-	Lock         sync.RWMutex
-	Logger       *flogging.FabricLogger
-	ChanExt      ChannelExtractor
-	H            Handler
-	Connections  *ConnectionStore
-	Chan2Members MembersByChannel
-	RPCTimeout   time.Duration
+	MinimumExpirationWarningInterval time.Duration
+	CertExpWarningThreshold          time.Duration
+	shutdownSignal                   chan struct{}
+	shutdown                         bool
+	SendBufferSize                   int
+	Lock                             sync.RWMutex
+	Logger                           *flogging.FabricLogger
+	ChanExt                          ChannelExtractor
+	H                                Handler
+	Connections                      *ConnectionStore
+	Chan2Members                     MembersByChannel
+	Metrics                          *Metrics
 }
 
 type requestContext struct {
@@ -99,23 +113,22 @@ type requestContext struct {
 
 
 
-func (c *Comm) DispatchSubmit(ctx context.Context, request *orderer.SubmitRequest) (*orderer.SubmitResponse, error) {
-	c.Logger.Debug(request.Channel)
+func (c *Comm) DispatchSubmit(ctx context.Context, request *orderer.SubmitRequest) error {
 	reqCtx, err := c.requestContext(ctx, request)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return err
 	}
 	return c.H.OnSubmit(reqCtx.channel, reqCtx.sender, request)
 }
 
 
 
-func (c *Comm) DispatchStep(ctx context.Context, request *orderer.StepRequest) (*orderer.StepResponse, error) {
+func (c *Comm) DispatchConsensus(ctx context.Context, request *orderer.ConsensusRequest) error {
 	reqCtx, err := c.requestContext(ctx, request)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return err
 	}
-	return c.H.OnStep(reqCtx.channel, reqCtx.sender, request)
+	return c.H.OnConsensus(reqCtx.channel, reqCtx.sender, request)
 }
 
 
@@ -125,6 +138,7 @@ func (c *Comm) requestContext(ctx context.Context, msg proto.Message) (*requestC
 	if channel == "" {
 		return nil, errors.Errorf("badly formatted message, cannot extract channel")
 	}
+
 	c.Lock.RLock()
 	mapping, exists := c.Chan2Members[channel]
 	c.Lock.RUnlock()
@@ -133,10 +147,11 @@ func (c *Comm) requestContext(ctx context.Context, msg proto.Message) (*requestC
 		return nil, errors.Errorf("channel %s doesn't exist", channel)
 	}
 
-	cert := comm.ExtractCertificateFromContext(ctx)
+	cert := comm.ExtractRawCertificateFromContext(ctx)
 	if len(cert) == 0 {
 		return nil, errors.Errorf("no TLS certificate sent")
 	}
+
 	stub := mapping.LookupByClientCert(cert)
 	if stub == nil {
 		return nil, errors.Errorf("certificate extracted from TLS connection isn't authorized")
@@ -170,7 +185,7 @@ func (c *Comm) Remote(channel string, id uint64) (*RemoteContext, error) {
 		return stub.RemoteContext, nil
 	}
 
-	err := stub.Activate(c.createRemoteContext(stub))
+	err := stub.Activate(c.createRemoteContext(stub, channel))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -185,6 +200,8 @@ func (c *Comm) Configure(channel string, newNodes []RemoteNode) {
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
 
+	c.createShutdownSignalIfNeeded()
+
 	if c.shutdown {
 		return
 	}
@@ -196,10 +213,21 @@ func (c *Comm) Configure(channel string, newNodes []RemoteNode) {
 	c.cleanUnusedConnections(beforeConfigChange)
 }
 
+func (c *Comm) createShutdownSignalIfNeeded() {
+	if c.shutdownSignal == nil {
+		c.shutdownSignal = make(chan struct{})
+	}
+}
+
 
 func (c *Comm) Shutdown() {
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
+
+	c.createShutdownSignalIfNeeded()
+	if !c.shutdown {
+		close(c.shutdownSignal)
+	}
 
 	c.shutdown = true
 	for _, members := range c.Chan2Members {
@@ -239,14 +267,14 @@ func (c *Comm) applyMembershipConfig(channel string, newNodes []RemoteNode) {
 
 	for _, node := range newNodes {
 		newNodeIDs[node.ID] = struct{}{}
-		c.updateStubInMapping(mapping, node)
+		c.updateStubInMapping(channel, mapping, node)
 	}
 
 	
 	
 	for id, stub := range mapping {
 		if _, exists := newNodeIDs[id]; exists {
-			c.Logger.Info(id, "exists in both old and new membership, skipping its deactivation")
+			c.Logger.Info(id, "exists in both old and new membership for channel", channel, ", skipping its deactivation")
 			continue
 		}
 		c.Logger.Info("Deactivated node", id, "who's endpoint is", stub.Endpoint, "as it's removed from membership")
@@ -256,10 +284,10 @@ func (c *Comm) applyMembershipConfig(channel string, newNodes []RemoteNode) {
 }
 
 
-func (c *Comm) updateStubInMapping(mapping MemberMapping, node RemoteNode) {
+func (c *Comm) updateStubInMapping(channel string, mapping MemberMapping, node RemoteNode) {
 	stub := mapping.ByID(node.ID)
 	if stub == nil {
-		c.Logger.Info("Allocating a new stub for node", node.ID, "with endpoint of", node.Endpoint)
+		c.Logger.Info("Allocating a new stub for node", node.ID, "with endpoint of", node.Endpoint, "for channel", channel)
 		stub = &Stub{}
 	}
 
@@ -267,7 +295,8 @@ func (c *Comm) updateStubInMapping(mapping MemberMapping, node RemoteNode) {
 	
 	
 	if !bytes.Equal(stub.ServerTLSCert, node.ServerTLSCert) {
-		c.Logger.Info("Deactivating node", node.ID, "with endpoint of", node.Endpoint, "due to TLS certificate change")
+		c.Logger.Info("Deactivating node", node.ID, "in channel", channel,
+			"with endpoint of", node.Endpoint, "due to TLS certificate change")
 		stub.Deactivate()
 	}
 
@@ -283,24 +312,26 @@ func (c *Comm) updateStubInMapping(mapping MemberMapping, node RemoteNode) {
 	}
 
 	
-	stub.Activate(c.createRemoteContext(stub))
+	stub.Activate(c.createRemoteContext(stub, channel))
 }
 
 
 
 
-func (c *Comm) createRemoteContext(stub *Stub) func() (*RemoteContext, error) {
+func (c *Comm) createRemoteContext(stub *Stub, channel string) func() (*RemoteContext, error) {
 	return func() (*RemoteContext, error) {
-		timeout := c.RPCTimeout
-		if timeout == time.Duration(0) {
-			timeout = DefaultRPCTimeout
+		cert, err := x509.ParseCertificate(stub.ServerTLSCert)
+		if err != nil {
+			pemString := string(pem.EncodeToMemory(&pem.Block{Bytes: stub.ServerTLSCert}))
+			c.Logger.Errorf("Invalid DER for channel %s, endpoint %s, ID %d: %v", channel, stub.Endpoint, stub.ID, pemString)
+			return nil, errors.Wrap(err, "invalid certificate DER")
 		}
 
-		c.Logger.Debug("Connecting to", stub.RemoteNode, "with gRPC timeout of", timeout)
+		c.Logger.Debug("Connecting to", stub.RemoteNode, "for channel", channel)
 
 		conn, err := c.Connections.Connection(stub.Endpoint, stub.ServerTLSCert)
 		if err != nil {
-			c.Logger.Warningf("Unable to obtain connection to %d(%s): %v", stub.ID, stub.Endpoint, err)
+			c.Logger.Warningf("Unable to obtain connection to %d(%s) (channel %s): %v", stub.ID, stub.Endpoint, channel, err)
 			return nil, err
 		}
 
@@ -314,15 +345,24 @@ func (c *Comm) createRemoteContext(stub *Stub) func() (*RemoteContext, error) {
 
 		clusterClient := orderer.NewClusterClient(conn)
 
+		workerCountReporter := workerCountReporter{
+			channel: channel,
+		}
+
 		rc := &RemoteContext{
-			ProbeConn:  probeConnection,
-			conn:       conn,
-			RPCTimeout: timeout,
-			Client:     clusterClient,
-			onAbort: func() {
-				c.Logger.Info("Aborted connection to", stub.ID, stub.Endpoint)
-				stub.RemoteContext = nil
-			},
+			expiresAt:                        cert.NotAfter,
+			minimumExpirationWarningInterval: c.MinimumExpirationWarningInterval,
+			certExpWarningThreshold:          c.CertExpWarningThreshold,
+			workerCountReporter:              workerCountReporter,
+			Channel:                          channel,
+			Metrics:                          c.Metrics,
+			SendBuffSize:                     c.SendBufferSize,
+			shutdownSignal:                   c.shutdownSignal,
+			endpoint:                         stub.Endpoint,
+			Logger:                           c.Logger,
+			ProbeConn:                        probeConnection,
+			conn:                             conn,
+			Client:                           clusterClient,
 		}
 		return rc, nil
 	}
@@ -398,81 +438,335 @@ func (stub *Stub) Activate(createRemoteContext func() (*RemoteContext, error)) e
 
 
 type RemoteContext struct {
-	RPCTimeout         time.Duration
-	onAbort            func()
-	Client             orderer.ClusterClient
-	stepLock           sync.Mutex
-	cancelStep         func()
-	submitLock         sync.Mutex
-	cancelSubmitStream func()
-	submitStream       orderer.Cluster_SubmitClient
-	ProbeConn          func(conn *grpc.ClientConn) error
-	conn               *grpc.ClientConn
+	expiresAt                        time.Time
+	minimumExpirationWarningInterval time.Duration
+	certExpWarningThreshold          time.Duration
+	Metrics                          *Metrics
+	Channel                          string
+	SendBuffSize                     int
+	shutdownSignal                   chan struct{}
+	Logger                           *flogging.FabricLogger
+	endpoint                         string
+	Client                           orderer.ClusterClient
+	ProbeConn                        func(conn *grpc.ClientConn) error
+	conn                             *grpc.ClientConn
+	nextStreamID                     uint64
+	streamsByID                      streamsMapperReporter
+	workerCountReporter              workerCountReporter
 }
 
 
-func (rc *RemoteContext) SubmitStream() (orderer.Cluster_SubmitClient, error) {
-	rc.submitLock.Lock()
-	defer rc.submitLock.Unlock()
+type Stream struct {
+	abortChan    <-chan struct{}
+	sendBuff     chan *orderer.StepRequest
+	commShutdown chan struct{}
+	abortReason  *atomic.Value
+	metrics      *Metrics
+	ID           uint64
+	Channel      string
+	NodeName     string
+	Endpoint     string
+	Logger       *flogging.FabricLogger
+	Timeout      time.Duration
+	orderer.Cluster_StepClient
+	Cancel   func(error)
+	canceled *uint32
+	expCheck *certificateExpirationCheck
+}
+
+
+type StreamOperation func() (*orderer.StepResponse, error)
+
+
+func (stream *Stream) Canceled() bool {
+	return atomic.LoadUint32(stream.canceled) == uint32(1)
+}
+
+
+func (stream *Stream) Send(request *orderer.StepRequest) error {
+	if stream.Canceled() {
+		return errors.New(stream.abortReason.Load().(string))
+	}
+	var allowDrop bool
 	
-	rc.closeSubmitStream()
+	
+	if request.GetConsensusRequest() != nil {
+		allowDrop = true
+	}
+
+	return stream.sendOrDrop(request, allowDrop)
+}
+
+
+
+func (stream *Stream) sendOrDrop(request *orderer.StepRequest, allowDrop bool) error {
+	msgType := "transaction"
+	if allowDrop {
+		msgType = "consensus"
+	}
+
+	stream.metrics.reportQueueOccupancy(stream.Endpoint, msgType, stream.Channel, len(stream.sendBuff), cap(stream.sendBuff))
+
+	if allowDrop && len(stream.sendBuff) == cap(stream.sendBuff) {
+		stream.Cancel(errOverflow)
+		stream.metrics.reportMessagesDropped(stream.Endpoint, stream.Channel)
+		return errOverflow
+	}
+
+	select {
+	case <-stream.abortChan:
+		return errors.Errorf("stream %d aborted", stream.ID)
+	case stream.sendBuff <- request:
+		return nil
+	case <-stream.commShutdown:
+		return nil
+	}
+}
+
+
+func (stream *Stream) sendMessage(request *orderer.StepRequest) {
+	start := time.Now()
+	var err error
+	defer func() {
+		if !stream.Logger.IsEnabledFor(zap.DebugLevel) {
+			return
+		}
+		var result string
+		if err != nil {
+			result = fmt.Sprintf("but failed due to %s", err.Error())
+		}
+		stream.Logger.Debugf("Send of %s to %s(%s) took %v %s", requestAsString(request),
+			stream.NodeName, stream.Endpoint, time.Since(start), result)
+	}()
+
+	f := func() (*orderer.StepResponse, error) {
+		startSend := time.Now()
+		stream.expCheck.checkExpiration(startSend, stream.Channel)
+		err := stream.Cluster_StepClient.Send(request)
+		stream.metrics.reportMsgSendTime(stream.Endpoint, stream.Channel, time.Since(startSend))
+		return nil, err
+	}
+
+	_, err = stream.operateWithTimeout(f)
+}
+
+func (stream *Stream) serviceStream() {
+	defer stream.Cancel(errAborted)
+
+	for {
+		select {
+		case msg := <-stream.sendBuff:
+			stream.sendMessage(msg)
+		case <-stream.abortChan:
+			return
+		case <-stream.commShutdown:
+			return
+		}
+	}
+}
+
+
+func (stream *Stream) Recv() (*orderer.StepResponse, error) {
+	start := time.Now()
+	defer func() {
+		if !stream.Logger.IsEnabledFor(zap.DebugLevel) {
+			return
+		}
+		stream.Logger.Debugf("Receive from %s(%s) took %v", stream.NodeName, stream.Endpoint, time.Since(start))
+	}()
+
+	f := func() (*orderer.StepResponse, error) {
+		return stream.Cluster_StepClient.Recv()
+	}
+
+	return stream.operateWithTimeout(f)
+}
+
+
+func (stream *Stream) operateWithTimeout(invoke StreamOperation) (*orderer.StepResponse, error) {
+	timer := time.NewTimer(stream.Timeout)
+	defer timer.Stop()
+
+	var operationEnded sync.WaitGroup
+	operationEnded.Add(1)
+
+	responseChan := make(chan struct {
+		res *orderer.StepResponse
+		err error
+	}, 1)
+
+	go func() {
+		defer operationEnded.Done()
+		res, err := invoke()
+		responseChan <- struct {
+			res *orderer.StepResponse
+			err error
+		}{res: res, err: err}
+	}()
+
+	select {
+	case r := <-responseChan:
+		if r.err != nil {
+			stream.Cancel(r.err)
+		}
+		return r.res, r.err
+	case <-timer.C:
+		stream.Logger.Warningf("Stream %d to %s(%s) was forcibly terminated because timeout (%v) expired",
+			stream.ID, stream.NodeName, stream.Endpoint, stream.Timeout)
+		stream.Cancel(errTimeout)
+		
+		operationEnded.Wait()
+		return nil, errTimeout
+	}
+}
+
+func requestAsString(request *orderer.StepRequest) string {
+	switch t := request.GetPayload().(type) {
+	case *orderer.StepRequest_SubmitRequest:
+		if t.SubmitRequest == nil || t.SubmitRequest.Payload == nil {
+			return fmt.Sprintf("Empty SubmitRequest: %v", t.SubmitRequest)
+		}
+		return fmt.Sprintf("SubmitRequest for channel %s with payload of size %d",
+			t.SubmitRequest.Channel, len(t.SubmitRequest.Payload.Payload))
+	case *orderer.StepRequest_ConsensusRequest:
+		return fmt.Sprintf("ConsensusRequest for channel %s with payload of size %d",
+			t.ConsensusRequest.Channel, len(t.ConsensusRequest.Payload))
+	default:
+		return fmt.Sprintf("unknown type: %v", request)
+	}
+}
+
+
+
+func (rc *RemoteContext) NewStream(timeout time.Duration) (*Stream, error) {
+	if err := rc.ProbeConn(rc.conn); err != nil {
+		return nil, err
+	}
 
 	ctx, cancel := context.WithCancel(context.TODO())
-	submitStream, err := rc.Client.Submit(ctx)
+	stream, err := rc.Client.Step(ctx)
 	if err != nil {
 		cancel()
 		return nil, errors.WithStack(err)
 	}
-	rc.submitStream = submitStream
-	rc.cancelSubmitStream = cancel
-	return rc.submitStream, nil
-}
 
+	streamID := atomic.AddUint64(&rc.nextStreamID, 1)
+	nodeName := commonNameFromContext(stream.Context())
 
-func (rc *RemoteContext) Step(req *orderer.StepRequest) (*orderer.StepResponse, error) {
-	if err := rc.ProbeConn(rc.conn); err != nil {
-		return nil, err
+	var canceled uint32
+
+	abortChan := make(chan struct{})
+
+	abort := func() {
+		cancel()
+		rc.streamsByID.Delete(streamID)
+		rc.Metrics.reportEgressStreamCount(rc.Channel, atomic.LoadUint32(&rc.streamsByID.size))
+		rc.Logger.Debugf("Stream %d to %s(%s) is aborted", streamID, nodeName, rc.endpoint)
+		atomic.StoreUint32(&canceled, 1)
+		close(abortChan)
 	}
-	ctx, abort := context.WithCancel(context.TODO())
-	ctx, cancel := context.WithTimeout(ctx, rc.RPCTimeout)
-	defer cancel()
 
-	rc.stepLock.Lock()
-	rc.cancelStep = abort
-	rc.stepLock.Unlock()
+	once := &sync.Once{}
+	abortReason := &atomic.Value{}
+	cancelWithReason := func(err error) {
+		abortReason.Store(err.Error())
+		once.Do(abort)
+	}
 
-	return rc.Client.Step(ctx, req)
+	logger := flogging.MustGetLogger("orderer.common.cluster.step")
+	stepLogger := logger.WithOptions(zap.AddCallerSkip(1))
+
+	s := &Stream{
+		Channel:            rc.Channel,
+		metrics:            rc.Metrics,
+		abortReason:        abortReason,
+		abortChan:          abortChan,
+		sendBuff:           make(chan *orderer.StepRequest, rc.SendBuffSize),
+		commShutdown:       rc.shutdownSignal,
+		NodeName:           nodeName,
+		Logger:             stepLogger,
+		ID:                 streamID,
+		Endpoint:           rc.endpoint,
+		Timeout:            timeout,
+		Cluster_StepClient: stream,
+		Cancel:             cancelWithReason,
+		canceled:           &canceled,
+	}
+
+	s.expCheck = &certificateExpirationCheck{
+		minimumExpirationWarningInterval: rc.minimumExpirationWarningInterval,
+		expirationWarningThreshold:       rc.certExpWarningThreshold,
+		expiresAt:                        rc.expiresAt,
+		endpoint:                         s.Endpoint,
+		nodeName:                         s.NodeName,
+		alert: func(template string, args ...interface{}) {
+			s.Logger.Warningf(template, args...)
+		},
+	}
+
+	rc.Logger.Debugf("Created new stream to %s with ID of %d and buffer size of %d",
+		rc.endpoint, streamID, cap(s.sendBuff))
+
+	rc.streamsByID.Store(streamID, s)
+	rc.Metrics.reportEgressStreamCount(rc.Channel, atomic.LoadUint32(&rc.streamsByID.size))
+
+	go func() {
+		rc.workerCountReporter.increment(s.metrics)
+		s.serviceStream()
+		rc.workerCountReporter.decrement(s.metrics)
+	}()
+
+	return s, nil
 }
-
 
 
 
 func (rc *RemoteContext) Abort() {
-	rc.stepLock.Lock()
-	defer rc.stepLock.Unlock()
-
-	rc.submitLock.Lock()
-	defer rc.submitLock.Unlock()
-
-	if rc.cancelStep != nil {
-		rc.cancelStep()
-		rc.cancelStep = nil
-	}
-
-	rc.closeSubmitStream()
-	rc.onAbort()
+	rc.streamsByID.Range(func(_, value interface{}) bool {
+		value.(*Stream).Cancel(errAborted)
+		return false
+	})
 }
 
-
-
-func (rc *RemoteContext) closeSubmitStream() {
-	if rc.cancelSubmitStream != nil {
-		rc.cancelSubmitStream()
-		rc.cancelSubmitStream = nil
+func commonNameFromContext(ctx context.Context) string {
+	cert := comm.ExtractCertificateFromContext(ctx)
+	if cert == nil {
+		return "unidentified node"
 	}
+	return cert.Subject.CommonName
+}
 
-	if rc.submitStream != nil {
-		rc.submitStream.CloseSend()
-		rc.submitStream = nil
-	}
+type streamsMapperReporter struct {
+	size uint32
+	sync.Map
+}
+
+func (smr *streamsMapperReporter) Delete(key interface{}) {
+	smr.Map.Delete(key)
+	atomic.AddUint32(&smr.size, ^uint32(0))
+}
+
+func (smr *streamsMapperReporter) Store(key, value interface{}) {
+	smr.Map.Store(key, value)
+	atomic.AddUint32(&smr.size, 1)
+}
+
+type workerCountReporter struct {
+	channel     string
+	workerCount uint32
+}
+
+func (wcr *workerCountReporter) increment(m *Metrics) {
+	count := atomic.AddUint32(&wcr.workerCount, 1)
+	m.reportWorkerCount(wcr.channel, count)
+}
+
+func (wcr *workerCountReporter) decrement(m *Metrics) {
+	
+	
+	
+	
+	
+	count := atomic.AddUint32(&wcr.workerCount, ^uint32(0))
+	m.reportWorkerCount(wcr.channel, count)
 }

@@ -14,14 +14,14 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/endorser"
 	"github.com/mcc-github/blockchain/core/endorser/mocks"
-	"github.com/mcc-github/blockchain/core/handlers/endorsement/api"
+	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
 	. "github.com/mcc-github/blockchain/core/handlers/endorsement/api/state"
 	"github.com/mcc-github/blockchain/core/transientstore"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/peer"
 	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -47,7 +47,7 @@ func TestPluginEndorserNotFound(t *testing.T) {
 }
 
 func TestPluginEndorserGreenPath(t *testing.T) {
-	proposal, _, err := utils.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, "mychannel", &peer.ChaincodeInvocationSpec{
+	proposal, _, err := protoutil.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, "mychannel", &peer.ChaincodeInvocationSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
 			ChaincodeId: &peer.ChaincodeID{Name: "mycc"},
 		},
@@ -281,7 +281,7 @@ func TestTransientStore(t *testing.T) {
 		TransientStoreRetriever: storeRetriever,
 	})
 
-	proposal, _, err := utils.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, "mychannel", &peer.ChaincodeInvocationSpec{
+	proposal, _, err := protoutil.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, "mychannel", &peer.ChaincodeInvocationSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
 			ChaincodeId: &peer.ChaincodeID{Name: "mycc"},
 		},

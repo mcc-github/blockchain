@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -24,7 +25,7 @@ type ConfigSequencer interface {
 
 
 func NewSessionAC(chain ConfigSequencer, env *common.Envelope, policyChecker PolicyChecker, channelID string, expiresAt ExpiresAtFunc) (*SessionAccessControl, error) {
-	signedData, err := env.AsSignedData()
+	signedData, err := protoutil.EnvelopeAsSignedData(env)
 	if err != nil {
 		return nil, err
 	}

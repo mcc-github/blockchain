@@ -30,6 +30,6 @@ func (am *aclMgmtImpl) CheckACL(resName string, channelID string, idinfo interfa
 
 func NewACLProvider(rg ResourceGetter) ACLProvider {
 	return &aclMgmtImpl{
-		rescfgProvider: newResourceProvider(rg, NewDefaultACLProvider()),
+		rescfgProvider: newResourceProvider(rg, newDefaultACLProvider()),
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/deliver"
@@ -21,8 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
-	"github.com/spf13/viper"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc/metadata"
@@ -168,7 +168,8 @@ func TestFilteredBlockResponseSenderIsFiltered(t *testing.T) {
 }
 
 func TestEventsServer_DeliverFiltered(t *testing.T) {
-	viper.Set("peer.authentication.timewindow", "1s")
+	
+	timeWindow := time.Duration(time.Second)
 	tests := []testCase{
 		{
 			name: "Testing deliver of the filtered block events",
@@ -185,7 +186,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 					deliverServer.On("Context").Return(peer2.NewContext(context.TODO(), p))
 
 					deliverServer.On("Recv").Return(&common.Envelope{
-						Payload: utils.MarshalOrPanic(config.payload),
+						Payload: protoutil.MarshalOrPanic(config.payload),
 					}, nil).Run(func(_ mock.Arguments) {
 						
 						
@@ -231,13 +232,13 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 				txID:          "testID",
 				payload: &common.Payload{
 					Header: &common.Header{
-						ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+						ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 							ChannelId: "testChainID",
 							Timestamp: util.CreateUtcTimestamp(),
 						}),
-						SignatureHeader: utils.MarshalOrPanic(&common.SignatureHeader{}),
+						SignatureHeader: protoutil.MarshalOrPanic(&common.SignatureHeader{}),
 					},
-					Data: utils.MarshalOrPanic(&orderer.SeekInfo{
+					Data: protoutil.MarshalOrPanic(&orderer.SeekInfo{
 						Start:    &orderer.SeekPosition{Type: &orderer.SeekPosition_Specified{Specified: &orderer.SeekSpecified{Number: 0}}},
 						Stop:     &orderer.SeekPosition{Type: &orderer.SeekPosition_Newest{Newest: &orderer.SeekNewest{}}},
 						Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
@@ -259,7 +260,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 					deliverServer.On("Context").Return(peer2.NewContext(context.TODO(), p))
 
 					deliverServer.On("Recv").Return(&common.Envelope{
-						Payload: utils.MarshalOrPanic(config.payload),
+						Payload: protoutil.MarshalOrPanic(config.payload),
 					}, nil).Run(func(_ mock.Arguments) {
 						
 						
@@ -304,13 +305,13 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 				txID:          "testID",
 				payload: &common.Payload{
 					Header: &common.Header{
-						ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+						ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 							ChannelId: "testChainID",
 							Timestamp: util.CreateUtcTimestamp(),
 						}),
-						SignatureHeader: utils.MarshalOrPanic(&common.SignatureHeader{}),
+						SignatureHeader: protoutil.MarshalOrPanic(&common.SignatureHeader{}),
 					},
-					Data: utils.MarshalOrPanic(&orderer.SeekInfo{
+					Data: protoutil.MarshalOrPanic(&orderer.SeekInfo{
 						Start:    &orderer.SeekPosition{Type: &orderer.SeekPosition_Specified{Specified: &orderer.SeekSpecified{Number: 0}}},
 						Stop:     &orderer.SeekPosition{Type: &orderer.SeekPosition_Newest{Newest: &orderer.SeekNewest{}}},
 						Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
@@ -332,7 +333,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 					deliverServer.On("Context").Return(peer2.NewContext(context.TODO(), p))
 
 					deliverServer.On("Recv").Return(&common.Envelope{
-						Payload: utils.MarshalOrPanic(config.payload),
+						Payload: protoutil.MarshalOrPanic(config.payload),
 					}, nil).Run(func(_ mock.Arguments) {
 						
 						
@@ -364,7 +365,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 				txID:          "testID",
 				payload: &common.Payload{
 					Header: nil,
-					Data: utils.MarshalOrPanic(&orderer.SeekInfo{
+					Data: protoutil.MarshalOrPanic(&orderer.SeekInfo{
 						Start:    &orderer.SeekPosition{Type: &orderer.SeekPosition_Specified{Specified: &orderer.SeekSpecified{Number: 0}}},
 						Stop:     &orderer.SeekPosition{Type: &orderer.SeekPosition_Newest{Newest: &orderer.SeekNewest{}}},
 						Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
@@ -380,6 +381,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 			chainManager, deliverServer := test.prepare(wg)
 
 			server := NewDeliverEventsServer(
+				timeWindow,
 				false,
 				defaultPolicyCheckerProvider,
 				chainManager,

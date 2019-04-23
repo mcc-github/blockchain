@@ -16,11 +16,12 @@ import (
 	"github.com/mcc-github/blockchain/common/mocks/configtx"
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
 	"github.com/mcc-github/blockchain/common/policies"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
+	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
+	"github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -69,7 +70,7 @@ func TestVerifyBlockSignature(t *testing.T) {
 
 	
 	
-	err := cs.VerifyBlockSignature([]*common.SignedData{}, nil)
+	err := cs.VerifyBlockSignature([]*protoutil.SignedData{}, nil)
 	assert.EqualError(t, err, "policy /Channel/Orderer/BlockValidation wasn't found")
 
 	
@@ -77,21 +78,21 @@ func TestVerifyBlockSignature(t *testing.T) {
 	policyMgr.PolicyMap["/Channel/Orderer/BlockValidation"] = &mockpolicies.Policy{
 		Err: errors.New("invalid signature"),
 	}
-	err = cs.VerifyBlockSignature([]*common.SignedData{}, nil)
+	err = cs.VerifyBlockSignature([]*protoutil.SignedData{}, nil)
 	assert.EqualError(t, err, "block verification failed: invalid signature")
 
 	
 	policyMgr.PolicyMap["/Channel/Orderer/BlockValidation"] = &mockpolicies.Policy{
 		Err: nil,
 	}
-	assert.NoError(t, cs.VerifyBlockSignature([]*common.SignedData{}, nil))
+	assert.NoError(t, cs.VerifyBlockSignature([]*protoutil.SignedData{}, nil))
 
 	
-	err = cs.VerifyBlockSignature([]*common.SignedData{}, &common.ConfigEnvelope{})
+	err = cs.VerifyBlockSignature([]*protoutil.SignedData{}, &common.ConfigEnvelope{})
 	assert.EqualError(t, err, "channelconfig Config cannot be nil")
 
 	
-	assert.NoError(t, cs.VerifyBlockSignature([]*common.SignedData{}, testConfigEnvelope(t)))
+	assert.NoError(t, cs.VerifyBlockSignature([]*protoutil.SignedData{}, testConfigEnvelope(t)))
 
 }
 

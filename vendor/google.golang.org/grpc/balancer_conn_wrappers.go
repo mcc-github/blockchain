@@ -162,6 +162,28 @@ func (ccb *ccBalancerWrapper) handleSubConnStateChange(sc balancer.SubConn, s co
 }
 
 func (ccb *ccBalancerWrapper) handleResolvedAddrs(addrs []resolver.Address, err error) {
+	if ccb.cc.curBalancerName != grpclbName {
+		var containsGRPCLB bool
+		for _, a := range addrs {
+			if a.Type == resolver.GRPCLB {
+				containsGRPCLB = true
+				break
+			}
+		}
+		if containsGRPCLB {
+			
+			
+			
+			
+			tempAddrs := make([]resolver.Address, 0, len(addrs))
+			for _, a := range addrs {
+				if a.Type != resolver.GRPCLB {
+					tempAddrs = append(tempAddrs, a)
+				}
+			}
+			addrs = tempAddrs
+		}
+	}
 	select {
 	case <-ccb.resolverUpdateCh:
 	default:

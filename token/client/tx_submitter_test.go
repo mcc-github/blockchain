@@ -3,6 +3,7 @@ Copyright IBM Corp. All Rights Reserved.
 
 SPDX-License-Identifier: Apache-2.0
 */
+
 package client_test
 
 import (
@@ -17,7 +18,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/mcc-github/blockchain/token/client"
 	"github.com/mcc-github/blockchain/token/client/mock"
 	. "github.com/onsi/ginkgo"
@@ -391,7 +392,7 @@ var _ = Describe("TxSubmitter", func() {
 			Expect(signatureHeader.Creator).To(Equal(txSubmitter.Creator))
 
 			
-			expectedTxid, err := utils.ComputeTxID(signatureHeader.Nonce, txSubmitter.Creator)
+			expectedTxid, err := protoutil.ComputeTxID(signatureHeader.Nonce, txSubmitter.Creator)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(channelHeader.TxId).To(Equal(expectedTxid))
 
@@ -656,7 +657,7 @@ var _ = Describe("Create a header", func() {
 			err = proto.Unmarshal(header.SignatureHeader, &signatureHeader)
 			Expect(err).NotTo(HaveOccurred())
 
-			expectedTxid, err := utils.ComputeTxID(signatureHeader.Nonce, creator)
+			expectedTxid, err := protoutil.ComputeTxID(signatureHeader.Nonce, creator)
 			Expect(txid).To(Equal(expectedTxid))
 			Expect(err).NotTo(HaveOccurred())
 

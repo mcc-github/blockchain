@@ -39,6 +39,9 @@ const (
 
 	
 	KafkaBrokersKey = "KafkaBrokers"
+
+	
+	EndpointsKey = "Endpoints"
 )
 
 
@@ -54,16 +57,73 @@ type OrdererProtos struct {
 
 type OrdererConfig struct {
 	protos *OrdererProtos
-	orgs   map[string]Org
+	orgs   map[string]OrdererOrg
 
 	batchTimeout time.Duration
 }
 
 
-func NewOrdererConfig(ordererGroup *cb.ConfigGroup, mspConfig *MSPConfigHandler) (*OrdererConfig, error) {
+type OrdererOrgProtos struct {
+	Endpoints *cb.OrdererAddresses
+}
+
+
+type OrdererOrgConfig struct {
+	*OrganizationConfig
+	protos *OrdererOrgProtos
+	name   string
+}
+
+
+func (oc *OrdererOrgConfig) Endpoints() []string {
+	return oc.protos.Endpoints.Addresses
+}
+
+
+func NewOrdererOrgConfig(orgName string, orgGroup *cb.ConfigGroup, mspConfigHandler *MSPConfigHandler, channelCapabilities ChannelCapabilities) (*OrdererOrgConfig, error) {
+	if len(orgGroup.Groups) > 0 {
+		return nil, fmt.Errorf("OrdererOrg config does not allow sub-groups")
+	}
+
+	if !channelCapabilities.OrgSpecificOrdererEndpoints() {
+		if _, ok := orgGroup.Values[EndpointsKey]; ok {
+			return nil, errors.Errorf("Orderer Org %s cannot contain endpoints value until V2_0+ capabilities have been enabled", orgName)
+		}
+	}
+
+	protos := &OrdererOrgProtos{}
+	orgProtos := &OrganizationProtos{}
+
+	if err := DeserializeProtoValuesFromGroup(orgGroup, protos, orgProtos); err != nil {
+		return nil, errors.Wrap(err, "failed to deserialize values")
+	}
+
+	ooc := &OrdererOrgConfig{
+		name:   orgName,
+		protos: protos,
+		OrganizationConfig: &OrganizationConfig{
+			name:             orgName,
+			protos:           orgProtos,
+			mspConfigHandler: mspConfigHandler,
+		},
+	}
+
+	if err := ooc.Validate(); err != nil {
+		return nil, err
+	}
+
+	return ooc, nil
+}
+
+func (ooc *OrdererOrgConfig) Validate() error {
+	return ooc.OrganizationConfig.Validate()
+}
+
+
+func NewOrdererConfig(ordererGroup *cb.ConfigGroup, mspConfig *MSPConfigHandler, channelCapabilities ChannelCapabilities) (*OrdererConfig, error) {
 	oc := &OrdererConfig{
 		protos: &OrdererProtos{},
-		orgs:   make(map[string]Org),
+		orgs:   make(map[string]OrdererOrg),
 	}
 
 	if err := DeserializeProtoValuesFromGroup(ordererGroup, oc.protos); err != nil {
@@ -76,7 +136,7 @@ func NewOrdererConfig(ordererGroup *cb.ConfigGroup, mspConfig *MSPConfigHandler)
 
 	for orgName, orgGroup := range ordererGroup.Groups {
 		var err error
-		if oc.orgs[orgName], err = NewOrganizationConfig(orgName, orgGroup, mspConfig); err != nil {
+		if oc.orgs[orgName], err = NewOrdererOrgConfig(orgName, orgGroup, mspConfig, channelCapabilities); err != nil {
 			return nil, err
 		}
 	}
@@ -126,7 +186,7 @@ func (oc *OrdererConfig) MaxChannelsCount() uint64 {
 }
 
 
-func (oc *OrdererConfig) Organizations() map[string]Org {
+func (oc *OrdererConfig) Organizations() map[string]OrdererOrg {
 	return oc.orgs
 }
 

@@ -21,7 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
@@ -198,20 +198,20 @@ var _ = Describe("Deliver", func() {
 
 		JustBeforeEach(func() {
 			if channelHeaderPayload == nil {
-				channelHeaderPayload = utils.MarshalOrPanic(channelHeader)
+				channelHeaderPayload = protoutil.MarshalOrPanic(channelHeader)
 			}
 			if seekInfoPayload == nil {
-				seekInfoPayload = utils.MarshalOrPanic(seekInfo)
+				seekInfoPayload = protoutil.MarshalOrPanic(seekInfo)
 			}
 			if envelope.Payload == nil {
 				payload := &cb.Payload{
 					Header: &cb.Header{
 						ChannelHeader:   channelHeaderPayload,
-						SignatureHeader: utils.MarshalOrPanic(&cb.SignatureHeader{}),
+						SignatureHeader: protoutil.MarshalOrPanic(&cb.SignatureHeader{}),
 					},
 					Data: seekInfoPayload,
 				}
-				envelope.Payload = utils.MarshalOrPanic(payload)
+				envelope.Payload = protoutil.MarshalOrPanic(payload)
 			}
 		})
 
@@ -420,6 +420,37 @@ var _ = Describe("Deliver", func() {
 			})
 		})
 
+		Context("when seek info is configured to send just the newest block and a new block is committed to the ledger after the iterator is acquired", func() {
+			BeforeEach(func() {
+				seekInfo = &ab.SeekInfo{Start: seekNewest, Stop: seekNewest}
+
+				fakeBlockReader.IteratorReturns(fakeBlockIterator, 0)
+				fakeBlockReader.HeightReturns(2)
+				fakeChain.ReaderReturns(fakeBlockReader)
+				fakeBlockIterator.NextStub = func() (*cb.Block, cb.Status) {
+					blk := &cb.Block{
+						Header: &cb.BlockHeader{Number: uint64(fakeBlockIterator.NextCallCount() - 1)},
+					}
+					return blk, cb.Status_SUCCESS
+				}
+			})
+
+			It("sends only the newest block at the time the iterator was acquired", func() {
+				err := handler.Handle(context.Background(), server)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(fakeBlockReader.IteratorCallCount()).To(Equal(1))
+				Expect(fakeBlockIterator.NextCallCount()).To(Equal(1))
+				Expect(fakeResponseSender.SendBlockResponseCallCount()).To(Equal(1))
+				for i := 0; i < fakeResponseSender.SendBlockResponseCallCount(); i++ {
+					b := fakeResponseSender.SendBlockResponseArgsForCall(i)
+					Expect(b).To(Equal(&cb.Block{
+						Header: &cb.BlockHeader{Number: uint64(i)},
+					}))
+				}
+			})
+		})
+
 		Context("when filtered blocks are requested", func() {
 			var fakeResponseSender *mock.FilteredResponseSender
 
@@ -547,7 +578,7 @@ var _ = Describe("Deliver", func() {
 
 		Context("when the payload header is nil", func() {
 			BeforeEach(func() {
-				envelope.Payload = utils.MarshalOrPanic(&cb.Payload{
+				envelope.Payload = protoutil.MarshalOrPanic(&cb.Payload{
 					Header: nil,
 				})
 			})
@@ -579,7 +610,7 @@ var _ = Describe("Deliver", func() {
 
 		Context("when the channel header timestamp is nil", func() {
 			BeforeEach(func() {
-				channelHeaderPayload = utils.MarshalOrPanic(&cb.ChannelHeader{
+				channelHeaderPayload = protoutil.MarshalOrPanic(&cb.ChannelHeader{
 					Timestamp: nil,
 				})
 			})
@@ -596,7 +627,7 @@ var _ = Describe("Deliver", func() {
 
 		Context("when the channel header timestamp is out of the time window", func() {
 			BeforeEach(func() {
-				channelHeaderPayload = utils.MarshalOrPanic(&cb.ChannelHeader{
+				channelHeaderPayload = protoutil.MarshalOrPanic(&cb.ChannelHeader{
 					Timestamp: &timestamp.Timestamp{},
 				})
 			})
@@ -666,6 +697,22 @@ var _ = Describe("Deliver", func() {
 				Expect(fakeResponseSender.SendStatusResponseCallCount()).To(Equal(1))
 				resp := fakeResponseSender.SendStatusResponseArgsForCall(0)
 				Expect(resp).To(Equal(cb.Status_SERVICE_UNAVAILABLE))
+			})
+
+			Context("when the seek info requests a best effort error response", func() {
+				BeforeEach(func() {
+					seekInfo.ErrorResponse = ab.SeekInfo_BEST_EFFORT
+				})
+
+				It("replies with the desired blocks", func() {
+					err := handler.Handle(context.Background(), server)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(fakeResponseSender.SendBlockResponseCallCount()).To(Equal(1))
+					Expect(fakeResponseSender.SendStatusResponseCallCount()).To(Equal(1))
+					resp := fakeResponseSender.SendStatusResponseArgsForCall(0)
+					Expect(resp).To(Equal(cb.Status_SUCCESS))
+				})
 			})
 		})
 

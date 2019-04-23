@@ -19,17 +19,17 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/configtxgentest"
-	"github.com/mcc-github/blockchain/common/tools/configtxgen/encoder"
-	genesisconfig "github.com/mcc-github/blockchain/common/tools/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
+	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	ordererconfig "github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -166,7 +166,7 @@ func (h *testHelper) sampleChannelConfig(sequence uint64, enableV11Capability bo
 }
 
 func (h *testHelper) constructConfigTx(t *testing.T, txType common.HeaderType, chainid string, config *common.Config) *common.Envelope {
-	env, err := utils.CreateSignedEnvelope(txType, chainid, nil, &common.ConfigEnvelope{Config: config}, 0, 0)
+	env, err := protoutil.CreateSignedEnvelope(txType, chainid, nil, &common.ConfigEnvelope{Config: config}, 0, 0)
 	assert.NoError(t, err)
 	return env
 }
@@ -176,7 +176,7 @@ func (h *testHelper) constructGenesisTx(t *testing.T, chainid string, chanConf *
 		Config:     chanConf,
 		LastUpdate: h.constructLastUpdateField(chainid),
 	}
-	txEnvelope, err := utils.CreateSignedEnvelope(common.HeaderType_CONFIG, chainid, nil, configEnvelop, 0, 0)
+	txEnvelope, err := protoutil.CreateSignedEnvelope(common.HeaderType_CONFIG, chainid, nil, configEnvelop, 0, 0)
 	assert.NoError(t, err)
 	return txEnvelope
 }
@@ -186,10 +186,10 @@ func (h *testHelper) constructBlock(txEnvelope *common.Envelope, blockNum uint64
 }
 
 func (h *testHelper) constructLastUpdateField(chainid string) *common.Envelope {
-	configUpdate := utils.MarshalOrPanic(&common.ConfigUpdate{
+	configUpdate := protoutil.MarshalOrPanic(&common.ConfigUpdate{
 		ChannelId: chainid,
 	})
-	envelopeForLastUpdateField, _ := utils.CreateSignedEnvelope(common.HeaderType_CONFIG_UPDATE, chainid, nil, &common.ConfigUpdateEnvelope{ConfigUpdate: configUpdate}, 0, 0)
+	envelopeForLastUpdateField, _ := protoutil.CreateSignedEnvelope(common.HeaderType_CONFIG_UPDATE, chainid, nil, &common.ConfigUpdateEnvelope{ConfigUpdate: configUpdate}, 0, 0)
 	return envelopeForLastUpdateField
 }
 

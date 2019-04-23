@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/internal"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/resolver"
 )
@@ -29,6 +30,18 @@ var (
 
 func Register(b Builder) {
 	m[strings.ToLower(b.Name())] = b
+}
+
+
+
+
+
+func unregisterForTesting(name string) {
+	delete(m, name)
+}
+
+func init() {
+	internal.BalancerUnregister = unregisterForTesting
 }
 
 
@@ -174,6 +187,7 @@ var (
 
 
 type Picker interface {
+	
 	
 	
 	

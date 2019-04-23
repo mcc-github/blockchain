@@ -17,7 +17,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,8 +25,8 @@ type customTxProcessor struct {
 }
 
 func (ctp *customTxProcessor) GenerateSimulationResults(txEnvelop *common.Envelope, simulator ledger.TxSimulator, initializingLedger bool) error {
-	payload := utils.UnmarshalPayloadOrPanic(txEnvelop.Payload)
-	chHdr, _ := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	payload := protoutil.UnmarshalPayloadOrPanic(txEnvelop.Payload)
+	chHdr, _ := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 	chainid := chHdr.ChannelId
 	kvw := &kvrwset.KVWrite{}
 	if err := proto.Unmarshal(payload.Data, kvw); err != nil {
@@ -61,7 +61,7 @@ func TestCustomProcessor(t *testing.T) {
 	tx1 := createCustomTx(t, 100, chainid, "custom_key1", "value1")
 	tx2 := createCustomTx(t, 101, chainid, "custom_key2", "value2")
 	tx3 := createCustomTx(t, 101, chainid, "", "")
-	blk1 := testutil.NewBlock([]*common.Envelope{tx1, tx2, tx3}, 1, gb.Header.Hash())
+	blk1 := testutil.NewBlock([]*common.Envelope{tx1, tx2, tx3}, 1, protoutil.BlockHeaderHash(gb.Header))
 	assert.NoError(t, lgr.CommitWithPvtData(&ledger.BlockAndPvtData{Block: blk1}))
 	
 	qe, err := lgr.NewQueryExecutor()
@@ -84,7 +84,7 @@ func TestCustomProcessor(t *testing.T) {
 	assert.Equal(t, peer.TxValidationCode_INVALID_OTHER_REASON, txFilter.Flag(2))
 
 	tx4 := createCustomTx(t, 100, chainid, "custom_key4", "value4")
-	blk2 := testutil.NewBlock([]*common.Envelope{tx4}, 2, blk1.Header.Hash())
+	blk2 := testutil.NewBlock([]*common.Envelope{tx4}, 2, protoutil.BlockHeaderHash(blk1.Header))
 	assert.NoError(t, lgr.CommitWithPvtData(&ledger.BlockAndPvtData{Block: blk2}))
 	qe, err = lgr.NewQueryExecutor()
 	assert.NoError(t, err)
@@ -96,7 +96,7 @@ func TestCustomProcessor(t *testing.T) {
 
 func createCustomTx(t *testing.T, txType common.HeaderType, chainid, key, val string) *common.Envelope {
 	kvWrite := &kvrwset.KVWrite{Key: key, Value: []byte(val)}
-	txEnv, err := utils.CreateSignedEnvelope(txType, chainid, nil, kvWrite, 0, 0)
+	txEnv, err := protoutil.CreateSignedEnvelope(txType, chainid, nil, kvWrite, 0, 0)
 	assert.NoError(t, err)
 	return txEnv
 }

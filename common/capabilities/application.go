@@ -23,22 +23,23 @@ const (
 	ApplicationV1_3 = "V1_3"
 
 	
+	ApplicationV2_0 = "V2_0"
+
+	
 	ApplicationPvtDataExperimental = "V1_1_PVTDATA_EXPERIMENTAL"
 
 	
 	ApplicationResourcesTreeExperimental = "V1_1_RESOURCETREE_EXPERIMENTAL"
-
-	ApplicationFabTokenExperimental = "V1_4_FABTOKEN_EXPERIMENTAL"
 )
 
 
 type ApplicationProvider struct {
 	*registry
-	v11                     bool
-	v12                     bool
-	v13                     bool
-	v11PvtDataExperimental  bool
-	v14FabTokenExperimental bool
+	v11                    bool
+	v12                    bool
+	v13                    bool
+	v20                    bool
+	v11PvtDataExperimental bool
 }
 
 
@@ -48,8 +49,8 @@ func NewApplicationProvider(capabilities map[string]*cb.Capability) *Application
 	_, ap.v11 = capabilities[ApplicationV1_1]
 	_, ap.v12 = capabilities[ApplicationV1_2]
 	_, ap.v13 = capabilities[ApplicationV1_3]
+	_, ap.v20 = capabilities[ApplicationV2_0]
 	_, ap.v11PvtDataExperimental = capabilities[ApplicationPvtDataExperimental]
-	_, ap.v14FabTokenExperimental = capabilities[ApplicationFabTokenExperimental]
 	return ap
 }
 
@@ -60,44 +61,44 @@ func (ap *ApplicationProvider) Type() string {
 
 
 func (ap *ApplicationProvider) ACLs() bool {
-	return ap.v12 || ap.v13
+	return ap.v12 || ap.v13 || ap.v20
 }
 
 
 
 func (ap *ApplicationProvider) ForbidDuplicateTXIdInBlock() bool {
-	return ap.v11 || ap.v12 || ap.v13
+	return ap.v11 || ap.v12 || ap.v13 || ap.v20
 }
 
 
 
 
 func (ap *ApplicationProvider) PrivateChannelData() bool {
-	return ap.v11PvtDataExperimental || ap.v12 || ap.v13
+	return ap.v11PvtDataExperimental || ap.v12 || ap.v13 || ap.v20
 }
 
 
 
 func (ap ApplicationProvider) CollectionUpgrade() bool {
-	return ap.v12 || ap.v13
+	return ap.v12 || ap.v13 || ap.v20
 }
 
 
 
 func (ap *ApplicationProvider) V1_1Validation() bool {
-	return ap.v11 || ap.v12 || ap.v13
+	return ap.v11 || ap.v12 || ap.v13 || ap.v20
 }
 
 
 
 func (ap *ApplicationProvider) V1_2Validation() bool {
-	return ap.v12 || ap.v13
+	return ap.v12 || ap.v13 || ap.v20
 }
 
 
 
 func (ap *ApplicationProvider) V1_3Validation() bool {
-	return ap.v13
+	return ap.v13 || ap.v20
 }
 
 
@@ -105,10 +106,16 @@ func (ap *ApplicationProvider) V1_3Validation() bool {
 
 
 func (ap *ApplicationProvider) V2_0Validation() bool {
-	return false
+	return ap.v20
 }
 
 
+
+
+
+func (ap *ApplicationProvider) LifecycleV20() bool {
+	return ap.v20
+}
 
 
 func (ap *ApplicationProvider) MetadataLifecycle() bool {
@@ -118,12 +125,12 @@ func (ap *ApplicationProvider) MetadataLifecycle() bool {
 
 
 func (ap *ApplicationProvider) KeyLevelEndorsement() bool {
-	return ap.v13
+	return ap.v13 || ap.v20
 }
 
 
 func (ap *ApplicationProvider) FabToken() bool {
-	return ap.v14FabTokenExperimental
+	return ap.v20
 }
 
 
@@ -136,11 +143,11 @@ func (ap *ApplicationProvider) HasCapability(capability string) bool {
 		return true
 	case ApplicationV1_3:
 		return true
+	case ApplicationV2_0:
+		return true
 	case ApplicationPvtDataExperimental:
 		return true
 	case ApplicationResourcesTreeExperimental:
-		return true
-	case ApplicationFabTokenExperimental:
 		return true
 	default:
 		return false

@@ -35,6 +35,14 @@ type ApplicationOrg interface {
 }
 
 
+type OrdererOrg interface {
+	Org
+
+	
+	Endpoints() []string
+}
+
+
 type Application interface {
 	
 	Organizations() map[string]ApplicationOrg
@@ -107,7 +115,7 @@ type Orderer interface {
 	KafkaBrokers() []string
 
 	
-	Organizations() map[string]Org
+	Organizations() map[string]OrdererOrg
 
 	
 	Capabilities() OrdererCapabilities
@@ -121,6 +129,12 @@ type ChannelCapabilities interface {
 	
 	
 	MSPVersion() msp.MSPVersion
+
+	
+	ConsensusTypeMigration() bool
+
+	
+	OrgSpecificOrdererEndpoints() bool
 }
 
 
@@ -167,6 +181,10 @@ type ApplicationCapabilities interface {
 	
 	
 	
+	
+	LifecycleV20() bool
+
+	
 	MetadataLifecycle() bool
 
 	
@@ -196,6 +214,11 @@ type OrdererCapabilities interface {
 
 	
 	Kafka2RaftMigration() bool
+
+	
+	
+	
+	UseChannelCreationPolicyAsAdmins() bool
 }
 
 

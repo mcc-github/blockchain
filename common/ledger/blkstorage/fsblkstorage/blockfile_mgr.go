@@ -21,7 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	putil "github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -117,7 +117,7 @@ func newBlockfileMgr(id string, conf *Conf, indexConfig *blkstorage.IndexConfig,
 		if err != nil {
 			panic(fmt.Sprintf("Could not retrieve header of the last block form file: %s", err))
 		}
-		lastBlockHash := lastBlockHeader.Hash()
+		lastBlockHash := protoutil.BlockHeaderHash(lastBlockHeader)
 		previousBlockHash := lastBlockHeader.PreviousHash
 		bcInfo = &common.BlockchainInfo{
 			Height:            cpInfo.lastBlockNumber + 1,
@@ -220,7 +220,7 @@ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
 	if err != nil {
 		return errors.WithMessage(err, "error serializing block")
 	}
-	blockHash := block.Header.Hash()
+	blockHash := protoutil.BlockHeaderHash(block.Header)
 	
 	txOffsets := info.txOffsets
 	currentOffset := mgr.cpInfo.latestFileChunksize
@@ -368,7 +368,7 @@ func (mgr *blockfileMgr) syncIndex() error {
 		}
 
 		
-		blockIdxInfo.blockHash = info.blockHeader.Hash()
+		blockIdxInfo.blockHash = protoutil.BlockHeaderHash(info.blockHeader)
 		blockIdxInfo.blockNum = info.blockHeader.Number
 		blockIdxInfo.flp = &fileLocPointer{fileSuffixNum: blockPlacementInfo.fileNum,
 			locPointer: locPointer{offset: int(blockPlacementInfo.blockStartOffset)}}
@@ -508,7 +508,7 @@ func (mgr *blockfileMgr) fetchTransactionEnvelope(lp *fileLocPointer) (*common.E
 		return nil, err
 	}
 	_, n := proto.DecodeVarint(txEnvelopeBytes)
-	return putil.GetEnvelopeFromBlock(txEnvelopeBytes[n:])
+	return protoutil.GetEnvelopeFromBlock(txEnvelopeBytes[n:])
 }
 
 func (mgr *blockfileMgr) fetchBlockBytes(lp *fileLocPointer) ([]byte, error) {

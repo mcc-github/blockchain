@@ -9,7 +9,6 @@ package comm
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -21,7 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/core/comm/testpb"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -46,93 +44,6 @@ VQQLDAtIeXBlcmxlZGdlcjESMBAGA1UEAwwJbG9jYWxob3N0MFkwEwYHKoZIzj0C
 -----END CERTIFICATE-----
 `
 
-func TestClientConnections(t *testing.T) {
-	t.Parallel()
-
-	
-	fileBase := "Org1"
-	certPEMBlock, _ := ioutil.ReadFile(filepath.Join("testdata", "certs", fileBase+"-server1-cert.pem"))
-	keyPEMBlock, _ := ioutil.ReadFile(filepath.Join("testdata", "certs", fileBase+"-server1-key.pem"))
-	caPEMBlock, _ := ioutil.ReadFile(filepath.Join("testdata", "certs", fileBase+"-cert.pem"))
-	certPool := x509.NewCertPool()
-	certPool.AppendCertsFromPEM(caPEMBlock)
-
-	var tests = []struct {
-		name       string
-		sc         ServerConfig
-		creds      credentials.TransportCredentials
-		clientPort int
-		fail       bool
-	}{
-		{
-			name: "ValidConnection",
-			sc: ServerConfig{
-				SecOpts: &SecureOptions{
-					UseTLS: false}},
-		},
-		{
-			name: "InvalidConnection",
-			sc: ServerConfig{
-				SecOpts: &SecureOptions{
-					UseTLS: false}},
-			clientPort: 20040,
-			fail:       true,
-		},
-		{
-			name: "ValidConnectionTLS",
-			sc: ServerConfig{
-				SecOpts: &SecureOptions{
-					UseTLS:      true,
-					Certificate: certPEMBlock,
-					Key:         keyPEMBlock}},
-			creds: credentials.NewClientTLSFromCert(certPool, ""),
-		},
-		{
-			name: "InvalidConnectionTLS",
-			sc: ServerConfig{
-				SecOpts: &SecureOptions{
-					UseTLS:      true,
-					Certificate: certPEMBlock,
-					Key:         keyPEMBlock}},
-			creds: credentials.NewClientTLSFromCert(nil, ""),
-			fail:  true,
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			t.Logf("Running test %s ...", test.name)
-			lis, err := net.Listen("tcp", "127.0.0.1:0")
-			if err != nil {
-				t.Fatalf("failed to create listener for test server: %v", err)
-			}
-			clientAddress := lis.Addr().String()
-			if test.clientPort > 0 {
-				clientAddress = fmt.Sprintf("127.0.0.1:%d", test.clientPort)
-			}
-			srv, err := NewGRPCServerFromListener(lis, test.sc)
-			
-			if err != nil {
-				t.Fatalf("Error [%s] creating test server for address [%s]",
-					err, lis.Addr().String())
-			}
-			
-			go srv.Start()
-			defer srv.Stop()
-			testConn, err := NewClientConnectionWithAddress(clientAddress,
-				true, test.sc.SecOpts.UseTLS, test.creds, nil)
-			if test.fail {
-				assert.Error(t, err)
-			} else {
-				testConn.Close()
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
 
 func loadRootCAs() [][]byte {
 	rootCAs := [][]byte{}
@@ -153,39 +64,6 @@ func loadRootCAs() [][]byte {
 	return rootCAs
 }
 
-func TestCASupport(t *testing.T) {
-	t.Parallel()
-	rootCAs := loadRootCAs()
-	t.Logf("loaded %d root certificates", len(rootCAs))
-	if len(rootCAs) != 6 {
-		t.Fatalf("failed to load root certificates")
-	}
-
-	cas := &CASupport{
-		AppRootCAsByChain:     make(map[string][][]byte),
-		OrdererRootCAsByChain: make(map[string][][]byte),
-	}
-	cas.AppRootCAsByChain["channel1"] = [][]byte{rootCAs[0]}
-	cas.AppRootCAsByChain["channel2"] = [][]byte{rootCAs[1]}
-	cas.AppRootCAsByChain["channel3"] = [][]byte{rootCAs[2]}
-	cas.OrdererRootCAsByChain["channel1"] = [][]byte{rootCAs[3]}
-	cas.OrdererRootCAsByChain["channel2"] = [][]byte{rootCAs[4]}
-	cas.ServerRootCAs = [][]byte{rootCAs[5]}
-	cas.ClientRootCAs = [][]byte{rootCAs[5]}
-
-	appServerRoots, ordererServerRoots := cas.GetServerRootCAs()
-	t.Logf("%d appServerRoots | %d ordererServerRoots", len(appServerRoots),
-		len(ordererServerRoots))
-	assert.Equal(t, 4, len(appServerRoots), "Expected 4 app server root CAs")
-	assert.Equal(t, 2, len(ordererServerRoots), "Expected 2 orderer server root CAs")
-
-	appClientRoots, ordererClientRoots := cas.GetClientRootCAs()
-	t.Logf("%d appClientRoots | %d ordererClientRoots", len(appClientRoots),
-		len(ordererClientRoots))
-	assert.Equal(t, 4, len(appClientRoots), "Expected 4 app client root CAs")
-	assert.Equal(t, 2, len(ordererClientRoots), "Expected 4 orderer client root CAs")
-}
-
 func TestCredentialSupport(t *testing.T) {
 	t.Parallel()
 	rootCAs := loadRootCAs()
@@ -195,10 +73,8 @@ func TestCredentialSupport(t *testing.T) {
 	}
 
 	cs := &CredentialSupport{
-		CASupport: &CASupport{
-			AppRootCAsByChain:     make(map[string][][]byte),
-			OrdererRootCAsByChain: make(map[string][][]byte),
-		},
+		AppRootCAsByChain:     make(map[string][][]byte),
+		OrdererRootCAsByChain: make(map[string][][]byte),
 	}
 	cert := tls.Certificate{Certificate: [][]byte{}}
 	cs.SetClientCertificate(cert)
@@ -211,19 +87,6 @@ func TestCredentialSupport(t *testing.T) {
 	cs.OrdererRootCAsByChain["channel1"] = [][]byte{rootCAs[3]}
 	cs.OrdererRootCAsByChain["channel2"] = [][]byte{rootCAs[4]}
 	cs.ServerRootCAs = [][]byte{rootCAs[5]}
-	cs.ClientRootCAs = [][]byte{rootCAs[5]}
-
-	appServerRoots, ordererServerRoots := cs.GetServerRootCAs()
-	t.Logf("%d appServerRoots | %d ordererServerRoots", len(appServerRoots),
-		len(ordererServerRoots))
-	assert.Equal(t, 4, len(appServerRoots), "Expected 4 app server root CAs")
-	assert.Equal(t, 2, len(ordererServerRoots), "Expected 2 orderer server root CAs")
-
-	appClientRoots, ordererClientRoots := cs.GetClientRootCAs()
-	t.Logf("%d appClientRoots | %d ordererClientRoots", len(appClientRoots),
-		len(ordererClientRoots))
-	assert.Equal(t, 4, len(appClientRoots), "Expected 4 app client root CAs")
-	assert.Equal(t, 2, len(ordererClientRoots), "Expected 4 orderer client root CAs")
 
 	creds, _ := cs.GetDeliverServiceCredentials("channel1")
 	assert.Equal(t, "1.2", creds.Info().SecurityVersion,
@@ -231,6 +94,9 @@ func TestCredentialSupport(t *testing.T) {
 	creds = cs.GetPeerCredentials()
 	assert.Equal(t, "1.2", creds.Info().SecurityVersion,
 		"Expected Security version to be 1.2")
+
+	_, err := cs.GetDeliverServiceCredentials("channel99")
+	assert.EqualError(t, err, "didn't find any root CA certs for channel channel99")
 
 	
 	cs.ServerRootCAs = append(cs.ServerRootCAs, []byte("badcert"))
@@ -249,7 +115,6 @@ func TestCredentialSupport(t *testing.T) {
 }
 
 type srv struct {
-	port    int
 	address string
 	*GRPCServer
 	caCert   []byte
@@ -319,16 +184,12 @@ func TestImpersonation(t *testing.T) {
 	
 
 	osA := newServer("orgA")
-	defer osA.Stop()
 	osB := newServer("orgB")
-	defer osB.Stop()
 	time.Sleep(time.Second)
 
 	cs := &CredentialSupport{
-		CASupport: &CASupport{
-			AppRootCAsByChain:     make(map[string][][]byte),
-			OrdererRootCAsByChain: make(map[string][][]byte),
-		},
+		AppRootCAsByChain:     make(map[string][][]byte),
+		OrdererRootCAsByChain: make(map[string][][]byte),
 	}
 	_, err := cs.GetDeliverServiceCredentials("C")
 	assert.Error(t, err)
@@ -336,11 +197,50 @@ func TestImpersonation(t *testing.T) {
 	cs.OrdererRootCAsByChain["A"] = [][]byte{osA.caCert}
 	cs.OrdererRootCAsByChain["B"] = [][]byte{osB.caCert}
 
-	testInvoke(t, "A", osA, cs, true)
-	testInvoke(t, "B", osB, cs, true)
-	testInvoke(t, "A", osB, cs, false)
-	testInvoke(t, "B", osA, cs, false)
-
+	var tests = []struct {
+		channel string
+		server  *srv
+		creds   *CredentialSupport
+		success bool
+	}{
+		{
+			channel: "A",
+			server:  osA,
+			creds:   cs,
+			success: true,
+		},
+		{
+			channel: "B",
+			server:  osB,
+			creds:   cs,
+			success: true,
+		},
+		{
+			channel: "A",
+			server:  osB,
+			creds:   cs,
+			success: false,
+		},
+		{
+			channel: "B",
+			server:  osA,
+			creds:   cs,
+			success: false,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run("", func(t *testing.T) {
+			t.Parallel()
+			testInvoke(
+				t,
+				test.channel,
+				test.server,
+				test.creds,
+				test.success,
+			)
+		})
+	}
 }
 
 func testInvoke(
@@ -354,7 +254,7 @@ func testInvoke(
 	assert.NoError(t, err)
 
 	endpoint := s.address
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, endpoint, grpc.WithTransportCredentials(creds), grpc.WithBlock())
 	if shouldSucceed {

@@ -2,11 +2,11 @@
 package fake
 
 import (
-	sync "sync"
+	"sync"
 
-	ledger "github.com/mcc-github/blockchain/common/ledger"
-	chaincode "github.com/mcc-github/blockchain/core/chaincode"
-	peer "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/common/ledger"
+	"github.com/mcc-github/blockchain/core/chaincode"
+	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 type QueryResponseBuilder struct {

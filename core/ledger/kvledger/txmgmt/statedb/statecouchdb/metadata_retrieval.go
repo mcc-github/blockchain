@@ -8,7 +8,6 @@ package statecouchdb
 import (
 	"fmt"
 
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
 )
 
@@ -20,6 +19,9 @@ type nsMetadataRetriever struct {
 	keys            []string
 	executionResult []*couchdb.DocMetadata
 }
+
+
+
 
 
 
@@ -52,11 +54,11 @@ func (vdb *VersionedDB) retrieveMetadata(nsKeysMap map[string][]string) (map[str
 
 func retrieveNsMetadata(db *couchdb.CouchDatabase, keys []string) ([]*couchdb.DocMetadata, error) {
 	
-	maxBacthSize := ledgerconfig.GetMaxBatchUpdateSize()
+	maxBatchSize := db.CouchInstance.MaxBatchUpdateSize()
 	batches := []batch{}
 	remainingKeys := keys
 	for {
-		numKeys := minimum(maxBacthSize, len(remainingKeys))
+		numKeys := minimum(maxBatchSize, len(remainingKeys))
 		if numKeys == 0 {
 			break
 		}

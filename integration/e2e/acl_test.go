@@ -22,7 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -58,7 +58,7 @@ var _ = Describe("EndToEndACL", func() {
 		soloConfig.RemovePeer("Org2", "peer1")
 		Expect(soloConfig.Peers).To(HaveLen(2))
 
-		network = nwo.New(soloConfig, testDir, client, BasePort(), components)
+		network = nwo.New(soloConfig, testDir, client, StartPort(), components)
 		network.GenerateConfigTree()
 		network.Bootstrap()
 
@@ -254,14 +254,14 @@ func SetACLPolicy(network *nwo.Network, channel, policyName, policy string, orde
 	
 	updatedConfig.ChannelGroup.Groups["Application"].Values["ACLs"] = &common.ConfigValue{
 		ModPolicy: "Admins",
-		Value: utils.MarshalOrPanic(&pb.ACLs{
+		Value: protoutil.MarshalOrPanic(&pb.ACLs{
 			Acls: map[string]*pb.APIResource{
 				policyName: {PolicyRef: policy},
 			},
 		}),
 	}
 
-	nwo.UpdateConfig(network, orderer, channel, config, updatedConfig, submitter, signer)
+	nwo.UpdateConfig(network, orderer, channel, config, updatedConfig, true, submitter, signer)
 }
 
 
@@ -269,13 +269,13 @@ func SetACLPolicy(network *nwo.Network, channel, policyName, policy string, orde
 func GetTxIDFromBlockFile(blockFile string) string {
 	block := nwo.UnmarshalBlockFromFile(blockFile)
 
-	envelope, err := utils.GetEnvelopeFromBlock(block.Data.Data[0])
+	envelope, err := protoutil.GetEnvelopeFromBlock(block.Data.Data[0])
 	Expect(err).NotTo(HaveOccurred())
 
-	payload, err := utils.GetPayload(envelope)
+	payload, err := protoutil.GetPayload(envelope)
 	Expect(err).NotTo(HaveOccurred())
 
-	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 	Expect(err).NotTo(HaveOccurred())
 
 	return chdr.TxId

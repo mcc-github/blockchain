@@ -16,7 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	gossip_proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"google.golang.org/grpc"
 )
 
@@ -64,10 +64,9 @@ func (mock *MockGossipServiceAdapter) Gossip(msg *gossip_proto.GossipMessage) {
 
 
 type MockBlocksDeliverer struct {
-	DisconnectCalled           chan struct{}
-	DisconnectAndDisableCalled chan struct{}
-	CloseCalled                chan struct{}
-	Pos                        uint64
+	DisconnectCalled chan struct{}
+	CloseCalled      chan struct{}
+	Pos              uint64
 	grpc.ClientStream
 	recvCnt  int32
 	MockRecv func(mock *MockBlocksDeliverer) (*orderer.DeliverResponse, error)
@@ -109,7 +108,7 @@ func MockRecv(mock *MockBlocksDeliverer) (*orderer.DeliverResponse, error) {
 
 
 func (mock *MockBlocksDeliverer) Send(env *common.Envelope) error {
-	payload, _ := utils.GetPayload(env)
+	payload, _ := protoutil.GetPayload(env)
 	seekInfo := &orderer.SeekInfo{}
 
 	proto.Unmarshal(payload.Data, seekInfo)
@@ -124,12 +123,8 @@ func (mock *MockBlocksDeliverer) Send(env *common.Envelope) error {
 	return nil
 }
 
-func (mock *MockBlocksDeliverer) Disconnect(disableEndpoint bool) {
-	if disableEndpoint {
-		mock.DisconnectAndDisableCalled <- struct{}{}
-	} else {
-		mock.DisconnectCalled <- struct{}{}
-	}
+func (mock *MockBlocksDeliverer) Disconnect() {
+	mock.DisconnectCalled <- struct{}{}
 }
 
 func (mock *MockBlocksDeliverer) Close() {

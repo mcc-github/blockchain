@@ -145,24 +145,6 @@ func WriteFolderToTarPackage(tw *tar.Writer, srcPath string, excludeDirs []strin
 }
 
 
-func WriteJavaProjectToPackage(tw *tar.Writer, srcPath string) error {
-
-	vmLogger.Debugf("Packaging Java project from path %s", srcPath)
-
-	if err := WriteFolderToTarPackage(tw, srcPath, []string{"target", "build", "out"}, nil, javaExcludeFileTypes); err != nil {
-
-		vmLogger.Errorf("Error writing folder to tar package %s", err)
-		return err
-	}
-	
-	if err := tw.Close(); err != nil {
-		return err
-	}
-	return nil
-
-}
-
-
 func WriteFileToPackage(localpath string, packagepath string, tw *tar.Writer) error {
 	vmLogger.Debug("Writing file to tarball:", packagepath)
 	fd, err := os.Open(localpath)
@@ -211,7 +193,15 @@ func WriteStreamToPackage(is io.Reader, localpath string, packagepath string, tw
 func WriteBytesToPackage(name string, payload []byte, tw *tar.Writer) error {
 	
 	var zeroTime time.Time
-	tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(payload)), ModTime: zeroTime, AccessTime: zeroTime, ChangeTime: zeroTime})
+	tw.WriteHeader(
+		&tar.Header{
+			Name:       name,
+			Size:       int64(len(payload)),
+			ModTime:    zeroTime,
+			AccessTime: zeroTime,
+			ChangeTime: zeroTime,
+			Mode:       0100644,
+		})
 	tw.Write(payload)
 
 	return nil

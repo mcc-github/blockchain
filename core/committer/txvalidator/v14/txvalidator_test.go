@@ -27,7 +27,7 @@ import (
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -105,7 +105,7 @@ func TestBlockValidationDuplicateTXId(t *testing.T) {
 	defer ledgermgmt.CleanupTestEnv()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
-	gbHash := gb.Header.Hash()
+	gbHash := protoutil.BlockHeaderHash(gb.Header)
 	ledger, _ := ledgermgmt.CreateLedger(gb)
 	defer ledger.Close()
 
@@ -166,7 +166,7 @@ func TestBlockValidation(t *testing.T) {
 	defer ledgermgmt.CleanupTestEnv()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
-	gbHash := gb.Header.Hash()
+	gbHash := protoutil.BlockHeaderHash(gb.Header)
 	ledger, _ := ledgermgmt.CreateLedger(gb)
 	defer ledger.Close()
 
@@ -180,7 +180,7 @@ func TestParallelBlockValidation(t *testing.T) {
 	defer ledgermgmt.CleanupTestEnv()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
-	gbHash := gb.Header.Hash()
+	gbHash := protoutil.BlockHeaderHash(gb.Header)
 	ledger, _ := ledgermgmt.CreateLedger(gb)
 	defer ledger.Close()
 
@@ -194,7 +194,7 @@ func TestVeryLargeParallelBlockValidation(t *testing.T) {
 	defer ledgermgmt.CleanupTestEnv()
 
 	gb, _ := test.MakeGenesisBlock("TestLedger")
-	gbHash := gb.Header.Hash()
+	gbHash := protoutil.BlockHeaderHash(gb.Header)
 	ledger, _ := ledgermgmt.CreateLedger(gb)
 	defer ledger.Close()
 
@@ -229,12 +229,12 @@ func TestTxValidationFailure_InvalidTxid(t *testing.T) {
 	
 	payload := &common.Payload{
 		Header: &common.Header{
-			ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+			ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 				TxId:      "INVALID TXID!!!",
 				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				ChannelId: util2.GetTestChainID(),
 			}),
-			SignatureHeader: utils.MarshalOrPanic(&common.SignatureHeader{
+			SignatureHeader: protoutil.MarshalOrPanic(&common.SignatureHeader{
 				Nonce:   []byte("nonce"),
 				Creator: mockSignerSerialized,
 			}),
@@ -270,11 +270,11 @@ func TestTxValidationFailure_InvalidTxid(t *testing.T) {
 
 	block.Header = &common.BlockHeader{
 		Number:   0,
-		DataHash: block.Data.Hash(),
+		DataHash: protoutil.BlockDataHash(block.Data),
 	}
 
 	
-	utils.InitBlockMetadata(block)
+	protoutil.InitBlockMetadata(block)
 	txsFilter := util.NewTxValidationFlagsSetValue(len(block.Data.Data), peer.TxValidationCode_VALID)
 	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
 
@@ -310,7 +310,7 @@ func createCCUpgradeEnvelope(chainID, chaincodeName, chaincodeVersion string, si
 	}
 
 	cds := &peer.ChaincodeDeploymentSpec{ChaincodeSpec: spec, CodePackage: []byte{}}
-	prop, _, err := utils.CreateUpgradeProposalFromCDS(chainID, cds, creator, []byte{}, []byte{}, []byte{}, nil)
+	prop, _, err := protoutil.CreateUpgradeProposalFromCDS(chainID, cds, creator, []byte{}, []byte{}, []byte{}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +322,7 @@ func createCCUpgradeEnvelope(chainID, chaincodeName, chaincodeVersion string, si
 		Endorsement: &peer.Endorsement{},
 	}
 
-	return utils.CreateSignedTx(prop, signer, proposalResponse)
+	return protoutil.CreateSignedTx(prop, signer, proposalResponse)
 }
 
 func TestGetTxCCInstance(t *testing.T) {
@@ -344,7 +344,7 @@ func TestGetTxCCInstance(t *testing.T) {
 	assert.NoError(t, err)
 
 	
-	payload, err := utils.GetPayload(env)
+	payload, err := protoutil.GetPayload(env)
 	assert.NoError(t, err)
 
 	expectInvokeCCIns := &sysccprovider.ChaincodeInstance{

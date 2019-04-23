@@ -13,7 +13,7 @@ import (
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
 	"github.com/mcc-github/blockchain/common/policies"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,7 +42,7 @@ func makeConfigPair(id, modificationPolicy string, lastModified uint64, data []b
 }
 
 func makeConfig(configPairs ...*configPair) *cb.Config {
-	channelGroup := cb.NewConfigGroup()
+	channelGroup := protoutil.NewConfigGroup()
 	for _, pair := range configPairs {
 		channelGroup.Values[pair.key] = pair.value
 	}
@@ -53,7 +53,7 @@ func makeConfig(configPairs ...*configPair) *cb.Config {
 }
 
 func makeConfigSet(configPairs ...*configPair) *cb.ConfigGroup {
-	result := cb.NewConfigGroup()
+	result := protoutil.NewConfigGroup()
 	for _, pair := range configPairs {
 		result.Values[pair.key] = pair.value
 	}
@@ -62,14 +62,14 @@ func makeConfigSet(configPairs ...*configPair) *cb.ConfigGroup {
 
 func makeConfigUpdateEnvelope(chainID string, readSet, writeSet *cb.ConfigGroup) *cb.Envelope {
 	return &cb.Envelope{
-		Payload: utils.MarshalOrPanic(&cb.Payload{
+		Payload: protoutil.MarshalOrPanic(&cb.Payload{
 			Header: &cb.Header{
-				ChannelHeader: utils.MarshalOrPanic(&cb.ChannelHeader{
+				ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
 					Type: int32(cb.HeaderType_CONFIG_UPDATE),
 				}),
 			},
-			Data: utils.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
-				ConfigUpdate: utils.MarshalOrPanic(&cb.ConfigUpdate{
+			Data: protoutil.MarshalOrPanic(&cb.ConfigUpdateEnvelope{
+				ConfigUpdate: protoutil.MarshalOrPanic(&cb.ConfigUpdate{
 					ChannelId: chainID,
 					ReadSet:   readSet,
 					WriteSet:  writeSet,

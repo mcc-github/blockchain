@@ -81,7 +81,7 @@ type streamClient interface {
 	Close()
 
 	
-	Disconnect(disableEndpoint bool)
+	Disconnect()
 }
 
 
@@ -150,11 +150,7 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 			if currDelay < maxDelay {
 				statusCounter++
 			}
-			if t.Status == common.Status_BAD_REQUEST {
-				b.client.Disconnect(false)
-			} else {
-				b.client.Disconnect(true)
-			}
+			b.client.Disconnect()
 			continue
 		case *orderer.DeliverResponse_Block:
 			errorStatusCounter = 0
@@ -203,7 +199,7 @@ func (b *blocksProviderImpl) Stop() {
 
 
 func (b *blocksProviderImpl) UpdateOrderingEndpoints(endpoints []string) {
-	if !b.isEndpointsUpdated(endpoints) {
+	if !b.areEndpointsUpdated(endpoints) {
 		
 		return
 	}
@@ -213,9 +209,10 @@ func (b *blocksProviderImpl) UpdateOrderingEndpoints(endpoints []string) {
 	logger.Debug("Disconnecting so endpoints update will take effect")
 	
 	
-	b.client.Disconnect(false)
+	b.client.Disconnect()
 }
-func (b *blocksProviderImpl) isEndpointsUpdated(endpoints []string) bool {
+
+func (b *blocksProviderImpl) areEndpointsUpdated(endpoints []string) bool {
 	if len(endpoints) != len(b.client.GetEndpoints()) {
 		return true
 	}

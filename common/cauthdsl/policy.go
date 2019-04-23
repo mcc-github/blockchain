@@ -15,6 +15,7 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	mspp "github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 type Identity interface {
@@ -37,7 +38,7 @@ type IdentityAndSignature interface {
 }
 
 type deserializeAndVerify struct {
-	signedData           *cb.SignedData
+	signedData           *protoutil.SignedData
 	deserializer         msp.IdentityDeserializer
 	deserializedIdentity msp.Identity
 }
@@ -93,13 +94,34 @@ func (pr *provider) NewPolicy(data []byte) (policies.Policy, proto.Message, erro
 
 }
 
+type ProviderFromStruct struct {
+	Deserializer msp.IdentityDeserializer
+}
+
+
+func (pr *ProviderFromStruct) NewPolicy(sigPolicy *cb.SignaturePolicyEnvelope) (policies.Policy, error) {
+	if sigPolicy == nil {
+		return nil, errors.New("invalid arguments")
+	}
+
+	compiled, err := compile(sigPolicy.Rule, sigPolicy.Identities, pr.Deserializer)
+	if err != nil {
+		return nil, err
+	}
+
+	return &policy{
+		evaluator:    compiled,
+		deserializer: pr.Deserializer,
+	}, nil
+}
+
 type policy struct {
 	evaluator    func([]IdentityAndSignature, []bool) bool
 	deserializer msp.IdentityDeserializer
 }
 
 
-func (p *policy) Evaluate(signatureSet []*cb.SignedData) error {
+func (p *policy) Evaluate(signatureSet []*protoutil.SignedData) error {
 	if p == nil {
 		return fmt.Errorf("No such policy")
 	}

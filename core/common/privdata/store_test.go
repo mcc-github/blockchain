@@ -16,7 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -77,6 +77,7 @@ func TestCollectionStore(t *testing.T) {
 		Name:             "mycollection",
 		MemberOrgsPolicy: accessPolicy,
 		MemberOnlyRead:   false,
+		MemberOnlyWrite:  false,
 	}
 
 	support.CollectionInfoProvider.CollectionInfoReturns(scc, nil)
@@ -92,6 +93,7 @@ func TestCollectionStore(t *testing.T) {
 		Name:             "mycollection",
 		MemberOrgsPolicy: accessPolicy,
 		MemberOnlyRead:   true,
+		MemberOnlyWrite:  true,
 	}
 	cc := &common.CollectionConfig{Payload: &common.CollectionConfig_StaticCollectionConfig{
 		StaticCollectionConfig: scc,
@@ -101,21 +103,38 @@ func TestCollectionStore(t *testing.T) {
 	support.CollectionInfoProvider.CollectionInfoReturns(scc, nil)
 	support.CollectionInfoProvider.ChaincodeInfoReturns(
 		&ledger.DeployedChaincodeInfo{
-			CollectionConfigPkg: ccp,
+			ExplicitCollectionConfigPkg: ccp,
 		}, nil)
 
 	ccc, err := cs.RetrieveCollectionConfigPackage(ccr)
 	assert.NoError(t, err)
 	assert.NotNil(t, ccc)
 
-	signedProp, _ := utils.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("signer0"), []byte("msg1"))
-	allowedAccess, err := cs.HasReadAccess(ccr, signedProp, &lm.MockQueryExecutor{})
+	signedProp, _ := protoutil.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("signer0"), []byte("msg1"))
+	readP, writeP, err := cs.RetrieveReadWritePermission(ccr, signedProp, &lm.MockQueryExecutor{})
 	assert.NoError(t, err)
-	assert.True(t, allowedAccess)
+	assert.True(t, readP)
+	assert.True(t, writeP)
 
 	
-	signedProp, _ = utils.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("signer2"), []byte("msg1"))
-	allowedAccess, err = cs.HasReadAccess(ccr, signedProp, &lm.MockQueryExecutor{})
+	signedProp, _ = protoutil.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("signer2"), []byte("msg1"))
+	readP, writeP, err = cs.RetrieveReadWritePermission(ccr, signedProp, &lm.MockQueryExecutor{})
 	assert.NoError(t, err)
-	assert.False(t, allowedAccess)
+	assert.False(t, readP)
+	assert.False(t, writeP)
+
+	scc = &common.StaticCollectionConfig{
+		Name:             "mycollection",
+		MemberOrgsPolicy: accessPolicy,
+		MemberOnlyRead:   false,
+		MemberOnlyWrite:  false,
+	}
+	support.CollectionInfoProvider.CollectionInfoReturns(scc, nil)
+
+	
+	signedProp, _ = protoutil.MockSignedEndorserProposalOrPanic("A", &peer.ChaincodeSpec{}, []byte("signer2"), []byte("msg1"))
+	readP, writeP, err = cs.RetrieveReadWritePermission(ccr, signedProp, &lm.MockQueryExecutor{})
+	assert.NoError(t, err)
+	assert.True(t, readP)
+	assert.True(t, writeP)
 }

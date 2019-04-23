@@ -20,7 +20,9 @@ import (
 )
 
 func init() {
-	viper.Set("chaincode.system", map[string]string{"invokableExternalButNotCC2CC": "enable", "invokableCC2CCButNotExternal": "enable", "disabled": "enable"})
+	viper.Set("chaincode.system.invokableExternalButNotCC2CC", "enable")
+	viper.Set("chaincode.system.invokableCC2CCButNotExternal", "enable")
+	viper.Set("chaincode.system.disabled", "enable")
 	viper.Set("peer.fileSystemPath", os.TempDir())
 }
 
@@ -133,5 +135,5 @@ func TestRegisterSysCC(t *testing.T) {
 		},
 	})
 	assert.Error(t, err)
-	assert.Contains(t, "invokableExternalButNotCC2CC-latest already registered", err)
+	assert.Contains(t, "invokableExternalButNotCC2CC:latest already registered", err)
 }

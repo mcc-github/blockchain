@@ -18,6 +18,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
+	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -36,9 +37,6 @@ var chaincodeInstallPath string
 type CCPackage interface {
 	
 	InitFromBuffer(buf []byte) (*ChaincodeData, error)
-
-	
-	InitFromFS(ccname string, ccversion string) ([]byte, *pb.ChaincodeDeploymentSpec, error)
 
 	
 	PutChaincodeToFS() error
@@ -79,10 +77,6 @@ func SetChaincodesPath(path string) {
 	}
 
 	chaincodeInstallPath = path
-}
-
-func GetChaincodePackage(ccname string, ccversion string) ([]byte, error) {
-	return GetChaincodePackageFromPath(ccname, ccversion, chaincodeInstallPath)
 }
 
 
@@ -137,7 +131,7 @@ func (cifs *CCInfoFSImpl) GetChaincodeCodePackage(ccname, ccversion string) ([]b
 	if err != nil {
 		return nil, err
 	}
-	return ccpack.GetDepSpec().Bytes(), nil
+	return ccpack.GetDepSpec().CodePackage, nil
 }
 
 
@@ -218,7 +212,7 @@ func (cifs *CCInfoFSImpl) ListInstalledChaincodes(dir string, ls DirEnumerator, 
 		chaincodes = append(chaincodes, chaincode.InstalledChaincode{
 			Name:    ccName,
 			Version: ccVersion,
-			Id:      ccPackage.GetId(),
+			Hash:    ccPackage.GetId(),
 		})
 	}
 	ccproviderLogger.Debug("Returning", chaincodes)
@@ -347,7 +341,6 @@ func GetInstalledChaincodes() (*pb.ChaincodeQueryResponse, error) {
 			if err != nil {
 				
 				
-				ccproviderLogger.Errorf("Unreadable chaincode file found on filesystem: %s", file.Name())
 				continue
 			}
 
@@ -386,11 +379,13 @@ type CCContext struct {
 
 	
 	Version string
-}
 
+	
+	ID []byte
 
-func (cccid *CCContext) GetCanonicalName() string {
-	return cccid.Name + ":" + cccid.Version
+	
+	
+	InitRequired bool
 }
 
 
@@ -415,6 +410,9 @@ type ChaincodeDefinition interface {
 	
 	
 	Endorsement() string
+
+	
+	RequiresInit() bool
 }
 
 
@@ -479,6 +477,11 @@ func (cd *ChaincodeData) Endorsement() string {
 }
 
 
+func (cd *ChaincodeData) RequiresInit() bool {
+	return true
+}
+
+
 
 
 func (cd *ChaincodeData) Reset() { *cd = ChaincodeData{} }
@@ -491,14 +494,17 @@ func (*ChaincodeData) ProtoMessage() {}
 
 
 type ChaincodeContainerInfo struct {
-	Name        string
-	Version     string
-	Path        string
-	Type        string
-	CodePackage []byte
+	PackageID persistence.PackageID
+	Path      string
+	Type      string
 
 	
 	ContainerType string
+
+	
+	
+	Name    string
+	Version string
 }
 
 
@@ -506,6 +512,7 @@ type ChaincodeContainerInfo struct {
 type TransactionParams struct {
 	TxID                 string
 	ChannelID            string
+	NamespaceID          string
 	SignedProp           *pb.SignedProposal
 	Proposal             *pb.Proposal
 	TXSimulator          ledger.TxSimulator
@@ -523,8 +530,6 @@ type TransactionParams struct {
 
 type ChaincodeProvider interface {
 	
-	Execute(txParams *TransactionParams, cccid *CCContext, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error)
-	
 	
 	ExecuteLegacyInit(txParams *TransactionParams, cccid *CCContext, spec *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error)
 	
@@ -533,10 +538,11 @@ type ChaincodeProvider interface {
 
 func DeploymentSpecToChaincodeContainerInfo(cds *pb.ChaincodeDeploymentSpec) *ChaincodeContainerInfo {
 	return &ChaincodeContainerInfo{
-		Name:          cds.Name(),
-		Version:       cds.Version(),
-		Path:          cds.Path(),
-		Type:          cds.CCType(),
+		Name:          cds.ChaincodeSpec.ChaincodeId.Name,
+		Version:       cds.ChaincodeSpec.ChaincodeId.Version,
+		Path:          cds.ChaincodeSpec.ChaincodeId.Path,
+		Type:          cds.ChaincodeSpec.Type.String(),
 		ContainerType: cds.ExecEnv.String(),
+		PackageID:     persistence.PackageID(cds.ChaincodeSpec.ChaincodeId.Name + ":" + cds.ChaincodeSpec.ChaincodeId.Version),
 	}
 }

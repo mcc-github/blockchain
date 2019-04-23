@@ -13,6 +13,7 @@ import (
 	"github.com/mcc-github/blockchain-lib-go/healthz"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/metrics"
+	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
@@ -26,6 +27,23 @@ type Initializer struct {
 	MembershipInfoProvider        MembershipInfoProvider
 	MetricsProvider               metrics.Provider
 	HealthCheckRegistry           HealthCheckRegistry
+	Config                        *Config
+}
+
+
+type Config struct {
+	
+	StateDB *StateDB
+}
+
+
+type StateDB struct {
+	
+	
+	StateDatabase string
+	
+	
+	CouchDB *couchdb.Config
 }
 
 
@@ -80,14 +98,6 @@ type PeerLedger interface {
 	
 	CommitWithPvtData(blockAndPvtdata *BlockAndPvtData) error
 	
-	
-	
-	PurgePrivateData(maxBlockNumToRetain uint64) error
-	
-	PrivateDataMinBlockNum() (uint64, error)
-	
-	Prune(policy commonledger.PrunePolicy) error
-	
 	GetConfigHistoryRetriever() (ConfigHistoryRetriever, error)
 	
 	
@@ -114,6 +124,11 @@ type SimpleQueryExecutor interface {
 	
 	
 	GetStateRangeScanIterator(namespace string, startKey string, endKey string) (commonledger.ResultsIterator, error)
+	
+	
+	
+	
+	GetPrivateDataHash(namespace, collection, key string) ([]byte, error)
 }
 
 
@@ -147,11 +162,6 @@ type QueryExecutor interface {
 	ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (QueryResultsIterator, error)
 	
 	GetPrivateData(namespace, collection, key string) ([]byte, error)
-	
-	
-	
-	
-	GetPrivateDataHash(namespace, collection, key string) ([]byte, error)
 	
 	GetPrivateDataMetadata(namespace, collection, key string) (map[string][]byte, error)
 	
@@ -351,8 +361,8 @@ func (txSim *TxSimulationResults) ContainsPvtWrites() bool {
 
 
 
-
 type StateListener interface {
+	Initialize(ledgerID string, qe SimpleQueryExecutor) error
 	InterestedInNamespaces() []string
 	HandleStateUpdates(trigger *StateUpdateTrigger) error
 	StateCommitDone(channelID string)
@@ -368,7 +378,13 @@ type StateUpdateTrigger struct {
 }
 
 
-type StateUpdates map[string]interface{}
+type StateUpdates map[string]*KVStateUpdates
+
+
+type KVStateUpdates struct {
+	PublicUpdates   []*kvrwset.KVWrite
+	CollHashUpdates map[string][]*kvrwset.KVWriteHash
+}
 
 
 type ConfigHistoryRetriever interface {
@@ -467,18 +483,46 @@ type PvtdataHashMismatch struct {
 
 
 type DeployedChaincodeInfoProvider interface {
+	
 	Namespaces() []string
+	
 	UpdatedChaincodes(stateUpdates map[string][]*kvrwset.KVWrite) ([]*ChaincodeLifecycleInfo, error)
+	
 	ChaincodeInfo(channelName, chaincodeName string, qe SimpleQueryExecutor) (*DeployedChaincodeInfo, error)
+	
 	CollectionInfo(channelName, chaincodeName, collectionName string, qe SimpleQueryExecutor) (*common.StaticCollectionConfig, error)
+	
+	ImplicitCollections(channelName, chaincodeName string, qe SimpleQueryExecutor) ([]*common.StaticCollectionConfig, error)
 }
 
 
 type DeployedChaincodeInfo struct {
-	Name                string
-	Hash                []byte
-	Version             string
-	CollectionConfigPkg *common.CollectionConfigPackage
+	Name                        string
+	Hash                        []byte
+	Version                     string
+	ExplicitCollectionConfigPkg *common.CollectionConfigPackage
+	ImplicitCollections         []*common.StaticCollectionConfig
+}
+
+
+func (dci DeployedChaincodeInfo) AllCollectionsConfigPkg() *common.CollectionConfigPackage {
+	var combinedColls []*common.CollectionConfig
+	if dci.ExplicitCollectionConfigPkg != nil {
+		for _, explicitColl := range dci.ExplicitCollectionConfigPkg.Config {
+			combinedColls = append(combinedColls, explicitColl)
+		}
+	}
+	for _, implicitColl := range dci.ImplicitCollections {
+		c := &common.CollectionConfig{}
+		c.Payload = &common.CollectionConfig_StaticCollectionConfig{StaticCollectionConfig: implicitColl}
+		combinedColls = append(combinedColls, c)
+	}
+	if combinedColls == nil {
+		return nil
+	}
+	return &common.CollectionConfigPackage{
+		Config: combinedColls,
+	}
 }
 
 
@@ -504,11 +548,13 @@ type MembershipInfoProvider interface {
 	AmMemberOf(channelName string, collectionPolicyConfig *common.CollectionPolicyConfig) (bool, error)
 }
 
-
-
-
-
-
 type HealthCheckRegistry interface {
 	RegisterChecker(string, healthz.HealthChecker) error
 }
+
+
+
+
+
+
+

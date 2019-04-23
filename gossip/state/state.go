@@ -18,11 +18,14 @@ import (
 	"github.com/mcc-github/blockchain/gossip/comm"
 	common2 "github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
+	"github.com/mcc-github/blockchain/gossip/metrics"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/transientstore"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -54,6 +57,17 @@ const (
 )
 
 
+type Configuration struct {
+	AntiEntropyInterval             time.Duration
+	AntiEntropyStateResponseTimeout time.Duration
+	AntiEntropyBatchSize            uint64
+	MaxBlockDistance                int
+	AntiEntropyMaxRetries           int
+	ChannelBufferSize               int
+	EnableStateTransfer             bool
+}
+
+
 type GossipAdapter interface {
 	
 	Send(msg *proto.GossipMessage, peers ...*comm.RemotePeer)
@@ -62,7 +76,7 @@ type GossipAdapter interface {
 	
 	
 	
-	Accept(acceptor common2.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage)
+	Accept(acceptor common2.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage)
 
 	
 	
@@ -101,7 +115,7 @@ type ledgerResources interface {
 	
 	
 	
-	GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common.SignedData) (*common.Block, util.PvtDataCollections, error)
+	GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo protoutil.SignedData) (*common.Block, util.PvtDataCollections, error)
 
 	
 	LedgerHeight() (uint64, error)
@@ -129,16 +143,16 @@ type GossipStateProviderImpl struct {
 	
 	gossipChan <-chan *proto.GossipMessage
 
-	commChan <-chan proto.ReceivedMessage
+	commChan <-chan protoext.ReceivedMessage
 
 	
 	payloads PayloadsBuffer
 
 	ledger ledgerResources
 
-	stateResponseCh chan proto.ReceivedMessage
+	stateResponseCh chan protoext.ReceivedMessage
 
-	stateRequestCh chan proto.ReceivedMessage
+	stateRequestCh chan protoext.ReceivedMessage
 
 	stopCh chan struct{}
 
@@ -147,24 +161,93 @@ type GossipStateProviderImpl struct {
 	once sync.Once
 
 	stateTransferActive int32
+
+	stateMetrics *metrics.StateMetrics
+
+	requestValidator *stateRequestValidator
+
+	blockingMode bool
+
+	config *Configuration
 }
 
 var logger = util.GetLogger(util.StateLogger, "")
 
 
+type stateRequestValidator struct {
+}
 
-func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources) GossipStateProvider {
+
+func (v *stateRequestValidator) validate(request *proto.RemoteStateRequest, batchSize uint64) error {
+	if request.StartSeqNum > request.EndSeqNum {
+		return errors.Errorf("Invalid sequence interval [%d...%d).", request.StartSeqNum, request.EndSeqNum)
+	}
+
+	if request.EndSeqNum > batchSize+request.StartSeqNum {
+		return errors.Errorf("Requesting blocks range [%d-%d) greater than configured allowed"+
+			" (%d) batching size for anti-entropy.", request.StartSeqNum, request.EndSeqNum, batchSize)
+	}
+	return nil
+}
+
+
+func readConfiguration() *Configuration {
+	config := &Configuration{
+		AntiEntropyInterval:             defAntiEntropyInterval,
+		AntiEntropyStateResponseTimeout: defAntiEntropyStateResponseTimeout,
+		AntiEntropyBatchSize:            defAntiEntropyBatchSize,
+		MaxBlockDistance:                defMaxBlockDistance,
+		AntiEntropyMaxRetries:           defAntiEntropyMaxRetries,
+		ChannelBufferSize:               defChannelBufferSize,
+		EnableStateTransfer:             true,
+	}
+
+	if viper.IsSet("peer.gossip.state.checkInterval") {
+		config.AntiEntropyInterval = viper.GetDuration("peer.gossip.state.checkInterval")
+	}
+
+	if viper.IsSet("peer.gossip.state.responseTimeout") {
+		config.AntiEntropyStateResponseTimeout = viper.GetDuration("peer.gossip.state.responseTimeout")
+	}
+
+	if viper.IsSet("peer.gossip.state.batchSize") {
+		config.AntiEntropyBatchSize = uint64(viper.GetInt("peer.gossip.state.batchSize"))
+	}
+
+	if viper.IsSet("peer.gossip.state.blockBufferSize") {
+		config.MaxBlockDistance = viper.GetInt("peer.gossip.state.blockBufferSize")
+	}
+
+	if viper.IsSet("peer.gossip.state.maxRetries") {
+		config.AntiEntropyMaxRetries = viper.GetInt("peer.gossip.state.maxRetries")
+	}
+
+	if viper.IsSet("peer.gossip.state.channelSize") {
+		config.ChannelBufferSize = viper.GetInt("peer.gossip.state.channelSize")
+	}
+
+	if viper.IsSet("peer.gossip.state.enabled") {
+		config.EnableStateTransfer = viper.GetBool("peer.gossip.state.enabled")
+	}
+
+	return config
+}
+
+
+
+func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources,
+	stateMetrics *metrics.StateMetrics, blockingMode bool) GossipStateProvider {
 
 	gossipChan, _ := services.Accept(func(message interface{}) bool {
 		
-		return message.(*proto.GossipMessage).IsDataMsg() &&
+		return protoext.IsDataMsg(message.(*proto.GossipMessage)) &&
 			bytes.Equal(message.(*proto.GossipMessage).Channel, []byte(chainID))
 	}, false)
 
 	remoteStateMsgFilter := func(message interface{}) bool {
-		receivedMsg := message.(proto.ReceivedMessage)
+		receivedMsg := message.(protoext.ReceivedMessage)
 		msg := receivedMsg.GetGossipMessage()
-		if !(msg.IsRemoteStateMessage() || msg.GetPrivateData() != nil) {
+		if !(protoext.IsRemoteStateMessage(msg.GossipMessage) || msg.GetPrivateData() != nil) {
 			return false
 		}
 		
@@ -197,6 +280,9 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		return nil
 	}
 
+	
+	config := readConfiguration()
+
 	s := &GossipStateProviderImpl{
 		
 		mediator: services,
@@ -211,19 +297,31 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		commChan: commChan,
 
 		
-		payloads: NewPayloadsBuffer(height),
+		payloads: &metricsBuffer{
+			PayloadsBuffer: NewPayloadsBuffer(height),
+			sizeMetrics:    stateMetrics.PayloadBufferSize,
+			chainID:        chainID,
+		},
 
 		ledger: ledger,
 
-		stateResponseCh: make(chan proto.ReceivedMessage, defChannelBufferSize),
+		stateResponseCh: make(chan protoext.ReceivedMessage, config.ChannelBufferSize),
 
-		stateRequestCh: make(chan proto.ReceivedMessage, defChannelBufferSize),
+		stateRequestCh: make(chan protoext.ReceivedMessage, config.ChannelBufferSize),
 
 		stopCh: make(chan struct{}, 1),
 
 		stateTransferActive: 0,
 
 		once: sync.Once{},
+
+		stateMetrics: stateMetrics,
+
+		requestValidator: &stateRequestValidator{},
+
+		blockingMode: blockingMode,
+
+		config: config,
 	}
 
 	logger.Infof("Updating metadata information, "+
@@ -237,8 +335,10 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 	go s.listen()
 	
 	go s.deliverPayloads()
-	
-	go s.antiEntropy()
+	if s.config.EnableStateTransfer {
+		
+		go s.antiEntropy()
+	}
 	
 	go s.processStateRequests()
 
@@ -263,9 +363,9 @@ func (s *GossipStateProviderImpl) listen() {
 		}
 	}
 }
-func (s *GossipStateProviderImpl) dispatch(msg proto.ReceivedMessage) {
+func (s *GossipStateProviderImpl) dispatch(msg protoext.ReceivedMessage) {
 	
-	if msg.GetGossipMessage().IsRemoteStateMessage() {
+	if protoext.IsRemoteStateMessage(msg.GetGossipMessage().GossipMessage) {
 		logger.Debug("Handling direct state transfer message")
 		
 		s.directMessage(msg)
@@ -276,7 +376,7 @@ func (s *GossipStateProviderImpl) dispatch(msg proto.ReceivedMessage) {
 	}
 
 }
-func (s *GossipStateProviderImpl) privateDataMessage(msg proto.ReceivedMessage) {
+func (s *GossipStateProviderImpl) privateDataMessage(msg protoext.ReceivedMessage) {
 	if !bytes.Equal(msg.GetGossipMessage().Channel, []byte(s.chainID)) {
 		logger.Warning("Received state transfer request for channel",
 			string(msg.GetGossipMessage().Channel), "while expecting channel", s.chainID, "skipping request...")
@@ -327,7 +427,7 @@ func (s *GossipStateProviderImpl) privateDataMessage(msg proto.ReceivedMessage) 
 	logger.Debug("Private data for collection", collectionName, "has been stored")
 }
 
-func (s *GossipStateProviderImpl) directMessage(msg proto.ReceivedMessage) {
+func (s *GossipStateProviderImpl) directMessage(msg protoext.ReceivedMessage) {
 	logger.Debug("[ENTER] -> directMessage")
 	defer logger.Debug("[EXIT] ->  directMessage")
 
@@ -345,7 +445,7 @@ func (s *GossipStateProviderImpl) directMessage(msg proto.ReceivedMessage) {
 	incoming := msg.GetGossipMessage()
 
 	if incoming.GetStateRequest() != nil {
-		if len(s.stateRequestCh) < defChannelBufferSize {
+		if len(s.stateRequestCh) < s.config.ChannelBufferSize {
 			
 			
 			s.stateRequestCh <- msg
@@ -376,27 +476,20 @@ func (s *GossipStateProviderImpl) processStateRequests() {
 
 
 
-func (s *GossipStateProviderImpl) handleStateRequest(msg proto.ReceivedMessage) {
+func (s *GossipStateProviderImpl) handleStateRequest(msg protoext.ReceivedMessage) {
 	if msg == nil {
 		return
 	}
 	request := msg.GetGossipMessage().GetStateRequest()
 
-	batchSize := request.EndSeqNum - request.StartSeqNum
-	if batchSize > defAntiEntropyBatchSize {
-		logger.Errorf("Requesting blocks batchSize size (%d) greater than configured allowed"+
-			" (%d) batching for anti-entropy. Ignoring request...", batchSize, defAntiEntropyBatchSize)
-		return
-	}
-
-	if request.StartSeqNum > request.EndSeqNum {
-		logger.Errorf("Invalid sequence interval [%d...%d], ignoring request...", request.StartSeqNum, request.EndSeqNum)
+	if err := s.requestValidator.validate(request, s.config.AntiEntropyBatchSize); err != nil {
+		logger.Errorf("State request validation failed, %s. Ignoring request...", err)
 		return
 	}
 
 	currentHeight, err := s.ledger.LedgerHeight()
 	if err != nil {
-		logger.Errorf("Cannot access to current ledger height, due to %+v", errors.WithStack(err))
+		logger.Errorf("Cannot access to current ledger height, due to %+v", err)
 		return
 	}
 	if currentHeight < request.EndSeqNum {
@@ -410,7 +503,7 @@ func (s *GossipStateProviderImpl) handleStateRequest(msg proto.ReceivedMessage) 
 	for seqNum := request.StartSeqNum; seqNum <= endSeqNum; seqNum++ {
 		logger.Debug("Reading block ", seqNum, " with private data from the coordinator service")
 		connInfo := msg.GetConnectionInfo()
-		peerAuthInfo := common.SignedData{
+		peerAuthInfo := protoutil.SignedData{
 			Data:      connInfo.Auth.SignedData,
 			Signature: connInfo.Auth.Signature,
 			Identity:  connInfo.Identity,
@@ -461,7 +554,7 @@ func (s *GossipStateProviderImpl) handleStateRequest(msg proto.ReceivedMessage) 
 	})
 }
 
-func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage) (uint64, error) {
+func (s *GossipStateProviderImpl) handleStateResponse(msg protoext.ReceivedMessage) (uint64, error) {
 	max := uint64(0)
 	
 	response := msg.GetGossipMessage().GetStateResponse()
@@ -580,7 +673,7 @@ func (s *GossipStateProviderImpl) antiEntropy() {
 		case <-s.stopCh:
 			s.stopCh <- struct{}{}
 			return
-		case <-time.After(defAntiEntropyInterval):
+		case <-time.After(s.config.AntiEntropyInterval):
 			ourHeight, err := s.ledger.LedgerHeight()
 			if err != nil {
 				
@@ -625,7 +718,7 @@ func (s *GossipStateProviderImpl) requestBlocksInRange(start uint64, end uint64)
 	defer atomic.StoreInt32(&s.stateTransferActive, 0)
 
 	for prev := start; prev <= end; {
-		next := min(end, prev+defAntiEntropyBatchSize)
+		next := min(end, prev+s.config.AntiEntropyBatchSize)
 
 		gossipMsg := s.stateRequestMessage(prev, next)
 
@@ -633,7 +726,7 @@ func (s *GossipStateProviderImpl) requestBlocksInRange(start uint64, end uint64)
 		tryCounts := 0
 
 		for !responseReceived {
-			if tryCounts > defAntiEntropyMaxRetries {
+			if tryCounts > s.config.AntiEntropyMaxRetries {
 				logger.Warningf("Wasn't  able to get blocks in range [%d...%d), after %d retries",
 					prev, next, tryCounts)
 				return
@@ -667,7 +760,7 @@ func (s *GossipStateProviderImpl) requestBlocksInRange(start uint64, end uint64)
 				}
 				prev = index + 1
 				responseReceived = true
-			case <-time.After(defAntiEntropyStateResponseTimeout):
+			case <-time.After(s.config.AntiEntropyStateResponseTimeout):
 			case <-s.stopCh:
 				s.stopCh <- struct{}{}
 				return
@@ -732,11 +825,7 @@ func (s *GossipStateProviderImpl) hasRequiredHeight(height uint64) func(peer dis
 
 
 func (s *GossipStateProviderImpl) AddPayload(payload *proto.Payload) error {
-	blockingMode := blocking
-	if viper.GetBool("peer.gossip.nonBlockingCommitMode") {
-		blockingMode = false
-	}
-	return s.addPayload(payload, blockingMode)
+	return s.addPayload(payload, s.blockingMode)
 }
 
 
@@ -753,19 +842,22 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 		return errors.Wrap(err, "Failed obtaining ledger height")
 	}
 
-	if !blockingMode && payload.SeqNum-height >= defMaxBlockDistance {
+	if !blockingMode && payload.SeqNum-height >= uint64(s.config.MaxBlockDistance) {
 		return errors.Errorf("Ledger height is at %d, cannot enqueue block with sequence of %d", height, payload.SeqNum)
 	}
 
-	for blockingMode && s.payloads.Size() > defMaxBlockDistance*2 {
+	for blockingMode && s.payloads.Size() > s.config.MaxBlockDistance*2 {
 		time.Sleep(enqueueRetryInterval)
 	}
 
 	s.payloads.Push(payload)
+	logger.Debugf("Blocks payloads buffer size for channel [%s] is %d blocks", s.chainID, s.payloads.Size())
 	return nil
 }
 
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
+
+	t1 := time.Now()
 
 	
 	if err := s.ledger.StoreBlock(block, pvtData); err != nil {
@@ -773,10 +865,15 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 		return err
 	}
 
+	sinceT1 := time.Since(t1)
+	s.stateMetrics.CommitDuration.With("channel", s.chainID).Observe(sinceT1.Seconds())
+
 	
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
 	logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
 		s.chainID, block.Header.Number, len(block.Data.Data))
+
+	s.stateMetrics.Height.With("channel", s.chainID).Set(float64(block.Header.Number + 1))
 
 	return nil
 }

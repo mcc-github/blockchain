@@ -28,8 +28,6 @@ General:
     ReplicationBufferSize: 20971520
     ReplicationPullTimeout: 5s
     ReplicationRetryTimeout: 5s
-    RootCAs:
-    -  {{ $w.OrdererLocalTLSDir Orderer }}/ca.crt
   Keepalive:
     ServerMinInterval: 60s
     ServerInterval: 7200s
@@ -95,6 +93,7 @@ Debug:
 Consensus:
   WALDir: {{ .OrdererDir Orderer }}/etcdraft/wal
   SnapDir: {{ .OrdererDir Orderer }}/etcdraft/snapshot
+  EvictionSuspicion: 10s
 Operations:
   ListenAddress: 127.0.0.1:{{ .OrdererPort Orderer "Operations" }}
   TLS:

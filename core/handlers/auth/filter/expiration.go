@@ -13,7 +13,7 @@ import (
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/core/handlers/auth"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -32,17 +32,17 @@ func (f *expirationCheckFilter) Init(next peer.EndorserServer) {
 }
 
 func validateProposal(signedProp *peer.SignedProposal) error {
-	prop, err := utils.GetProposal(signedProp.ProposalBytes)
+	prop, err := protoutil.GetProposal(signedProp.ProposalBytes)
 	if err != nil {
 		return errors.Wrap(err, "failed parsing proposal")
 	}
 
-	hdr, err := utils.GetHeader(prop.Header)
+	hdr, err := protoutil.GetHeader(prop.Header)
 	if err != nil {
 		return errors.Wrap(err, "failed parsing header")
 	}
 
-	sh, err := utils.GetSignatureHeader(hdr.SignatureHeader)
+	sh, err := protoutil.GetSignatureHeader(hdr.SignatureHeader)
 	if err != nil {
 		return errors.Wrap(err, "failed parsing signature header")
 	}

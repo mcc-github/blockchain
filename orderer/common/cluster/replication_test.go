@@ -9,6 +9,7 @@ package cluster_test
 import (
 	"io/ioutil"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/common/mocks/crypto"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/cluster/mocks"
@@ -24,7 +24,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -155,7 +155,7 @@ func TestReplicateChainsFailures(t *testing.T) {
 			name:                    "failure in appending a block to the ledger",
 			latestBlockSeqInOrderer: 21,
 			appendBlockError:        errors.New("IO error"),
-			expectedPanic:           "Failed to write block 0: IO error",
+			expectedPanic:           "Failed to write block [0]: IO error",
 		},
 		{
 			name:                    "failure pulling the system chain",
@@ -189,7 +189,7 @@ func TestReplicateChainsFailures(t *testing.T) {
 				{ChannelName: "channelWeAreNotPartOf", GenesisBlock: &common.Block{
 					Header: &common.BlockHeader{},
 					Data: &common.BlockData{
-						Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
+						Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
 							Payload: []byte{1, 2, 3},
 						})},
 					},
@@ -349,7 +349,7 @@ func TestPullChannelFailure(t *testing.T) {
 }
 
 func TestPullerConfigFromTopLevelConfig(t *testing.T) {
-	signer := &crypto.LocalSigner{}
+	signer := &mocks.SignerSerializer{}
 	expected := cluster.PullerConfig{
 		Channel:             "system",
 		MaxTotalBufferBytes: 100,
@@ -376,9 +376,9 @@ func TestReplicateChainsChannelClassificationFailure(t *testing.T) {
 	
 	
 
-	block30WithConfigBlockOf21 := common.NewBlock(30, nil)
-	block30WithConfigBlockOf21.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = utils.MarshalOrPanic(&common.Metadata{
-		Value: utils.MarshalOrPanic(&common.LastConfig{Index: 21}),
+	block30WithConfigBlockOf21 := protoutil.NewBlock(30, nil)
+	block30WithConfigBlockOf21.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = protoutil.MarshalOrPanic(&common.Metadata{
+		Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 21}),
 	})
 
 	osn := newClusterNode(t)
@@ -450,9 +450,9 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	
 
 	systemChannelBlocks := createBlockChain(0, 21)
-	block30WithConfigBlockOf21 := common.NewBlock(30, nil)
-	block30WithConfigBlockOf21.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = utils.MarshalOrPanic(&common.Metadata{
-		Value: utils.MarshalOrPanic(&common.LastConfig{Index: 21}),
+	block30WithConfigBlockOf21 := protoutil.NewBlock(30, nil)
+	block30WithConfigBlockOf21.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = protoutil.MarshalOrPanic(&common.Metadata{
+		Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 21}),
 	})
 
 	osn := newClusterNode(t)
@@ -468,7 +468,7 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	channelLister.On("Channels").Return([]cluster.ChannelGenesisBlock{
 		{ChannelName: "E", GenesisBlock: fakeGB},
 		{ChannelName: "D", GenesisBlock: fakeGB}, {ChannelName: "C", GenesisBlock: fakeGB},
-		{ChannelName: "A"}, {ChannelName: "B", GenesisBlock: fakeGB},
+		{ChannelName: "A", GenesisBlock: fakeGB}, {ChannelName: "B", GenesisBlock: fakeGB},
 	})
 	channelLister.On("Close")
 
@@ -651,9 +651,9 @@ func TestReplicateChainsGreenPath(t *testing.T) {
 	
 	osn.enqueueResponse(30)
 	osn.addExpectProbeAssert()
-	osn.addExpectPullAssert(0)
+	osn.addExpectPullAssert(10)
 	
-	for _, block := range createBlockChain(0, 30) {
+	for _, block := range createBlockChain(10, 30) {
 		osn.blockResponses <- &orderer.DeliverResponse{
 			Type: &orderer.DeliverResponse_Block{Block: block},
 		}
@@ -785,8 +785,8 @@ func TestParticipant(t *testing.T) {
 			latestBlockSeq: uint64(99),
 			latestBlock: &common.Block{
 				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{1, 2, 3}, utils.MarshalOrPanic(&common.Metadata{
-						Value: utils.MarshalOrPanic(&common.LastConfig{
+					Metadata: [][]byte{{1, 2, 3}, protoutil.MarshalOrPanic(&common.Metadata{
+						Value: protoutil.MarshalOrPanic(&common.LastConfig{
 							Index: 42,
 						}),
 					})},
@@ -814,8 +814,8 @@ func TestParticipant(t *testing.T) {
 			latestBlockSeq: uint64(99),
 			latestBlock: &common.Block{
 				Metadata: &common.BlockMetadata{
-					Metadata: [][]byte{{1, 2, 3}, utils.MarshalOrPanic(&common.Metadata{
-						Value: utils.MarshalOrPanic(&common.LastConfig{
+					Metadata: [][]byte{{1, 2, 3}, protoutil.MarshalOrPanic(&common.Metadata{
+						Value: protoutil.MarshalOrPanic(&common.LastConfig{
 							Index: 42,
 						}),
 					})},
@@ -879,7 +879,7 @@ func TestBlockPullerFromConfigBlockFailures(t *testing.T) {
 				"proto: common.Payload: illegal tag 0 (wire type 1)",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
 						Payload: []byte{1, 2, 3},
 					})},
 				},
@@ -895,14 +895,21 @@ func TestBlockPullerFromConfigBlockFailures(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			bp, err := cluster.BlockPullerFromConfigBlock(testCase.pullerConfig, testCase.block)
+			verifierRetriever := &mocks.VerifierRetriever{}
+			verifierRetriever.On("RetrieveVerifier", mock.Anything).Return(&cluster.NoopBlockVerifier{})
+			bp, err := cluster.BlockPullerFromConfigBlock(testCase.pullerConfig, testCase.block, verifierRetriever)
 			assert.EqualError(t, err, testCase.expectedErr)
 			assert.Nil(t, bp)
 		})
 	}
 }
 
-func TestBlockPullerFromConfigBlockGreenPath(t *testing.T) {
+func testBlockPullerFromConfig(t *testing.T, blockVerifiers []cluster.BlockVerifier, expectedLogMsg string, iterations int) {
+	verifierRetriever := &mocks.VerifierRetriever{}
+	for _, blockVerifier := range blockVerifiers {
+		verifierRetriever.On("RetrieveVerifier", mock.Anything).Return(blockVerifier).Once()
+	}
+
 	caCert, err := ioutil.ReadFile(filepath.Join("testdata", "ca.crt"))
 	assert.NoError(t, err)
 
@@ -940,18 +947,25 @@ func TestBlockPullerFromConfigBlockGreenPath(t *testing.T) {
 	
 	injectTLSCACert(t, validBlock, caCert)
 	injectOrdererEndpoint(t, validBlock, osn.srv.Address())
-	validBlock.Header.DataHash = validBlock.Data.Hash()
+	validBlock.Header.DataHash = protoutil.BlockDataHash(validBlock.Data)
 
-	blockMsg := &orderer.DeliverResponse_Block{
-		Block: validBlock,
-	}
+	for attempt := 0; attempt < iterations; attempt++ {
+		blockMsg := &orderer.DeliverResponse_Block{
+			Block: validBlock,
+		}
 
-	osn.blockResponses <- &orderer.DeliverResponse{
-		Type: blockMsg,
-	}
+		osn.blockResponses <- &orderer.DeliverResponse{
+			Type: blockMsg,
+		}
 
-	osn.blockResponses <- &orderer.DeliverResponse{
-		Type: blockMsg,
+		osn.blockResponses <- &orderer.DeliverResponse{
+			Type: blockMsg,
+		}
+
+		osn.blockResponses <- nil
+
+		osn.addExpectProbeAssert()
+		osn.addExpectPullAssert(0)
 	}
 
 	bp, err := cluster.BlockPullerFromConfigBlock(cluster.PullerConfig{
@@ -959,17 +973,106 @@ func TestBlockPullerFromConfigBlockGreenPath(t *testing.T) {
 		TLSKey:              tlsKey,
 		MaxTotalBufferBytes: 1,
 		Channel:             "mychannel",
-		Signer:              &crypto.LocalSigner{},
+		Signer:              &mocks.SignerSerializer{},
 		Timeout:             time.Hour,
-	}, validBlock)
+	}, validBlock, verifierRetriever)
+	bp.RetryTimeout = time.Millisecond * 10
 	assert.NoError(t, err)
 	defer bp.Close()
 
-	osn.addExpectProbeAssert()
-	osn.addExpectPullAssert(0)
+	var seenExpectedLogMsg bool
+
+	bp.Logger = bp.Logger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+		if strings.Contains(entry.Message, expectedLogMsg) {
+			seenExpectedLogMsg = true
+		}
+		return nil
+	}))
 
 	block := bp.PullBlock(0)
 	assert.Equal(t, uint64(0), block.Header.Number)
+	assert.True(t, seenExpectedLogMsg)
+}
+
+func TestSkipPullingPulledChannels(t *testing.T) {
+	blockchain := createBlockChain(0, 5)
+	lw := &mocks.LedgerWriter{}
+	lw.On("Height").Return(uint64(6))
+
+	lf := &mocks.LedgerFactory{}
+	lf.On("GetOrCreate", "mychannel").Return(lw, nil)
+
+	osn := newClusterNode(t)
+	defer osn.stop()
+
+	enqueueBlock := func(seq int) {
+		osn.blockResponses <- &orderer.DeliverResponse{
+			Type: &orderer.DeliverResponse_Block{
+				Block: blockchain[seq],
+			},
+		}
+	}
+
+	dialer := newCountingDialer()
+	bp := newBlockPuller(dialer, osn.srv.Address())
+	bp.FetchTimeout = time.Hour
+
+	r := cluster.Replicator{
+		Filter: cluster.AnyChannel,
+		AmIPartOfChannel: func(configBlock *common.Block) error {
+			return nil
+		},
+		Logger:        flogging.MustGetLogger("test"),
+		SystemChannel: "system",
+		LedgerFactory: lf,
+		Puller:        bp,
+	}
+
+	var detectedChannelPulled bool
+	r.Logger = r.Logger.WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+		if strings.Contains(entry.Message, "Latest height found (6) is equal to our height, skipping pulling channel mychannel") {
+			detectedChannelPulled = true
+		}
+		return nil
+	}))
+
+	osn.addExpectProbeAssert()
+	enqueueBlock(5)
+	osn.addExpectProbeAssert()
+	enqueueBlock(5)
+
+	err := r.PullChannel("mychannel")
+	assert.NoError(t, err)
+	assert.True(t, detectedChannelPulled)
+}
+
+func TestBlockPullerFromConfigBlockGreenPath(t *testing.T) {
+	for _, testCase := range []struct {
+		description        string
+		blockVerifiers     []cluster.BlockVerifier
+		expectedLogMessage string
+		iterations         int
+	}{
+		{
+			description:        "Success",
+			blockVerifiers:     []cluster.BlockVerifier{&cluster.NoopBlockVerifier{}},
+			expectedLogMessage: "Got block [0] of size",
+			iterations:         1,
+		},
+		{
+			description: "Failure",
+			iterations:  2,
+			
+			blockVerifiers: []cluster.BlockVerifier{nil, &cluster.NoopBlockVerifier{}},
+			expectedLogMessage: "Failed verifying received blocks: " +
+				"couldn't acquire verifier for channel mychannel",
+		},
+	} {
+		t.Run(testCase.description, func(t *testing.T) {
+			testBlockPullerFromConfig(t, testCase.blockVerifiers,
+				testCase.expectedLogMessage, testCase.iterations)
+		})
+	}
 }
 
 func TestNoopBlockVerifier(t *testing.T) {
@@ -980,25 +1083,25 @@ func TestNoopBlockVerifier(t *testing.T) {
 func injectOrdererEndpoint(t *testing.T, block *common.Block, endpoint string) {
 	ordererAddresses := channelconfig.OrdererAddressesValue([]string{endpoint})
 	
-	env, err := utils.ExtractEnvelope(block, 0)
+	env, err := protoutil.ExtractEnvelope(block, 0)
 	assert.NoError(t, err)
-	payload, err := utils.ExtractPayload(env)
+	payload, err := protoutil.ExtractPayload(env)
 	assert.NoError(t, err)
 	confEnv, err := configtx.UnmarshalConfigEnvelope(payload.Data)
 	assert.NoError(t, err)
 	
-	confEnv.Config.ChannelGroup.Values[ordererAddresses.Key()].Value = utils.MarshalOrPanic(ordererAddresses.Value())
+	confEnv.Config.ChannelGroup.Values[ordererAddresses.Key()].Value = protoutil.MarshalOrPanic(ordererAddresses.Value())
 	
-	payload.Data = utils.MarshalOrPanic(confEnv)
-	env.Payload = utils.MarshalOrPanic(payload)
-	block.Data.Data[0] = utils.MarshalOrPanic(env)
+	payload.Data = protoutil.MarshalOrPanic(confEnv)
+	env.Payload = protoutil.MarshalOrPanic(payload)
+	block.Data.Data[0] = protoutil.MarshalOrPanic(env)
 }
 
 func injectTLSCACert(t *testing.T, block *common.Block, tlsCA []byte) {
 	
-	env, err := utils.ExtractEnvelope(block, 0)
+	env, err := protoutil.ExtractEnvelope(block, 0)
 	assert.NoError(t, err)
-	payload, err := utils.ExtractPayload(env)
+	payload, err := protoutil.ExtractPayload(env)
 	assert.NoError(t, err)
 	confEnv, err := configtx.UnmarshalConfigEnvelope(payload.Data)
 	assert.NoError(t, err)
@@ -1011,11 +1114,11 @@ func injectTLSCACert(t *testing.T, block *common.Block, tlsCA []byte) {
 	
 	blockchainMSPConf.TlsRootCerts = [][]byte{tlsCA}
 	
-	mspConf.Config = utils.MarshalOrPanic(blockchainMSPConf)
-	mspKey.Value = utils.MarshalOrPanic(mspConf)
-	payload.Data = utils.MarshalOrPanic(confEnv)
-	env.Payload = utils.MarshalOrPanic(payload)
-	block.Data.Data[0] = utils.MarshalOrPanic(env)
+	mspConf.Config = protoutil.MarshalOrPanic(blockchainMSPConf)
+	mspKey.Value = protoutil.MarshalOrPanic(mspConf)
+	payload.Data = protoutil.MarshalOrPanic(confEnv)
+	env.Payload = protoutil.MarshalOrPanic(payload)
+	block.Data.Data[0] = protoutil.MarshalOrPanic(env)
 }
 
 func TestIsNewChannelBlock(t *testing.T) {
@@ -1049,7 +1152,7 @@ func TestIsNewChannelBlock(t *testing.T) {
 			expectedErr: "no payload in envelope: proto: common.Payload: illegal tag 0 (wire type 1)",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
 						Payload: []byte{1, 2, 3},
 					})},
 				},
@@ -1060,8 +1163,8 @@ func TestIsNewChannelBlock(t *testing.T) {
 			expectedErr: "nil header in payload",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{}),
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{}),
 					})},
 				},
 			},
@@ -1072,8 +1175,8 @@ func TestIsNewChannelBlock(t *testing.T) {
 				" proto: common.ChannelHeader: illegal tag 0 (wire type 1)",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
 								ChannelHeader: []byte{1, 2, 3},
 							},
@@ -1087,10 +1190,10 @@ func TestIsNewChannelBlock(t *testing.T) {
 			expectedErr: "",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									Type: int32(common.HeaderType_CONFIG_UPDATE),
 								}),
 							},
@@ -1104,10 +1207,10 @@ func TestIsNewChannelBlock(t *testing.T) {
 			expectedErr: "error unmarshaling Envelope: proto: common.Envelope: illegal tag 0 (wire type 1)",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									Type: int32(common.HeaderType_ORDERER_TRANSACTION),
 								}),
 							},
@@ -1122,14 +1225,14 @@ func TestIsNewChannelBlock(t *testing.T) {
 			expectedErr: "error unmarshaling Payload: proto: common.Payload: illegal tag 0 (wire type 1)",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									Type: int32(common.HeaderType_ORDERER_TRANSACTION),
 								}),
 							},
-							Data: utils.MarshalOrPanic(&common.Envelope{
+							Data: protoutil.MarshalOrPanic(&common.Envelope{
 								Payload: []byte{1, 2, 3},
 							}),
 						}),
@@ -1142,15 +1245,15 @@ func TestIsNewChannelBlock(t *testing.T) {
 			expectedErr: "inner payload's header is nil",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									Type: int32(common.HeaderType_ORDERER_TRANSACTION),
 								}),
 							},
-							Data: utils.MarshalOrPanic(&common.Envelope{
-								Payload: utils.MarshalOrPanic(&common.Payload{}),
+							Data: protoutil.MarshalOrPanic(&common.Envelope{
+								Payload: protoutil.MarshalOrPanic(&common.Payload{}),
 							}),
 						}),
 					})},
@@ -1162,15 +1265,15 @@ func TestIsNewChannelBlock(t *testing.T) {
 			expectedErr: "error unmarshaling ChannelHeader: proto: common.ChannelHeader: illegal tag 0 (wire type 1)",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									Type: int32(common.HeaderType_ORDERER_TRANSACTION),
 								}),
 							},
-							Data: utils.MarshalOrPanic(&common.Envelope{
-								Payload: utils.MarshalOrPanic(&common.Payload{
+							Data: protoutil.MarshalOrPanic(&common.Envelope{
+								Payload: protoutil.MarshalOrPanic(&common.Payload{
 									Header: &common.Header{
 										ChannelHeader: []byte{1, 2, 3},
 									},
@@ -1186,17 +1289,17 @@ func TestIsNewChannelBlock(t *testing.T) {
 			expectedErr: "",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									Type: int32(common.HeaderType_ORDERER_TRANSACTION),
 								}),
 							},
-							Data: utils.MarshalOrPanic(&common.Envelope{
-								Payload: utils.MarshalOrPanic(&common.Payload{
+							Data: protoutil.MarshalOrPanic(&common.Envelope{
+								Payload: protoutil.MarshalOrPanic(&common.Payload{
 									Header: &common.Header{
-										ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+										ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 											Type: int32(common.HeaderType_CONFIG_UPDATE),
 										}),
 									},
@@ -1212,18 +1315,18 @@ func TestIsNewChannelBlock(t *testing.T) {
 			name:        "orderer transaction that is a system channel config block",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									ChannelId: "systemChannel",
 									Type:      int32(common.HeaderType_ORDERER_TRANSACTION),
 								}),
 							},
-							Data: utils.MarshalOrPanic(&common.Envelope{
-								Payload: utils.MarshalOrPanic(&common.Payload{
+							Data: protoutil.MarshalOrPanic(&common.Envelope{
+								Payload: protoutil.MarshalOrPanic(&common.Payload{
 									Header: &common.Header{
-										ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+										ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 											Type:      int32(common.HeaderType_CONFIG),
 											ChannelId: "systemChannel",
 										}),
@@ -1241,18 +1344,18 @@ func TestIsNewChannelBlock(t *testing.T) {
 			returnedName: "notSystemChannel",
 			block: &common.Block{
 				Data: &common.BlockData{
-					Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-						Payload: utils.MarshalOrPanic(&common.Payload{
+					Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+						Payload: protoutil.MarshalOrPanic(&common.Payload{
 							Header: &common.Header{
-								ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+								ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 									ChannelId: "systemChannel",
 									Type:      int32(common.HeaderType_ORDERER_TRANSACTION),
 								}),
 							},
-							Data: utils.MarshalOrPanic(&common.Envelope{
-								Payload: utils.MarshalOrPanic(&common.Payload{
+							Data: protoutil.MarshalOrPanic(&common.Envelope{
+								Payload: protoutil.MarshalOrPanic(&common.Payload{
 									Header: &common.Header{
-										ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+										ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 											Type:      int32(common.HeaderType_CONFIG),
 											ChannelId: "notSystemChannel",
 										}),
@@ -1282,18 +1385,18 @@ func TestChannels(t *testing.T) {
 		return &common.Block{
 			Header: &common.BlockHeader{},
 			Data: &common.BlockData{
-				Data: [][]byte{utils.MarshalOrPanic(&common.Envelope{
-					Payload: utils.MarshalOrPanic(&common.Payload{
+				Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{
+					Payload: protoutil.MarshalOrPanic(&common.Payload{
 						Header: &common.Header{
-							ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+							ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 								ChannelId: outerChannelName,
 								Type:      int32(common.HeaderType_ORDERER_TRANSACTION),
 							}),
 						},
-						Data: utils.MarshalOrPanic(&common.Envelope{
-							Payload: utils.MarshalOrPanic(&common.Payload{
+						Data: protoutil.MarshalOrPanic(&common.Envelope{
+							Payload: protoutil.MarshalOrPanic(&common.Payload{
 								Header: &common.Header{
-									ChannelHeader: utils.MarshalOrPanic(&common.ChannelHeader{
+									ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{
 										Type:      int32(common.HeaderType_CONFIG),
 										ChannelId: innerChannelName,
 									}),
@@ -1331,13 +1434,13 @@ func TestChannels(t *testing.T) {
 				err = proto.Unmarshal(blockbytes, block)
 				assert.NoError(t, err)
 
-				systemChain[len(systemChain)/2] = block
+				systemChain[len(systemChain)/2-1] = block
 				assignHashes(systemChain)
 			},
 			assertion: func(t *testing.T, ci *cluster.ChainInspector) {
 				actual := cluster.GenesisBlocks(ci.Channels())
 				
-				assert.Contains(t, [][]string{{"mychannel", "bar"}, {"bar", "mychannel"}}, actual.Names())
+				assert.Contains(t, [][]string{{"mychannel2", "bar"}, {"bar", "mychannel2"}}, actual.Names())
 			},
 		},
 		{
@@ -1348,8 +1451,8 @@ func TestChannels(t *testing.T) {
 			},
 			assertion: func(t *testing.T, ci *cluster.ChainInspector) {
 				panicValue := "System channel pulled doesn't match the boot last config block:" +
-					" block 4's hash (34762d9deefdea2514a85663856e92b5c7e1ae4669e6265b27b079d1f320e741)" +
-					" mismatches 3's prev block hash ()"
+					" block [2]'s hash (bc4ef5cc8a61ac0747cc82df58bac9ad3278622c1cfc7a119b9b1068e422c9f1)" +
+					" mismatches block [3]'s prev block hash ()"
 				assert.PanicsWithValue(t, panicValue, func() {
 					ci.Channels()
 				})
@@ -1359,11 +1462,11 @@ func TestChannels(t *testing.T) {
 			name: "bad path - hash chain mismatch",
 			prepareSystemChain: func(systemChain []*common.Block) {
 				assignHashes(systemChain)
-				systemChain[len(systemChain)/2].Header.PreviousHash = nil
+				systemChain[len(systemChain)-2].Header.PreviousHash = nil
 			},
 			assertion: func(t *testing.T, ci *cluster.ChainInspector) {
-				panicValue := "Claimed previous hash of block 3 is  but actual previous " +
-					"hash is ab6be2effec106c0324f9d6b1af2cf115c60c3f60e250658362991cb8e195a50"
+				panicValue := "Claimed previous hash of block [2] is  but actual previous " +
+					"hash is 920faeb0bd8a02b3f2553247359fb3b684819c75c6e5487bc7eed632841ddc5f"
 				assert.PanicsWithValue(t, panicValue, func() {
 					ci.Channels()
 				})
@@ -1376,7 +1479,7 @@ func TestChannels(t *testing.T) {
 				systemChain[len(systemChain)-2].Data.Data = [][]byte{{1, 2, 3}}
 			},
 			assertion: func(t *testing.T, ci *cluster.ChainInspector) {
-				panicValue := "Failed classifying block 3 : block data does not carry" +
+				panicValue := "Failed classifying block [2]: block data does not carry" +
 					" an envelope at index 0: error unmarshaling Envelope: " +
 					"proto: common.Envelope: illegal tag 0 (wire type 1)"
 				assert.PanicsWithValue(t, panicValue, func() {
@@ -1393,7 +1496,7 @@ func TestChannels(t *testing.T) {
 				systemChain[len(systemChain)/2] = nil
 			},
 			assertion: func(t *testing.T, ci *cluster.ChainInspector) {
-				panicValue := "Failed pulling block 3 from the system channel"
+				panicValue := "Failed pulling block [2] from the system channel"
 				assert.PanicsWithValue(t, panicValue, func() {
 					ci.Channels()
 				})
@@ -1409,14 +1512,14 @@ func TestChannels(t *testing.T) {
 			}
 
 			for i := 0; i < len(systemChain); i++ {
-				systemChain[i].Header.DataHash = systemChain[i].Data.Hash()
-				systemChain[i].Header.Number = uint64(i + 1)
+				systemChain[i].Header.DataHash = protoutil.BlockDataHash(systemChain[i].Data)
+				systemChain[i].Header.Number = uint64(i)
 			}
 			testCase.prepareSystemChain(systemChain)
 			puller := &mocks.ChainPuller{}
 			puller.On("Close")
-			for seq := uint64(1); int(seq) <= len(systemChain); seq++ {
-				puller.On("PullBlock", seq).Return(systemChain[int(seq)-1])
+			for seq := uint64(0); int(seq) < len(systemChain)-1; seq++ {
+				puller.On("PullBlock", seq).Return(systemChain[int(seq)])
 			}
 
 			ci := &cluster.ChainInspector{
@@ -1438,9 +1541,9 @@ var fakeGB = &common.Block{
 	},
 	Data: &common.BlockData{
 		Data: [][]byte{
-			utils.MarshalOrPanic(&common.Envelope{
-				Payload: utils.MarshalOrPanic(&common.Envelope{
-					Payload: utils.MarshalOrPanic(&common.Config{
+			protoutil.MarshalOrPanic(&common.Envelope{
+				Payload: protoutil.MarshalOrPanic(&common.Envelope{
+					Payload: protoutil.MarshalOrPanic(&common.Config{
 						Sequence: 1,
 					}),
 				}),
@@ -1450,9 +1553,9 @@ var fakeGB = &common.Block{
 }
 
 func simulateNonParticipantChannelPull(osn *deliverServer) {
-	lastBlock := common.NewBlock(1, nil)
-	lastBlock.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = utils.MarshalOrPanic(&common.Metadata{
-		Value: utils.MarshalOrPanic(&common.LastConfig{Index: 0}),
+	lastBlock := protoutil.NewBlock(1, nil)
+	lastBlock.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = protoutil.MarshalOrPanic(&common.Metadata{
+		Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: 0}),
 	})
 	
 	

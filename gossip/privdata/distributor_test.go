@@ -17,9 +17,13 @@ import (
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/gossip/filter"
 	gossip2 "github.com/mcc-github/blockchain/gossip/gossip"
+	"github.com/mcc-github/blockchain/gossip/metrics"
+	"github.com/mcc-github/blockchain/gossip/metrics/mocks"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/protos/common"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/transientstore"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -62,6 +66,11 @@ func (mock *collectionAccessPolicyMock) IsMemberOnlyRead() bool {
 	return args.Get(0).(bool)
 }
 
+func (mock *collectionAccessPolicyMock) IsMemberOnlyWrite() bool {
+	args := mock.Called()
+	return args.Get(0).(bool)
+}
+
 func (mock *collectionAccessPolicyMock) Setup(requiredPeerCount int, maxPeerCount int,
 	accessFilter privdata.Filter, orgs []string, memberOnlyRead bool) {
 	mock.On("AccessFilter").Return(accessFilter)
@@ -85,7 +94,7 @@ func (g *gossipMock) PeersOfChannel(chainID gcommon.ChainID) []discovery.Network
 	return g.Called(chainID).Get(0).([]discovery.NetworkMember)
 }
 
-func (g *gossipMock) SendByCriteria(message *proto.SignedGossipMessage, criteria gossip2.SendCriteria) error {
+func (g *gossipMock) SendByCriteria(message *protoext.SignedGossipMessage, criteria gossip2.SendCriteria) error {
 	args := g.Called(message, criteria)
 	if args.Get(0) != nil {
 		return args.Get(0).(error)
@@ -135,7 +144,7 @@ func TestDistributor(t *testing.T) {
 	})
 
 	g.On("SendByCriteria", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		msg := args.Get(0).(*proto.SignedGossipMessage)
+		msg := args.Get(0).(*protoext.SignedGossipMessage)
 		sendCriteria := args.Get(1).(gossip2.SendCriteria)
 		sendings <- struct {
 			*proto.PrivatePayload
@@ -167,14 +176,17 @@ func TestDistributor(t *testing.T) {
 	}
 
 	policyMock := &collectionAccessPolicyMock{}
-	policyMock.Setup(1, 2, func(_ common.SignedData) bool {
+	policyMock.Setup(1, 2, func(_ protoutil.SignedData) bool {
 		return true
 	}, []string{"org1", "org2"}, false)
 
 	accessFactoryMock.On("AccessPolicy", c1ColConfig, channelID).Return(policyMock, nil)
 	accessFactoryMock.On("AccessPolicy", c2ColConfig, channelID).Return(policyMock, nil)
 
-	d := NewDistributor(channelID, g, accessFactoryMock)
+	testMetricProvider := mocks.TestUtilConstructMetricProvider()
+	metrics := metrics.NewGossipMetrics(testMetricProvider.FakeProvider).PrivdataMetrics
+
+	d := NewDistributor(channelID, g, accessFactoryMock, metrics, 0)
 	pdFactory := &pvtDataFactory{}
 	pvtData := pdFactory.addRWSet().addNSRWSet("ns1", "c1", "c2").addRWSet().addNSRWSet("ns2", "c1", "c2").create()
 	err := d.Distribute("tx1", &transientstore.TxPvtReadWriteSetWithConfigInfo{
@@ -259,4 +271,10 @@ func TestDistributor(t *testing.T) {
 	}, 0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Failed disseminating 4 out of 4 private dissemination plans")
+
+	assert.Equal(t,
+		[]string{"channel", channelID},
+		testMetricProvider.FakeSendDuration.WithArgsForCall(0),
+	)
+	assert.True(t, testMetricProvider.FakeSendDuration.ObserveArgsForCall(0) > 0)
 }

@@ -68,6 +68,14 @@ type ChannelCapabilities struct {
 
 	
 	MSPVersionVal msp.MSPVersion
+
+	ConsensusTypeMigrationVal bool
+}
+
+func (cc *ChannelCapabilities) OrgSpecificOrdererEndpoints() bool {
+	
+	
+	return false
 }
 
 
@@ -78,4 +86,9 @@ func (cc *ChannelCapabilities) Supported() error {
 
 func (cc *ChannelCapabilities) MSPVersion() msp.MSPVersion {
 	return cc.MSPVersionVal
+}
+
+
+func (cc *ChannelCapabilities) ConsensusTypeMigration() bool {
+	return cc.ConsensusTypeMigrationVal
 }

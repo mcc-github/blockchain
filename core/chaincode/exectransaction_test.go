@@ -13,18 +13,19 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
@@ -38,6 +39,8 @@ import (
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	aclmocks "github.com/mcc-github/blockchain/core/aclmgmt/mocks"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
+	cm "github.com/mcc-github/blockchain/core/chaincode/mock"
+	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
@@ -47,11 +50,9 @@ import (
 	"github.com/mcc-github/blockchain/core/container/dockercontroller"
 	"github.com/mcc-github/blockchain/core/container/inproccontroller"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	cut "github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
 	cmp "github.com/mcc-github/blockchain/core/mocks/peer"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
@@ -63,16 +64,16 @@ import (
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	putils "github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	ma "github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 
-func initPeer(chainIDs ...string) (net.Listener, *ChaincodeSupport, func(), error) {
+func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSupport, func(), error) {
 	
 	finitPeer(nil, chainIDs...)
 
@@ -95,47 +96,89 @@ func initPeer(chainIDs ...string) (net.Listener, *ChaincodeSupport, func(), erro
 
 	peer.MockSetMSPIDGetter(mspGetter)
 
-	
-	viper.Set("peer.tls.enabled", false)
+	grpcServer := grpc.NewServer()
 
-	var opts []grpc.ServerOption
-	if viper.GetBool("peer.tls.enabled") {
-		creds, err := credentials.NewServerTLSFromFile(config.GetPath("peer.tls.cert.file"), config.GetPath("peer.tls.key.file"))
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("Failed to generate credentials %v", err)
-		}
-		opts = []grpc.ServerOption{grpc.Creds(creds)}
-	}
-	grpcServer := grpc.NewServer(opts...)
-
-	peerAddress, err := peer.GetLocalAddress()
+	lis, err := net.Listen("tcp", ":0")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Error obtaining peer address: %s", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to start peer listener %s", err)
 	}
-	lis, err := net.Listen("tcp", peerAddress)
+	_, localPort, err := net.SplitHostPort(lis.Addr().String())
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Error starting peer listener %s", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to get port: %s", err)
+	}
+	localIP, err := peer.GetLocalIP()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to get local IP: %s", err)
 	}
 
-	ccprovider.SetChaincodesPath(ccprovider.GetChaincodeInstallPathFromViper())
+	peerAddress := net.JoinHostPort(localIP, localPort)
+
+	tempdir, err := ioutil.TempDir("", "chaincode")
+	if err != nil {
+		panic(fmt.Sprintf("failed to create temporary directory: %s", err))
+	}
+
+	ccprovider.SetChaincodesPath(tempdir)
 	ca, _ := tlsgen.NewCA()
 	certGenerator := accesscontrol.NewAuthenticator(ca)
-	config := GlobalConfig()
-	config.StartupTimeout = 3 * time.Minute
+	config := &Config{
+		TLSEnabled:     false,
+		Keepalive:      time.Second,
+		StartupTimeout: 3 * time.Minute,
+		ExecuteTimeout: 30 * time.Second,
+		LogLevel:       "info",
+		ShimLogLevel:   "warning",
+		LogFormat:      "TEST: [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}",
+	}
 	pr := platforms.NewRegistry(&golang.Platform{})
 	lsccImpl := lscc.New(sccp, mockAclProvider, pr)
+	ml := &cm.Lifecycle{}
+	ml.On("ChaincodeContainerInfo", ma.Anything, "lscc", ma.Anything).Return(
+		&ccprovider.ChaincodeContainerInfo{
+			Name:      "lscc",
+			Version:   util.GetSysCCVersion(),
+			PackageID: persistence.PackageID("lscc:" + util.GetSysCCVersion()),
+		}, nil)
+	ml.On("ChaincodeContainerInfo", ma.Anything, "pthru", ma.Anything).Return(
+		&ccprovider.ChaincodeContainerInfo{
+			Name:      "pthru",
+			Version:   "0",
+			PackageID: persistence.PackageID("pthru:0"),
+		}, nil)
+	ml.On("ChaincodeContainerInfo", ma.Anything, "example02", ma.Anything).Return(
+		&ccprovider.ChaincodeContainerInfo{
+			Name:      "example02",
+			Version:   "0",
+			PackageID: persistence.PackageID("example02:0"),
+		}, nil)
+	ml.On("ChaincodeContainerInfo", ma.Anything, "tmap", ma.Anything).Return(
+		&ccprovider.ChaincodeContainerInfo{
+			Name:      "tmap",
+			Version:   "0",
+			PackageID: persistence.PackageID("tmap:0"),
+		}, nil)
+	client, err := docker.NewClientFromEnv()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	provider := &dockercontroller.Provider{
+		PeerID:       "",
+		NetworkID:    "",
+		BuildMetrics: dockercontroller.NewBuildMetrics(&disabled.Provider{}),
+		Client:       client,
+	}
 	chaincodeSupport := NewChaincodeSupport(
 		config,
 		peerAddress,
 		false,
 		ca.CertBytes(),
 		certGenerator,
-		&ccprovider.CCInfoFSImpl{},
-		lsccImpl,
+		&PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
+		ml,
 		aclmgmt.NewACLProvider(func(string) channelconfig.Resources { return nil }),
 		container.NewVMController(
 			map[string]container.VMProvider{
-				dockercontroller.ContainerType: dockercontroller.NewProvider("", "", &disabled.Provider{}),
+				dockercontroller.ContainerType: provider,
 				inproccontroller.ContainerType: ipRegistry,
 			},
 		),
@@ -158,7 +201,7 @@ func initPeer(chainIDs ...string) (net.Listener, *ChaincodeSupport, func(), erro
 		sccp.DeDeploySysCCs(id, ccp)
 		if err = peer.MockCreateChain(id); err != nil {
 			closeListenerAndSleep(lis)
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		sccp.DeploySysCCs(id, ccp)
 		
@@ -170,7 +213,10 @@ func initPeer(chainIDs ...string) (net.Listener, *ChaincodeSupport, func(), erro
 	go grpcServer.Serve(lis)
 
 	
-	return lis, chaincodeSupport, func() { finitPeer(lis, chainIDs...) }, nil
+	return ml, lis, chaincodeSupport, func() {
+		finitPeer(lis, chainIDs...)
+		os.RemoveAll(tempdir)
+	}, nil
 }
 
 func finitPeer(lis net.Listener, chainIDs ...string) {
@@ -186,26 +232,6 @@ func finitPeer(lis net.Listener, chainIDs ...string) {
 	ledgerPath := config.GetPath("peer.fileSystemPath")
 	os.RemoveAll(ledgerPath)
 	os.RemoveAll(filepath.Join(os.TempDir(), "mcc-github"))
-
-	
-	if ledgerconfig.IsCouchDBEnabled() == true {
-
-		chainID := util.GetTestChainID()
-
-		connectURL := viper.GetString("ledger.state.couchDBConfig.couchDBAddress")
-		username := viper.GetString("ledger.state.couchDBConfig.username")
-		password := viper.GetString("ledger.state.couchDBConfig.password")
-		maxRetries := viper.GetInt("ledger.state.couchDBConfig.maxRetries")
-		maxRetriesOnStartup := viper.GetInt("ledger.state.couchDBConfig.maxRetriesOnStartup")
-		requestTimeout := viper.GetDuration("ledger.state.couchDBConfig.requestTimeout")
-		createGlobalChangesDB := viper.GetBool("ledger.state.couchDBConfig.createGlobalChangesDB")
-
-		couchInstance, _ := couchdb.CreateCouchInstance(connectURL, username, password, maxRetries, maxRetriesOnStartup, requestTimeout, createGlobalChangesDB, &disabled.Provider{})
-		db := couchdb.CouchDatabase{CouchInstance: couchInstance, DBName: chainID}
-		
-		db.DropDatabase()
-
-	}
 }
 
 func startTxSimulation(chainID string, txid string) (ledger.TxSimulator, ledger.HistoryQueryExecutor, error) {
@@ -236,7 +262,7 @@ func endTxSimulationCDS(chainID string, txid string, txsim ledger.TxSimulator, p
 	}
 
 	
-	prop, _, err := putils.CreateDeployProposalFromCDS(chainID, cds, ss, nil, nil, nil, nil)
+	prop, _, err := protoutil.CreateDeployProposalFromCDS(chainID, cds, ss, nil, nil, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -252,7 +278,7 @@ func endTxSimulationCIS(chainID string, ccid *pb.ChaincodeID, txid string, txsim
 	}
 
 	
-	prop, returnedTxid, err := putils.CreateProposalFromCISAndTxid(txid, common.HeaderType_ENDORSER_TRANSACTION, chainID, cis, ss)
+	prop, returnedTxid, err := protoutil.CreateProposalFromCISAndTxid(txid, common.HeaderType_ENDORSER_TRANSACTION, chainID, cis, ss)
 	if err != nil {
 		return err
 	}
@@ -291,19 +317,19 @@ func endTxSimulation(chainID string, ccid *pb.ChaincodeID, txsim ledger.TxSimula
 				return err
 			}
 			
-			resp, err := putils.CreateProposalResponse(prop.Header, prop.Payload, &pb.Response{Status: 200},
+			resp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, &pb.Response{Status: 200},
 				txSimulationBytes, nil, ccid, nil, signer)
 			if err != nil {
 				return err
 			}
 
 			
-			env, err := putils.CreateSignedTx(prop, signer, resp)
+			env, err := protoutil.CreateSignedTx(prop, signer, resp)
 			if err != nil {
 				return err
 			}
 
-			envBytes, err := putils.GetBytesEnvelope(env)
+			envBytes, err := protoutil.GetBytesEnvelope(env)
 			if err != nil {
 				return err
 			}
@@ -313,7 +339,7 @@ func endTxSimulation(chainID string, ccid *pb.ChaincodeID, txsim ledger.TxSimula
 			if err != nil {
 				return err
 			}
-			block := common.NewBlock(blockNumber, bcInfo.CurrentBlockHash)
+			block := protoutil.NewBlock(blockNumber, bcInfo.CurrentBlockHash)
 			block.Data.Data = [][]byte{envBytes}
 			txsFilter := cut.NewTxValidationFlagsSetValue(len(block.Data.Data), pb.TxValidationCode_VALID)
 			block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
@@ -432,7 +458,7 @@ func deploy2(chainID string, cccid *ccprovider.CCContext, chaincodeDeploymentSpe
 
 	uuid := util.GenerateUUID()
 	txsim, hqe, err := startTxSimulation(chainID, uuid)
-	sprop, prop := putils.MockSignedEndorserProposal2OrPanic(chainID, cis.ChaincodeSpec, signer)
+	sprop, prop := protoutil.MockSignedEndorserProposal2OrPanic(chainID, cis.ChaincodeSpec, signer)
 	txParams := &ccprovider.TransactionParams{
 		TxID:                 uuid,
 		ChannelID:            chainID,
@@ -508,7 +534,7 @@ func invokeWithVersion(chainID string, version string, spec *pb.ChaincodeSpec, b
 	if len(creator) == 0 {
 		creator = []byte("Admin")
 	}
-	sprop, prop := putils.MockSignedEndorserProposalOrPanic(chainID, spec, creator, []byte("msg1"))
+	sprop, prop := protoutil.MockSignedEndorserProposalOrPanic(chainID, spec, creator, []byte("msg1"))
 	cccid := &ccprovider.CCContext{
 		Name:    cdInvocationSpec.ChaincodeSpec.ChaincodeId.Name,
 		Version: version,
@@ -551,7 +577,7 @@ func checkFinalState(chainID string, cccid *ccprovider.CCContext, a int, b int) 
 
 	defer txsim.Done()
 
-	cName := cccid.GetCanonicalName()
+	cName := cccid.Name + ":" + cccid.Version
 
 	
 	var Aval, Bval int
@@ -586,20 +612,31 @@ func checkFinalState(chainID string, cccid *ccprovider.CCContext, a int, b int) 
 }
 
 const (
-	chaincodeExample02GolangPath = "github.com/mcc-github/blockchain/examples/chaincode/go/example02/cmd"
-	chaincodeExample04GolangPath = "github.com/mcc-github/blockchain/examples/chaincode/go/example04/cmd"
-	chaincodePassthruGolangPath  = "github.com/mcc-github/blockchain/examples/chaincode/go/passthru"
+	chaincodeExample02GolangPath = "github.com/mcc-github/blockchain/core/chaincode/testdata/src/chaincodes/example02"
+	chaincodePassthruGolangPath  = "github.com/mcc-github/blockchain/core/chaincode/testdata/src/chaincodes/passthru"
 )
 
-func runChaincodeInvokeChaincode(t *testing.T, channel1 string, channel2 string, tc tcicTc, cccid1 *ccprovider.CCContext, expectedA int, expectedB int, nextBlockNumber1, nextBlockNumber2 uint64, chaincodeSupport *ChaincodeSupport) (uint64, uint64) {
+func runChaincodeInvokeChaincode(t *testing.T, channel1 string, channel2 string, tc tcicTc, cccid1 *ccprovider.CCContext, expectedA int, expectedB int, nextBlockNumber1, nextBlockNumber2 uint64, chaincodeSupport *ChaincodeSupport, ml *cm.Lifecycle) (uint64, uint64) {
 	var ctxt = context.Background()
 
 	
 	chaincode2Name := generateChaincodeName(tc.chaincodeType)
+	ml.On("ChaincodeContainerInfo", ma.Anything, chaincode2Name, ma.Anything).Return(
+		&ccprovider.ChaincodeContainerInfo{
+			Name:      chaincode2Name,
+			Version:   "0",
+			PackageID: persistence.PackageID(chaincode2Name + ":0"),
+		}, nil)
+	mcd := &cm.ChaincodeDefinition{}
+	mcd.On("CCName").Return(chaincode2Name)
+	mcd.On("CCVersion").Return("0")
+	mcd.On("Hash").Return([]byte("Hulk, (sm)hash"))
+	mcd.On("RequiresInit").Return(false)
+	ml.On("ChaincodeDefinition", ma.Anything, chaincode2Name, ma.Anything).Return(mcd, nil)
 	chaincode2Version := "0"
 	chaincode2Type := tc.chaincodeType
 	chaincode2Path := tc.chaincodePath
-	chaincode2InitArgs := util.ToChaincodeArgs("init", "e", "0")
+	chaincode2InitArgs := util.ToChaincodeArgs("init")
 	chaincode2Creator := []byte([]byte("Alice"))
 
 	
@@ -634,7 +671,7 @@ func runChaincodeInvokeChaincode(t *testing.T, channel1 string, channel2 string,
 			Version: chaincode2Version,
 		},
 		Input: &pb.ChaincodeInput{
-			Args: util.ToChaincodeArgs("invoke", cccid1.Name, "e", "1"),
+			Args: util.ToChaincodeArgs(cccid1.Name, "invoke", "a", "b", "10", ""),
 		},
 	}
 	
@@ -701,7 +738,7 @@ func runChaincodeInvokeChaincode(t *testing.T, channel1 string, channel2 string,
 			Version: chaincode2Version,
 		},
 		Input: &pb.ChaincodeInput{
-			Args: util.ToChaincodeArgs("invoke", cccid1.Name, "e", "1", channel1),
+			Args: util.ToChaincodeArgs(cccid1.Name, "invoke", "a", "b", "10", channel1),
 		},
 	}
 
@@ -748,7 +785,7 @@ type tcicTc struct {
 func TestChaincodeInvokeChaincode(t *testing.T) {
 	channel := util.GetTestChainID()
 	channel2 := channel + "2"
-	lis, chaincodeSupport, cleanup, err := initPeer(channel, channel2)
+	ml, lis, chaincodeSupport, cleanup, err := initPeer(channel, channel2)
 	if err != nil {
 		t.Fail()
 		t.Logf("Error creating peer: %s", err)
@@ -757,9 +794,7 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 
 	mockAclProvider.On("CheckACL", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	testCases := []tcicTc{
-		{pb.ChaincodeSpec_GOLANG, chaincodeExample04GolangPath},
-	}
+	testCase := tcicTc{pb.ChaincodeSpec_GOLANG, chaincodePassthruGolangPath}
 
 	ctx := context.Background()
 
@@ -768,6 +803,18 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 
 	
 	chaincode1Name := generateChaincodeName(pb.ChaincodeSpec_GOLANG)
+	ml.On("ChaincodeContainerInfo", ma.Anything, chaincode1Name, ma.Anything).Return(
+		&ccprovider.ChaincodeContainerInfo{
+			Name:      chaincode1Name,
+			Version:   "0",
+			PackageID: persistence.PackageID(chaincode1Name + ":0"),
+		}, nil)
+	mcd := &cm.ChaincodeDefinition{}
+	mcd.On("CCName").Return(chaincode1Name)
+	mcd.On("CCVersion").Return("0")
+	mcd.On("Hash").Return([]byte("Hulk, (sm)hash"))
+	mcd.On("RequiresInit").Return(false)
+	ml.On("ChaincodeDefinition", ma.Anything, chaincode1Name, ma.Anything).Return(mcd, nil)
 	chaincode1Version := "0"
 	chaincode1Type := pb.ChaincodeSpec_GOLANG
 	chaincode1Path := chaincodeExample02GolangPath
@@ -799,24 +846,23 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 	expectedA := initialA
 	expectedB := initialB
 
-	for _, tc := range testCases {
-		t.Run(tc.chaincodeType.String(), func(t *testing.T) {
-			expectedA = expectedA - 10
-			expectedB = expectedB + 10
-			nextBlockNumber1, nextBlockNumber2 = runChaincodeInvokeChaincode(
-				t,
-				channel,
-				channel2,
-				tc,
-				chaincodeCtx,
-				expectedA,
-				expectedB,
-				nextBlockNumber1,
-				nextBlockNumber2,
-				chaincodeSupport,
-			)
-		})
-	}
+	t.Run(testCase.chaincodeType.String(), func(t *testing.T) {
+		expectedA = expectedA - 10
+		expectedB = expectedB + 10
+		nextBlockNumber1, nextBlockNumber2 = runChaincodeInvokeChaincode(
+			t,
+			channel,
+			channel2,
+			testCase,
+			chaincodeCtx,
+			expectedA,
+			expectedB,
+			nextBlockNumber1,
+			nextBlockNumber2,
+			chaincodeSupport,
+			ml,
+		)
+	})
 
 	closeListenerAndSleep(lis)
 }
@@ -835,7 +881,7 @@ func stopChaincode(ctx context.Context, chaincodeCtx *ccprovider.CCContext, chai
 func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 	chainID := util.GetTestChainID()
 
-	_, chaincodeSupport, cleanup, err := initPeer(chainID)
+	ml, _, chaincodeSupport, cleanup, err := initPeer(chainID)
 	if err != nil {
 		t.Fail()
 		t.Logf("Error creating peer: %s", err)
@@ -843,6 +889,12 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 	defer cleanup()
 
 	mockAclProvider.On("CheckACL", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mcd := &cm.ChaincodeDefinition{}
+	mcd.On("CCName").Return("example02")
+	mcd.On("CCVersion").Return("0")
+	mcd.On("Hash").Return([]byte("Hulk, (sm)hash"))
+	mcd.On("RequiresInit").Return(false)
+	ml.On("ChaincodeDefinition", ma.Anything, "example02", ma.Anything).Return(mcd, nil)
 
 	
 	cID1 := &pb.ChaincodeID{Name: "example02", Path: chaincodeExample02GolangPath, Version: "0"}
@@ -908,7 +960,7 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 
 	
 	f = ccID1
-	args = util.ToChaincodeArgs(f, "invoke", "a")
+	args = util.ToChaincodeArgs(f, "invoke", "a", "")
 
 	spec2 = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID2, Input: &pb.ChaincodeInput{Args: args}}
 	
@@ -920,7 +972,7 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 		return
 	}
 
-	if strings.Index(err.Error(), "Error invoking chaincode: Incorrect number of arguments. Expecting 3") < 0 {
+	if !strings.Contains(err.Error(), "Incorrect number of arguments. Expecting 3") {
 		t.Fail()
 		t.Logf("Unexpected error %s", err)
 		return
@@ -930,7 +982,7 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 func TestChaincodeInit(t *testing.T) {
 	chainID := util.GetTestChainID()
 
-	_, chaincodeSupport, cleanup, err := initPeer(chainID)
+	_, _, chaincodeSupport, cleanup, err := initPeer(chainID)
 	if err != nil {
 		t.Fail()
 		t.Logf("Error creating peer: %s", err)
@@ -938,7 +990,7 @@ func TestChaincodeInit(t *testing.T) {
 
 	defer cleanup()
 
-	url := "github.com/mcc-github/blockchain/core/chaincode/testdata/chaincode/init_private_data"
+	url := "github.com/mcc-github/blockchain/core/chaincode/testdata/src/chaincodes/init_private_data"
 	cID := &pb.ChaincodeID{Name: "init_pvtdata", Path: url, Version: "0"}
 
 	f := "init"
@@ -963,7 +1015,7 @@ func TestChaincodeInit(t *testing.T) {
 	_, err = deploy(chainID, cccid, spec, nextBlockNumber, chaincodeSupport)
 	assert.Contains(t, err.Error(), "private data APIs are not allowed in chaincode Init")
 
-	url = "github.com/mcc-github/blockchain/core/chaincode/testdata/chaincode/init_public_data"
+	url = "github.com/mcc-github/blockchain/core/chaincode/testdata/src/chaincodes/init_public_data"
 	cID = &pb.ChaincodeID{Name: "init_public_data", Path: url, Version: "0"}
 
 	f = "init"
@@ -998,7 +1050,7 @@ func TestQueries(t *testing.T) {
 
 	chainID := util.GetTestChainID()
 
-	_, chaincodeSupport, cleanup, err := initPeer(chainID)
+	_, _, chaincodeSupport, cleanup, err := initPeer(chainID)
 	if err != nil {
 		t.Fail()
 		t.Logf("Error creating peer: %s", err)
@@ -1006,7 +1058,7 @@ func TestQueries(t *testing.T) {
 
 	defer cleanup()
 
-	url := "github.com/mcc-github/blockchain/examples/chaincode/go/map"
+	url := "github.com/mcc-github/blockchain/core/chaincode/testdata/src/chaincodes/map"
 	cID := &pb.ChaincodeID{Name: "tmap", Path: url, Version: "0"}
 
 	f := "init"
@@ -1084,6 +1136,7 @@ func TestQueries(t *testing.T) {
 	}
 
 	err = json.Unmarshal(retval, &keys)
+	assert.NoError(t, err)
 	if len(keys) != 10 {
 		t.Fail()
 		t.Logf("Error detected with the range query, should have returned 10 but returned %v", len(keys))
@@ -1101,7 +1154,7 @@ func TestQueries(t *testing.T) {
 	args = util.ToChaincodeArgs(f, "marble001", "marble002", "2000")
 
 	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-	_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
+	_, _, _, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
 	if err == nil {
 		t.Fail()
 		t.Logf("expected timeout error but succeeded")
@@ -1128,6 +1181,7 @@ func TestQueries(t *testing.T) {
 
 	
 	err = json.Unmarshal(retval, &keys)
+	assert.NoError(t, err)
 
 	
 	
@@ -1154,6 +1208,7 @@ func TestQueries(t *testing.T) {
 
 	
 	err = json.Unmarshal(retval, &keys)
+	assert.NoError(t, err)
 
 	
 	
@@ -1214,164 +1269,6 @@ func TestQueries(t *testing.T) {
 	}
 
 	
-	
-	if ledgerconfig.IsCouchDBEnabled() == true {
-
-		
-		
-		f = "query"
-		args = util.ToChaincodeArgs(f, "{\"selector\":{\"color\":\"blue\"}}")
-
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, _, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
-
-		
-		err = json.Unmarshal(retval, &keys)
-
-		
-		if len(keys) != 100 {
-			t.Fail()
-			t.Logf("Error detected with the rich query, should have returned 100 but returned %v %s", len(keys), keys)
-			return
-		}
-		
-		viper.Set("ledger.state.queryLimit", 5)
-
-		
-		f = "keys"
-		args = util.ToChaincodeArgs(f, "marble001", "marble011")
-
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, retval, err := invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
-
-		
-		err = json.Unmarshal(retval, &keys)
-		
-		if len(keys) != 5 {
-			t.Fail()
-			t.Logf("Error detected with the range query, should have returned 5 but returned %v", len(keys))
-			return
-		}
-
-		
-		viper.Set("ledger.state.queryLimit", 10000)
-
-		
-		f = "query"
-		args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}")
-
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
-
-		
-		err = json.Unmarshal(retval, &keys)
-
-		
-		
-		if len(keys) != 50 {
-			t.Fail()
-			t.Logf("Error detected with the rich query, should have returned 50 but returned %v", len(keys))
-			return
-		}
-
-		
-		viper.Set("ledger.state.queryLimit", 5)
-
-		
-		f = "query"
-		args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}")
-
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
-
-		
-		err = json.Unmarshal(retval, &keys)
-
-		
-		if len(keys) != 5 {
-			t.Fail()
-			t.Logf("Error detected with the rich query, should have returned 5 but returned %v", len(keys))
-			return
-		}
-
-		
-		f = "queryByPage"
-		args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}", "2", "")
-
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
-
-		queryPage := &PageResponse{}
-
-		json.Unmarshal(retval, &queryPage)
-
-		expectedResult := []string{"marble001", "marble003"}
-
-		if !reflect.DeepEqual(expectedResult, queryPage.Keys) {
-			t.Fail()
-			t.Logf("Error detected with the paginated range query. Returned: %v  should have returned: %v", queryPage.Keys, expectedResult)
-			return
-		}
-
-		
-		args = util.ToChaincodeArgs(f, "{\"selector\":{\"owner\":\"jerry\"}}", "2", queryPage.Bookmark)
-
-		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-		_, _, retval, err = invoke(chainID, spec, nextBlockNumber, nil, chaincodeSupport)
-		nextBlockNumber++
-		if err != nil {
-			t.Fail()
-			t.Logf("Error invoking <%s>: %s", ccID, err)
-			return
-		}
-
-		queryPage = &PageResponse{}
-
-		json.Unmarshal(retval, &queryPage)
-
-		expectedResult = []string{"marble005", "marble007"}
-
-		if !reflect.DeepEqual(expectedResult, queryPage.Keys) {
-			t.Fail()
-			t.Logf("Error detected with the paginated range query. Returned: %v  should have returned: %v", queryPage.Keys, expectedResult)
-			return
-		}
-
-	}
-
-	
 	f = "put"
 	args = util.ToChaincodeArgs(f, "marble012", "{\"docType\":\"marble\",\"name\":\"marble012\",\"color\":\"red\",\"size\":30,\"owner\":\"jerry\"}")
 	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
@@ -1408,6 +1305,7 @@ func TestQueries(t *testing.T) {
 
 	var history []interface{}
 	err = json.Unmarshal(retval, &history)
+	assert.NoError(t, err)
 	if len(history) != 3 {
 		t.Fail()
 		t.Logf("Error detected with the history query, should have returned 3 but returned %v", len(history))
@@ -1445,10 +1343,6 @@ func setupTestConfig() {
 	if err != nil {                      
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
-
-	
-	var numProcsDesired = viper.GetInt("peer.gomaxprocs")
-	chaincodeLogger.Debugf("setting Number of procs to %d, was %d\n", numProcsDesired, runtime.GOMAXPROCS(numProcsDesired))
 
 	
 	err = factory.InitFactories(nil)
@@ -1504,9 +1398,9 @@ type CreatorPolicy struct {
 }
 
 
-func (c *CreatorPolicy) Evaluate(signatureSet []*common.SignedData) error {
+func (c *CreatorPolicy) Evaluate(signatureSet []*protoutil.SignedData) error {
 	for _, value := range c.Creators {
-		if bytes.Compare(signatureSet[0].Identity, value) == 0 {
+		if bytes.Equal(signatureSet[0].Identity, value) {
 			return nil
 		}
 	}

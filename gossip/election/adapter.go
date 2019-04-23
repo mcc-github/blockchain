@@ -13,6 +13,8 @@ import (
 
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
+	"github.com/mcc-github/blockchain/gossip/metrics"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
@@ -49,7 +51,7 @@ type gossip interface {
 	
 	
 	
-	Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage)
+	Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage)
 
 	
 	Gossip(msg *proto.GossipMessage)
@@ -68,10 +70,12 @@ type adapterImpl struct {
 
 	doneCh   chan struct{}
 	stopOnce *sync.Once
+	metrics  *metrics.ElectionMetrics
 }
 
 
-func NewAdapter(gossip gossip, pkiid common.PKIidType, channel common.ChainID) LeaderElectionAdapter {
+func NewAdapter(gossip gossip, pkiid common.PKIidType, channel common.ChainID,
+	metrics *metrics.ElectionMetrics) LeaderElectionAdapter {
 	return &adapterImpl{
 		gossip:    gossip,
 		selfPKIid: pkiid,
@@ -85,6 +89,7 @@ func NewAdapter(gossip gossip, pkiid common.PKIidType, channel common.ChainID) L
 
 		doneCh:   make(chan struct{}),
 		stopOnce: &sync.Once{},
+		metrics:  metrics,
 	}
 }
 
@@ -96,7 +101,7 @@ func (ai *adapterImpl) Accept() <-chan Msg {
 	adapterCh, _ := ai.gossip.Accept(func(message interface{}) bool {
 		
 		return message.(*proto.GossipMessage).Tag == proto.GossipMessage_CHAN_AND_ORG &&
-			message.(*proto.GossipMessage).IsLeadershipMsg() &&
+			protoext.IsLeadershipMsg(message.(*proto.GossipMessage)) &&
 			bytes.Equal(message.(*proto.GossipMessage).Channel, ai.channel)
 	}, false)
 
@@ -150,6 +155,14 @@ func (ai *adapterImpl) Peers() []Peer {
 	}
 
 	return res
+}
+
+func (ai *adapterImpl) ReportMetrics(isLeader bool) {
+	var leadershipBit float64
+	if isLeader {
+		leadershipBit = 1
+	}
+	ai.metrics.Declaration.With("channel", string(ai.channel)).Set(leadershipBit)
 }
 
 func (ai *adapterImpl) Stop() {

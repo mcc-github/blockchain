@@ -10,17 +10,13 @@ import (
 	"bytes"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/flogging"
 	mockpeer "github.com/mcc-github/blockchain/common/mocks/peer"
 	"github.com/mcc-github/blockchain/common/util"
 	lproto "github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/utils"
-	logging "github.com/op/go-logging"
-	"github.com/spf13/viper"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -361,168 +357,6 @@ func (t *shimTestCC) getEP(stub ChaincodeStubInterface) pb.Response {
 }
 
 
-
-
-
-
-
-func TestShimLogging(t *testing.T) {
-	SetLoggingLevel(LogCritical)
-	if shimLoggingLevel != LogCritical {
-		t.Errorf("shimLoggingLevel is not LogCritical as expected")
-	}
-	if chaincodeLogger.IsEnabledFor(logging.DEBUG) {
-		t.Errorf("The chaincodeLogger should not be enabled for DEBUG")
-	}
-	if !chaincodeLogger.IsEnabledFor(logging.CRITICAL) {
-		t.Errorf("The chaincodeLogger should be enabled for CRITICAL")
-	}
-	var level LoggingLevel
-	var err error
-	level, err = LogLevel("debug")
-	if err != nil {
-		t.Errorf("LogLevel(debug) failed")
-	}
-	if level != LogDebug {
-		t.Errorf("LogLevel(debug) did not return LogDebug")
-	}
-	level, err = LogLevel("INFO")
-	if err != nil {
-		t.Errorf("LogLevel(INFO) failed")
-	}
-	if level != LogInfo {
-		t.Errorf("LogLevel(INFO) did not return LogInfo")
-	}
-	level, err = LogLevel("Notice")
-	if err != nil {
-		t.Errorf("LogLevel(Notice) failed")
-	}
-	if level != LogNotice {
-		t.Errorf("LogLevel(Notice) did not return LogNotice")
-	}
-	level, err = LogLevel("WaRnInG")
-	if err != nil {
-		t.Errorf("LogLevel(WaRnInG) failed")
-	}
-	if level != LogWarning {
-		t.Errorf("LogLevel(WaRnInG) did not return LogWarning")
-	}
-	level, err = LogLevel("ERRor")
-	if err != nil {
-		t.Errorf("LogLevel(ERRor) failed")
-	}
-	if level != LogError {
-		t.Errorf("LogLevel(ERRor) did not return LogError")
-	}
-	level, err = LogLevel("critiCAL")
-	if err != nil {
-		t.Errorf("LogLevel(critiCAL) failed")
-	}
-	if level != LogCritical {
-		t.Errorf("LogLevel(critiCAL) did not return LogCritical")
-	}
-	level, err = LogLevel("foo")
-	if err == nil {
-		t.Errorf("LogLevel(foo) did not fail")
-	}
-	if level != LogError {
-		t.Errorf("LogLevel(foo) did not return LogError")
-	}
-}
-
-
-func TestChaincodeLogging(t *testing.T) {
-
-	
-	format := logging.MustStringFormatter("%{time:15:04:05.000} [%{module}] %{level:.4s} : %{message}")
-	backend := logging.NewLogBackend(os.Stderr, "", 0)
-	backendFormatter := logging.NewBackendFormatter(backend, format)
-	logging.SetBackend(backendFormatter).SetLevel(logging.Level(shimLoggingLevel), "shim")
-
-	foo := NewLogger("foo")
-	bar := NewLogger("bar")
-
-	foo.Debugf("Foo is debugging: %d", 10)
-	bar.Infof("Bar is informational? %s.", "Yes")
-	foo.Noticef("NOTE NOTE NOTE")
-	bar.Warningf("Danger, Danger %s %s", "Will", "Robinson!")
-	foo.Errorf("I'm sorry Dave, I'm afraid I can't do that.")
-	bar.Criticalf("PI is not equal to 3.14, we computed it as %.2f", 4.13)
-
-	bar.Debug("Foo is debugging:", 10)
-	foo.Info("Bar is informational?", "Yes.")
-	bar.Notice("NOTE NOTE NOTE")
-	foo.Warning("Danger, Danger", "Will", "Robinson!")
-	bar.Error("I'm sorry Dave, I'm afraid I can't do that.")
-	foo.Critical("PI is not equal to", 3.14, ", we computed it as", 4.13)
-
-	foo.SetLevel(LogWarning)
-	if foo.IsEnabledFor(LogDebug) {
-		t.Errorf("'foo' should not be enabled for LogDebug")
-	}
-	if !foo.IsEnabledFor(LogCritical) {
-		t.Errorf("'foo' should be enabled for LogCritical")
-	}
-	bar.SetLevel(LogCritical)
-	if bar.IsEnabledFor(LogDebug) {
-		t.Errorf("'bar' should not be enabled for LogDebug")
-	}
-	if !bar.IsEnabledFor(LogCritical) {
-		t.Errorf("'bar' should be enabled for LogCritical")
-	}
-}
-
-func TestNilEventName(t *testing.T) {
-	stub := ChaincodeStub{}
-	if err := stub.SetEvent("", []byte("event payload")); err == nil {
-		t.Error("Event name can not be nil string.")
-	}
-
-}
-
-func TestSetupChaincodeLogging_shim(t *testing.T) {
-	var tests = []struct {
-		name         string
-		ccLogLevel   string
-		shimLogLevel string
-	}{
-		{name: "ValidLevels", ccLogLevel: "debug", shimLogLevel: "warning"},
-		{name: "EmptyLevels", ccLogLevel: "", shimLogLevel: ""},
-		{name: "BadShimLevel", ccLogLevel: "debug", shimLogLevel: "war"},
-		{name: "BadCCLevel", ccLogLevel: "deb", shimLogLevel: "notice"},
-		{name: "EmptyShimLevel", ccLogLevel: "error", shimLogLevel: ""},
-		{name: "EmptyCCLevel", ccLogLevel: "", shimLogLevel: "critical"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			viper.Set("chaincode.logging.level", tc.ccLogLevel)
-			viper.Set("chaincode.logging.shim", tc.shimLogLevel)
-
-			setupChaincodeLogging()
-
-			_, ccErr := logging.LogLevel(tc.ccLogLevel)
-			_, shimErr := logging.LogLevel(tc.shimLogLevel)
-			if ccErr == nil {
-				assert.Equal(t, strings.ToUpper(tc.ccLogLevel), logging.GetLevel("ccLogger").String())
-				if shimErr == nil {
-					assert.Equal(t, strings.ToUpper(tc.shimLogLevel), logging.GetLevel("shim").String())
-				} else {
-					assert.Equal(t, strings.ToUpper(tc.ccLogLevel), logging.GetLevel("shim").String())
-				}
-			} else {
-				assert.Equal(t, flogging.DefaultLevel(), logging.GetLevel("ccLogger").String())
-				if shimErr == nil {
-					assert.Equal(t, strings.ToUpper(tc.shimLogLevel), logging.GetLevel("shim").String())
-				} else {
-					assert.Equal(t, flogging.DefaultLevel(), logging.GetLevel("shim").String())
-				}
-			}
-		})
-	}
-}
-
-
 var mockPeerCCSupport = mockpeer.NewMockPeerSupport()
 
 func mockChaincodeStreamGetter(name string) (PeerChaincodeStream, error) {
@@ -530,7 +364,7 @@ func mockChaincodeStreamGetter(name string) (PeerChaincodeStream, error) {
 }
 
 func setupcc(name string) *mockpeer.MockCCComm {
-	viper.Set("chaincode.id.name", name)
+	os.Setenv("CORE_CHAINCODE_ID_NAME", name)
 	send := make(chan *pb.ChaincodeMessage)
 	recv := make(chan *pb.ChaincodeMessage)
 	ccSide, _ := mockPeerCCSupport.AddCC(name, recv, send)
@@ -559,7 +393,6 @@ func processDone(t *testing.T, done chan error, expecterr bool) {
 func TestInvoke(t *testing.T) {
 	streamGetter = mockChaincodeStreamGetter
 	cc := &shimTestCC{}
-	
 	ccname := "shimTestCC"
 	peerSide := setupcc(ccname)
 	defer mockPeerCCSupport.RemoveCC(ccname)
@@ -598,7 +431,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_READY, Txid: "1", ChannelId: channelId})
 
 	ci := &pb.ChaincodeInput{Args: [][]byte{[]byte("init"), []byte("A"), []byte("100"), []byte("B"), []byte("200")}, Decorations: nil}
-	payload := utils.MarshalOrPanic(ci)
+	payload := protoutil.MarshalOrPanic(ci)
 	respSet := &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
@@ -631,7 +464,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("invoke"), []byte("A"), []byte("B"), []byte("10")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "3", ChannelId: channelId})
 
 	
@@ -651,7 +484,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("invoke"), []byte("A"), []byte("B"), []byte("10")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "3a", ChannelId: channelId})
 
 	
@@ -669,7 +502,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("invoke"), []byte("A"), []byte("B"), []byte("10")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "3b", ChannelId: channelId})
 
 	
@@ -687,7 +520,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("delete"), []byte("A")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "4", ChannelId: channelId})
 
 	
@@ -705,7 +538,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("delete"), []byte("A")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "4a", ChannelId: channelId})
 
 	
@@ -722,7 +555,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("badinvoke")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "5", ChannelId: channelId})
 
 	
@@ -732,10 +565,10 @@ func TestInvoke(t *testing.T) {
 
 	
 	rangeQueryResponse := &pb.QueryResponse{Results: []*pb.QueryResultBytes{
-		{ResultBytes: utils.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "A", Value: []byte("100")})},
-		{ResultBytes: utils.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "B", Value: []byte("200")})}},
+		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "A", Value: []byte("100")})},
+		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "B", Value: []byte("200")})}},
 		HasMore: true}
-	rangeQPayload := utils.MarshalOrPanic(rangeQueryResponse)
+	rangeQPayload := protoutil.MarshalOrPanic(rangeQueryResponse)
 
 	
 	rangeQueryNext := &pb.QueryResponse{Results: nil, HasMore: false}
@@ -745,7 +578,7 @@ func TestInvoke(t *testing.T) {
 		ErrorFunc: errorFunc,
 		Responses: []*mockpeer.MockResponse{
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_GET_STATE_BY_RANGE, Txid: "6", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: rangeQPayload, Txid: "6", ChannelId: channelId}},
-			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "6", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: utils.MarshalOrPanic(rangeQueryNext), Txid: "6", ChannelId: channelId}},
+			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "6", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: protoutil.MarshalOrPanic(rangeQueryNext), Txid: "6", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_CLOSE, Txid: "6", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Txid: "6", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Txid: "6", ChannelId: channelId}, RespMsg: nil},
 		},
@@ -753,7 +586,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("rangeq"), []byte("A"), []byte("B")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "6", ChannelId: channelId})
 
 	
@@ -773,7 +606,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("rangeq"), []byte("A"), []byte("B")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "6a", ChannelId: channelId})
 
 	
@@ -795,7 +628,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("rangeq"), []byte("A"), []byte("B")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "6b", ChannelId: channelId})
 
 	
@@ -817,7 +650,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("rangeq"), []byte("A"), []byte("B")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "6c", ChannelId: channelId})
 
 	
@@ -827,16 +660,16 @@ func TestInvoke(t *testing.T) {
 
 	
 	historyQueryResponse := &pb.QueryResponse{Results: []*pb.QueryResultBytes{
-		{ResultBytes: utils.MarshalOrPanic(&lproto.KeyModification{TxId: "6", Value: []byte("100")})}},
+		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KeyModification{TxId: "6", Value: []byte("100")})}},
 		HasMore: true}
-	payload = utils.MarshalOrPanic(historyQueryResponse)
+	payload = protoutil.MarshalOrPanic(historyQueryResponse)
 
 	respSet = &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
 		Responses: []*mockpeer.MockResponse{
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_GET_HISTORY_FOR_KEY, Txid: "7", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: payload, Txid: "7", ChannelId: channelId}},
-			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "7", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: utils.MarshalOrPanic(rangeQueryNext), Txid: "7", ChannelId: channelId}},
+			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "7", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: protoutil.MarshalOrPanic(rangeQueryNext), Txid: "7", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_CLOSE, Txid: "7", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Txid: "7", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Txid: "7", ChannelId: channelId}, RespMsg: nil},
 		},
@@ -844,7 +677,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("historyq"), []byte("A")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "7", ChannelId: channelId})
 
 	
@@ -864,7 +697,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("historyq"), []byte("A")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "7a", ChannelId: channelId})
 
 	
@@ -874,10 +707,10 @@ func TestInvoke(t *testing.T) {
 
 	
 	getQRResp := &pb.QueryResponse{Results: []*pb.QueryResultBytes{
-		{ResultBytes: utils.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "A", Value: []byte("100")})},
-		{ResultBytes: utils.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "B", Value: []byte("200")})}},
+		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "A", Value: []byte("100")})},
+		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "B", Value: []byte("200")})}},
 		HasMore: true}
-	getQRRespPayload := utils.MarshalOrPanic(getQRResp)
+	getQRRespPayload := protoutil.MarshalOrPanic(getQRResp)
 
 	
 	rangeQueryNext = &pb.QueryResponse{Results: nil, HasMore: false}
@@ -887,7 +720,7 @@ func TestInvoke(t *testing.T) {
 		ErrorFunc: errorFunc,
 		Responses: []*mockpeer.MockResponse{
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_GET_QUERY_RESULT, Txid: "8", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: getQRRespPayload, Txid: "8", ChannelId: channelId}},
-			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "8", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: utils.MarshalOrPanic(rangeQueryNext), Txid: "8", ChannelId: channelId}},
+			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "8", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: protoutil.MarshalOrPanic(rangeQueryNext), Txid: "8", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_CLOSE, Txid: "8", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Txid: "8", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Txid: "8", ChannelId: channelId}, RespMsg: nil},
 		},
@@ -895,7 +728,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("richq"), []byte("A")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "8", ChannelId: channelId})
 
 	
@@ -914,7 +747,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("richq"), []byte("A")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "8a", ChannelId: channelId})
 
 	
@@ -962,7 +795,7 @@ func TestSetKeyEP(t *testing.T) {
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_READY, Txid: "1", ChannelId: channelID})
 
 	ci := &pb.ChaincodeInput{Args: [][]byte{[]byte("init"), []byte("A"), []byte("100"), []byte("B"), []byte("200")}, Decorations: nil}
-	payload := utils.MarshalOrPanic(ci)
+	payload := protoutil.MarshalOrPanic(ci)
 	respSet := &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
@@ -991,7 +824,7 @@ func TestSetKeyEP(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("putep"), []byte("A"), []byte("epA")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "4", ChannelId: channelID})
 
@@ -1010,7 +843,7 @@ func TestSetKeyEP(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("getep"), []byte("A")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "5", ChannelId: channelID})
 
@@ -1051,7 +884,7 @@ func TestStartInProc(t *testing.T) {
 	}()
 
 	
-	go StartInProc([]string{"CORE_CHAINCODE_ID_NAME=shimTestCC", "CORE_CHAINCODE_LOGGING_SHIM=debug"}, nil, cc, peerSide.GetSendStream(), peerSide.GetRecvStream())
+	go StartInProc([]string{"CORE_CHAINCODE_ID_NAME=shimTestCC"}, nil, cc, peerSide.GetSendStream(), peerSide.GetRecvStream())
 
 	
 	processDone(t, done, false)
@@ -1063,7 +896,6 @@ func TestStartInProc(t *testing.T) {
 func TestCC2CC(t *testing.T) {
 	streamGetter = mockChaincodeStreamGetter
 	cc := &shimTestCC{}
-	
 	ccname := "shimTestCC"
 	peerSide := setupcc(ccname)
 	defer mockPeerCCSupport.RemoveCC(ccname)
@@ -1102,7 +934,7 @@ func TestCC2CC(t *testing.T) {
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_READY, Txid: "1", ChannelId: channelId})
 
 	ci := &pb.ChaincodeInput{Args: [][]byte{[]byte("init"), []byte("A"), []byte("100"), []byte("B"), []byte("200")}, Decorations: nil}
-	payload := utils.MarshalOrPanic(ci)
+	payload := protoutil.MarshalOrPanic(ci)
 	respSet := &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
@@ -1121,8 +953,8 @@ func TestCC2CC(t *testing.T) {
 	processDone(t, done, false)
 
 	
-	innerResp := utils.MarshalOrPanic(&pb.Response{Status: OK, Payload: []byte("CC2CC rocks")})
-	cc2ccresp := utils.MarshalOrPanic(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Payload: innerResp})
+	innerResp := protoutil.MarshalOrPanic(&pb.Response{Status: OK, Payload: []byte("CC2CC rocks")})
+	cc2ccresp := protoutil.MarshalOrPanic(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Payload: innerResp})
 	respSet = &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
@@ -1134,7 +966,7 @@ func TestCC2CC(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("cc2cc"), []byte("othercc"), []byte("arg1"), []byte("arg2")}, Decorations: nil}
-	payload = utils.MarshalOrPanic(ci)
+	payload = protoutil.MarshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "3", ChannelId: channelId})
 
 	
@@ -1158,7 +990,7 @@ func TestCC2CC(t *testing.T) {
 }
 
 func TestRealPeerStream(t *testing.T) {
-	viper.Set("peer.address", "127.0.0.1:12345")
+	os.Args = []string{"chaincode", "peer.address", "127.0.0.1:12345"}
 	_, err := userChaincodeStreamGetter("fake")
 	assert.Error(t, err)
 }

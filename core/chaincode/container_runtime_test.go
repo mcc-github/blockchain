@@ -12,6 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
+	"github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
@@ -168,6 +169,7 @@ func TestContainerRuntimeStart(t *testing.T) {
 		Name:          "chaincode-name",
 		Version:       "chaincode-version",
 		ContainerType: "container-type",
+		PackageID:     "chaincode-name:chaincode-version",
 	}
 
 	err := cr.Start(ccci, nil)
@@ -183,10 +185,7 @@ func TestContainerRuntimeStart(t *testing.T) {
 	assert.Equal(t, startReq.Args, []string{"chaincode", "-peer.address=peer.example.com"})
 	assert.Equal(t, startReq.Env, []string{"CORE_CHAINCODE_ID_NAME=chaincode-name:chaincode-version", "CORE_PEER_TLS_ENABLED=false"})
 	assert.Nil(t, startReq.FilesToUpload)
-	assert.Equal(t, startReq.CCID, ccintf.CCID{
-		Name:    "chaincode-name",
-		Version: "chaincode-version",
-	})
+	assert.Equal(t, startReq.CCID, ccintf.CCID("chaincode-name:chaincode-version"))
 }
 
 func TestContainerRuntimeStartErrors(t *testing.T) {
@@ -230,6 +229,7 @@ func TestContainerRuntimeStop(t *testing.T) {
 		Name:          "chaincode-id-name",
 		Version:       "chaincode-version",
 		ContainerType: "container-type",
+		PackageID:     "chaincode-id-name:chaincode-version",
 	}
 
 	err := cr.Stop(ccci)
@@ -243,10 +243,7 @@ func TestContainerRuntimeStop(t *testing.T) {
 
 	assert.Equal(t, stopReq.Timeout, uint(0))
 	assert.Equal(t, stopReq.Dontremove, false)
-	assert.Equal(t, stopReq.CCID, ccintf.CCID{
-		Name:    "chaincode-id-name",
-		Version: "chaincode-version",
-	})
+	assert.Equal(t, stopReq.CCID, ccintf.CCID("chaincode-id-name:chaincode-version"))
 }
 
 func TestContainerRuntimeStopErrors(t *testing.T) {
@@ -279,4 +276,39 @@ func TestContainerRuntimeStopErrors(t *testing.T) {
 		}
 		assert.NoError(t, err)
 	}
+}
+
+func TestContainerRuntimeWait(t *testing.T) {
+	fakeProcessor := &mock.Processor{}
+	fakeProcessor.ProcessStub = func(containerType string, req container.VMCReq) error {
+		waitReq := req.(container.WaitContainerReq)
+		waitReq.Exited(0, nil)
+		return nil
+	}
+	cr := &chaincode.ContainerRuntime{
+		Processor: fakeProcessor,
+	}
+
+	ccci := &ccprovider.ChaincodeContainerInfo{
+		Type:          pb.ChaincodeSpec_GOLANG.String(),
+		Name:          "chaincode-id-name",
+		Version:       "chaincode-version",
+		ContainerType: "container-type",
+		PackageID:     persistence.PackageID("chaincode-id-name:chaincode-version"),
+	}
+
+	exitCode, err := cr.Wait(ccci)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, exitCode)
+
+	assert.Equal(t, 1, fakeProcessor.ProcessCallCount())
+	vmType, req := fakeProcessor.ProcessArgsForCall(0)
+	assert.Equal(t, vmType, "container-type")
+	waitReq, ok := req.(container.WaitContainerReq)
+	assert.True(t, ok)
+	assert.Equal(t, ccintf.CCID("chaincode-id-name:chaincode-version"), waitReq.CCID)
+
+	fakeProcessor.ProcessReturns(errors.New("moles-and-trolls"))
+	_, err = cr.Wait(ccci)
+	assert.EqualError(t, err, "moles-and-trolls")
 }

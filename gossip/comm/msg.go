@@ -9,16 +9,17 @@ package comm
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/pkg/errors"
 )
 
 
 type ReceivedMessageImpl struct {
-	*proto.SignedGossipMessage
+	*protoext.SignedGossipMessage
 	lock     sync.Locker
 	conn     *connection
-	connInfo *proto.ConnectionInfo
+	connInfo *protoext.ConnectionInfo
 }
 
 
@@ -29,7 +30,7 @@ func (m *ReceivedMessageImpl) GetSourceEnvelope() *proto.Envelope {
 
 
 func (m *ReceivedMessageImpl) Respond(msg *proto.GossipMessage) {
-	sMsg, err := msg.NoopSign()
+	sMsg, err := protoext.NoopSign(msg)
 	if err != nil {
 		err = errors.WithStack(err)
 		m.conn.logger.Errorf("Failed creating SignedGossipMessage: %+v", err)
@@ -39,13 +40,13 @@ func (m *ReceivedMessageImpl) Respond(msg *proto.GossipMessage) {
 }
 
 
-func (m *ReceivedMessageImpl) GetGossipMessage() *proto.SignedGossipMessage {
+func (m *ReceivedMessageImpl) GetGossipMessage() *protoext.SignedGossipMessage {
 	return m.SignedGossipMessage
 }
 
 
 
-func (m *ReceivedMessageImpl) GetConnectionInfo() *proto.ConnectionInfo {
+func (m *ReceivedMessageImpl) GetConnectionInfo() *protoext.ConnectionInfo {
 	return m.connInfo
 }
 

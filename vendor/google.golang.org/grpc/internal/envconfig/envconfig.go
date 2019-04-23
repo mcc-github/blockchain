@@ -43,6 +43,8 @@ var (
 func init() {
 	switch strings.ToLower(os.Getenv(requireHandshakeStr)) {
 	case "on":
+		fallthrough
+	default:
 		RequireHandshake = RequireHandshakeOn
 	case "off":
 		RequireHandshake = RequireHandshakeOff

@@ -1,0 +1,335 @@
+/*
+Copyright IBM Corp. All Rights Reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+package chaincode
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/internal/peer/chaincode"
+	"github.com/mcc-github/blockchain/internal/peer/common"
+	cb "github.com/mcc-github/blockchain/protos/common"
+	pb "github.com/mcc-github/blockchain/protos/peer"
+	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
+	"github.com/mcc-github/blockchain/protoutil"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+
+
+type ApproverForMyOrg struct {
+	Certificate     tls.Certificate
+	Command         *cobra.Command
+	BroadcastClient common.BroadcastClient
+	DeliverClients  []pb.DeliverClient
+	EndorserClients []EndorserClient
+	Input           *ApproveForMyOrgInput
+	Signer          Signer
+}
+
+
+
+
+
+type ApproveForMyOrgInput struct {
+	ChannelID                string
+	Name                     string
+	Version                  string
+	PackageID                string
+	Sequence                 int64
+	EndorsementPlugin        string
+	ValidationPlugin         string
+	ValidationParameterBytes []byte
+	CollectionConfigPackage  *cb.CollectionConfigPackage
+	InitRequired             bool
+	PeerAddresses            []string
+	WaitForEvent             bool
+	WaitForEventTimeout      time.Duration
+	TxID                     string
+}
+
+
+func (a *ApproveForMyOrgInput) Validate() error {
+	if a.ChannelID == "" {
+		return errors.New("The required parameter 'channelID' is empty. Rerun the command with -C flag")
+	}
+
+	if a.Name == "" {
+		return errors.New("The required parameter 'name' is empty. Rerun the command with -n flag")
+	}
+
+	if a.Version == "" {
+		return errors.New("The required parameter 'version' is empty. Rerun the command with -v flag")
+	}
+
+	if a.Sequence == 0 {
+		return errors.New("The required parameter 'sequence' is empty. Rerun the command with --sequence flag")
+	}
+
+	return nil
+}
+
+
+func ApproveForMyOrgCmd(a *ApproverForMyOrg) *cobra.Command {
+	chaincodeApproveForMyOrgCmd := &cobra.Command{
+		Use:   "approveformyorg",
+		Short: fmt.Sprintf("Approve the chaincode definition for my org."),
+		Long:  fmt.Sprintf("Approve the chaincode definition for my organization."),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if a == nil {
+				
+				input, err := a.createInput()
+				if err != nil {
+					return err
+				}
+
+				ccInput := &ClientConnectionsInput{
+					CommandName:           cmd.Name(),
+					EndorserRequired:      true,
+					OrdererRequired:       true,
+					ChannelID:             channelID,
+					PeerAddresses:         peerAddresses,
+					TLSRootCertFiles:      tlsRootCertFiles,
+					ConnectionProfilePath: connectionProfilePath,
+					TLSEnabled:            viper.GetBool("peer.tls.enabled"),
+				}
+
+				cc, err := NewClientConnections(ccInput)
+				if err != nil {
+					return err
+				}
+
+				endorserClients := make([]EndorserClient, len(cc.EndorserClients))
+				for i, e := range cc.EndorserClients {
+					endorserClients[i] = e
+				}
+
+				a = &ApproverForMyOrg{
+					Command:         cmd,
+					Input:           input,
+					Certificate:     cc.Certificate,
+					BroadcastClient: cc.BroadcastClient,
+					DeliverClients:  cc.DeliverClients,
+					EndorserClients: endorserClients,
+					Signer:          cc.Signer,
+				}
+			}
+			return a.Approve()
+		},
+	}
+	flagList := []string{
+		"channelID",
+		"name",
+		"version",
+		"package-id",
+		"sequence",
+		"endorsement-plugin",
+		"validation-plugin",
+		"signature-policy",
+		"channel-config-policy",
+		"init-required",
+		"collections-config",
+		"peerAddresses",
+		"tlsRootCertFiles",
+		"connectionProfile",
+		"waitForEvent",
+		"waitForEventTimeout",
+	}
+	attachFlags(chaincodeApproveForMyOrgCmd, flagList)
+
+	return chaincodeApproveForMyOrgCmd
+}
+
+
+
+func (a *ApproverForMyOrg) Approve() error {
+	err := a.Input.Validate()
+	if err != nil {
+		return err
+	}
+
+	if a.Command != nil {
+		
+		a.Command.SilenceUsage = true
+	}
+
+	proposal, txID, err := a.createProposal(a.Input.TxID)
+	if err != nil {
+		return errors.WithMessage(err, "failed to create proposal")
+	}
+
+	signedProposal, err := signProposal(proposal, a.Signer)
+	if err != nil {
+		return errors.WithMessage(err, "failed to create signed proposal")
+	}
+
+	var responses []*pb.ProposalResponse
+	for _, endorser := range a.EndorserClients {
+		proposalResponse, err := endorser.ProcessProposal(context.Background(), signedProposal)
+		if err != nil {
+			return errors.WithMessage(err, "failed to endorse proposal")
+		}
+		responses = append(responses, proposalResponse)
+	}
+
+	if len(responses) == 0 {
+		
+		return errors.New("no proposal responses received")
+	}
+
+	
+	
+	proposalResponse := responses[0]
+
+	if proposalResponse == nil {
+		return errors.New("received nil proposal response")
+	}
+
+	if proposalResponse.Response == nil {
+		return errors.Errorf("received proposal response with nil response")
+	}
+
+	if proposalResponse.Response.Status != int32(cb.Status_SUCCESS) {
+		return errors.Errorf("proposal failed with status: %d - %s", proposalResponse.Response.Status, proposalResponse.Response.Message)
+	}
+	
+	env, err := protoutil.CreateSignedTx(proposal, a.Signer, responses...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to create signed transaction")
+	}
+	var dg *chaincode.DeliverGroup
+	var ctx context.Context
+	if a.Input.WaitForEvent {
+		var cancelFunc context.CancelFunc
+		ctx, cancelFunc = context.WithTimeout(context.Background(), a.Input.WaitForEventTimeout)
+		defer cancelFunc()
+
+		dg = chaincode.NewDeliverGroup(
+			a.DeliverClients,
+			a.Input.PeerAddresses,
+			a.Signer,
+			a.Certificate,
+			a.Input.ChannelID,
+			txID,
+		)
+		
+		err := dg.Connect(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err = a.BroadcastClient.Send(env); err != nil {
+		return errors.WithMessage(err, "failed to send transaction")
+	}
+
+	if dg != nil && ctx != nil {
+		
+		err = dg.Wait(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
+
+func (a *ApproverForMyOrg) createInput() (*ApproveForMyOrgInput, error) {
+	policyBytes, err := createPolicyBytes(signaturePolicy, channelConfigPolicy)
+	if err != nil {
+		return nil, err
+	}
+
+	ccp, err := createCollectionConfigPackage(collectionsConfigFile)
+	if err != nil {
+		return nil, err
+	}
+
+	input := &ApproveForMyOrgInput{
+		ChannelID:                channelID,
+		Name:                     chaincodeName,
+		Version:                  chaincodeVersion,
+		PackageID:                packageID,
+		Sequence:                 int64(sequence),
+		EndorsementPlugin:        endorsementPlugin,
+		ValidationPlugin:         validationPlugin,
+		ValidationParameterBytes: policyBytes,
+		InitRequired:             initRequired,
+		CollectionConfigPackage:  ccp,
+		PeerAddresses:            peerAddresses,
+		WaitForEvent:             waitForEvent,
+		WaitForEventTimeout:      waitForEventTimeout,
+	}
+
+	return input, nil
+}
+
+func (a *ApproverForMyOrg) createProposal(inputTxID string) (proposal *pb.Proposal, txID string, err error) {
+	if a.Signer == nil {
+		return nil, "", errors.New("nil signer provided")
+	}
+
+	var ccsrc *lb.ChaincodeSource
+	if a.Input.PackageID != "" {
+		ccsrc = &lb.ChaincodeSource{
+			Type: &lb.ChaincodeSource_LocalPackage{
+				LocalPackage: &lb.ChaincodeSource_Local{
+					PackageId: a.Input.PackageID,
+				},
+			},
+		}
+	} else {
+		ccsrc = &lb.ChaincodeSource{
+			Type: &lb.ChaincodeSource_Unavailable_{
+				Unavailable: &lb.ChaincodeSource_Unavailable{},
+			},
+		}
+	}
+
+	args := &lb.ApproveChaincodeDefinitionForMyOrgArgs{
+		Name:                a.Input.Name,
+		Version:             a.Input.Version,
+		Sequence:            a.Input.Sequence,
+		EndorsementPlugin:   a.Input.EndorsementPlugin,
+		ValidationPlugin:    a.Input.ValidationPlugin,
+		ValidationParameter: a.Input.ValidationParameterBytes,
+		InitRequired:        a.Input.InitRequired,
+		Collections:         a.Input.CollectionConfigPackage,
+		Source:              ccsrc,
+	}
+
+	argsBytes, err := proto.Marshal(args)
+	if err != nil {
+		return nil, "", err
+	}
+	ccInput := &pb.ChaincodeInput{Args: [][]byte{[]byte(approveFuncName), argsBytes}}
+
+	cis := &pb.ChaincodeInvocationSpec{
+		ChaincodeSpec: &pb.ChaincodeSpec{
+			ChaincodeId: &pb.ChaincodeID{Name: lifecycleName},
+			Input:       ccInput,
+		},
+	}
+
+	creatorBytes, err := a.Signer.Serialize()
+	if err != nil {
+		return nil, "", errors.WithMessage(err, "failed to serialize identity")
+	}
+
+	proposal, txID, err = protoutil.CreateChaincodeProposalWithTxIDAndTransient(cb.HeaderType_ENDORSER_TRANSACTION, a.Input.ChannelID, cis, creatorBytes, inputTxID, nil)
+	if err != nil {
+		return nil, "", errors.WithMessage(err, "failed to create ChaincodeInvocationSpec proposal")
+	}
+
+	return proposal, txID, nil
+}

@@ -9,6 +9,7 @@ package chaincode
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/pkg/errors"
 )
 
@@ -16,9 +17,9 @@ import (
 type HandlerRegistry struct {
 	allowUnsolicitedRegistration bool 
 
-	mutex     sync.Mutex              
-	handlers  map[string]*Handler     
-	launching map[string]*LaunchState 
+	mutex     sync.Mutex                   
+	handlers  map[ccintf.CCID]*Handler     
+	launching map[ccintf.CCID]*LaunchState 
 }
 
 type LaunchState struct {
@@ -58,8 +59,8 @@ func (l *LaunchState) Notify(err error) {
 
 func NewHandlerRegistry(allowUnsolicitedRegistration bool) *HandlerRegistry {
 	return &HandlerRegistry{
-		handlers:                     map[string]*Handler{},
-		launching:                    map[string]*LaunchState{},
+		handlers:                     map[ccintf.CCID]*Handler{},
+		launching:                    map[ccintf.CCID]*LaunchState{},
 		allowUnsolicitedRegistration: allowUnsolicitedRegistration,
 	}
 }
@@ -68,17 +69,17 @@ func NewHandlerRegistry(allowUnsolicitedRegistration bool) *HandlerRegistry {
 
 
 
-func (r *HandlerRegistry) Launching(cname string) (*LaunchState, bool) {
+func (r *HandlerRegistry) Launching(packageID ccintf.CCID) (*LaunchState, bool) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
 	
-	if launchState, ok := r.launching[cname]; ok {
+	if launchState, ok := r.launching[packageID]; ok {
 		return launchState, true
 	}
 
 	
-	if _, ok := r.handlers[cname]; ok {
+	if _, ok := r.handlers[packageID]; ok {
 		launchState := NewLaunchState()
 		launchState.Notify(nil)
 		return launchState, true
@@ -86,37 +87,37 @@ func (r *HandlerRegistry) Launching(cname string) (*LaunchState, bool) {
 
 	
 	launchState := NewLaunchState()
-	r.launching[cname] = launchState
+	r.launching[packageID] = launchState
 	return launchState, false
 }
 
 
 
-func (r *HandlerRegistry) Ready(cname string) {
+func (r *HandlerRegistry) Ready(packageID ccintf.CCID) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	launchStatus := r.launching[cname]
+	launchStatus := r.launching[packageID]
 	if launchStatus != nil {
 		launchStatus.Notify(nil)
 	}
 }
 
 
-func (r *HandlerRegistry) Failed(cname string, err error) {
+func (r *HandlerRegistry) Failed(packageID ccintf.CCID, err error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	launchStatus := r.launching[cname]
+	launchStatus := r.launching[packageID]
 	if launchStatus != nil {
 		launchStatus.Notify(err)
 	}
 }
 
 
-func (r *HandlerRegistry) Handler(cname string) *Handler {
+func (r *HandlerRegistry) Handler(packageID ccintf.CCID) *Handler {
 	r.mutex.Lock()
-	h := r.handlers[cname]
+	h := r.handlers[packageID]
 	r.mutex.Unlock()
 	return h
 }
@@ -128,43 +129,50 @@ func (r *HandlerRegistry) Handler(cname string) *Handler {
 func (r *HandlerRegistry) Register(h *Handler) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	key := h.chaincodeID.Name
 
-	if r.handlers[key] != nil {
-		chaincodeLogger.Debugf("duplicate registered handler(key:%s) return error", key)
+	
+	
+	
+	
+	
+	
+	packageID := ccintf.CCID(h.chaincodeID.Name)
+
+	if r.handlers[packageID] != nil {
+		chaincodeLogger.Debugf("duplicate registered handler(key:%s) return error", packageID)
 		return errors.Errorf("duplicate chaincodeID: %s", h.chaincodeID.Name)
 	}
 
 	
 	
-	if r.launching[key] == nil && !r.allowUnsolicitedRegistration {
+	if r.launching[packageID] == nil && !r.allowUnsolicitedRegistration {
 		return errors.Errorf("peer will not accept external chaincode connection %v (except in dev mode)", h.chaincodeID.Name)
 	}
 
-	r.handlers[key] = h
+	r.handlers[packageID] = h
 
-	chaincodeLogger.Debugf("registered handler complete for chaincode %s", key)
+	chaincodeLogger.Debugf("registered handler complete for chaincode %s", packageID)
 	return nil
 }
 
 
 
 
-func (r *HandlerRegistry) Deregister(cname string) error {
-	chaincodeLogger.Debugf("deregister handler: %s", cname)
+func (r *HandlerRegistry) Deregister(packageID ccintf.CCID) error {
+	chaincodeLogger.Debugf("deregister handler: %s", packageID)
 
 	r.mutex.Lock()
-	handler := r.handlers[cname]
-	delete(r.handlers, cname)
-	delete(r.launching, cname)
+	handler := r.handlers[packageID]
+	delete(r.handlers, packageID)
+	delete(r.launching, packageID)
 	r.mutex.Unlock()
 
 	if handler == nil {
-		return errors.Errorf("could not find handler: %s", cname)
+		return errors.Errorf("could not find handler: %s", packageID)
 	}
 
 	handler.Close()
 
-	chaincodeLogger.Debugf("deregistered handler with key: %s", cname)
+	chaincodeLogger.Debugf("deregistered handler with key: %s", packageID)
 	return nil
 }

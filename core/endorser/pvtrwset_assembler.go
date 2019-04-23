@@ -57,9 +57,9 @@ func (as *rwSetAssembler) AssemblePvtRWSet(channelName string,
 		if _, found := txPvtRwSetWithConfig.CollectionConfigs[namespace]; !found {
 			ccInfo, err := deployedCCInfoProvider.ChaincodeInfo(channelName, namespace, txsim)
 			if err != nil {
-				return nil, errors.WithMessage(err, fmt.Sprintf("error while retrieving collection config for chaincode %#v", namespace))
+				return nil, errors.WithMessagef(err, "error while retrieving collection config for chaincode %#v", namespace)
 			}
-			colCP := ccInfo.CollectionConfigPkg
+			colCP := ccInfo.AllCollectionsConfigPkg()
 			if colCP == nil {
 				return nil, errors.New(fmt.Sprintf("no collection config for chaincode %#v", namespace))
 			}

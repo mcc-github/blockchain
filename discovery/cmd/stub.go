@@ -12,9 +12,9 @@ import (
 	"github.com/mcc-github/blockchain/cmd/common"
 	"github.com/mcc-github/blockchain/cmd/common/comm"
 	"github.com/mcc-github/blockchain/cmd/common/signer"
-	"github.com/mcc-github/blockchain/discovery/client"
+	discovery "github.com/mcc-github/blockchain/discovery/client"
 	. "github.com/mcc-github/blockchain/protos/discovery"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -98,7 +98,7 @@ func (stub *RawStub) Send(server string, conf common.Config, req *discovery.Requ
 		ClientTlsCertHash: comm.TLSCertHash,
 	}
 
-	payload := utils.MarshalOrPanic(req.Request)
+	payload := protoutil.MarshalOrPanic(req.Request)
 	sig, err := signer.Sign(payload)
 	if err != nil {
 		return nil, err

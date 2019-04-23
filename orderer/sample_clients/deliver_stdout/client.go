@@ -10,14 +10,13 @@ import (
 	"math"
 	"os"
 
-	"github.com/mcc-github/blockchain/common/crypto"
-	"github.com/mcc-github/blockchain/common/localmsp"
 	"github.com/mcc-github/blockchain/common/tools/protolator"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/utils"
+	"github.com/mcc-github/blockchain/protoutil"
 	"google.golang.org/grpc"
 )
 
@@ -30,16 +29,16 @@ var (
 type deliverClient struct {
 	client    ab.AtomicBroadcast_DeliverClient
 	channelID string
-	signer    crypto.LocalSigner
+	signer    identity.SignerSerializer
 	quiet     bool
 }
 
-func newDeliverClient(client ab.AtomicBroadcast_DeliverClient, channelID string, signer crypto.LocalSigner, quiet bool) *deliverClient {
+func newDeliverClient(client ab.AtomicBroadcast_DeliverClient, channelID string, signer identity.SignerSerializer, quiet bool) *deliverClient {
 	return &deliverClient{client: client, channelID: channelID, signer: signer, quiet: quiet}
 }
 
 func (r *deliverClient) seekHelper(start *ab.SeekPosition, stop *ab.SeekPosition) *cb.Envelope {
-	env, err := utils.CreateSignedEnvelope(cb.HeaderType_DELIVER_SEEK_INFO, r.channelID, r.signer, &ab.SeekInfo{
+	env, err := protoutil.CreateSignedEnvelope(cb.HeaderType_DELIVER_SEEK_INFO, r.channelID, r.signer, &ab.SeekInfo{
 		Start:    start,
 		Stop:     stop,
 		Behavior: ab.SeekInfo_BLOCK_UNTIL_READY,
@@ -103,7 +102,11 @@ func main() {
 		os.Exit(0)
 	}
 
-	signer := localmsp.NewSigner()
+	signer, err := mspmgmt.GetLocalMSP().GetDefaultSigningIdentity()
+	if err != nil {
+		fmt.Println("Failed to load local signing identity:", err)
+		os.Exit(0)
+	}
 
 	var channelID string
 	var serverAddr string

@@ -37,13 +37,13 @@ var _ = Describe("Marshal", func() {
 					Nonce:     []byte{1, 2, 3, 4, 5},
 					Creator:   []byte("creator"),
 				},
-				Payload: &token.Command_ImportRequest{
-					ImportRequest: &token.ImportRequest{
+				Payload: &token.Command_IssueRequest{
+					IssueRequest: &token.IssueRequest{
 						Credential: []byte("credential"),
-						TokensToIssue: []*token.TokenToIssue{{
-							Recipient: []byte("recipient"),
-							Type:      "TYPE",
-							Quantity:  999,
+						TokensToIssue: []*token.Token{{
+							Owner:    &token.TokenOwner{Raw: []byte("recipient")},
+							Type:     "TYPE",
+							Quantity: ToHex(999),
 						}},
 					},
 				},
@@ -134,13 +134,13 @@ var _ = Describe("Marshal", func() {
 		It("marshals and signs TokenTransaction responses", func() {
 			tokenTransactionResponse := &token.CommandResponse_TokenTransaction{
 				TokenTransaction: &token.TokenTransaction{
-					Action: &token.TokenTransaction_PlainAction{
-						PlainAction: &token.PlainTokenAction{
-							Data: &token.PlainTokenAction_PlainImport{
-								PlainImport: &token.PlainImport{
-									Outputs: []*token.PlainOutput{
-										{Owner: []byte("owner-1"), Type: "TOK1", Quantity: 888},
-										{Owner: []byte("owner-2"), Type: "TOK2", Quantity: 999},
+					Action: &token.TokenTransaction_TokenAction{
+						TokenAction: &token.TokenAction{
+							Data: &token.TokenAction_Issue{
+								Issue: &token.Issue{
+									Outputs: []*token.Token{
+										{Owner: &token.TokenOwner{Raw: []byte("owner-1")}, Type: "TOK1", Quantity: ToHex(888)},
+										{Owner: &token.TokenOwner{Raw: []byte("owner-2")}, Type: "TOK2", Quantity: ToHex(999)},
 									},
 								},
 							},

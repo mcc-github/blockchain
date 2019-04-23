@@ -20,7 +20,6 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
-	"google.golang.org/grpc/internal"
 	"google.golang.org/grpc/internal/backoff"
 	"google.golang.org/grpc/internal/channelz"
 	"google.golang.org/grpc/internal/envconfig"
@@ -576,13 +575,12 @@ func (cc *ClientConn) handleSubConnStateChange(sc balancer.SubConn, s connectivi
 
 func (cc *ClientConn) newAddrConn(addrs []resolver.Address, opts balancer.NewSubConnOptions) (*addrConn, error) {
 	ac := &addrConn{
-		cc:                  cc,
-		addrs:               addrs,
-		scopts:              opts,
-		dopts:               cc.dopts,
-		czData:              new(channelzData),
-		successfulHandshake: true, 
-		resetBackoff:        make(chan struct{}),
+		cc:           cc,
+		addrs:        addrs,
+		scopts:       opts,
+		dopts:        cc.dopts,
+		czData:       new(channelzData),
+		resetBackoff: make(chan struct{}),
 	}
 	ac.ctx, ac.cancel = context.WithCancel(cc.ctx)
 	
@@ -664,11 +662,10 @@ func (ac *addrConn) connect() error {
 		return nil
 	}
 	ac.updateConnectivityState(connectivity.Connecting)
-	ac.cc.handleSubConnStateChange(ac.acbw, ac.state)
 	ac.mu.Unlock()
 
 	
-	go ac.resetTransport(false)
+	go ac.resetTransport()
 	return nil
 }
 
@@ -687,6 +684,12 @@ func (ac *addrConn) tryUpdateAddrs(addrs []resolver.Address) bool {
 		return true
 	}
 
+	
+	
+	if ac.state != connectivity.Ready {
+		return false
+	}
+
 	var curAddrFound bool
 	for _, a := range addrs {
 		if reflect.DeepEqual(ac.curAddr, a) {
@@ -697,7 +700,6 @@ func (ac *addrConn) tryUpdateAddrs(addrs []resolver.Address) bool {
 	grpclog.Infof("addrConn: tryUpdateAddrs curAddrFound: %v", curAddrFound)
 	if curAddrFound {
 		ac.addrs = addrs
-		ac.addrIdx = 0 
 	}
 
 	return curAddrFound
@@ -897,7 +899,6 @@ type addrConn struct {
 	transport transport.ClientTransport 
 
 	mu      sync.Mutex
-	addrIdx int                
 	curAddr resolver.Address   
 	addrs   []resolver.Address 
 
@@ -906,33 +907,28 @@ type addrConn struct {
 
 	tearDownErr error 
 
-	backoffIdx int
-	
-	
-	backoffDeadline time.Time
-	
-	
-	connectDeadline time.Time
-
+	backoffIdx   int 
 	resetBackoff chan struct{}
 
 	channelzID int64 
 	czData     *channelzData
-
-	successfulHandshake bool
-
-	healthCheckEnabled bool
 }
 
 
 func (ac *addrConn) updateConnectivityState(s connectivity.State) {
+	if ac.state == s {
+		return
+	}
+
+	updateMsg := fmt.Sprintf("Subchannel Connectivity change to %v", s)
 	ac.state = s
 	if channelz.IsOn() {
 		channelz.AddTraceEvent(ac.channelzID, &channelz.TraceEventDesc{
-			Desc:     fmt.Sprintf("Subchannel Connectivity change to %v", s),
+			Desc:     updateMsg,
 			Severity: channelz.CtINFO,
 		})
 	}
+	ac.cc.handleSubConnStateChange(ac.acbw, s)
 }
 
 
@@ -949,151 +945,192 @@ func (ac *addrConn) adjustParams(r transport.GoAwayReason) {
 	}
 }
 
+func (ac *addrConn) resetTransport() {
+	for i := 0; ; i++ {
+		tryNextAddrFromStart := grpcsync.NewEvent()
 
-
-
-
-
-
-
-
-
-
-func (ac *addrConn) resetTransport(resolveNow bool) {
-	for {
-		
-		
-		if resolveNow {
-			ac.mu.Lock()
+		ac.mu.Lock()
+		if i > 0 {
 			ac.cc.resolveNow(resolver.ResolveNowOption{})
-			ac.mu.Unlock()
 		}
-
-		ac.mu.Lock()
-		if ac.state == connectivity.Shutdown {
-			ac.mu.Unlock()
-			return
-		}
-
-		
-		ac.transport = nil
-		
-		
-		
-		
-		
-		if ac.state == connectivity.Ready || (ac.addrIdx == len(ac.addrs)-1 && ac.state == connectivity.Connecting && !ac.successfulHandshake) {
-			ac.updateConnectivityState(connectivity.TransientFailure)
-			ac.cc.handleSubConnStateChange(ac.acbw, ac.state)
-		}
-		ac.transport = nil
-		ac.mu.Unlock()
-
-		if err := ac.nextAddr(); err != nil {
-			return
-		}
-
-		ac.mu.Lock()
-		if ac.state == connectivity.Shutdown {
-			ac.mu.Unlock()
-			return
-		}
-
-		backoffIdx := ac.backoffIdx
-		backoffFor := ac.dopts.bs.Backoff(backoffIdx)
+		addrs := ac.addrs
+		backoffFor := ac.dopts.bs.Backoff(ac.backoffIdx)
 
 		
 		dialDuration := getMinConnectTimeout()
-		if backoffFor > dialDuration {
+		if dialDuration < backoffFor {
 			
 			dialDuration = backoffFor
 		}
-		start := time.Now()
-		connectDeadline := start.Add(dialDuration)
-		ac.backoffDeadline = start.Add(backoffFor)
-		ac.connectDeadline = connectDeadline
-
+		connectDeadline := time.Now().Add(dialDuration)
 		ac.mu.Unlock()
 
-		ac.cc.mu.RLock()
-		ac.dopts.copts.KeepaliveParams = ac.cc.mkp
-		ac.cc.mu.RUnlock()
+	addrLoop:
+		for _, addr := range addrs {
+			ac.mu.Lock()
 
+			if ac.state == connectivity.Shutdown {
+				ac.mu.Unlock()
+				return
+			}
+			ac.updateConnectivityState(connectivity.Connecting)
+			ac.transport = nil
+
+			ac.cc.mu.RLock()
+			ac.dopts.copts.KeepaliveParams = ac.cc.mkp
+			ac.cc.mu.RUnlock()
+
+			if ac.state == connectivity.Shutdown {
+				ac.mu.Unlock()
+				return
+			}
+
+			copts := ac.dopts.copts
+			if ac.scopts.CredsBundle != nil {
+				copts.CredsBundle = ac.scopts.CredsBundle
+			}
+			hctx, hcancel := context.WithCancel(ac.ctx)
+			defer hcancel()
+			ac.mu.Unlock()
+
+			if channelz.IsOn() {
+				channelz.AddTraceEvent(ac.channelzID, &channelz.TraceEventDesc{
+					Desc:     fmt.Sprintf("Subchannel picks a new address %q to connect", addr.Addr),
+					Severity: channelz.CtINFO,
+				})
+			}
+
+			reconnect := grpcsync.NewEvent()
+			prefaceReceived := make(chan struct{})
+			newTr, err := ac.createTransport(addr, copts, connectDeadline, reconnect, prefaceReceived)
+			if err == nil {
+				ac.mu.Lock()
+				ac.curAddr = addr
+				ac.transport = newTr
+				ac.mu.Unlock()
+
+				healthCheckConfig := ac.cc.healthCheckConfig()
+				
+				
+				
+				
+				
+				healthcheckManagingState := false
+				if !ac.cc.dopts.disableHealthCheck && healthCheckConfig != nil && ac.scopts.HealthCheckEnabled {
+					if ac.cc.dopts.healthCheckFunc == nil {
+						
+						grpclog.Error("the client side LB channel health check function has not been set.")
+					} else {
+						
+						go ac.startHealthCheck(hctx, newTr, addr, healthCheckConfig.ServiceName)
+						healthcheckManagingState = true
+					}
+				}
+				if !healthcheckManagingState {
+					ac.mu.Lock()
+					ac.updateConnectivityState(connectivity.Ready)
+					ac.mu.Unlock()
+				}
+			} else {
+				hcancel()
+				if err == errConnClosing {
+					return
+				}
+
+				if tryNextAddrFromStart.HasFired() {
+					break addrLoop
+				}
+				continue
+			}
+
+			ac.mu.Lock()
+			reqHandshake := ac.dopts.reqHandshake
+			ac.mu.Unlock()
+
+			<-reconnect.Done()
+			hcancel()
+
+			if reqHandshake == envconfig.RequireHandshakeHybrid {
+				
+				
+				
+				
+				
+				select {
+				case <-prefaceReceived:
+					
+					
+					ac.mu.Lock()
+					ac.backoffIdx = 0
+					ac.mu.Unlock()
+					break addrLoop
+				default:
+					
+					
+					
+					ac.mu.Lock()
+					if ac.state == connectivity.Shutdown {
+						ac.mu.Unlock()
+						return
+					}
+
+					ac.updateConnectivityState(connectivity.TransientFailure)
+					ac.mu.Unlock()
+
+					if tryNextAddrFromStart.HasFired() {
+						break addrLoop
+					}
+				}
+			} else {
+				
+				
+				
+				
+				
+				
+				ac.mu.Lock()
+				ac.backoffIdx = 0
+				ac.mu.Unlock()
+				break addrLoop
+			}
+		}
+
+		
+		
 		ac.mu.Lock()
-
 		if ac.state == connectivity.Shutdown {
 			ac.mu.Unlock()
 			return
 		}
+		ac.updateConnectivityState(connectivity.TransientFailure)
 
-		if ac.state != connectivity.Connecting {
-			ac.updateConnectivityState(connectivity.Connecting)
-			ac.cc.handleSubConnStateChange(ac.acbw, ac.state)
-		}
-
-		addr := ac.addrs[ac.addrIdx]
-		copts := ac.dopts.copts
-		if ac.scopts.CredsBundle != nil {
-			copts.CredsBundle = ac.scopts.CredsBundle
-		}
+		
+		b := ac.resetBackoff
+		timer := time.NewTimer(backoffFor)
+		acctx := ac.ctx
 		ac.mu.Unlock()
 
-		if channelz.IsOn() {
-			channelz.AddTraceEvent(ac.channelzID, &channelz.TraceEventDesc{
-				Desc:     fmt.Sprintf("Subchannel picks a new address %q to connect", addr.Addr),
-				Severity: channelz.CtINFO,
-			})
+		select {
+		case <-timer.C:
+			ac.mu.Lock()
+			ac.backoffIdx++
+			ac.mu.Unlock()
+		case <-b:
+			timer.Stop()
+		case <-acctx.Done():
+			timer.Stop()
+			return
 		}
-
-		if err := ac.createTransport(backoffIdx, addr, copts, connectDeadline); err != nil {
-			continue
-		}
-
-		return
 	}
 }
 
 
-func (ac *addrConn) createTransport(backoffNum int, addr resolver.Address, copts transport.ConnectOptions, connectDeadline time.Time) error {
-	oneReset := sync.Once{}
-	skipReset := make(chan struct{})
-	allowedToReset := make(chan struct{})
-	prefaceReceived := make(chan struct{})
+
+
+
+
+func (ac *addrConn) createTransport(addr resolver.Address, copts transport.ConnectOptions, connectDeadline time.Time, reconnect *grpcsync.Event, prefaceReceived chan struct{}) (transport.ClientTransport, error) {
 	onCloseCalled := make(chan struct{})
-
-	var prefaceMu sync.Mutex
-	var serverPrefaceReceived bool
-	var clientPrefaceWrote bool
-
-	hcCtx, hcCancel := context.WithCancel(ac.ctx)
-
-	onGoAway := func(r transport.GoAwayReason) {
-		hcCancel()
-		ac.mu.Lock()
-		ac.adjustParams(r)
-		ac.mu.Unlock()
-		select {
-		case <-skipReset: 
-			return
-		case <-allowedToReset: 
-			go oneReset.Do(func() { ac.resetTransport(false) })
-		}
-	}
-
-	prefaceTimer := time.NewTimer(connectDeadline.Sub(time.Now()))
-
-	onClose := func() {
-		hcCancel()
-		close(onCloseCalled)
-		prefaceTimer.Stop()
-
-		select {
-		case <-skipReset: 
-			return
-		case <-allowedToReset: 
-			oneReset.Do(func() { ac.resetTransport(false) })
-		}
-	}
 
 	target := transport.TargetInfo{
 		Addr:      addr.Addr,
@@ -1101,21 +1138,24 @@ func (ac *addrConn) createTransport(backoffNum int, addr resolver.Address, copts
 		Authority: ac.cc.authority,
 	}
 
+	prefaceTimer := time.NewTimer(time.Until(connectDeadline))
+
+	onGoAway := func(r transport.GoAwayReason) {
+		ac.mu.Lock()
+		ac.adjustParams(r)
+		ac.mu.Unlock()
+		reconnect.Fire()
+	}
+
+	onClose := func() {
+		close(onCloseCalled)
+		prefaceTimer.Stop()
+		reconnect.Fire()
+	}
+
 	onPrefaceReceipt := func() {
 		close(prefaceReceived)
 		prefaceTimer.Stop()
-
-		
-		ac.mu.Lock()
-
-		prefaceMu.Lock()
-		serverPrefaceReceived = true
-		if clientPrefaceWrote {
-			ac.successfulHandshake = true
-		}
-		prefaceMu.Unlock()
-
-		ac.mu.Unlock()
 	}
 
 	connectCtx, cancel := context.WithDeadline(ac.ctx, connectDeadline)
@@ -1127,13 +1167,6 @@ func (ac *addrConn) createTransport(backoffNum int, addr resolver.Address, copts
 	newTr, err := transport.NewClientTransport(connectCtx, ac.cc.ctx, target, copts, onPrefaceReceipt, onGoAway, onClose)
 
 	if err == nil {
-		prefaceMu.Lock()
-		clientPrefaceWrote = true
-		if serverPrefaceReceived || ac.dopts.reqHandshake == envconfig.RequireHandshakeOff {
-			ac.successfulHandshake = true
-		}
-		prefaceMu.Unlock()
-
 		if ac.dopts.reqHandshake == envconfig.RequireHandshakeOn {
 			select {
 			case <-prefaceTimer.C:
@@ -1144,8 +1177,7 @@ func (ac *addrConn) createTransport(backoffNum int, addr resolver.Address, copts
 				
 			case <-onCloseCalled:
 				
-				close(allowedToReset)
-				return nil
+				return nil, errors.New("connection closed")
 			}
 		} else if ac.dopts.reqHandshake == envconfig.RequireHandshakeHybrid {
 			go func() {
@@ -1170,70 +1202,32 @@ func (ac *addrConn) createTransport(backoffNum int, addr resolver.Address, copts
 			
 			ac.mu.Unlock()
 
-			
-			
-			close(skipReset)
-
-			return errConnClosing
+			return nil, errConnClosing
 		}
 		ac.mu.Unlock()
 		grpclog.Warningf("grpc: addrConn.createTransport failed to connect to %v. Err :%v. Reconnecting...", addr, err)
-
-		
-		
-		close(skipReset)
-
-		return err
+		return nil, err
 	}
 
 	
 	ac.mu.Lock()
 	if ac.state == connectivity.Shutdown {
 		ac.mu.Unlock()
-		close(skipReset)
 		newTr.Close()
-		return nil
+		return nil, errConnClosing
 	}
-	ac.transport = newTr
 	ac.mu.Unlock()
-
-	healthCheckConfig := ac.cc.healthCheckConfig()
-	
-	
-	
-	
-	
-	if !ac.cc.dopts.disableHealthCheck && healthCheckConfig != nil && ac.scopts.HealthCheckEnabled {
-		if internal.HealthCheckFunc != nil {
-			go ac.startHealthCheck(hcCtx, newTr, addr, healthCheckConfig.ServiceName)
-			close(allowedToReset)
-			return nil
-		}
-		
-		grpclog.Error("the client side LB channel health check function has not been set.")
-	}
 
 	
 	ac.mu.Lock()
-
 	if ac.state == connectivity.Shutdown {
 		ac.mu.Unlock()
-
-		
-		close(skipReset)
-		return errConnClosing
+		newTr.Close()
+		return nil, errConnClosing
 	}
-
-	ac.updateConnectivityState(connectivity.Ready)
-	ac.cc.handleSubConnStateChange(ac.acbw, ac.state)
-	ac.curAddr = addr
-
 	ac.mu.Unlock()
 
-	
-	
-	close(allowedToReset)
-	return nil
+	return newTr, nil
 }
 
 func (ac *addrConn) startHealthCheck(ctx context.Context, newTr transport.ClientTransport, addr resolver.Address, serviceName string) {
@@ -1253,19 +1247,12 @@ func (ac *addrConn) startHealthCheck(ctx context.Context, newTr transport.Client
 				firstReady = false
 				ac.curAddr = addr
 			}
-			if ac.state != connectivity.Ready {
-				ac.updateConnectivityState(connectivity.Ready)
-				ac.cc.handleSubConnStateChange(ac.acbw, ac.state)
-			}
+			ac.updateConnectivityState(connectivity.Ready)
 		} else {
-			if ac.state != connectivity.TransientFailure {
-				ac.updateConnectivityState(connectivity.TransientFailure)
-				ac.cc.handleSubConnStateChange(ac.acbw, ac.state)
-			}
+			ac.updateConnectivityState(connectivity.TransientFailure)
 		}
 	}
-
-	err := internal.HealthCheckFunc(ctx, newStream, reportHealth, serviceName)
+	err := ac.cc.dopts.healthCheckFunc(ctx, newStream, reportHealth, serviceName)
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			if channelz.IsOn() {
@@ -1279,55 +1266,6 @@ func (ac *addrConn) startHealthCheck(ctx context.Context, newTr transport.Client
 			grpclog.Errorf("HealthCheckFunc exits with unexpected error %v", err)
 		}
 	}
-}
-
-
-
-
-
-
-func (ac *addrConn) nextAddr() error {
-	ac.mu.Lock()
-
-	
-	
-	if ac.successfulHandshake {
-		ac.successfulHandshake = false
-		ac.backoffDeadline = time.Time{}
-		ac.connectDeadline = time.Time{}
-		ac.addrIdx = 0
-		ac.backoffIdx = 0
-		ac.mu.Unlock()
-		return nil
-	}
-
-	if ac.addrIdx < len(ac.addrs)-1 {
-		ac.addrIdx++
-		ac.mu.Unlock()
-		return nil
-	}
-
-	ac.addrIdx = 0
-	ac.backoffIdx++
-
-	if ac.state == connectivity.Shutdown {
-		ac.mu.Unlock()
-		return errConnClosing
-	}
-	ac.cc.resolveNow(resolver.ResolveNowOption{})
-	backoffDeadline := ac.backoffDeadline
-	b := ac.resetBackoff
-	ac.mu.Unlock()
-	timer := time.NewTimer(backoffDeadline.Sub(time.Now()))
-	select {
-	case <-timer.C:
-	case <-b:
-		timer.Stop()
-	case <-ac.ctx.Done():
-		timer.Stop()
-		return ac.ctx.Err()
-	}
-	return nil
 }
 
 func (ac *addrConn) resetConnectBackoff() {
@@ -1378,7 +1316,6 @@ func (ac *addrConn) tearDown(err error) {
 	ac.updateConnectivityState(connectivity.Shutdown)
 	ac.cancel()
 	ac.tearDownErr = err
-	ac.cc.handleSubConnStateChange(ac.acbw, ac.state)
 	ac.curAddr = resolver.Address{}
 	if err == errConnDrain && curTr != nil {
 		

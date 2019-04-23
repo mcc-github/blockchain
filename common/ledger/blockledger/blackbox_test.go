@@ -14,6 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/protoutil"
 )
 
 type ledgerTestable interface {
@@ -91,7 +92,7 @@ func testReinitialization(lf ledgerTestFactory, t *testing.T) {
 	if block == nil {
 		t.Fatalf("Error retrieving block 1")
 	}
-	if !bytes.Equal(block.Header.Hash(), aBlock.Header.Hash()) {
+	if !bytes.Equal(protoutil.BlockHeaderHash(block.Header), protoutil.BlockHeaderHash(aBlock.Header)) {
 		t.Fatalf("Block hashes did no match")
 	}
 }
@@ -106,7 +107,7 @@ func testAddition(lf ledgerTestFactory, t *testing.T) {
 	if genesis == nil {
 		t.Fatalf("Could not retrieve genesis block")
 	}
-	prevHash := genesis.Header.Hash()
+	prevHash := protoutil.BlockHeaderHash(genesis.Header)
 
 	li.Append(blockledger.CreateNextBlock(li, []*cb.Envelope{{Payload: []byte("My Data")}}))
 	if li.Height() != 2 {

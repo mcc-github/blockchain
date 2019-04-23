@@ -62,6 +62,18 @@ var _ = Describe("Platforms", func() {
 				Expect(fakePlatform.ValidateCodePackageArgsForCall(0)).To(Equal([]byte("code-package")))
 			})
 
+			Context("when the code package is empty", func() {
+				It("does nothing", func() {
+					err := registry.ValidateDeploymentSpec("fakeType", []byte{})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(fakePlatform.ValidateCodePackageCallCount()).To(Equal(0))
+
+					err = registry.ValidateDeploymentSpec("fakeType", nil)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(fakePlatform.ValidateCodePackageCallCount()).To(Equal(0))
+				})
+			})
+
 			Context("when the platform is unknown", func() {
 				It("returns an error", func() {
 					err := registry.ValidateDeploymentSpec("badType", nil)
@@ -75,8 +87,8 @@ var _ = Describe("Platforms", func() {
 				md, err := registry.GetMetadataProvider("fakeType", []byte("code-package"))
 				Expect(md).To(BeNil())
 				Expect(err).NotTo(HaveOccurred())
-				Expect(fakePlatform.GetMetadataProviderCallCount()).To(Equal(1))
-				Expect(fakePlatform.GetMetadataProviderArgsForCall(0)).To(Equal([]byte("code-package")))
+				Expect(fakePlatform.GetMetadataAsTarEntriesCallCount()).To(Equal(1))
+				Expect(fakePlatform.GetMetadataAsTarEntriesArgsForCall(0)).To(Equal([]byte("code-package")))
 			})
 
 			Context("when the platform is unknown", func() {

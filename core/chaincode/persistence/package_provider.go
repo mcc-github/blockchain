@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 
 	"github.com/mcc-github/blockchain/common/chaincode"
+	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/pkg/errors"
 )
@@ -19,8 +20,7 @@ import (
 type StorePackageProvider interface {
 	GetChaincodeInstallPath() string
 	ListInstalledChaincodes() ([]chaincode.InstalledChaincode, error)
-	Load(hash []byte) (codePackage []byte, name, version string, err error)
-	RetrieveHash(name, version string) (hash []byte, err error)
+	Load(packageID persistence.PackageID) ([]byte, error)
 }
 
 
@@ -47,8 +47,8 @@ type PackageProvider struct {
 
 
 
-func (p *PackageProvider) GetChaincodeCodePackage(name, version string) ([]byte, error) {
-	codePackage, err := p.getCodePackageFromStore(name, version)
+func (p *PackageProvider) GetChaincodeCodePackage(ccci *ccprovider.ChaincodeContainerInfo) ([]byte, error) {
+	codePackage, err := p.getCodePackageFromStore(ccci.PackageID)
 	if err == nil {
 		return codePackage, nil
 	}
@@ -58,10 +58,10 @@ func (p *PackageProvider) GetChaincodeCodePackage(name, version string) ([]byte,
 		return nil, err
 	}
 
-	codePackage, err = p.getCodePackageFromLegacyPP(name, version)
+	codePackage, err = p.getCodePackageFromLegacyPP(ccci.Name, ccci.Version)
 	if err != nil {
 		logger.Debug(err.Error())
-		err = errors.Errorf("code package not found for chaincode with name '%s', version '%s'", name, version)
+		err = errors.Errorf("code package not found for chaincode with name '%s', version '%s'", ccci.Name, ccci.Version)
 		return nil, err
 	}
 	return codePackage, nil
@@ -69,16 +69,11 @@ func (p *PackageProvider) GetChaincodeCodePackage(name, version string) ([]byte,
 
 
 
-func (p *PackageProvider) getCodePackageFromStore(name, version string) ([]byte, error) {
-	hash, err := p.Store.RetrieveHash(name, version)
+func (p *PackageProvider) getCodePackageFromStore(packageID persistence.PackageID) ([]byte, error) {
+	fsBytes, err := p.Store.Load(packageID)
 	if _, ok := err.(*CodePackageNotFoundErr); ok {
 		return nil, err
 	}
-	if err != nil {
-		return nil, errors.WithMessage(err, "error retrieving hash")
-	}
-
-	fsBytes, _, _, err := p.Store.Load(hash)
 	if err != nil {
 		return nil, errors.WithMessage(err, "error loading code package from ChaincodeInstallPackage")
 	}
@@ -106,7 +101,6 @@ func (p *PackageProvider) getCodePackageFromLegacyPP(name, version string) ([]by
 func (p *PackageProvider) ListInstalledChaincodes() ([]chaincode.InstalledChaincode, error) {
 	
 	installedChaincodes, err := p.Store.ListInstalledChaincodes()
-
 	if err != nil {
 		
 		logger.Debugf("error getting installed chaincodes from persistence store: %s", err)
@@ -114,15 +108,11 @@ func (p *PackageProvider) ListInstalledChaincodes() ([]chaincode.InstalledChainc
 
 	
 	installedChaincodesLegacy, err := p.LegacyPP.ListInstalledChaincodes(p.Store.GetChaincodeInstallPath(), ioutil.ReadDir, ccprovider.LoadPackage)
-
 	if err != nil {
 		
 		logger.Debugf("error getting installed chaincodes from ccprovider: %s", err)
 	}
 
-	for _, cc := range installedChaincodesLegacy {
-		installedChaincodes = append(installedChaincodes, cc)
-	}
-
+	installedChaincodes = append(installedChaincodes, installedChaincodesLegacy...)
 	return installedChaincodes, nil
 }
