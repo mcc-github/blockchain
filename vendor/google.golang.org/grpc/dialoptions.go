@@ -39,13 +39,16 @@ type dialOptions struct {
 	
 	balancerBuilder balancer.Builder
 	
-	resolverBuilder      resolver.Builder
-	reqHandshake         envconfig.RequireHandshakeSetting
-	channelzParentID     int64
-	disableServiceConfig bool
-	disableRetry         bool
-	disableHealthCheck   bool
-	healthCheckFunc      internal.HealthChecker
+	resolverBuilder             resolver.Builder
+	reqHandshake                envconfig.RequireHandshakeSetting
+	channelzParentID            int64
+	disableServiceConfig        bool
+	disableRetry                bool
+	disableHealthCheck          bool
+	healthCheckFunc             internal.HealthChecker
+	minConnectTimeout           func() time.Duration
+	defaultServiceConfig        *ServiceConfig 
+	defaultServiceConfigRawJSON *string
 }
 
 
@@ -424,9 +427,24 @@ func WithChannelzParentID(id int64) DialOption {
 
 
 
+
+
+
 func WithDisableServiceConfig() DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
 		o.disableServiceConfig = true
+	})
+}
+
+
+
+
+
+
+
+func WithDefaultServiceConfig(s string) DialOption {
+	return newFuncDialOption(func(o *dialOptions) {
+		o.defaultServiceConfigRawJSON = &s
 	})
 }
 
@@ -457,6 +475,7 @@ func WithMaxHeaderListSize(s uint32) DialOption {
 
 
 
+
 func WithDisableHealthCheck() DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
 		o.disableHealthCheck = true
@@ -483,4 +502,15 @@ func defaultDialOptions() dialOptions {
 			ReadBufferSize:  defaultReadBufSize,
 		},
 	}
+}
+
+
+
+
+
+
+func withMinConnectDeadline(f func() time.Duration) DialOption {
+	return newFuncDialOption(func(o *dialOptions) {
+		o.minConnectTimeout = f
+	})
 }

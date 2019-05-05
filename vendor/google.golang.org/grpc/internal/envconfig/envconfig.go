@@ -20,11 +20,7 @@ type RequireHandshakeSetting int
 const (
 	
 	
-	
-	RequireHandshakeHybrid RequireHandshakeSetting = iota
-	
-	
-	RequireHandshakeOn
+	RequireHandshakeOn RequireHandshakeSetting = iota
 	
 	
 	RequireHandshakeOff
@@ -37,7 +33,7 @@ var (
 	
 	
 	
-	RequireHandshake RequireHandshakeSetting
+	RequireHandshake = RequireHandshakeOn
 )
 
 func init() {
@@ -48,8 +44,5 @@ func init() {
 		RequireHandshake = RequireHandshakeOn
 	case "off":
 		RequireHandshake = RequireHandshakeOff
-	case "hybrid":
-		
-		RequireHandshake = RequireHandshakeHybrid
 	}
 }

@@ -13,25 +13,37 @@ import (
 	"sync"
 	"time"
 
-	util2 "github.com/mcc-github/blockchain/common/util"
+	commonutil "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/committer"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/gossip/metrics"
 	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
 	"github.com/mcc-github/blockchain/protos/common"
-	gossip2 "github.com/mcc-github/blockchain/protos/gossip"
+	protosgossip "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/pkg/errors"
 )
+
+
+
+
+
+
+type MissingPvtDataTracker interface {
+	ledger.MissingPvtDataTracker
+}
+
+
+
+
+type ConfigHistoryRetriever interface {
+	ledger.ConfigHistoryRetriever
+}
 
 
 
 type ReconciliationFetcher interface {
 	FetchReconciledItems(dig2collectionConfig privdatacommon.Dig2CollectionConfig) (*privdatacommon.FetchedPvtDataContainer, error)
 }
-
-
-
-
 
 
 
@@ -252,7 +264,7 @@ func (r *Reconciler) getMostRecentCollectionConfig(chaincodeName string, collect
 	return staticCollectionConfig.StaticCollectionConfig, nil
 }
 
-func (r *Reconciler) preparePvtDataToCommit(elements []*gossip2.PvtDataElement) []*ledger.BlockPvtData {
+func (r *Reconciler) preparePvtDataToCommit(elements []*protosgossip.PvtDataElement) []*ledger.BlockPvtData {
 	rwSetByBlockByKeys := r.groupRwsetByBlock(elements)
 
 	
@@ -286,7 +298,7 @@ func (r *Reconciler) logMismatched(pvtdataMismatched []*ledger.PvtdataHashMismat
 }
 
 
-func (r *Reconciler) groupRwsetByBlock(elements []*gossip2.PvtDataElement) map[uint64]rwsetByKeys {
+func (r *Reconciler) groupRwsetByBlock(elements []*protosgossip.PvtDataElement) map[uint64]rwsetByKeys {
 	rwSetByBlockByKeys := make(map[uint64]rwsetByKeys) 
 
 	
@@ -296,7 +308,7 @@ func (r *Reconciler) groupRwsetByBlock(elements []*gossip2.PvtDataElement) map[u
 			rwSetByBlockByKeys[dig.BlockSeq] = make(map[rwSetKey][]byte)
 		}
 		for _, rws := range element.Payload {
-			hash := hex.EncodeToString(util2.ComputeSHA256(rws))
+			hash := hex.EncodeToString(commonutil.ComputeSHA256(rws))
 			key := rwSetKey{
 				txID:       dig.TxId,
 				namespace:  dig.Namespace,

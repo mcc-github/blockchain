@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	server "github.com/mcc-github/blockchain/token/server"
+	"github.com/mcc-github/blockchain/token/server"
 )
 
 type TMSManager struct {

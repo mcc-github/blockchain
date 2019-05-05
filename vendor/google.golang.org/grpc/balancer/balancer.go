@@ -155,9 +155,6 @@ type PickOptions struct {
 	
 	
 	FullMethodName string
-	
-	
-	Header metadata.MD
 }
 
 
@@ -170,6 +167,11 @@ type DoneInfo struct {
 	BytesSent bool
 	
 	BytesReceived bool
+	
+	
+	
+	
+	ServerLoad interface{}
 }
 
 var (
@@ -187,6 +189,8 @@ var (
 
 
 type Picker interface {
+	
+	
 	
 	
 	
@@ -233,13 +237,41 @@ type Balancer interface {
 	
 	
 	
+	
+	
+	
 	HandleSubConnStateChange(sc SubConn, state connectivity.State)
 	
 	
 	
 	
 	
+	
+	
+	
 	HandleResolvedAddrs([]resolver.Address, error)
+	
+	
+	Close()
+}
+
+
+type SubConnState struct {
+	ConnectivityState connectivity.State
+	
+}
+
+
+
+
+
+type V2Balancer interface {
+	
+	
+	UpdateResolverState(resolver.State)
+	
+	
+	UpdateSubConnState(SubConn, SubConnState)
 	
 	
 	Close()

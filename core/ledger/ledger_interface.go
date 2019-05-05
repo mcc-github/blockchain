@@ -38,6 +38,8 @@ type Config struct {
 	StateDB *StateDB
 	
 	PrivateData *PrivateData
+	
+	HistoryDB *HistoryDB
 }
 
 
@@ -69,8 +71,12 @@ type PrivateData struct {
 }
 
 
+type HistoryDB struct {
+	Enabled bool
+}
+
+
 type PeerLedgerProvider interface {
-	Initialize(initializer *Initializer) error
 	
 	
 	
@@ -128,12 +134,6 @@ type PeerLedger interface {
 	CommitPvtDataOfOldBlocks(blockPvtData []*BlockPvtData) ([]*PvtdataHashMismatch, error)
 	
 	GetMissingPvtDataTracker() (MissingPvtDataTracker, error)
-}
-
-
-
-type ValidatedLedger interface {
-	commonledger.Ledger
 }
 
 

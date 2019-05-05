@@ -14,6 +14,11 @@ import (
 
 
 
+type LifecycleResources interface {
+	plugindispatcher.LifecycleResources
+}
+
+
 
 
 

@@ -9,6 +9,7 @@ package multichannel
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	newchannelconfig "github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
@@ -17,6 +18,7 @@ import (
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
+	"github.com/mcc-github/blockchain/orderer/common/blockcutter/mock"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
@@ -27,6 +29,7 @@ type mockBlockWriterSupport struct {
 	*mockconfigtx.Validator
 	identity.SignerSerializer
 	blockledger.ReadWriter
+	fakeConfig *mock.OrdererConfig
 }
 
 func (mbws mockBlockWriterSupport) Update(bundle *newchannelconfig.Bundle) {
@@ -34,7 +37,11 @@ func (mbws mockBlockWriterSupport) Update(bundle *newchannelconfig.Bundle) {
 }
 
 func (mbws mockBlockWriterSupport) CreateBundle(channelID string, config *cb.Config) (*newchannelconfig.Bundle, error) {
-	return nil, nil
+	return channelconfig.NewBundle(channelID, config)
+}
+
+func (mbws mockBlockWriterSupport) SharedConfig() newchannelconfig.Orderer {
+	return mbws.fakeConfig
 }
 
 func TestCreateBlock(t *testing.T) {
@@ -186,15 +193,18 @@ func TestGoodWriteConfig(t *testing.T) {
 	genesisBlockSys := encoder.New(confSys).GenesisBlock()
 	_, l := newRAMLedgerAndFactory(10, genesisconfig.TestChainID, genesisBlockSys)
 
-	bw := &BlockWriter{
-		support: &mockBlockWriterSupport{
+	fakeConfig := &mock.OrdererConfig{}
+	fakeConfig.ConsensusTypeReturns("solo")
+	bw := newBlockWriter(genesisBlockSys, nil,
+		&mockBlockWriterSupport{
 			SignerSerializer: mockCrypto(),
 			ReadWriter:       l,
-			Validator:        &mockconfigtx.Validator{},
+			Validator:        &mockconfigtx.Validator{ChainIDVal: genesisconfig.TestChainID},
+			fakeConfig:       fakeConfig,
 		},
-	}
+	)
 
-	ctx := makeConfigTx(genesisconfig.TestChainID, 1)
+	ctx := makeConfigTxFull(genesisconfig.TestChainID, 1)
 	block := protoutil.NewBlock(1, protoutil.BlockHeaderHash(genesisBlockSys.Header))
 	block.Data.Data = [][]byte{protoutil.MarshalOrPanic(ctx)}
 	consenterMetadata := []byte("foo")
@@ -212,25 +222,64 @@ func TestGoodWriteConfig(t *testing.T) {
 	assert.Equal(t, consenterMetadata, omd.Value)
 }
 
+func TestMigrationWriteConfig(t *testing.T) {
+	confSys := configtxgentest.Load(genesisconfig.SampleInsecureSoloProfile)
+	genesisBlockSys := encoder.New(confSys).GenesisBlock()
+	_, l := newRAMLedgerAndFactory(10, genesisconfig.TestChainID, genesisBlockSys)
+
+	fakeConfig := &mock.OrdererConfig{}
+	fakeConfig.ConsensusTypeReturns("solo")
+	fakeConfig.ConsensusStateReturns(orderer.ConsensusType_STATE_MAINTENANCE)
+	bw := newBlockWriter(genesisBlockSys, nil,
+		&mockBlockWriterSupport{
+			SignerSerializer: mockCrypto(),
+			ReadWriter:       l,
+			Validator:        &mockconfigtx.Validator{ChainIDVal: genesisconfig.TestChainID},
+			fakeConfig:       fakeConfig,
+		},
+	)
+
+	ctx := makeConfigTxMig(genesisconfig.TestChainID, 1)
+	block := protoutil.NewBlock(1, protoutil.BlockHeaderHash(genesisBlockSys.Header))
+	block.Data.Data = [][]byte{protoutil.MarshalOrPanic(ctx)}
+	consenterMetadata := []byte("foo")
+
+	bw.WriteConfigBlock(block, consenterMetadata)
+
+	
+	bw.committingBlock.Lock()
+	bw.committingBlock.Unlock()
+
+	cBlock := blockledger.GetBlock(l, block.Header.Number)
+	assert.Equal(t, block.Header, cBlock.Header)
+	assert.Equal(t, block.Data, cBlock.Data)
+
+	omd := protoutil.GetMetadataFromBlockOrPanic(block, cb.BlockMetadataIndex_ORDERER)
+	assert.Equal(t, []byte(nil), omd.Value)
+}
+
 func TestRaceWriteConfig(t *testing.T) {
 	confSys := configtxgentest.Load(genesisconfig.SampleInsecureSoloProfile)
 	genesisBlockSys := encoder.New(confSys).GenesisBlock()
 	_, l := newRAMLedgerAndFactory(10, genesisconfig.TestChainID, genesisBlockSys)
 
-	bw := &BlockWriter{
-		support: &mockBlockWriterSupport{
+	fakeConfig := &mock.OrdererConfig{}
+	fakeConfig.ConsensusTypeReturns("solo")
+	bw := newBlockWriter(genesisBlockSys, nil,
+		&mockBlockWriterSupport{
 			SignerSerializer: mockCrypto(),
 			ReadWriter:       l,
 			Validator:        &mockconfigtx.Validator{},
+			fakeConfig:       fakeConfig,
 		},
-	}
+	)
 
-	ctx := makeConfigTx(genesisconfig.TestChainID, 1)
+	ctx := makeConfigTxFull(genesisconfig.TestChainID, 1)
 	block1 := protoutil.NewBlock(1, protoutil.BlockHeaderHash(genesisBlockSys.Header))
 	block1.Data.Data = [][]byte{protoutil.MarshalOrPanic(ctx)}
 	consenterMetadata1 := []byte("foo")
 
-	ctx = makeConfigTx(genesisconfig.TestChainID, 1)
+	ctx = makeConfigTxFull(genesisconfig.TestChainID, 1)
 	block2 := protoutil.NewBlock(2, protoutil.BlockHeaderHash(block1.Header))
 	block2.Data.Data = [][]byte{protoutil.MarshalOrPanic(ctx)}
 	consenterMetadata2 := []byte("bar")

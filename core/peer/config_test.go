@@ -105,10 +105,8 @@ func TestConfiguration(t *testing.T) {
 				viper.Set(k, v)
 			}
 			
-			coreConfig, err := GlobalConfig()
-			assert.NoError(t, err, "GetPeerEndpoint returned unexpected error")
-			assert.Equal(t, test.settings["peer.id"], coreConfig.PeerEndpoint.Id.Name, "GetPeerEndpoint returned the wrong peer ID")
-			assert.Equal(t, test.expectedPeerAddress, coreConfig.PeerEndpoint.Address, "GetPeerEndpoint returned the wrong peer address")
+			_, err := GlobalConfig()
+			assert.NoError(t, err, "GlobalConfig returned unexpected error")
 		})
 	}
 }
@@ -249,42 +247,70 @@ func TestGlobalConfig(t *testing.T) {
 	viper.Set("peer.chaincodeListenAddress", "0.0.0.0:7052")
 	viper.Set("peer.chaincodeAddress", "0.0.0.0:7052")
 	viper.Set("peer.adminService.listenAddress", "0.0.0.0:7055")
+	viper.Set("peer.validatorPoolSize", 1)
 
 	viper.Set("vm.endpoint", "unix:/
 	viper.Set("vm.docker.tls.enabled", false)
 	viper.Set("vm.docker.attachStdout", false)
+
+	viper.Set("operations.listenAddress", "127.0.0.1:9443")
+	viper.Set("operations.tls.enabled", false)
+	viper.Set("operations.tls.cert.file", "test/tls/cert/file")
+	viper.Set("operations.tls.key.file", "test/tls/key/file")
+	viper.Set("operations.tls.clientAuthRequired", false)
+	viper.Set("operations.tls.clientRootCAs.files", []string{"file1, file2"})
+
+	viper.Set("metrics.provider", "disabled")
+	viper.Set("metrics.statsd.network", "udp")
+	viper.Set("metrics.statsd.address", "127.0.0.1:8125")
+	viper.Set("metrics.statsd.writeInterval", "10s")
+	viper.Set("metrics.statsd.prefix", "testPrefix")
 
 	viper.Set("chaincode.pull", false)
 
 	coreConfig, err := GlobalConfig()
 	assert.NoError(t, err)
 
-	assert.Equal(t, coreConfig.LocalMspID, "SampleOrg")
-	assert.Equal(t, coreConfig.ListenAddress, "0.0.0.0:7051")
-	assert.Equal(t, coreConfig.AuthenticationTimeWindow, 15*time.Minute)
-	assert.Equal(t, coreConfig.PeerTLSEnabled, false)
-	assert.Equal(t, coreConfig.NetworkID, "testNetwork")
-	assert.Equal(t, coreConfig.LimitsConcurrencyQSCC, 5000)
-	assert.Equal(t, coreConfig.DiscoveryEnabled, true)
-	assert.Equal(t, coreConfig.ProfileEnabled, false)
-	assert.Equal(t, coreConfig.ProfileListenAddress, "peer.authentication.timewindow")
-	assert.Equal(t, coreConfig.DiscoveryOrgMembersAllowed, false)
-	assert.Equal(t, coreConfig.DiscoveryAuthCacheEnabled, true)
-	assert.Equal(t, coreConfig.DiscoveryAuthCacheMaxSize, 1000)
-	assert.Equal(t, coreConfig.DiscoveryAuthCachePurgeRetentionRatio, 0.75)
-	assert.Equal(t, coreConfig.ChaincodeListenAddr, "0.0.0.0:7052")
-	assert.Equal(t, coreConfig.ChaincodeAddr, "0.0.0.0:7052")
-	assert.Equal(t, coreConfig.AdminListenAddr, "0.0.0.0:7055")
+	expectedConfig := &Config{
+		LocalMSPID:                            "SampleOrg",
+		ListenAddress:                         "0.0.0.0:7051",
+		AuthenticationTimeWindow:              15 * time.Minute,
+		PeerTLSEnabled:                        false,
+		PeerAddress:                           "localhost:8080",
+		PeerID:                                "testPeerID",
+		NetworkID:                             "testNetwork",
+		LimitsConcurrencyQSCC:                 5000,
+		DiscoveryEnabled:                      true,
+		ProfileEnabled:                        false,
+		ProfileListenAddress:                  "peer.authentication.timewindow",
+		DiscoveryOrgMembersAllowed:            false,
+		DiscoveryAuthCacheEnabled:             true,
+		DiscoveryAuthCacheMaxSize:             1000,
+		DiscoveryAuthCachePurgeRetentionRatio: 0.75,
+		ChaincodeListenAddress:                "0.0.0.0:7052",
+		ChaincodeAddress:                      "0.0.0.0:7052",
+		AdminListenAddress:                    "0.0.0.0:7055",
+		ValidatorPoolSize:                     1,
 
-	assert.Equal(t, coreConfig.VMEndpoint, "unix:/
-	assert.Equal(t, coreConfig.VMDockerTLSEnabled, false)
-	assert.Equal(t, coreConfig.VMDockerAttachStdout, false)
+		VMEndpoint:           "unix:/
+		VMDockerTLSEnabled:   false,
+		VMDockerAttachStdout: false,
 
-	assert.Equal(t, coreConfig.ChaincodePull, false)
+		ChaincodePull: false,
 
-	assert.Equal(t, coreConfig.PeerAddress, "localhost:8080")
-	assert.Equal(t, coreConfig.PeerID, "testPeerID")
-	assert.Equal(t, coreConfig.PeerEndpoint.Id.Name, "testPeerID")
-	assert.Equal(t, coreConfig.PeerEndpoint.Address, "localhost:8080")
+		OperationsListenAddress:         "127.0.0.1:9443",
+		OperationsTLSEnabled:            false,
+		OperationsTLSCertFile:           "test/tls/cert/file",
+		OperationsTLSKeyFile:            "test/tls/key/file",
+		OperationsTLSClientAuthRequired: false,
+		OperationsTLSClientRootCAs:      []string{"file1, file2"},
 
+		MetricsProvider:     "disabled",
+		StatsdNetwork:       "udp",
+		StatsdAaddress:      "127.0.0.1:8125",
+		StatsdWriteInterval: 10 * time.Second,
+		StatsdPrefix:        "testPrefix",
+	}
+
+	assert.Equal(t, coreConfig, expectedConfig)
 }

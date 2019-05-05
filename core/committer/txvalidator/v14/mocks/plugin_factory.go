@@ -1,7 +1,9 @@
 
+
 package mocks
 
 import mock "github.com/stretchr/testify/mock"
+
 import validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 
 

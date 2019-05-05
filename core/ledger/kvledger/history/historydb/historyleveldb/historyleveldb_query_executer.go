@@ -14,7 +14,6 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/util"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	protoutil "github.com/mcc-github/blockchain/protoutil"
@@ -30,11 +29,6 @@ type LevelHistoryDBQueryExecutor struct {
 
 
 func (q *LevelHistoryDBQueryExecutor) GetHistoryForKey(namespace string, key string) (commonledger.ResultsIterator, error) {
-
-	if ledgerconfig.IsHistoryDBEnabled() == false {
-		return nil, errors.New("history database not enabled")
-	}
-
 	var compositeStartKey []byte
 	var compositeEndKey []byte
 	compositeStartKey = historydb.ConstructPartialCompositeHistoryKey(namespace, key, false)

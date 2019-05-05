@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -23,7 +24,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
-	deliverclient "github.com/mcc-github/blockchain/core/deliverservice"
+	"github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -66,7 +67,7 @@ func (*mockDeliveryClient) Stop() {
 type mockDeliveryClientFactory struct {
 }
 
-func (*mockDeliveryClientFactory) Service(g service.GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverclient.DeliverService, error) {
+func (*mockDeliveryClientFactory) Service(g service.GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverservice.DeliverService, error) {
 	return &mockDeliveryClient{}, nil
 }
 
@@ -116,7 +117,11 @@ func TestInitialize(t *testing.T) {
 				BatchesInterval: 1000,
 				PurgeInterval:   100,
 			},
+			HistoryDB: &ledger.HistoryDB{
+				Enabled: true,
+			},
 		},
+		runtime.NumCPU(),
 	)
 }
 
@@ -149,7 +154,11 @@ func TestCreateChainFromBlock(t *testing.T) {
 				BatchesInterval: 1000,
 				PurgeInterval:   100,
 			},
+			HistoryDB: &ledger.HistoryDB{
+				Enabled: true,
+			},
 		},
+		runtime.NumCPU(),
 	)
 	testChainID := fmt.Sprintf("mytestchainid-%d", rand.Int())
 	block, err := configtxtest.MakeGenesisBlock(testChainID)

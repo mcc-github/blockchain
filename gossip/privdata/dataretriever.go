@@ -11,19 +11,10 @@ import (
 	"github.com/mcc-github/blockchain/core/transientstore"
 	"github.com/mcc-github/blockchain/gossip/privdata/common"
 	"github.com/mcc-github/blockchain/gossip/util"
-	gossip2 "github.com/mcc-github/blockchain/protos/gossip"
+	protosgossip "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/pkg/errors"
 )
-
-
-type StorageDataRetriever interface {
-	
-	
-	CollectionRWSet(dig []*gossip2.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, bool, error)
-}
-
-
 
 
 
@@ -46,6 +37,20 @@ type DataStore interface {
 	LedgerHeight() (uint64, error)
 }
 
+
+
+
+type RWSetScanner interface {
+	transientstore.RWSetScanner
+}
+
+
+type StorageDataRetriever interface {
+	
+	
+	CollectionRWSet(dig []*protosgossip.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, bool, error)
+}
+
 type dataRetriever struct {
 	store DataStore
 }
@@ -58,7 +63,7 @@ func NewDataRetriever(store DataStore) StorageDataRetriever {
 
 
 
-func (dr *dataRetriever) CollectionRWSet(digests []*gossip2.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, bool, error) {
+func (dr *dataRetriever) CollectionRWSet(digests []*protosgossip.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, bool, error) {
 	height, err := dr.store.LedgerHeight()
 	if err != nil {
 		
@@ -99,7 +104,7 @@ func (dr *dataRetriever) CollectionRWSet(digests []*gossip2.PvtDataDigest, block
 	return results, true, err
 }
 
-func (dr *dataRetriever) fromLedger(digests []*gossip2.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, error) {
+func (dr *dataRetriever) fromLedger(digests []*protosgossip.PvtDataDigest, blockNum uint64) (Dig2PvtRWSetWithConfig, error) {
 	filter := make(map[string]ledger.PvtCollFilter)
 	for _, dig := range digests {
 		if _, ok := filter[dig.Namespace]; !ok {
@@ -167,7 +172,7 @@ func (dr *dataRetriever) fromLedger(digests []*gossip2.PvtDataDigest, blockNum u
 	return results, nil
 }
 
-func (dr *dataRetriever) fromTransientStore(dig *gossip2.PvtDataDigest, filter map[string]ledger.PvtCollFilter) (*util.PrivateRWSetWithConfig, error) {
+func (dr *dataRetriever) fromTransientStore(dig *protosgossip.PvtDataDigest, filter map[string]ledger.PvtCollFilter) (*util.PrivateRWSetWithConfig, error) {
 	results := &util.PrivateRWSetWithConfig{}
 	it, err := dr.store.GetTxPvtRWSetByTxid(dig.TxId, filter)
 	if err != nil {

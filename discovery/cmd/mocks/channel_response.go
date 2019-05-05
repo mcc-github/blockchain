@@ -1,7 +1,9 @@
 
+
 package mocks
 
 import client "github.com/mcc-github/blockchain/discovery/client"
+
 import discovery "github.com/mcc-github/blockchain/protos/discovery"
 import mock "github.com/stretchr/testify/mock"
 

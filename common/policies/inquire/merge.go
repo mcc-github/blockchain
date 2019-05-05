@@ -158,6 +158,25 @@ func (cps ComparablePrincipalSets) OfMapping(mapping map[int][]int, sets2 Compar
 
 
 func (cps ComparablePrincipalSets) Reduce() ComparablePrincipalSets {
+	
+	
+	current := cps
+	for {
+		currLen := len(current)
+		
+		reduced := current.reduce()
+		newLen := len(reduced)
+		if currLen == newLen {
+			
+			
+			return reduced
+		}
+		
+		current = reduced
+	}
+}
+
+func (cps ComparablePrincipalSets) reduce() ComparablePrincipalSets {
 	var res ComparablePrincipalSets
 	for i, s1 := range cps {
 		var isContaining bool
@@ -168,6 +187,12 @@ func (cps ComparablePrincipalSets) Reduce() ComparablePrincipalSets {
 			if s2.IsSubset(s1) {
 				isContaining = true
 			}
+			
+			
+			if s1.IsSubset(s2) && i < j {
+				isContaining = false
+			}
+
 		}
 		if !isContaining {
 			res = append(res, s1)

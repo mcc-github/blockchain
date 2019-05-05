@@ -54,55 +54,48 @@ type Provider struct {
 
 
 
-func NewProvider() (ledger.PeerLedgerProvider, error) {
-	logger.Info("Initializing ledger provider")
-
-	logger.Info("ledger provider Initialized")
+func NewProvider(initializer *ledger.Initializer) (*Provider, error) {
 	p := &Provider{}
-	return p, nil
-}
-
-
-func (p *Provider) Initialize(initializer *ledger.Initializer) error {
-	var err error
-
 	p.initializer = initializer
 	
 	idStore := openIDStore(filepath.Join(p.initializer.Config.RootFSPath, "ledgerProvider"))
+	p.idStore = idStore
 	
 	ledgerStoreProvider := ledgerstorage.NewProvider(
 		p.initializer.Config.RootFSPath,
 		p.initializer.Config.PrivateData,
 	)
-	
-	historydbProvider := historyleveldb.NewHistoryDBProvider(
-		filepath.Join(p.initializer.Config.RootFSPath, "historyLeveldb"),
-	)
+	p.ledgerStoreProvider = ledgerStoreProvider
+	if initializer.Config.HistoryDB.Enabled {
+		
+		historydbProvider := historyleveldb.NewHistoryDBProvider(
+			filepath.Join(p.initializer.Config.RootFSPath, "historyLeveldb"),
+		)
+		p.historydbProvider = historydbProvider
+	}
 	
 	configHistoryMgr := confighistory.NewMgr(
 		filepath.Join(p.initializer.Config.RootFSPath, "configHistory"),
 		initializer.DeployedChaincodeInfoProvider,
 	)
+	p.configHistoryMgr = configHistoryMgr
 	
 	collElgNotifier := &collElgNotifier{
 		initializer.DeployedChaincodeInfoProvider,
 		initializer.MembershipInfoProvider,
 		make(map[string]collElgListener),
 	}
+	p.collElgNotifier = collElgNotifier
 	
 	stateListeners := initializer.StateListeners
 	stateListeners = append(stateListeners, collElgNotifier)
 	stateListeners = append(stateListeners, configHistoryMgr)
-
-	p.idStore = idStore
-	p.ledgerStoreProvider = ledgerStoreProvider
-	p.historydbProvider = historydbProvider
-	p.configHistoryMgr = configHistoryMgr
 	p.stateListeners = stateListeners
-	p.collElgNotifier = collElgNotifier
+
 	p.bookkeepingProvider = bookkeeping.NewProvider(
 		filepath.Join(p.initializer.Config.RootFSPath, "bookkeeper"),
 	)
+	var err error
 	p.vdbProvider, err = privacyenabledstate.NewCommonStorageDBProvider(
 		p.bookkeepingProvider,
 		initializer.MetricsProvider,
@@ -110,11 +103,11 @@ func (p *Provider) Initialize(initializer *ledger.Initializer) error {
 		initializer.Config.StateDB,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	p.stats = newStats(initializer.MetricsProvider)
 	p.recoverUnderConstructionLedger()
-	return nil
+	return p, nil
 }
 
 
@@ -183,16 +176,24 @@ func (p *Provider) openInternal(ledgerID string) (ledger.PeerLedger, error) {
 	}
 
 	
-	historyDB, err := p.historydbProvider.GetDBHandle(ledgerID)
-	if err != nil {
-		return nil, err
+	var historyDB historydb.HistoryDB
+	if p.historydbProvider != nil {
+		historyDB, err = p.historydbProvider.GetDBHandle(ledgerID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	
 	
 	l, err := newKVLedger(
-		ledgerID, blockStore, vDB, historyDB, p.configHistoryMgr,
-		p.stateListeners, p.bookkeepingProvider,
+		ledgerID,
+		blockStore,
+		vDB,
+		historyDB,
+		p.configHistoryMgr,
+		p.stateListeners,
+		p.bookkeepingProvider,
 		p.initializer.DeployedChaincodeInfoProvider,
 		p.stats.ledgerStats(ledgerID),
 	)
@@ -217,9 +218,11 @@ func (p *Provider) Close() {
 	p.idStore.close()
 	p.ledgerStoreProvider.Close()
 	p.vdbProvider.Close()
-	p.historydbProvider.Close()
 	p.bookkeepingProvider.Close()
 	p.configHistoryMgr.Close()
+	if p.historydbProvider != nil {
+		p.historydbProvider.Close()
+	}
 }
 
 

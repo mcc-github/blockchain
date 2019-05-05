@@ -9,8 +9,11 @@ package multichannel
 import (
 	"fmt"
 
+	"github.com/mcc-github/blockchain/common/capabilities"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
+	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
+	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
@@ -116,6 +119,42 @@ func makeConfigTx(chainID string, i int) *cb.Envelope {
 	return makeConfigTxFromConfigUpdateEnvelope(chainID, &cb.ConfigUpdateEnvelope{
 		ConfigUpdate: protoutil.MarshalOrPanic(&cb.ConfigUpdate{
 			WriteSet: group,
+		}),
+	})
+}
+
+func makeConfigTxFull(chainID string, i int) *cb.Envelope {
+	gConf := configtxgentest.Load(genesisconfig.SampleInsecureSoloProfile)
+	gConf.Orderer.Capabilities = map[string]bool{
+		capabilities.OrdererV2_0: true,
+	}
+	gConf.Orderer.MaxChannels = 10
+	channelGroup, err := encoder.NewChannelGroup(gConf)
+	if err != nil {
+		return nil
+	}
+
+	return makeConfigTxFromConfigUpdateEnvelope(chainID, &cb.ConfigUpdateEnvelope{
+		ConfigUpdate: protoutil.MarshalOrPanic(&cb.ConfigUpdate{
+			WriteSet: channelGroup,
+		}),
+	})
+}
+
+func makeConfigTxMig(chainID string, i int) *cb.Envelope {
+	gConf := configtxgentest.Load(genesisconfig.SampleInsecureSoloProfile)
+	gConf.Orderer.Capabilities = map[string]bool{
+		capabilities.OrdererV2_0: true,
+	}
+	gConf.Orderer.OrdererType = "kafka"
+	channelGroup, err := encoder.NewChannelGroup(gConf)
+	if err != nil {
+		return nil
+	}
+
+	return makeConfigTxFromConfigUpdateEnvelope(chainID, &cb.ConfigUpdateEnvelope{
+		ConfigUpdate: protoutil.MarshalOrPanic(&cb.ConfigUpdate{
+			WriteSet: channelGroup,
 		}),
 	})
 }

@@ -83,6 +83,15 @@ type BuildOption struct {
 }
 
 
+type State struct {
+	Addresses     []Address 
+	ServiceConfig string    
+
+	
+	
+}
+
+
 
 
 
@@ -91,9 +100,15 @@ type BuildOption struct {
 
 type ClientConn interface {
 	
+	UpdateState(State)
+	
+	
+	
 	
 	
 	NewAddress(addresses []Address)
+	
+	
 	
 	
 	NewServiceConfig(serviceConfig string)

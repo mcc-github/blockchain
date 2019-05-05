@@ -25,44 +25,140 @@ import (
 	"io/ioutil"
 	"net"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
 
+
+
+
+
+
 type Config struct {
 	
-	LocalMspID                            string
-	ListenAddress                         string
-	AuthenticationTimeWindow              time.Duration
-	PeerTLSEnabled                        bool
-	PeerID                                string
-	PeerAddress                           string
-	PeerEndpoint                          *pb.PeerEndpoint
-	NetworkID                             string
-	LimitsConcurrencyQSCC                 int
-	DiscoveryEnabled                      bool
-	ProfileEnabled                        bool
-	ProfileListenAddress                  string
-	DiscoveryOrgMembersAllowed            bool
-	DiscoveryAuthCacheEnabled             bool
-	DiscoveryAuthCacheMaxSize             int
-	DiscoveryAuthCachePurgeRetentionRatio float64
-	ChaincodeListenAddr                   string
-	ChaincodeAddr                         string
-	AdminListenAddr                       string
+	
+	
+	
+	
+	
+	LocalMSPID string
+	
+	
+	ListenAddress string
+	
+	
+	PeerID string
+	
+	
+	
+	
+	PeerAddress string
+	
+	
+	NetworkID string
+	
+	
+	
+	ChaincodeListenAddress string
+	
+	
+	
+	ChaincodeAddress string
+	
+	
+	
+	
+	
+	ValidatorPoolSize int
 
 	
-	VMEndpoint           string
+	
+	
+	ProfileEnabled       bool
+	ProfileListenAddress string
+
+	
+	
+	
+	
+	
+
+	
+	DiscoveryEnabled bool
+	
+	
+	DiscoveryOrgMembersAllowed bool
+	
+	DiscoveryAuthCacheEnabled bool
+	
+	DiscoveryAuthCacheMaxSize int
+	
+	
+	DiscoveryAuthCachePurgeRetentionRatio float64
+
+	
+	
+
+	
+	
+	LimitsConcurrencyQSCC int
+
+	
+	
+	PeerTLSEnabled bool
+
+	
+	
+	
+
+	
+	
+	AuthenticationTimeWindow time.Duration
+
+	
+	
+	
+
+	
+	
+	
+	AdminListenAddress string
+
+	
+	
+	
+	
+	VMEndpoint string
+
+	
+	
 	VMDockerTLSEnabled   bool
 	VMDockerAttachStdout bool
 
 	
+	
+	
 	ChaincodePull bool
+
+	
+	OperationsListenAddress         string
+	OperationsTLSEnabled            bool
+	OperationsTLSCertFile           string
+	OperationsTLSKeyFile            string
+	OperationsTLSClientAuthRequired bool
+	OperationsTLSClientRootCAs      []string
+
+	
+	MetricsProvider     string
+	StatsdNetwork       string
+	StatsdAaddress      string
+	StatsdWriteInterval time.Duration
+	StatsdPrefix        string
 }
 
 func GlobalConfig() (*Config, error) {
@@ -80,15 +176,16 @@ func (c *Config) load() error {
 	}
 	c.PeerAddress = preeAddress
 	c.PeerID = viper.GetString("peer.id")
-	c.PeerEndpoint = &pb.PeerEndpoint{
-		Id: &pb.PeerID{
-			Name: c.PeerID,
-		},
-		Address: c.PeerAddress,
-	}
-	c.LocalMspID = viper.GetString("peer.localMspId")
+	c.LocalMSPID = viper.GetString("peer.localMspId")
 	c.ListenAddress = viper.GetString("peer.listenAddress")
+
 	c.AuthenticationTimeWindow = viper.GetDuration("peer.authentication.timewindow")
+	if c.AuthenticationTimeWindow == 0 {
+		defaultTimeWindow := 15 * time.Minute
+		logger.Warningf("`peer.authentication.timewindow` not set; defaulting to %s", defaultTimeWindow)
+		c.AuthenticationTimeWindow = defaultTimeWindow
+	}
+
 	c.PeerTLSEnabled = viper.GetBool("peer.tls.enabled")
 	c.NetworkID = viper.GetString("peer.networkId")
 	c.LimitsConcurrencyQSCC = viper.GetInt("peer.limits.concurrency.qscc")
@@ -99,15 +196,33 @@ func (c *Config) load() error {
 	c.DiscoveryAuthCacheEnabled = viper.GetBool("peer.discovery.authCacheEnabled")
 	c.DiscoveryAuthCacheMaxSize = viper.GetInt("peer.discovery.authCacheMaxSize")
 	c.DiscoveryAuthCachePurgeRetentionRatio = viper.GetFloat64("peer.discovery.authCachePurgeRetentionRatio")
-	c.ChaincodeListenAddr = viper.GetString("peer.chaincodeListenAddress")
-	c.ChaincodeAddr = viper.GetString("peer.chaincodeAddress")
-	c.AdminListenAddr = viper.GetString("peer.adminService.listenAddress")
+	c.ChaincodeListenAddress = viper.GetString("peer.chaincodeListenAddress")
+	c.ChaincodeAddress = viper.GetString("peer.chaincodeAddress")
+	c.AdminListenAddress = viper.GetString("peer.adminService.listenAddress")
+
+	c.ValidatorPoolSize = viper.GetInt("peer.validatorPoolSize")
+	if c.ValidatorPoolSize <= 0 {
+		c.ValidatorPoolSize = runtime.NumCPU()
+	}
 
 	c.VMEndpoint = viper.GetString("vm.endpoint")
 	c.VMDockerTLSEnabled = viper.GetBool("vm.docker.tls.enabled")
 	c.VMDockerAttachStdout = viper.GetBool("vm.docker.attachStdout")
 
 	c.ChaincodePull = viper.GetBool("chaincode.pull")
+
+	c.OperationsListenAddress = viper.GetString("operations.listenAddress")
+	c.OperationsTLSEnabled = viper.GetBool("operations.tls.enabled")
+	c.OperationsTLSCertFile = viper.GetString("operations.tls.cert.file")
+	c.OperationsTLSKeyFile = viper.GetString("operations.tls.key.file")
+	c.OperationsTLSClientAuthRequired = viper.GetBool("operations.tls.clientAuthRequired")
+	c.OperationsTLSClientRootCAs = viper.GetStringSlice("operations.tls.clientRootCAs.files")
+
+	c.MetricsProvider = viper.GetString("metrics.provider")
+	c.StatsdNetwork = viper.GetString("metrics.statsd.network")
+	c.StatsdAaddress = viper.GetString("metrics.statsd.address")
+	c.StatsdWriteInterval = viper.GetDuration("metrics.statsd.writeInterval")
+	c.StatsdPrefix = viper.GetString("metrics.statsd.prefix")
 
 	return nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder/fakes"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
+	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
@@ -24,6 +25,9 @@ import (
 )
 
 
+type signerSerializer interface {
+	identity.SignerSerializer
+}
 
 func CreateStandardPolicies() map[string]*genesisconfig.Policy {
 	return map[string]*genesisconfig.Policy{

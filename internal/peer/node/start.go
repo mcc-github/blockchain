@@ -33,7 +33,7 @@ import (
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/admin"
-	cc "github.com/mcc-github/blockchain/core/cclifecycle"
+	"github.com/mcc-github/blockchain/core/cclifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
@@ -158,7 +158,7 @@ func serve(args []string) error {
 		return mgmt.GetManagerForChain(chainID)
 	}
 
-	opsSystem := newOperationsSystem()
+	opsSystem := newOperationsSystem(coreConfig)
 	err = opsSystem.Start()
 	if err != nil {
 		return errors.WithMessage(err, "failed to initialize operations subystems")
@@ -171,14 +171,11 @@ func serve(args []string) error {
 
 	membershipInfoProvider := privdata.NewMembershipInfoProvider(createSelfSignedData(), identityDeserializerFactory)
 
-	mspID := coreConfig.LocalMspID
+	mspID := coreConfig.LocalMSPID
 
-	chaincodeInstallPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "chaincodes")
+	chaincodeInstallPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "lifecycle", "chaincodes")
+	ccStore := persistence.NewStore(chaincodeInstallPath)
 	ccPackageParser := &persistence.ChaincodePackageParser{}
-	ccStore := &persistence.Store{
-		Path:       chaincodeInstallPath,
-		ReadWriter: &persistence.FilesystemIO{},
-	}
 
 	
 	
@@ -216,7 +213,8 @@ func serve(args []string) error {
 	)
 
 	
-	ccprovider.SetChaincodesPath(chaincodeInstallPath)
+	lsccInstallPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "chaincodes")
+	ccprovider.SetChaincodesPath(lsccInstallPath)
 
 	if err := lifecycleCache.InitializeLocalChaincodes(); err != nil {
 		return errors.WithMessage(err, "could not initialize local chaincodes")
@@ -237,9 +235,7 @@ func serve(args []string) error {
 		viper.Set("chaincode.mode", chaincode.DevModeUserRunsChaincode)
 	}
 
-	peerEndpoint := coreConfig.PeerEndpoint
-
-	peerHost, _, err := net.SplitHostPort(peerEndpoint.Address)
+	peerHost, _, err := net.SplitHostPort(coreConfig.PeerAddress)
 	if err != nil {
 		return fmt.Errorf("peer address is not in the format of host:port: %v", err)
 	}
@@ -289,8 +285,11 @@ func serve(args []string) error {
 		}
 	}
 
-	timeWindow := coreConfig.AuthenticationTimeWindow
-	abServer := peer.NewDeliverEventsServer(timeWindow, mutualTLS, policyCheckerProvider, &peer.DeliverChainManager{}, metricsProvider)
+	metrics := deliver.NewMetrics(metricsProvider)
+	abServer := &peer.Server{
+		DeliverHandler:        deliver.NewHandler(&peer.DeliverChainManager{}, coreConfig.AuthenticationTimeWindow, mutualTLS, metrics),
+		PolicyCheckerProvider: policyCheckerProvider,
+	}
 	pb.RegisterDeliverServer(peerServer.Server(), abServer)
 
 	
@@ -365,23 +364,42 @@ func serve(args []string) error {
 		logger.Panicf("failed to register docker health check: %s", err)
 	}
 
+	chaincodeConfig := chaincode.GlobalConfig()
+
+	chaincodeVMController := container.NewVMController(
+		map[string]container.VMProvider{
+			dockercontroller.ContainerType: dockerProvider,
+			inproccontroller.ContainerType: ipRegistry,
+		},
+	)
+
+	containerRuntime := &chaincode.ContainerRuntime{
+		CACert:        ca.CertBytes(),
+		CertGenerator: authenticator,
+		CommonEnv: []string{
+			"CORE_CHAINCODE_LOGGING_LEVEL=" + chaincodeConfig.LogLevel,
+			"CORE_CHAINCODE_LOGGING_SHIM=" + chaincodeConfig.ShimLogLevel,
+			"CORE_CHAINCODE_LOGGING_FORMAT=" + chaincodeConfig.LogFormat,
+		},
+		DockerClient:     client,
+		PeerAddress:      ccEndpoint,
+		Processor:        chaincodeVMController,
+		PlatformRegistry: platformRegistry,
+	}
+
+	
+	if !chaincodeConfig.TLSEnabled {
+		containerRuntime.CertGenerator = nil
+	}
+
 	chaincodeSupport := chaincode.NewChaincodeSupport(
 		chaincode.GlobalConfig(),
-		ccEndpoint,
 		userRunsCC,
-		ca.CertBytes(),
-		authenticator,
+		containerRuntime,
 		packageProvider,
 		chaincodeEndorsementInfo,
 		aclProvider,
-		container.NewVMController(
-			map[string]container.VMProvider{
-				dockercontroller.ContainerType: dockerProvider,
-				inproccontroller.ContainerType: ipRegistry,
-			},
-		),
 		sccp,
-		platformRegistry,
 		peer.DefaultSupport,
 		opsSystem.Provider,
 		lifecycleValidatorCommitter,
@@ -455,7 +473,7 @@ func serve(args []string) error {
 	policyMgr := peer.NewChannelPolicyManagerGetter()
 
 	
-	err = initGossipService(policyMgr, metricsProvider, peerServer, signingIdentity, peerEndpoint.Address)
+	err = initGossipService(policyMgr, metricsProvider, peerServer, signingIdentity, coreConfig.PeerAddress)
 	if err != nil {
 		return err
 	}
@@ -477,11 +495,11 @@ func serve(args []string) error {
 	installedCCs := func() ([]ccdef.InstalledChaincode, error) {
 		return packageProvider.ListInstalledChaincodes()
 	}
-	lifecycle, err := cc.NewLifeCycle(cc.Enumerate(installedCCs))
+	lifecycle, err := cclifecycle.NewLifecycle(cclifecycle.EnumerateFunc(installedCCs))
 	if err != nil {
 		logger.Panicf("Failed creating lifecycle: +%v", err)
 	}
-	onUpdate := cc.HandleMetadataUpdate(func(channel string, chaincodes ccdef.MetadataSet) {
+	onUpdate := cclifecycle.HandleMetadataUpdateFunc(func(channel string, chaincodes ccdef.MetadataSet) {
 		service.GetGossipService().UpdateChaincodes(chaincodes.AsChaincodes(), gossipcommon.ChainID(channel))
 	})
 	lifecycle.AddListener(onUpdate)
@@ -491,7 +509,7 @@ func serve(args []string) error {
 		func(cid string) {
 			logger.Debugf("Deploying system CC, for channel <%s>", cid)
 			sccp.DeploySysCCs(cid, ccp)
-			sub, err := lifecycle.NewChannelSubscription(cid, cc.QueryCreatorFunc(func() (cc.Query, error) {
+			sub, err := lifecycle.NewChannelSubscription(cid, cclifecycle.QueryCreatorFunc(func() (cclifecycle.Query, error) {
 				return peer.GetLedger(cid).NewQueryExecutor()
 			}))
 			if err != nil {
@@ -508,15 +526,14 @@ func serve(args []string) error {
 		lsccInst,
 		lifecycleValidatorCommitter,
 		ledgerConfig(),
+		coreConfig.ValidatorPoolSize,
 	)
 
 	if coreConfig.DiscoveryEnabled {
 		registerDiscoveryService(coreConfig, peerServer, policyMgr, lifecycle)
 	}
 
-	networkID := coreConfig.NetworkID
-
-	logger.Infof("Starting peer with ID=[%s], network ID=[%s], address=[%s]", peerEndpoint.Id, networkID, peerEndpoint.Address)
+	logger.Infof("Starting peer with ID=[%s], network ID=[%s], address=[%s]", coreConfig.PeerID, coreConfig.NetworkID, coreConfig.PeerAddress)
 
 	
 	
@@ -552,7 +569,7 @@ func serve(args []string) error {
 		syscall.SIGTERM: func() { serve <- nil },
 	}))
 
-	logger.Infof("Started peer with ID=[%s], network ID=[%s], address=[%s]", peerEndpoint.Id, networkID, peerEndpoint.Address)
+	logger.Infof("Started peer with ID=[%s], network ID=[%s], address=[%s]", coreConfig.PeerID, coreConfig.NetworkID, coreConfig.PeerAddress)
 
 	
 	return <-serve
@@ -601,8 +618,8 @@ func createSelfSignedData() protoutil.SignedData {
 	}
 }
 
-func registerDiscoveryService(coreConfig *peer.Config, peerServer *comm.GRPCServer, polMgr policies.ChannelPolicyManagerGetter, lc *cc.Lifecycle) {
-	mspID := coreConfig.LocalMspID
+func registerDiscoveryService(coreConfig *peer.Config, peerServer *comm.GRPCServer, polMgr policies.ChannelPolicyManagerGetter, lc *cclifecycle.Lifecycle) {
+	mspID := coreConfig.LocalMSPID
 	localAccessPolicy := localPolicy(cauthdsl.SignedByAnyAdmin([]string{mspID}))
 	if coreConfig.DiscoveryOrgMembersAllowed {
 		localAccessPolicy = localPolicy(cauthdsl.SignedByAnyMember([]string{mspID}))
@@ -627,7 +644,7 @@ func registerDiscoveryService(coreConfig *peer.Config, peerServer *comm.GRPCServ
 
 func createChaincodeServer(coreConfig *peer.Config, ca tlsgen.CA, peerHostname string) (srv *comm.GRPCServer, ccEndpoint string, err error) {
 	
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerHostname)
+	ccEndpoint, err = computeChaincodeEndpoint(coreConfig.ChaincodeAddress, coreConfig.ChaincodeListenAddress, peerHostname)
 	if err != nil {
 		if chaincode.IsDevMode() {
 			
@@ -645,11 +662,11 @@ func createChaincodeServer(coreConfig *peer.Config, ca tlsgen.CA, peerHostname s
 		logger.Panic("Chaincode service host", ccEndpoint, "isn't a valid hostname:", err)
 	}
 
-	cclistenAddress := coreConfig.ChaincodeListenAddr
+	cclistenAddress := coreConfig.ChaincodeListenAddress
 	if cclistenAddress == "" {
 		cclistenAddress = fmt.Sprintf("%s:%d", peerHostname, defaultChaincodePort)
 		logger.Warningf("%s is not set, using %s", chaincodeListenAddrKey, cclistenAddress)
-		coreConfig.ChaincodeListenAddr = cclistenAddress
+		coreConfig.ChaincodeListenAddress = cclistenAddress
 	}
 
 	config, err := peer.GetServerConfig()
@@ -708,55 +725,11 @@ func createChaincodeServer(coreConfig *peer.Config, ca tlsgen.CA, peerHostname s
 
 
 
-func computeChaincodeEndpoint(coreConfig *peer.Config, peerHostname string) (ccEndpoint string, err error) {
+func computeChaincodeEndpoint(chaincodeAddress string, chaincodeListenAddress string, peerHostname string) (ccEndpoint string, err error) {
 	logger.Infof("Entering computeChaincodeEndpoint with peerHostname: %s", peerHostname)
 	
-	
-	
-	ccEndpoint = coreConfig.ChaincodeAddr
-	if ccEndpoint == "" {
-		
-		
-		ccEndpoint = coreConfig.ChaincodeListenAddr
-		if ccEndpoint == "" {
-			
-			peerIP := net.ParseIP(peerHostname)
-			if peerIP != nil && peerIP.IsUnspecified() {
-				
-				logger.Errorf("ChaincodeAddress and chaincodeListenAddress are nil and peerIP is %s", peerIP)
-				return "", errors.New("invalid endpoint for chaincode to connect")
-			}
-
-			
-			ccEndpoint = fmt.Sprintf("%s:%d", peerHostname, defaultChaincodePort)
-
-		} else {
-			
-			host, port, err := net.SplitHostPort(ccEndpoint)
-			if err != nil {
-				logger.Errorf("ChaincodeAddress is nil and fail to split chaincodeListenAddress: %s", err)
-				return "", err
-			}
-
-			ccListenerIP := net.ParseIP(host)
-			
-			
-			if ccListenerIP != nil && ccListenerIP.IsUnspecified() {
-				
-				peerIP := net.ParseIP(peerHostname)
-				if peerIP != nil && peerIP.IsUnspecified() {
-					
-					logger.Error("ChaincodeAddress is nil while both chaincodeListenAddressIP and peerIP are 0.0.0.0")
-					return "", errors.New("invalid endpoint for chaincode to connect")
-				}
-				ccEndpoint = fmt.Sprintf("%s:%s", peerHostname, port)
-			}
-
-		}
-
-	} else {
-		
-		host, _, err := net.SplitHostPort(ccEndpoint)
+	if chaincodeAddress != "" {
+		host, _, err := net.SplitHostPort(chaincodeAddress)
 		if err != nil {
 			logger.Errorf("Fail to split chaincodeAddress: %s", err)
 			return "", err
@@ -766,7 +739,46 @@ func computeChaincodeEndpoint(coreConfig *peer.Config, peerHostname string) (ccE
 			logger.Errorf("ChaincodeAddress' IP cannot be %s in non-dev mode", ccIP)
 			return "", errors.New("invalid endpoint for chaincode to connect")
 		}
+		logger.Infof("Exit with ccEndpoint: %s", chaincodeAddress)
+		return chaincodeAddress, nil
 	}
+
+	
+	if chaincodeListenAddress != "" {
+		ccEndpoint = chaincodeListenAddress
+		host, port, err := net.SplitHostPort(ccEndpoint)
+		if err != nil {
+			logger.Errorf("ChaincodeAddress is nil and fail to split chaincodeListenAddress: %s", err)
+			return "", err
+		}
+
+		ccListenerIP := net.ParseIP(host)
+		
+		
+		if ccListenerIP != nil && ccListenerIP.IsUnspecified() {
+			
+			peerIP := net.ParseIP(peerHostname)
+			if peerIP != nil && peerIP.IsUnspecified() {
+				
+				logger.Error("ChaincodeAddress is nil while both chaincodeListenAddressIP and peerIP are 0.0.0.0")
+				return "", errors.New("invalid endpoint for chaincode to connect")
+			}
+			ccEndpoint = fmt.Sprintf("%s:%s", peerHostname, port)
+		}
+		logger.Infof("Exit with ccEndpoint: %s", ccEndpoint)
+		return ccEndpoint, nil
+	}
+
+	
+	peerIP := net.ParseIP(peerHostname)
+	if peerIP != nil && peerIP.IsUnspecified() {
+		
+		logger.Errorf("ChaincodeAddress and chaincodeListenAddress are nil and peerIP is %s", peerIP)
+		return "", errors.New("invalid endpoint for chaincode to connect")
+	}
+
+	
+	ccEndpoint = fmt.Sprintf("%s:%d", peerHostname, defaultChaincodePort)
 
 	logger.Infof("Exit with ccEndpoint: %s", ccEndpoint)
 	return ccEndpoint, nil
@@ -792,9 +804,9 @@ func adminHasSeparateListener(peerListenAddr string, adminListenAddress string) 
 }
 
 func startAdminServer(coreConfig *peer.Config, peerListenAddr string, peerServer *grpc.Server, metricsProvider metrics.Provider) {
-	adminListenAddress := coreConfig.AdminListenAddr
+	adminListenAddress := coreConfig.AdminListenAddress
 	separateLsnrForAdmin := adminHasSeparateListener(peerListenAddr, adminListenAddress)
-	mspID := coreConfig.LocalMspID
+	mspID := coreConfig.LocalMSPID
 	adminPolicy := localPolicy(cauthdsl.SignedByAnyAdmin([]string{mspID}))
 	gRPCService := peerServer
 	if separateLsnrForAdmin {
@@ -901,25 +913,25 @@ func initGossipService(
 	)
 }
 
-func newOperationsSystem() *operations.System {
+func newOperationsSystem(coreConfig *peer.Config) *operations.System {
 	return operations.NewSystem(operations.Options{
 		Logger:        flogging.MustGetLogger("peer.operations"),
-		ListenAddress: viper.GetString("operations.listenAddress"),
+		ListenAddress: coreConfig.OperationsListenAddress,
 		Metrics: operations.MetricsOptions{
-			Provider: viper.GetString("metrics.provider"),
+			Provider: coreConfig.MetricsProvider,
 			Statsd: &operations.Statsd{
-				Network:       viper.GetString("metrics.statsd.network"),
-				Address:       viper.GetString("metrics.statsd.address"),
-				WriteInterval: viper.GetDuration("metrics.statsd.writeInterval"),
-				Prefix:        viper.GetString("metrics.statsd.prefix"),
+				Network:       coreConfig.StatsdNetwork,
+				Address:       coreConfig.StatsdAaddress,
+				WriteInterval: coreConfig.StatsdWriteInterval,
+				Prefix:        coreConfig.StatsdPrefix,
 			},
 		},
 		TLS: operations.TLS{
-			Enabled:            viper.GetBool("operations.tls.enabled"),
-			CertFile:           viper.GetString("operations.tls.cert.file"),
-			KeyFile:            viper.GetString("operations.tls.key.file"),
-			ClientCertRequired: viper.GetBool("operations.tls.clientAuthRequired"),
-			ClientCACertFiles:  viper.GetStringSlice("operations.tls.clientRootCAs.files"),
+			Enabled:            coreConfig.OperationsTLSEnabled,
+			CertFile:           coreConfig.OperationsTLSCertFile,
+			KeyFile:            coreConfig.OperationsTLSKeyFile,
+			ClientCertRequired: coreConfig.OperationsTLSClientAuthRequired,
+			ClientCACertFiles:  coreConfig.OperationsTLSClientRootCAs,
 		},
 		Version: metadata.Version,
 	})

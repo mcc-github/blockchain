@@ -29,8 +29,6 @@ type ConfigSequenceSupport interface {
 
 
 
-
-
 type GossipSupport interface {
 	
 	ChannelExists(channel string) bool

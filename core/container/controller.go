@@ -12,6 +12,7 @@ import (
 	"io"
 	"sync"
 
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
@@ -134,6 +135,7 @@ type PlatformBuilder struct {
 	Version          string
 	CodePackage      []byte
 	PlatformRegistry *platforms.Registry
+	Client           *docker.Client
 }
 
 
@@ -144,6 +146,7 @@ func (b *PlatformBuilder) Build() (io.Reader, error) {
 		b.Name,
 		b.Version,
 		b.CodePackage,
+		b.Client,
 	)
 }
 

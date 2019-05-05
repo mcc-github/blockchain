@@ -106,8 +106,6 @@ func (s *DiscoverySupport) SatisfiesPrincipal(channel string, rawIdentity []byte
 
 
 
-
-
 type ChannelPolicyManagerGetter interface {
 	
 	

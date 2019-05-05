@@ -17,7 +17,7 @@ import (
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
-	"github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
+	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 
 	"github.com/pkg/errors"
 )
@@ -30,7 +30,8 @@ type IOReadWriter interface {
 	ReadDir(string) ([]os.FileInfo, error)
 	ReadFile(string) ([]byte, error)
 	Remove(name string) error
-	WriteFile(string, []byte, os.FileMode) error
+	WriteFile(string, string, []byte) error
+	MakeDir(string, os.FileMode) error
 	Exists(path string) (bool, error)
 }
 
@@ -39,8 +40,33 @@ type FilesystemIO struct {
 }
 
 
-func (f *FilesystemIO) WriteFile(filename string, data []byte, perm os.FileMode) error {
-	return ioutil.WriteFile(filename, data, perm)
+
+
+func (f *FilesystemIO) WriteFile(path, name string, data []byte) error {
+	tmpFile, err := ioutil.TempFile(path, ".ccpackage.")
+	if err != nil {
+		return errors.Wrapf(err, "error creating temp file in directory '%s'", path)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if n, err := tmpFile.Write(data); err != nil || n != len(data) {
+		if err == nil {
+			err = errors.Errorf(
+				"failed to write the entire content of the file, expected %d, wrote %d",
+				len(data), n)
+		}
+		return errors.Wrapf(err, "error writing to temp file '%s'", tmpFile.Name())
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return errors.Wrapf(err, "error closing temp file '%s'", tmpFile.Name())
+	}
+
+	if err := os.Rename(tmpFile.Name(), filepath.Join(path, name)); err != nil {
+		return errors.Wrapf(err, "error renaming temp file '%s'", tmpFile.Name())
+	}
+
+	return nil
 }
 
 
@@ -60,11 +86,18 @@ func (f *FilesystemIO) ReadDir(dirname string) ([]os.FileInfo, error) {
 }
 
 
+
+func (f *FilesystemIO) MakeDir(dirname string, mode os.FileMode) error {
+	return os.MkdirAll(dirname, mode)
+}
+
+
 func (*FilesystemIO) Exists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
-	} else if os.IsNotExist(err) {
+	}
+	if os.IsNotExist(err) {
 		return false, nil
 	}
 
@@ -79,18 +112,49 @@ type Store struct {
 
 
 
+func NewStore(path string) *Store {
+	store := &Store{
+		Path:       path,
+		ReadWriter: &FilesystemIO{},
+	}
+	store.Initialize()
+	return store
+}
+
+
+
+func (s *Store) Initialize() {
+	var (
+		exists bool
+		err    error
+	)
+	if exists, err = s.ReadWriter.Exists(s.Path); exists {
+		return
+	}
+	if err != nil {
+		panic(fmt.Sprintf("Initialization of chaincode store failed: %s", err))
+	}
+	if err = s.ReadWriter.MakeDir(s.Path, 0750); err != nil {
+		panic(fmt.Sprintf("Could not create _lifecycle chaincodes install path: %s", err))
+	}
+}
+
+
+
 func (s *Store) Save(label string, ccInstallPkg []byte) (persistence.PackageID, error) {
 	hash := util.ComputeSHA256(ccInstallPkg)
 	packageID := packageID(label, hash)
-	ccInstallPkgPath := packagePath(s.Path, packageID)
 
-	if exists, _ := s.ReadWriter.Exists(ccInstallPkgPath); exists {
+	ccInstallPkgFileName := packageID.String() + ".bin"
+	ccInstallPkgFilePath := filepath.Join(s.Path, ccInstallPkgFileName)
+
+	if exists, _ := s.ReadWriter.Exists(ccInstallPkgFilePath); exists {
 		
 		return packageID, nil
 	}
 
-	if err := s.ReadWriter.WriteFile(ccInstallPkgPath, ccInstallPkg, 0600); err != nil {
-		err = errors.Wrapf(err, "error writing chaincode install package to %s", ccInstallPkgPath)
+	if err := s.ReadWriter.WriteFile(s.Path, ccInstallPkgFileName, ccInstallPkg); err != nil {
+		err = errors.Wrapf(err, "error writing chaincode install package to %s", ccInstallPkgFilePath)
 		logger.Error(err.Error())
 		return "", err
 	}
@@ -102,7 +166,7 @@ func (s *Store) Save(label string, ccInstallPkg []byte) (persistence.PackageID, 
 
 
 func (s *Store) Load(packageID persistence.PackageID) ([]byte, error) {
-	ccInstallPkgPath := packagePath(s.Path, packageID)
+	ccInstallPkgPath := filepath.Join(s.Path, packageID.String()+".bin")
 
 	exists, err := s.ReadWriter.Exists(ccInstallPkgPath)
 	if err != nil {
@@ -161,10 +225,6 @@ func packageID(label string, hash []byte) persistence.PackageID {
 }
 
 var packageFileMatcher = regexp.MustCompile("^(.+):([0-9abcdef]+)[.]bin$")
-
-func packagePath(path string, packageID persistence.PackageID) string {
-	return filepath.Join(path, packageID.String()+".bin")
-}
 
 func installedChaincodeFromFilename(fileName string) (chaincode.InstalledChaincode, bool) {
 	matches := packageFileMatcher.FindStringSubmatch(fileName)

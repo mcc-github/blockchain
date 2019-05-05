@@ -23,8 +23,6 @@ import (
 func TestConstructValidInvalidBlocksPvtData(t *testing.T) {
 	conf, cleanup := testConfig(t)
 	defer cleanup()
-	
-	_ = createTestEnv(t, conf.RootFSPath)
 	provider := testutilNewProvider(conf, t)
 	defer provider.Close()
 

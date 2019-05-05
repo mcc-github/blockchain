@@ -22,6 +22,12 @@ import (
 
 
 
+type Store interface {
+	transientstore.Store
+}
+
+
+
 
 type TransientStoreRetriever interface {
 	

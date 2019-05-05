@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
-	mocklgr "github.com/mcc-github/blockchain/common/mocks/ledger"
 	mockpeer "github.com/mcc-github/blockchain/common/mocks/peer"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/aclmgmt/mocks"
@@ -78,8 +78,7 @@ func (mri *mockResultsIterator) Close() {
 }
 
 type mockExecQuerySimulator struct {
-	txsim ledger.TxSimulator
-	mocklgr.MockQueryExecutor
+	txsim       ledger.TxSimulator
 	resultsIter map[string]map[string]*mockResultsIterator
 }
 
@@ -220,28 +219,42 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
 			PackageID: persistence.PackageID("lscc:" + util.GetSysCCVersion()),
 		}, nil)
 	ml.On("ChaincodeContainerInfo", ma.Anything, "badccname", ma.Anything).Return(nil, errors.New("get lost"))
-	mcd := &mock.ChaincodeDefinition{}
-	mcd.On("CCVersion").Return("0")
-	mcd.On("Hash").Return([]byte("Hulk, (sm)hash"))
-	mcd.On("RequiresInit").Return(false)
-	ml.On("ChaincodeDefinition", ma.Anything, "calledCC", ma.Anything).Return(mcd, nil)
-	chaincodeSupport := NewChaincodeSupport(
-		globalConfig,
-		"0.0.0.0:7052",
-		true,
-		ca.CertBytes(),
-		certGenerator,
-		&PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
-		ml,
-		mockAclProvider,
-		container.NewVMController(
+	fakeCCDefinition := &mock.ChaincodeDefinition{}
+	ml.On("ChaincodeDefinition", ma.Anything, "calledCC", ma.Anything).Return(fakeCCDefinition, nil)
+	client, err := docker.NewClientFromEnv()
+	if err != nil {
+		panic(err)
+	}
+	containerRuntime := &ContainerRuntime{
+		CACert:        ca.CertBytes(),
+		CertGenerator: certGenerator,
+		PeerAddress:   "0.0.0.0:7052",
+		DockerClient:  client,
+		Processor: container.NewVMController(
 			map[string]container.VMProvider{
 				dockercontroller.ContainerType: &dockercontroller.Provider{},
 				inproccontroller.ContainerType: ipRegistry,
 			},
 		),
+		CommonEnv: []string{
+			"CORE_CHAINCODE_LOGGING_LEVEL=" + globalConfig.LogLevel,
+			"CORE_CHAINCODE_LOGGING_SHIM=" + globalConfig.ShimLogLevel,
+			"CORE_CHAINCODE_LOGGING_FORMAT=" + globalConfig.LogFormat,
+		},
+		PlatformRegistry: pr,
+	}
+	if !globalConfig.TLSEnabled {
+		containerRuntime.CertGenerator = nil
+	}
+
+	chaincodeSupport := NewChaincodeSupport(
+		globalConfig,
+		true,
+		containerRuntime,
+		&PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
+		ml,
+		mockAclProvider,
 		sccp,
-		pr,
 		peer.DefaultSupport,
 		&disabled.Provider{},
 		&ledgermock.DeployedChaincodeInfoProvider{},

@@ -2,12 +2,12 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	channelconfig "github.com/mcc-github/blockchain/common/channelconfig"
-	configtx "github.com/mcc-github/blockchain/common/configtx"
-	policies "github.com/mcc-github/blockchain/common/policies"
-	msp "github.com/mcc-github/blockchain/msp"
+	"github.com/mcc-github/blockchain/common/channelconfig"
+	"github.com/mcc-github/blockchain/common/configtx"
+	"github.com/mcc-github/blockchain/common/policies"
+	"github.com/mcc-github/blockchain/msp"
 )
 
 type ChannelConfig struct {

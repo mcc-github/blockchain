@@ -14,19 +14,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	proto2 "github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/gossip/api"
 	gossipCommon "github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/gossip/filter"
-	gossip2 "github.com/mcc-github/blockchain/gossip/gossip"
+	gossipgossip "github.com/mcc-github/blockchain/gossip/gossip"
 	"github.com/mcc-github/blockchain/gossip/metrics"
 	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
+	protosgossip "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protoutil"
@@ -36,7 +36,7 @@ import (
 
 type gossipAdapter interface {
 	
-	SendByCriteria(message *protoext.SignedGossipMessage, criteria gossip2.SendCriteria) error
+	SendByCriteria(message *protoext.SignedGossipMessage, criteria gossipgossip.SendCriteria) error
 
 	
 	
@@ -129,7 +129,7 @@ func (d *distributorImpl) Distribute(txID string, privData *transientstore.TxPvt
 
 type dissemination struct {
 	msg      *protoext.SignedGossipMessage
-	criteria gossip2.SendCriteria
+	criteria gossipgossip.SendCriteria
 }
 
 func (d *distributorImpl) computeDisseminationPlan(txID string,
@@ -221,7 +221,7 @@ func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAcces
 				required = 0
 			}
 			peer2SendPerOrg := selectionPeers[rand.Intn(len(selectionPeers))]
-			sc := gossip2.SendCriteria{
+			sc := gossipgossip.SendCriteria{
 				Timeout:  d.pushAckTimeout,
 				Channel:  gossipCommon.ChainID(d.chainID),
 				MaxPeers: 1,
@@ -233,8 +233,8 @@ func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAcces
 			disseminationPlan = append(disseminationPlan, &dissemination{
 				criteria: sc,
 				msg: &protoext.SignedGossipMessage{
-					Envelope:      proto2.Clone(pvtDataMsg.Envelope).(*proto.Envelope),
-					GossipMessage: proto2.Clone(pvtDataMsg.GossipMessage).(*proto.GossipMessage),
+					Envelope:      proto.Clone(pvtDataMsg.Envelope).(*protosgossip.Envelope),
+					GossipMessage: proto.Clone(pvtDataMsg.GossipMessage).(*protosgossip.GossipMessage),
 				},
 			})
 
@@ -251,7 +251,7 @@ func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAcces
 
 	
 	
-	sc := gossip2.SendCriteria{
+	sc := gossipgossip.SendCriteria{
 		Timeout:  d.pushAckTimeout,
 		Channel:  gossipCommon.ChainID(d.chainID),
 		MaxPeers: maximumPeerCount,
@@ -333,13 +333,13 @@ func (d *distributorImpl) createPrivateDataMessage(txID, namespace string,
 	collection *rwset.CollectionPvtReadWriteSet,
 	ccp *common.CollectionConfigPackage,
 	blkHt uint64) (*protoext.SignedGossipMessage, error) {
-	msg := &proto.GossipMessage{
+	msg := &protosgossip.GossipMessage{
 		Channel: []byte(d.chainID),
 		Nonce:   util.RandomUInt64(),
-		Tag:     proto.GossipMessage_CHAN_ONLY,
-		Content: &proto.GossipMessage_PrivateData{
-			PrivateData: &proto.PrivateDataMessage{
-				Payload: &proto.PrivatePayload{
+		Tag:     protosgossip.GossipMessage_CHAN_ONLY,
+		Content: &protosgossip.GossipMessage_PrivateData{
+			PrivateData: &protosgossip.PrivateDataMessage{
+				Payload: &protosgossip.PrivatePayload{
 					Namespace:         namespace,
 					CollectionName:    collection.CollectionName,
 					TxId:              txID,

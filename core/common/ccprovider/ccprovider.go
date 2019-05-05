@@ -477,8 +477,11 @@ func (cd *ChaincodeData) Endorsement() string {
 }
 
 
+
+
+
 func (cd *ChaincodeData) RequiresInit() bool {
-	return true
+	return false
 }
 
 

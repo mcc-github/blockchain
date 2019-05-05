@@ -95,10 +95,7 @@ type Orderer interface {
 	ConsensusMetadata() []byte
 
 	
-	ConsensusMigrationState() ab.ConsensusType_MigrationState
-
-	
-	ConsensusMigrationContext() uint64
+	ConsensusState() ab.ConsensusType_State
 
 	
 	BatchSize() *ab.BatchSize
@@ -213,7 +210,7 @@ type OrdererCapabilities interface {
 	ExpirationCheck() bool
 
 	
-	Kafka2RaftMigration() bool
+	ConsensusTypeMigration() bool
 
 	
 	

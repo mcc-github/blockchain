@@ -47,9 +47,6 @@ func NewServerHandlerTransport(w http.ResponseWriter, r *http.Request, stats sta
 	if _, ok := w.(http.Flusher); !ok {
 		return nil, errors.New("gRPC requires a ResponseWriter supporting http.Flusher")
 	}
-	if _, ok := w.(http.CloseNotifier); !ok {
-		return nil, errors.New("gRPC requires a ResponseWriter supporting http.CloseNotifier")
-	}
 
 	st := &serverHandlerTransport{
 		rw:             w,
@@ -160,17 +157,11 @@ func (a strAddr) String() string { return string(a) }
 
 
 func (ht *serverHandlerTransport) do(fn func()) error {
-	
 	select {
 	case <-ht.closedCh:
 		return ErrConnClosing
-	default:
-		select {
-		case ht.writes <- fn:
-			return nil
-		case <-ht.closedCh:
-			return ErrConnClosing
-		}
+	case ht.writes <- fn:
+		return nil
 	}
 }
 
@@ -221,7 +212,6 @@ func (ht *serverHandlerTransport) WriteStatus(s *Stream, st *status.Status) erro
 		if ht.stats != nil {
 			ht.stats.HandleRPC(s.Context(), &stats.OutTrailer{})
 		}
-		close(ht.writes)
 	}
 	ht.Close()
 	return err
@@ -300,18 +290,12 @@ func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), trace
 	}
 
 	
-	
 	requestOver := make(chan struct{})
-
-	
-	
-	
-	clientGone := ht.rw.(http.CloseNotifier).CloseNotify()
 	go func() {
 		select {
 		case <-requestOver:
 		case <-ht.closedCh:
-		case <-clientGone:
+		case <-ht.req.Context().Done():
 		}
 		cancel()
 		ht.Close()
@@ -391,10 +375,7 @@ func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), trace
 func (ht *serverHandlerTransport) runStream() {
 	for {
 		select {
-		case fn, ok := <-ht.writes:
-			if !ok {
-				return
-			}
+		case fn := <-ht.writes:
 			fn()
 		case <-ht.closedCh:
 			return

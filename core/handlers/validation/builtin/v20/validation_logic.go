@@ -12,11 +12,11 @@ import (
 	"github.com/golang/protobuf/proto"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
-	. "github.com/mcc-github/blockchain/core/common/validation/statebased"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
+	"github.com/mcc-github/blockchain/core/common/validation/statebased"
+	vc "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
+	vi "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
+	vp "github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
+	vs "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
@@ -26,6 +26,18 @@ import (
 var logger = flogging.MustGetLogger("vscc")
 
 
+
+
+type IdentityDeserializer interface {
+	vi.IdentityDeserializer
+}
+
+
+
+
+type CollectionResources interface {
+	statebased.CollectionResources
+}
 
 
 
@@ -55,13 +67,13 @@ func (n *toApplicationPolicyTranslator) Translate(b []byte) ([]byte, error) {
 
 
 
-func New(c Capabilities, s StateFetcher, d IdentityDeserializer, pe PolicyEvaluator, cor CollectionResources) *Validator {
-	vpmgr := &KeyLevelValidationParameterManagerImpl{
+func New(c vc.Capabilities, s vs.StateFetcher, d vi.IdentityDeserializer, pe vp.PolicyEvaluator, cor statebased.CollectionResources) *Validator {
+	vpmgr := &statebased.KeyLevelValidationParameterManagerImpl{
 		StateFetcher:     s,
 		PolicyTranslator: &toApplicationPolicyTranslator{},
 	}
-	eval := NewV20Evaluator(vpmgr, pe, cor, s)
-	sbv := NewKeyLevelValidator(eval, vpmgr)
+	eval := statebased.NewV20Evaluator(vpmgr, pe, cor, s)
+	sbv := statebased.NewKeyLevelValidator(eval, vpmgr)
 
 	return &Validator{
 		capabilities:        c,
@@ -77,10 +89,10 @@ func New(c Capabilities, s StateFetcher, d IdentityDeserializer, pe PolicyEvalua
 
 
 type Validator struct {
-	deserializer        IdentityDeserializer
-	capabilities        Capabilities
-	stateFetcher        StateFetcher
-	policyEvaluator     PolicyEvaluator
+	deserializer        vi.IdentityDeserializer
+	capabilities        vc.Capabilities
+	stateFetcher        vs.StateFetcher
+	policyEvaluator     vp.PolicyEvaluator
 	stateBasedValidator StateBasedValidator
 }
 

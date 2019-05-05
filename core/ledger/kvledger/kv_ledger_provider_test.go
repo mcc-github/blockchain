@@ -24,15 +24,12 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	"github.com/mcc-github/blockchain/protoutil"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestLedgerProvider(t *testing.T) {
 	conf, cleanup := testConfig(t)
 	defer cleanup()
-	
-	_ = createTestEnv(t, conf.RootFSPath)
 	provider := testutilNewProvider(conf, t)
 	numLedgers := 10
 	existingLedgerIDs, err := provider.List()
@@ -70,7 +67,7 @@ func TestLedgerProvider(t *testing.T) {
 		assert.Equal(t, uint64(1), bcInfo.Height)
 
 		
-		s := provider.(*Provider).idStore
+		s := provider.idStore
 		gbBytesInProviderStore, err := s.db.Get(s.encodeLedgerKey(ledgerid))
 		assert.NoError(t, err)
 		gb := &common.Block{}
@@ -87,30 +84,90 @@ func TestLedgerProvider(t *testing.T) {
 
 	_, err = provider.Open(constructTestLedgerID(numLedgers))
 	assert.Equal(t, ErrNonExistingLedgerID, err)
+
+}
+
+func TestLedgerProviderHistoryDBDisabled(t *testing.T) {
+	conf, cleanup := testConfig(t)
+	conf.HistoryDB.Enabled = false
+	defer cleanup()
+	provider := testutilNewProvider(conf, t)
+	numLedgers := 10
+	existingLedgerIDs, err := provider.List()
+	assert.NoError(t, err)
+	assert.Len(t, existingLedgerIDs, 0)
+	genesisBlocks := make([]*common.Block, numLedgers)
+	for i := 0; i < numLedgers; i++ {
+		genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(i))
+		genesisBlocks[i] = genesisBlock
+		provider.Create(genesisBlock)
+	}
+	existingLedgerIDs, err = provider.List()
+	assert.NoError(t, err)
+	assert.Len(t, existingLedgerIDs, numLedgers)
+
+	provider.Close()
+
+	provider = testutilNewProvider(conf, t)
+	defer provider.Close()
+	ledgerIds, _ := provider.List()
+	assert.Len(t, ledgerIds, numLedgers)
+	t.Logf("ledgerIDs=%#v", ledgerIds)
+	for i := 0; i < numLedgers; i++ {
+		assert.Equal(t, constructTestLedgerID(i), ledgerIds[i])
+	}
+	for i := 0; i < numLedgers; i++ {
+		ledgerid := constructTestLedgerID(i)
+		status, _ := provider.Exists(ledgerid)
+		assert.True(t, status)
+		ledger, err := provider.Open(ledgerid)
+		assert.NoError(t, err)
+		bcInfo, err := ledger.GetBlockchainInfo()
+		ledger.Close()
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(1), bcInfo.Height)
+
+		
+		s := provider.idStore
+		gbBytesInProviderStore, err := s.db.Get(s.encodeLedgerKey(ledgerid))
+		assert.NoError(t, err)
+		gb := &common.Block{}
+		assert.NoError(t, proto.Unmarshal(gbBytesInProviderStore, gb))
+		assert.True(t, proto.Equal(gb, genesisBlocks[i]), "proto messages are not equal")
+	}
+	gb, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(2))
+	_, err = provider.Create(gb)
+	assert.Equal(t, ErrLedgerIDExists, err)
+
+	status, err := provider.Exists(constructTestLedgerID(numLedgers))
+	assert.NoError(t, err, "Failed to check for ledger existence")
+	assert.Equal(t, status, false)
+
+	_, err = provider.Open(constructTestLedgerID(numLedgers))
+	assert.Equal(t, ErrNonExistingLedgerID, err)
+
 }
 
 func TestRecovery(t *testing.T) {
 	conf, cleanup := testConfig(t)
 	defer cleanup()
-	
-	_ = createTestEnv(t, conf.RootFSPath)
 	provider := testutilNewProvider(conf, t)
 
 	
 	genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(1))
-	ledger, err := provider.(*Provider).openInternal(constructTestLedgerID(1))
+	ledger, err := provider.openInternal(constructTestLedgerID(1))
 	ledger.CommitWithPvtData(&lgr.BlockAndPvtData{Block: genesisBlock})
 	ledger.Close()
 
 	
 	
-	provider.(*Provider).idStore.setUnderConstructionFlag(constructTestLedgerID(1))
+	provider.idStore.setUnderConstructionFlag(constructTestLedgerID(1))
 	provider.Close()
 
 	
 	provider = testutilNewProvider(conf, t)
 	
-	flag, err := provider.(*Provider).idStore.getUnderConstructionFlag()
+	flag, err := provider.idStore.getUnderConstructionFlag()
 	assert.NoError(t, err, "Failed to read the underconstruction flag")
 	assert.Equal(t, "", flag)
 	ledger, err = provider.Open(constructTestLedgerID(1))
@@ -119,13 +176,54 @@ func TestRecovery(t *testing.T) {
 
 	
 	
-	provider.(*Provider).idStore.setUnderConstructionFlag(constructTestLedgerID(2))
+	provider.idStore.setUnderConstructionFlag(constructTestLedgerID(2))
 	provider.Close()
 
 	
 	provider = testutilNewProvider(conf, t)
 	assert.NoError(t, err, "Provider failed to recover an underConstructionLedger")
-	flag, err = provider.(*Provider).idStore.getUnderConstructionFlag()
+	flag, err = provider.idStore.getUnderConstructionFlag()
+	assert.NoError(t, err, "Failed to read the underconstruction flag")
+	assert.Equal(t, "", flag)
+
+}
+
+func TestRecoveryHistoryDBDisabled(t *testing.T) {
+	conf, cleanup := testConfig(t)
+	conf.HistoryDB.Enabled = false
+	defer cleanup()
+	provider := testutilNewProvider(conf, t)
+
+	
+	genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(1))
+	ledger, err := provider.openInternal(constructTestLedgerID(1))
+	ledger.CommitWithPvtData(&lgr.BlockAndPvtData{Block: genesisBlock})
+	ledger.Close()
+
+	
+	
+	provider.idStore.setUnderConstructionFlag(constructTestLedgerID(1))
+	provider.Close()
+
+	
+	provider = testutilNewProvider(conf, t)
+	
+	flag, err := provider.idStore.getUnderConstructionFlag()
+	assert.NoError(t, err, "Failed to read the underconstruction flag")
+	assert.Equal(t, "", flag)
+	ledger, err = provider.Open(constructTestLedgerID(1))
+	assert.NoError(t, err, "Failed to open the ledger")
+	ledger.Close()
+
+	
+	
+	provider.idStore.setUnderConstructionFlag(constructTestLedgerID(2))
+	provider.Close()
+
+	
+	provider = testutilNewProvider(conf, t)
+	assert.NoError(t, err, "Provider failed to recover an underConstructionLedger")
+	flag, err = provider.idStore.getUnderConstructionFlag()
 	assert.NoError(t, err, "Failed to read the underconstruction flag")
 	assert.Equal(t, "", flag)
 
@@ -134,8 +232,6 @@ func TestRecovery(t *testing.T) {
 func TestMultipleLedgerBasicRW(t *testing.T) {
 	conf, cleanup := testConfig(t)
 	defer cleanup()
-	
-	_ = createTestEnv(t, conf.RootFSPath)
 	provider := testutilNewProvider(conf, t)
 	numLedgers := 10
 	ledgers := make([]lgr.PeerLedger, numLedgers)
@@ -181,12 +277,15 @@ func TestMultipleLedgerBasicRW(t *testing.T) {
 
 func TestLedgerBackup(t *testing.T) {
 	ledgerid := "TestLedger"
-	originalPath := "/tmp/blockchain/ledgertests/kvledger1"
-	restorePath := "/tmp/blockchain/ledgertests/kvledger2"
-	viper.Set("ledger.history.enableHistoryDatabase", true)
+	basePath, err := ioutil.TempDir("", "kvledger")
+	if err != nil {
+		t.Fatalf("Failed to create ledger directory: %s", err)
+	}
+	defer os.RemoveAll(basePath)
+	originalPath := filepath.Join(basePath, "kvledger1")
+	restorePath := filepath.Join(basePath, "kvledger2")
 
 	
-	env := createTestEnv(t, originalPath)
 	origConf := &lgr.Config{
 		RootFSPath: originalPath,
 		StateDB: &lgr.StateDB{
@@ -197,6 +296,9 @@ func TestLedgerBackup(t *testing.T) {
 			MaxBatchSize:    5000,
 			BatchesInterval: 1000,
 			PurgeInterval:   100,
+		},
+		HistoryDB: &lgr.HistoryDB{
+			Enabled: true,
 		},
 	}
 	provider := testutilNewProvider(origConf, t)
@@ -230,15 +332,11 @@ func TestLedgerBackup(t *testing.T) {
 	provider.Close()
 
 	
-	env = createTestEnv(t, restorePath)
-
-	
 	
 	assert.NoError(t, os.RemoveAll(filepath.Join(originalPath, "stateLeveldb")))
 	assert.NoError(t, os.RemoveAll(filepath.Join(originalPath, "historyLeveldb")))
 	assert.NoError(t, os.RemoveAll(filepath.Join(originalPath, "chains", fsblkstorage.IndexDir)))
 	assert.NoError(t, os.Rename(originalPath, restorePath))
-	defer env.cleanup()
 
 	
 	restoreConf := &lgr.Config{
@@ -252,11 +350,14 @@ func TestLedgerBackup(t *testing.T) {
 			BatchesInterval: 1000,
 			PurgeInterval:   100,
 		},
+		HistoryDB: &lgr.HistoryDB{
+			Enabled: true,
+		},
 	}
 	provider = testutilNewProvider(restoreConf, t)
 	defer provider.Close()
 
-	_, err := provider.Create(gb)
+	_, err = provider.Create(gb)
 	assert.Equal(t, ErrLedgerIDExists, err)
 
 	ledger, _ = provider.Open(ledgerid)
@@ -340,6 +441,9 @@ func testConfig(t *testing.T) (conf *lgr.Config, cleanup func()) {
 			BatchesInterval: 1000,
 			PurgeInterval:   100,
 		},
+		HistoryDB: &lgr.HistoryDB{
+			Enabled: true,
+		},
 	}
 	cleanup = func() {
 		os.RemoveAll(path)
@@ -348,14 +452,17 @@ func testConfig(t *testing.T) (conf *lgr.Config, cleanup func()) {
 	return conf, cleanup
 }
 
-func testutilNewProvider(conf *lgr.Config, t *testing.T) lgr.PeerLedgerProvider {
-	provider, err := NewProvider()
-	assert.NoError(t, err)
-	provider.Initialize(&lgr.Initializer{
-		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
-		MetricsProvider:               &disabled.Provider{},
-		Config:                        conf,
-	})
+func testutilNewProvider(conf *lgr.Config, t *testing.T) *Provider {
+	provider, err := NewProvider(
+		&lgr.Initializer{
+			DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+			MetricsProvider:               &disabled.Provider{},
+			Config:                        conf,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Failed to create new Provider: %s", err)
+	}
 	return provider
 }
 
@@ -364,9 +471,9 @@ func testutilNewProviderWithCollectionConfig(
 	namespace string,
 	btlConfigs map[string]uint64,
 	conf *lgr.Config,
-) lgr.PeerLedgerProvider {
+) *Provider {
 	provider := testutilNewProvider(conf, t)
-	mockCCInfoProvider := provider.(*Provider).initializer.DeployedChaincodeInfoProvider.(*mock.DeployedChaincodeInfoProvider)
+	mockCCInfoProvider := provider.initializer.DeployedChaincodeInfoProvider.(*mock.DeployedChaincodeInfoProvider)
 	collMap := map[string]*common.StaticCollectionConfig{}
 	var collConf []*common.CollectionConfig
 	for collName, btl := range btlConfigs {

@@ -154,13 +154,8 @@ func (oc *OrdererConfig) ConsensusMetadata() []byte {
 }
 
 
-func (oc *OrdererConfig) ConsensusMigrationState() ab.ConsensusType_MigrationState {
-	return oc.protos.ConsensusType.MigrationState
-}
-
-
-func (oc *OrdererConfig) ConsensusMigrationContext() uint64 {
-	return oc.protos.ConsensusType.MigrationContext
+func (oc *OrdererConfig) ConsensusState() ab.ConsensusType_State {
+	return oc.protos.ConsensusType.State
 }
 
 

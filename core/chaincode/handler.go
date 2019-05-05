@@ -24,7 +24,6 @@ import (
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -121,6 +120,9 @@ type ApplicationConfigRetriever interface {
 type Handler struct {
 	
 	Keepalive time.Duration
+	
+	
+	TotalQueryLimit int
 	
 	SystemCCVersion string
 	
@@ -733,7 +735,7 @@ func (h *Handler) HandleGetStateByRange(msg *pb.ChaincodeMessage, txContext *Tra
 		return nil, err
 	}
 
-	totalReturnLimit := calculateTotalReturnLimit(metadata)
+	totalReturnLimit := h.calculateTotalReturnLimit(metadata)
 
 	iterID := h.UUIDGenerator.New()
 
@@ -806,7 +808,7 @@ func (h *Handler) HandleQueryStateNext(msg *pb.ChaincodeMessage, txContext *Tran
 		return nil, errors.New("query iterator not found")
 	}
 
-	totalReturnLimit := calculateTotalReturnLimit(nil)
+	totalReturnLimit := h.calculateTotalReturnLimit(nil)
 
 	payload, err := h.QueryResponseBuilder.BuildQueryResponse(txContext, queryIter, queryStateNext.Id, false, totalReturnLimit)
 	if err != nil {
@@ -860,7 +862,7 @@ func (h *Handler) HandleGetQueryResult(msg *pb.ChaincodeMessage, txContext *Tran
 		return nil, err
 	}
 
-	totalReturnLimit := calculateTotalReturnLimit(metadata)
+	totalReturnLimit := h.calculateTotalReturnLimit(metadata)
 	isPaginated := false
 
 	var executeIter commonledger.ResultsIterator
@@ -912,6 +914,9 @@ func (h *Handler) HandleGetQueryResult(msg *pb.ChaincodeMessage, txContext *Tran
 
 
 func (h *Handler) HandleGetHistoryForKey(msg *pb.ChaincodeMessage, txContext *TransactionContext) (*pb.ChaincodeMessage, error) {
+	if txContext.HistoryQueryExecutor == nil {
+		return nil, errors.New("history database is not enabled")
+	}
 	iterID := h.UUIDGenerator.New()
 	namespaceID := txContext.NamespaceID
 
@@ -926,7 +931,7 @@ func (h *Handler) HandleGetHistoryForKey(msg *pb.ChaincodeMessage, txContext *Tr
 		return nil, errors.WithStack(err)
 	}
 
-	totalReturnLimit := calculateTotalReturnLimit(nil)
+	totalReturnLimit := h.calculateTotalReturnLimit(nil)
 
 	txContext.InitializeQueryContext(iterID, historyIter)
 	payload, err := h.QueryResponseBuilder.BuildQueryResponse(txContext, historyIter, iterID, false, totalReturnLimit)
@@ -989,8 +994,8 @@ func createPaginationInfoFromMetadata(metadata *pb.QueryMetadata, totalReturnLim
 	return paginationInfoMap, nil
 }
 
-func calculateTotalReturnLimit(metadata *pb.QueryMetadata) int32 {
-	totalReturnLimit := int32(ledgerconfig.GetTotalQueryLimit())
+func (h *Handler) calculateTotalReturnLimit(metadata *pb.QueryMetadata) int32 {
+	totalReturnLimit := int32(h.TotalQueryLimit)
 	if metadata != nil {
 		pageSize := int32(metadata.PageSize)
 		if pageSize > 0 && pageSize < totalReturnLimit {

@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	channelconfig "github.com/mcc-github/blockchain/common/channelconfig"
+	"github.com/mcc-github/blockchain/common/channelconfig"
 )
 
 type ApplicationConfig struct {

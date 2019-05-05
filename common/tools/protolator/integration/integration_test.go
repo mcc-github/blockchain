@@ -238,6 +238,8 @@ func TestStaticMarshal(t *testing.T) {
 	
 	
 	
+	
+	
 
 	blockBin, err := ioutil.ReadFile("testdata/block.pb")
 	require.NoError(t, err)

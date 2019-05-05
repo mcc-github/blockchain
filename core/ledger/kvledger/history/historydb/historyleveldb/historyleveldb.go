@@ -14,7 +14,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	protoutil "github.com/mcc-github/blockchain/protoutil"
@@ -34,17 +33,23 @@ type HistoryDBProvider struct {
 func NewHistoryDBProvider(dbPath string) *HistoryDBProvider {
 	logger.Debugf("constructing HistoryDBProvider dbPath=%s", dbPath)
 	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
-	return &HistoryDBProvider{dbProvider}
+	return &HistoryDBProvider{
+		dbProvider: dbProvider,
+	}
 }
 
 
-func (provider *HistoryDBProvider) GetDBHandle(dbName string) (historydb.HistoryDB, error) {
-	return newHistoryDB(provider.dbProvider.GetDBHandle(dbName), dbName), nil
+func (p *HistoryDBProvider) GetDBHandle(dbName string) (historydb.HistoryDB, error) {
+	return newHistoryDB(
+			p.dbProvider.GetDBHandle(dbName),
+			dbName,
+		),
+		nil
 }
 
 
-func (provider *HistoryDBProvider) Close() {
-	provider.dbProvider.Close()
+func (p *HistoryDBProvider) Close() {
+	p.dbProvider.Close()
 }
 
 
@@ -55,22 +60,14 @@ type historyDB struct {
 
 
 func newHistoryDB(db *leveldbhelper.DBHandle, dbName string) *historyDB {
-	return &historyDB{db, dbName}
+	return &historyDB{
+		db:     db,
+		dbName: dbName,
+	}
 }
 
 
-func (historyDB *historyDB) Open() error {
-	
-	return nil
-}
-
-
-func (historyDB *historyDB) Close() {
-	
-}
-
-
-func (historyDB *historyDB) Commit(block *common.Block) error {
+func (h *historyDB) Commit(block *common.Block) error {
 
 	blockNo := block.Header.Number
 	
@@ -79,7 +76,7 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 	dbBatch := leveldbhelper.NewUpdateBatch()
 
 	logger.Debugf("Channel [%s]: Updating history database for blockNo [%v] with [%d] transactions",
-		historyDB.dbName, blockNo, len(block.Data.Data))
+		h.dbName, blockNo, len(block.Data.Data))
 
 	
 	txsFilter := util.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
@@ -90,7 +87,7 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 		
 		if txsFilter.IsInvalid(int(tranNo)) {
 			logger.Debugf("Channel [%s]: Skipping history write for invalid transaction number %d",
-				historyDB.dbName, tranNo)
+				h.dbName, tranNo)
 			tranNo++
 			continue
 		}
@@ -154,22 +151,22 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 
 	
 	
-	if err := historyDB.db.WriteBatch(dbBatch, true); err != nil {
+	if err := h.db.WriteBatch(dbBatch, true); err != nil {
 		return err
 	}
 
-	logger.Debugf("Channel [%s]: Updates committed to history database for blockNo [%v]", historyDB.dbName, blockNo)
+	logger.Debugf("Channel [%s]: Updates committed to history database for blockNo [%v]", h.dbName, blockNo)
 	return nil
 }
 
 
-func (historyDB *historyDB) NewHistoryQueryExecutor(blockStore blkstorage.BlockStore) (ledger.HistoryQueryExecutor, error) {
-	return &LevelHistoryDBQueryExecutor{historyDB, blockStore}, nil
+func (h *historyDB) NewHistoryQueryExecutor(blockStore blkstorage.BlockStore) (ledger.HistoryQueryExecutor, error) {
+	return &LevelHistoryDBQueryExecutor{h, blockStore}, nil
 }
 
 
-func (historyDB *historyDB) GetLastSavepoint() (*version.Height, error) {
-	versionBytes, err := historyDB.db.Get(savePointKey)
+func (h *historyDB) GetLastSavepoint() (*version.Height, error) {
+	versionBytes, err := h.db.Get(savePointKey)
 	if err != nil || versionBytes == nil {
 		return nil, err
 	}
@@ -178,11 +175,8 @@ func (historyDB *historyDB) GetLastSavepoint() (*version.Height, error) {
 }
 
 
-func (historyDB *historyDB) ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error) {
-	if !ledgerconfig.IsHistoryDBEnabled() {
-		return false, 0, nil
-	}
-	savepoint, err := historyDB.GetLastSavepoint()
+func (h *historyDB) ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error) {
+	savepoint, err := h.GetLastSavepoint()
 	if err != nil {
 		return false, 0, err
 	}
@@ -193,7 +187,7 @@ func (historyDB *historyDB) ShouldRecover(lastAvailableBlock uint64) (bool, uint
 }
 
 
-func (historyDB *historyDB) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
+func (h *historyDB) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
 	block := blockAndPvtdata.Block
 
 	
@@ -203,7 +197,7 @@ func (historyDB *historyDB) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtD
 		logger.Debugf("Recommitting block [%d] to history database", block.Header.Number)
 	}
 
-	if err := historyDB.Commit(block); err != nil {
+	if err := h.Commit(block); err != nil {
 		return err
 	}
 	return nil

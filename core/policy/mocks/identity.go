@@ -4,6 +4,7 @@ package mocks
 
 import mock "github.com/stretchr/testify/mock"
 import msp "github.com/mcc-github/blockchain/msp"
+
 import protosmsp "github.com/mcc-github/blockchain/protos/msp"
 import time "time"
 

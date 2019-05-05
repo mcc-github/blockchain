@@ -1,10 +1,10 @@
 
+
 package mocks
 
 import api "github.com/mcc-github/blockchain/gossip/api"
 import common "github.com/mcc-github/blockchain/gossip/common"
-
-import gossipdiscovery "github.com/mcc-github/blockchain/gossip/discovery"
+import discovery "github.com/mcc-github/blockchain/gossip/discovery"
 import mock "github.com/stretchr/testify/mock"
 
 
@@ -43,15 +43,15 @@ func (_m *GossipSupport) IdentityInfo() api.PeerIdentitySet {
 }
 
 
-func (_m *GossipSupport) Peers() gossipdiscovery.Members {
+func (_m *GossipSupport) Peers() discovery.Members {
 	ret := _m.Called()
 
-	var r0 gossipdiscovery.Members
-	if rf, ok := ret.Get(0).(func() gossipdiscovery.Members); ok {
+	var r0 discovery.Members
+	if rf, ok := ret.Get(0).(func() discovery.Members); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(gossipdiscovery.Members)
+			r0 = ret.Get(0).(discovery.Members)
 		}
 	}
 
@@ -59,15 +59,15 @@ func (_m *GossipSupport) Peers() gossipdiscovery.Members {
 }
 
 
-func (_m *GossipSupport) PeersOfChannel(_a0 common.ChainID) gossipdiscovery.Members {
+func (_m *GossipSupport) PeersOfChannel(_a0 common.ChainID) discovery.Members {
 	ret := _m.Called(_a0)
 
-	var r0 gossipdiscovery.Members
-	if rf, ok := ret.Get(0).(func(common.ChainID) gossipdiscovery.Members); ok {
+	var r0 discovery.Members
+	if rf, ok := ret.Get(0).(func(common.ChainID) discovery.Members); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(gossipdiscovery.Members)
+			r0 = ret.Get(0).(discovery.Members)
 		}
 	}
 

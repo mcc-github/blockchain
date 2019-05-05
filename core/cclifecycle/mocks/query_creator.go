@@ -1,7 +1,8 @@
 
+
 package mocks
 
-import cc "github.com/mcc-github/blockchain/core/cclifecycle"
+import cclifecycle "github.com/mcc-github/blockchain/core/cclifecycle"
 import mock "github.com/stretchr/testify/mock"
 
 
@@ -10,15 +11,15 @@ type QueryCreator struct {
 }
 
 
-func (_m *QueryCreator) NewQuery() (cc.Query, error) {
+func (_m *QueryCreator) NewQuery() (cclifecycle.Query, error) {
 	ret := _m.Called()
 
-	var r0 cc.Query
-	if rf, ok := ret.Get(0).(func() cc.Query); ok {
+	var r0 cclifecycle.Query
+	if rf, ok := ret.Get(0).(func() cclifecycle.Query); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(cc.Query)
+			r0 = ret.Get(0).(cclifecycle.Query)
 		}
 	}
 

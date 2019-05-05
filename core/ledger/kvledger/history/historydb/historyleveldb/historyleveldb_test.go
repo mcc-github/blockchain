@@ -20,7 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	"github.com/mcc-github/blockchain/protos/peer"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -234,18 +233,6 @@ func TestHistoryForInvalidTran(t *testing.T) {
 	
 	kmod, _ := itr.Next()
 	assert.Nil(t, kmod)
-}
-
-
-func TestHistoryDisabled(t *testing.T) {
-	env := newTestHistoryEnv(t)
-	defer env.cleanup()
-	viper.Set("ledger.history.enableHistoryDatabase", "false")
-	
-	qhistory, err := env.testHistoryDB.NewHistoryQueryExecutor(nil)
-	assert.NoError(t, err, "Error upon NewHistoryQueryExecutor")
-	_, err2 := qhistory.GetHistoryForKey("ns1", "key7")
-	assert.Error(t, err2, "Error should have been returned for GetHistoryForKey() when history disabled")
 }
 
 

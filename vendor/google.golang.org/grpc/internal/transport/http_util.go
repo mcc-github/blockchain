@@ -62,7 +62,8 @@ var (
 		codes.ResourceExhausted: http2.ErrCodeEnhanceYourCalm,
 		codes.PermissionDenied:  http2.ErrCodeInadequateSecurity,
 	}
-	httpStatusConvTab = map[int]codes.Code{
+	
+	HTTPStatusConvTab = map[int]codes.Code{
 		
 		http.StatusBadRequest: codes.Internal,
 		
@@ -82,9 +83,7 @@ var (
 	}
 )
 
-
-
-type decodeState struct {
+type parsedHeaderData struct {
 	encoding string
 	
 	
@@ -104,8 +103,30 @@ type decodeState struct {
 	statsTags      []byte
 	statsTrace     []byte
 	contentSubtype string
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	isGRPC         bool
+	grpcErr        error
+	httpErr        error
+	contentTypeErr string
+}
+
+
+type decodeState struct {
 	
 	serverSide bool
+
+	
+	
+	data parsedHeaderData
 }
 
 
@@ -186,11 +207,11 @@ func contentType(contentSubtype string) string {
 }
 
 func (d *decodeState) status() *status.Status {
-	if d.statusGen == nil {
+	if d.data.statusGen == nil {
 		
-		d.statusGen = status.New(codes.Code(int32(*(d.rawStatusCode))), d.rawStatusMsg)
+		d.data.statusGen = status.New(codes.Code(int32(*(d.data.rawStatusCode))), d.data.rawStatusMsg)
 	}
-	return d.statusGen
+	return d.data.statusGen
 }
 
 const binHdrSuffix = "-bin"
@@ -228,113 +249,146 @@ func (d *decodeState) decodeHeader(frame *http2.MetaHeadersFrame) error {
 	if frame.Truncated {
 		return status.Error(codes.Internal, "peer header list size exceeded limit")
 	}
+
 	for _, hf := range frame.Fields {
-		if err := d.processHeaderField(hf); err != nil {
-			return err
+		d.processHeaderField(hf)
+	}
+
+	if d.data.isGRPC {
+		if d.data.grpcErr != nil {
+			return d.data.grpcErr
 		}
-	}
-
-	if d.serverSide {
+		if d.serverSide {
+			return nil
+		}
+		if d.data.rawStatusCode == nil && d.data.statusGen == nil {
+			
+			
+			
+			
+			
+			
+			code := int(codes.Unknown)
+			d.data.rawStatusCode = &code
+		}
 		return nil
 	}
 
 	
-	if d.rawStatusCode != nil || d.statusGen != nil {
-		return nil
+	if d.data.httpErr != nil {
+		return d.data.httpErr
 	}
 
-	
-	
-	if d.httpStatus == nil {
-		return status.Error(codes.Internal, "malformed header: doesn't contain status(gRPC or HTTP)")
-	}
+	var (
+		code = codes.Internal 
+		ok   bool
+	)
 
-	if *(d.httpStatus) != http.StatusOK {
-		code, ok := httpStatusConvTab[*(d.httpStatus)]
+	if d.data.httpStatus != nil {
+		code, ok = HTTPStatusConvTab[*(d.data.httpStatus)]
 		if !ok {
 			code = codes.Unknown
 		}
-		return status.Error(code, http.StatusText(*(d.httpStatus)))
 	}
 
-	
-	
-	
-	
-	
-	
-	code := int(codes.Unknown)
-	d.rawStatusCode = &code
-	return nil
+	return status.Error(code, d.constructHTTPErrMsg())
+}
+
+
+
+func (d *decodeState) constructHTTPErrMsg() string {
+	var errMsgs []string
+
+	if d.data.httpStatus == nil {
+		errMsgs = append(errMsgs, "malformed header: missing HTTP status")
+	} else {
+		errMsgs = append(errMsgs, fmt.Sprintf("%s: HTTP status code %d", http.StatusText(*(d.data.httpStatus)), *d.data.httpStatus))
+	}
+
+	if d.data.contentTypeErr == "" {
+		errMsgs = append(errMsgs, "transport: missing content-type field")
+	} else {
+		errMsgs = append(errMsgs, d.data.contentTypeErr)
+	}
+
+	return strings.Join(errMsgs, "; ")
 }
 
 func (d *decodeState) addMetadata(k, v string) {
-	if d.mdata == nil {
-		d.mdata = make(map[string][]string)
+	if d.data.mdata == nil {
+		d.data.mdata = make(map[string][]string)
 	}
-	d.mdata[k] = append(d.mdata[k], v)
+	d.data.mdata[k] = append(d.data.mdata[k], v)
 }
 
-func (d *decodeState) processHeaderField(f hpack.HeaderField) error {
+func (d *decodeState) processHeaderField(f hpack.HeaderField) {
 	switch f.Name {
 	case "content-type":
 		contentSubtype, validContentType := contentSubtype(f.Value)
 		if !validContentType {
-			return status.Errorf(codes.Internal, "transport: received the unexpected content-type %q", f.Value)
+			d.data.contentTypeErr = fmt.Sprintf("transport: received the unexpected content-type %q", f.Value)
+			return
 		}
-		d.contentSubtype = contentSubtype
+		d.data.contentSubtype = contentSubtype
 		
 		
 		
 		
 		d.addMetadata(f.Name, f.Value)
+		d.data.isGRPC = true
 	case "grpc-encoding":
-		d.encoding = f.Value
+		d.data.encoding = f.Value
 	case "grpc-status":
 		code, err := strconv.Atoi(f.Value)
 		if err != nil {
-			return status.Errorf(codes.Internal, "transport: malformed grpc-status: %v", err)
+			d.data.grpcErr = status.Errorf(codes.Internal, "transport: malformed grpc-status: %v", err)
+			return
 		}
-		d.rawStatusCode = &code
+		d.data.rawStatusCode = &code
 	case "grpc-message":
-		d.rawStatusMsg = decodeGrpcMessage(f.Value)
+		d.data.rawStatusMsg = decodeGrpcMessage(f.Value)
 	case "grpc-status-details-bin":
 		v, err := decodeBinHeader(f.Value)
 		if err != nil {
-			return status.Errorf(codes.Internal, "transport: malformed grpc-status-details-bin: %v", err)
+			d.data.grpcErr = status.Errorf(codes.Internal, "transport: malformed grpc-status-details-bin: %v", err)
+			return
 		}
 		s := &spb.Status{}
 		if err := proto.Unmarshal(v, s); err != nil {
-			return status.Errorf(codes.Internal, "transport: malformed grpc-status-details-bin: %v", err)
+			d.data.grpcErr = status.Errorf(codes.Internal, "transport: malformed grpc-status-details-bin: %v", err)
+			return
 		}
-		d.statusGen = status.FromProto(s)
+		d.data.statusGen = status.FromProto(s)
 	case "grpc-timeout":
-		d.timeoutSet = true
+		d.data.timeoutSet = true
 		var err error
-		if d.timeout, err = decodeTimeout(f.Value); err != nil {
-			return status.Errorf(codes.Internal, "transport: malformed time-out: %v", err)
+		if d.data.timeout, err = decodeTimeout(f.Value); err != nil {
+			d.data.grpcErr = status.Errorf(codes.Internal, "transport: malformed time-out: %v", err)
 		}
 	case ":path":
-		d.method = f.Value
+		d.data.method = f.Value
 	case ":status":
 		code, err := strconv.Atoi(f.Value)
 		if err != nil {
-			return status.Errorf(codes.Internal, "transport: malformed http-status: %v", err)
+			d.data.httpErr = status.Errorf(codes.Internal, "transport: malformed http-status: %v", err)
+			return
 		}
-		d.httpStatus = &code
+		d.data.httpStatus = &code
 	case "grpc-tags-bin":
 		v, err := decodeBinHeader(f.Value)
 		if err != nil {
-			return status.Errorf(codes.Internal, "transport: malformed grpc-tags-bin: %v", err)
+			d.data.grpcErr = status.Errorf(codes.Internal, "transport: malformed grpc-tags-bin: %v", err)
+			return
 		}
-		d.statsTags = v
+		d.data.statsTags = v
 		d.addMetadata(f.Name, string(v))
 	case "grpc-trace-bin":
 		v, err := decodeBinHeader(f.Value)
 		if err != nil {
-			return status.Errorf(codes.Internal, "transport: malformed grpc-trace-bin: %v", err)
+			d.data.grpcErr = status.Errorf(codes.Internal, "transport: malformed grpc-trace-bin: %v", err)
+			return
 		}
-		d.statsTrace = v
+		d.data.statsTrace = v
 		d.addMetadata(f.Name, string(v))
 	default:
 		if isReservedHeader(f.Name) && !isWhitelistedHeader(f.Name) {
@@ -343,11 +397,10 @@ func (d *decodeState) processHeaderField(f hpack.HeaderField) error {
 		v, err := decodeMetadataHeader(f.Name, f.Value)
 		if err != nil {
 			errorf("Failed to decode metadata header (%q, %q): %v", f.Name, f.Value, err)
-			return nil
+			return
 		}
 		d.addMetadata(f.Name, v)
 	}
-	return nil
 }
 
 type timeoutUnit uint8

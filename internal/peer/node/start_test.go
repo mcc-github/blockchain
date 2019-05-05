@@ -10,11 +10,11 @@ import (
 	"bytes"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/viperutil"
 	"github.com/mcc-github/blockchain/core/handlers/library"
-	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/testutil"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	. "github.com/onsi/gomega"
@@ -97,85 +97,76 @@ func TestHandlerMap(t *testing.T) {
 }
 
 func TestComputeChaincodeEndpoint(t *testing.T) {
-	
-	coreConfig := &peer.Config{}
-	
-	
-	peerAddress0 := "0.0.0.0"
-	ccEndpoint, err := computeChaincodeEndpoint(coreConfig, peerAddress0)
-	assert.Error(t, err)
-	assert.Equal(t, "", ccEndpoint)
-	
-	
-	peerAddress := "127.0.0.1"
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerAddress)
-	assert.NoError(t, err)
-	assert.Equal(t, peerAddress+":7052", ccEndpoint)
+	var tests = []struct {
+		peerAddress            string
+		chaincodeAddress       string
+		chaincodeListenAddress string
+		expectedError          string
+		expectedEndpoint       string
+	}{
+		{
+			peerAddress:   "0.0.0.0",
+			expectedError: "invalid endpoint for chaincode to connect",
+		},
+		{
+			peerAddress:      "127.0.0.1",
+			expectedEndpoint: "127.0.0.1:7052",
+		},
+		{
+			peerAddress:            "0.0.0.0",
+			chaincodeListenAddress: "0.0.0.0:8052",
+			expectedError:          "invalid endpoint for chaincode to connect",
+		},
+		{
+			peerAddress:            "127.0.0.1",
+			chaincodeListenAddress: "0.0.0.0:8052",
+			expectedEndpoint:       "127.0.0.1:8052",
+		},
+		{
+			peerAddress:            "127.0.0.1",
+			chaincodeListenAddress: "127.0.0.1:8052",
+			expectedEndpoint:       "127.0.0.1:8052",
+		},
+		{
+			peerAddress:            "127.0.0.1",
+			chaincodeListenAddress: "abc",
+			expectedError:          "address abc: missing port in address",
+		},
+		{
+			peerAddress:      "127.0.0.1",
+			chaincodeAddress: "0.0.0.0:9052",
+			expectedError:    "invalid endpoint for chaincode to connect",
+		},
+		{
+			peerAddress:      "127.0.0.1",
+			chaincodeAddress: "127.0.0.2:9052",
+			expectedEndpoint: "127.0.0.2:9052",
+		},
+		{
+			peerAddress:            "127.0.0.1",
+			chaincodeAddress:       "bcd",
+			chaincodeListenAddress: "ignored",
+			expectedError:          "address bcd: missing port in address",
+		},
+		{
+			peerAddress:            "127.0.0.1",
+			chaincodeAddress:       "127.0.0.2:9052",
+			chaincodeListenAddress: "ignored",
+			expectedEndpoint:       "127.0.0.2:9052",
+		},
+	}
 
-	
-	
-	chaincodeListenPort := "8052"
-	settingChaincodeListenAddress0 := "0.0.0.0:" + chaincodeListenPort
-	coreConfig.ChaincodeListenAddr = settingChaincodeListenAddress0
-	coreConfig.ChaincodeAddr = ""
-	
-	
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerAddress0)
-	assert.Error(t, err)
-	assert.Equal(t, "", ccEndpoint)
-	
-	
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerAddress)
-	assert.NoError(t, err)
-	assert.Equal(t, peerAddress+":"+chaincodeListenPort, ccEndpoint)
-	
-	
-	settingChaincodeListenAddress := "127.0.0.1:" + chaincodeListenPort
-	coreConfig.ChaincodeListenAddr = settingChaincodeListenAddress
-	coreConfig.ChaincodeAddr = ""
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerAddress)
-	assert.NoError(t, err)
-	assert.Equal(t, settingChaincodeListenAddress, ccEndpoint)
-	
-	
-	settingChaincodeListenAddressInvalid := "abc"
-	coreConfig.ChaincodeListenAddr = settingChaincodeListenAddressInvalid
-	coreConfig.ChaincodeAddr = ""
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerAddress)
-
-	assert.Error(t, err)
-	assert.Equal(t, "", ccEndpoint)
-
-	
-	
-	
-	chaincodeAddressPort := "9052"
-	settingChaincodeAddress0 := "0.0.0.0:" + chaincodeAddressPort
-	coreConfig.ChaincodeListenAddr = ""
-	coreConfig.ChaincodeAddr = settingChaincodeAddress0
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerAddress)
-
-	assert.Error(t, err)
-	assert.Equal(t, "", ccEndpoint)
-	
-	
-	settingChaincodeAddress := "127.0.0.2:" + chaincodeAddressPort
-	coreConfig.ChaincodeListenAddr = ""
-	coreConfig.ChaincodeAddr = settingChaincodeAddress
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerAddress)
-	assert.NoError(t, err)
-	assert.Equal(t, settingChaincodeAddress, ccEndpoint)
-	
-	
-	settingChaincodeAddressInvalid := "bcd"
-	coreConfig.ChaincodeListenAddr = ""
-	coreConfig.ChaincodeAddr = settingChaincodeAddressInvalid
-	ccEndpoint, err = computeChaincodeEndpoint(coreConfig, peerAddress)
-	assert.Error(t, err)
-	assert.Equal(t, "", ccEndpoint)
-
-	
-	
+	for i, tt := range tests {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			ccEndpoint, err := computeChaincodeEndpoint(tt.chaincodeAddress, tt.chaincodeListenAddress, tt.peerAddress)
+			if tt.expectedError != "" {
+				assert.EqualErrorf(t, err, tt.expectedError, "peerAddress: %q, ccListenAddr: %q, ccAddr: %q", tt.peerAddress, tt.chaincodeListenAddress, tt.chaincodeAddress)
+				return
+			}
+			assert.NoErrorf(t, err, "peerAddress: %q, ccListenAddr: %q, ccAddr: %q", tt.peerAddress, tt.chaincodeListenAddress, tt.chaincodeAddress)
+			assert.Equalf(t, tt.expectedEndpoint, ccEndpoint, "peerAddress: %q, ccListenAddr: %q, ccAddr: %q", tt.peerAddress, tt.chaincodeListenAddress, tt.chaincodeAddress)
+		})
+	}
 }
 
 func TestGetDockerHostConfig(t *testing.T) {

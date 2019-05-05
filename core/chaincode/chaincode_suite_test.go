@@ -12,6 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/chaincode"
+	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -66,6 +67,10 @@ type packageProvider interface {
 
 
 
+
+type chaincodeDefinition interface {
+	ccprovider.ChaincodeDefinition
+}
 
 
 type chaincodeStream interface {

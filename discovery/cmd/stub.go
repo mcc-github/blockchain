@@ -12,8 +12,8 @@ import (
 	"github.com/mcc-github/blockchain/cmd/common"
 	"github.com/mcc-github/blockchain/cmd/common/comm"
 	"github.com/mcc-github/blockchain/cmd/common/signer"
-	discovery "github.com/mcc-github/blockchain/discovery/client"
-	. "github.com/mcc-github/blockchain/protos/discovery"
+	discoveryclient "github.com/mcc-github/blockchain/discovery/client"
+	"github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
@@ -21,25 +21,37 @@ import (
 
 
 
+type LocalResponse interface {
+	discoveryclient.LocalResponse
+}
+
+
+
+
+type ChannelResponse interface {
+	discoveryclient.ChannelResponse
+}
+
+
 
 
 type ServiceResponse interface {
 	
-	ForChannel(string) discovery.ChannelResponse
+	ForChannel(string) discoveryclient.ChannelResponse
 
 	
-	ForLocal() discovery.LocalResponse
+	ForLocal() discoveryclient.LocalResponse
 
 	
-	Raw() *Response
+	Raw() *discovery.Response
 }
 
 type response struct {
-	raw *Response
-	discovery.Response
+	raw *discovery.Response
+	discoveryclient.Response
 }
 
-func (r *response) Raw() *Response {
+func (r *response) Raw() *discovery.Response {
 	return r.raw
 }
 
@@ -49,7 +61,7 @@ type ClientStub struct {
 }
 
 
-func (stub *ClientStub) Send(server string, conf common.Config, req *discovery.Request) (ServiceResponse, error) {
+func (stub *ClientStub) Send(server string, conf common.Config, req *discoveryclient.Request) (ServiceResponse, error) {
 	comm, err := comm.NewClient(conf.TLSConfig)
 	if err != nil {
 		return nil, err
@@ -61,9 +73,9 @@ func (stub *ClientStub) Send(server string, conf common.Config, req *discovery.R
 	timeout, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	disc := discovery.NewClient(comm.NewDialer(server), signer.Sign, 0)
+	disc := discoveryclient.NewClient(comm.NewDialer(server), signer.Sign, 0)
 
-	resp, err := disc.Send(timeout, req, &AuthInfo{
+	resp, err := disc.Send(timeout, req, &discovery.AuthInfo{
 		ClientIdentity:    signer.Creator,
 		ClientTlsCertHash: comm.TLSCertHash,
 	})
@@ -81,7 +93,7 @@ type RawStub struct {
 }
 
 
-func (stub *RawStub) Send(server string, conf common.Config, req *discovery.Request) (ServiceResponse, error) {
+func (stub *RawStub) Send(server string, conf common.Config, req *discoveryclient.Request) (ServiceResponse, error) {
 	comm, err := comm.NewClient(conf.TLSConfig)
 	if err != nil {
 		return nil, err
@@ -93,7 +105,7 @@ func (stub *RawStub) Send(server string, conf common.Config, req *discovery.Requ
 	timeout, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	req.Authentication = &AuthInfo{
+	req.Authentication = &discovery.AuthInfo{
 		ClientIdentity:    signer.Creator,
 		ClientTlsCertHash: comm.TLSCertHash,
 	}
@@ -108,7 +120,7 @@ func (stub *RawStub) Send(server string, conf common.Config, req *discovery.Requ
 	if err != nil {
 		return nil, err
 	}
-	resp, err := NewDiscoveryClient(cc).Discover(timeout, &SignedRequest{
+	resp, err := discovery.NewDiscoveryClient(cc).Discover(timeout, &discovery.SignedRequest{
 		Payload:   payload,
 		Signature: sig,
 	})

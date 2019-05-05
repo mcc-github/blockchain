@@ -3,6 +3,7 @@
 package mocks
 
 import common "github.com/mcc-github/blockchain/protos/common"
+
 import ledger "github.com/mcc-github/blockchain/core/ledger"
 import mock "github.com/stretchr/testify/mock"
 import peer "github.com/mcc-github/blockchain/protos/peer"

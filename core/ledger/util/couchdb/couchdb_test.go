@@ -20,7 +20,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
-	ledgertestutil "github.com/mcc-github/blockchain/core/ledger/testutil"
 	"github.com/mcc-github/blockchain/integration/runner"
 	"github.com/stretchr/testify/assert"
 )
@@ -73,9 +72,6 @@ func TestMain(m *testing.M) {
 }
 
 func testMain(m *testing.M) int {
-	
-	ledgertestutil.SetupCoreYAMLConfig()
-
 	
 	address, cleanup := couchDBSetup()
 	testAddress = address

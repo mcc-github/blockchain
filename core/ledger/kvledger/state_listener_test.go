@@ -21,20 +21,22 @@ import (
 func TestStateListener(t *testing.T) {
 	conf, cleanup := testConfig(t)
 	defer cleanup()
-	
-	_ = createTestEnv(t, conf.RootFSPath)
-	provider, _ := NewProvider()
 
 	
 	channelid := "testLedger"
 	namespace := "testchaincode"
 	mockListener := &mockStateListener{namespace: namespace}
-	provider.Initialize(&ledger.Initializer{
-		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
-		StateListeners:                []ledger.StateListener{mockListener},
-		MetricsProvider:               &disabled.Provider{},
-		Config:                        conf,
-	})
+	provider, err := NewProvider(
+		&ledger.Initializer{
+			DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+			StateListeners:                []ledger.StateListener{mockListener},
+			MetricsProvider:               &disabled.Provider{},
+			Config:                        conf,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Failed to create new Provider: %s", err)
+	}
 
 	bg, gb := testutil.NewBlockGenerator(t, channelid, false)
 	lgr, err := provider.Create(gb)
@@ -93,13 +95,17 @@ func TestStateListener(t *testing.T) {
 	}, mockListener.kvWrites)
 
 	provider.Close()
-	provider, _ = NewProvider()
-	provider.Initialize(&ledger.Initializer{
-		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
-		StateListeners:                []ledger.StateListener{mockListener},
-		MetricsProvider:               &disabled.Provider{},
-		Config:                        conf,
-	})
+	provider, err = NewProvider(
+		&ledger.Initializer{
+			DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+			StateListeners:                []ledger.StateListener{mockListener},
+			MetricsProvider:               &disabled.Provider{},
+			Config:                        conf,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Failed to create new Provider: %s", err)
+	}
 	defer provider.Close()
 	lgr, err = provider.Open(channelid)
 	assert.NoError(t, err)

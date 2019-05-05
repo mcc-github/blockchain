@@ -21,7 +21,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr"
-	"github.com/mcc-github/blockchain/core/ledger/ledgerconfig"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerstorage"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -137,7 +136,10 @@ func (l *kvLedger) syncStateAndHistoryDBWithBlockstore() error {
 		return nil
 	}
 	lastAvailableBlockNum := info.Height - 1
-	recoverables := []recoverable{l.txtmgmt, l.historyDB}
+	recoverables := []recoverable{l.txtmgmt}
+	if l.historyDB != nil {
+		recoverables = append(recoverables, l.historyDB)
+	}
 	recoverers := []*recoverer{}
 	for _, recoverable := range recoverables {
 		recoverFlag, firstBlockNum, err := recoverable.ShouldRecover(lastAvailableBlockNum)
@@ -299,7 +301,10 @@ func (l *kvLedger) NewQueryExecutor() (ledger.QueryExecutor, error) {
 
 
 func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error) {
-	return l.historyDB.NewHistoryQueryExecutor(l.blockStore)
+	if l.historyDB != nil {
+		return l.historyDB.NewHistoryQueryExecutor(l.blockStore)
+	}
+	return nil, nil
 }
 
 
@@ -334,7 +339,7 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 
 	
 	
-	if ledgerconfig.IsHistoryDBEnabled() {
+	if l.historyDB != nil {
 		logger.Debugf("[%s] Committing block [%d] transactions to history database", l.ledgerID, blockNo)
 		if err := l.historyDB.Commit(block); err != nil {
 			panic(errors.WithMessage(err, "Error during commit to history db"))

@@ -51,14 +51,16 @@ type baseBalancer struct {
 }
 
 func (b *baseBalancer) HandleResolvedAddrs(addrs []resolver.Address, err error) {
-	if err != nil {
-		grpclog.Infof("base.baseBalancer: HandleResolvedAddrs called with error %v", err)
-		return
-	}
-	grpclog.Infoln("base.baseBalancer: got new resolved addresses: ", addrs)
+	panic("not implemented")
+}
+
+func (b *baseBalancer) UpdateResolverState(s resolver.State) {
+	
+	
+	grpclog.Infoln("base.baseBalancer: got new resolver state: ", s)
 	
 	addrsSet := make(map[resolver.Address]struct{})
-	for _, a := range addrs {
+	for _, a := range s.Addresses {
 		addrsSet[a] = struct{}{}
 		if _, ok := b.subConns[a]; !ok {
 			
@@ -104,6 +106,11 @@ func (b *baseBalancer) regeneratePicker() {
 }
 
 func (b *baseBalancer) HandleSubConnStateChange(sc balancer.SubConn, s connectivity.State) {
+	panic("not implemented")
+}
+
+func (b *baseBalancer) UpdateSubConnState(sc balancer.SubConn, state balancer.SubConnState) {
+	s := state.ConnectivityState
 	grpclog.Infof("base.baseBalancer: handle SubConn state change: %p, %v", sc, s)
 	oldS, ok := b.scStates[sc]
 	if !ok {

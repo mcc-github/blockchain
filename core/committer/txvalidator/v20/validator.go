@@ -82,6 +82,19 @@ type Dispatcher interface {
 
 
 
+type QueryExecutor interface {
+	ledger.QueryExecutor
+}
+
+
+
+
+type ChannelPolicyManagerGetter interface {
+	policies.ChannelPolicyManagerGetter
+}
+
+
+
 
 
 

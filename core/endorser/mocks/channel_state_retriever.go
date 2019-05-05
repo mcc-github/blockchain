@@ -1,4 +1,5 @@
 
+
 package mocks
 
 import endorser "github.com/mcc-github/blockchain/core/endorser"

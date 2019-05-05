@@ -42,7 +42,7 @@ var _ = Describe("Persistence", func() {
 
 		It("writes a file", func() {
 			path := filepath.Join(testDir, "write")
-			err := filesystemIO.WriteFile(path, []byte("test"), 0600)
+			err := filesystemIO.WriteFile(testDir, "write", []byte("test"))
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = os.Stat(path)
@@ -105,6 +105,98 @@ var _ = Describe("Persistence", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(files)).To(Equal(1))
 		})
+
+		It("makes a directory (and any necessary parent directories)", func() {
+			path := filepath.Join(testDir, "make", "dir")
+			err := filesystemIO.MakeDir(path, 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = os.Stat(path)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("NewStore", func() {
+		var (
+			err     error
+			tempDir string
+			store   *persistence.Store
+		)
+
+		BeforeEach(func() {
+			tempDir, err = ioutil.TempDir("", "NewStore")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			os.RemoveAll(tempDir)
+		})
+
+		It("creates a persistence store with the specified path and creates the directory on the filesystem", func() {
+			store = persistence.NewStore(tempDir)
+			Expect(store.Path).To(Equal(tempDir))
+			_, err = os.Stat(tempDir)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("Initialize", func() {
+		var (
+			mockReadWriter *mock.IOReadWriter
+			store          *persistence.Store
+		)
+
+		BeforeEach(func() {
+			mockReadWriter = &mock.IOReadWriter{}
+			mockReadWriter.ExistsReturns(false, nil)
+			mockReadWriter.MakeDirReturns(nil)
+
+			store = &persistence.Store{
+				ReadWriter: mockReadWriter,
+			}
+		})
+
+		It("creates the directory for the persistence store", func() {
+			store.Initialize()
+			Expect(mockReadWriter.ExistsCallCount()).To(Equal(1))
+			Expect(mockReadWriter.MakeDirCallCount()).To(Equal(1))
+		})
+
+		Context("when the directory already exists", func() {
+			BeforeEach(func() {
+				mockReadWriter.ExistsReturns(true, nil)
+			})
+
+			It("returns without creating the directory", func() {
+				store.Initialize()
+				Expect(mockReadWriter.ExistsCallCount()).To(Equal(1))
+				Expect(mockReadWriter.MakeDirCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("when the existence of the directory cannot be determined", func() {
+			BeforeEach(func() {
+				mockReadWriter.ExistsReturns(false, errors.New("blurg"))
+			})
+
+			It("returns without creating the directory", func() {
+				Expect(store.Initialize).Should(Panic())
+				Expect(mockReadWriter.ExistsCallCount()).To(Equal(1))
+				Expect(mockReadWriter.MakeDirCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("when the directory cannot be created", func() {
+			BeforeEach(func() {
+				mockReadWriter.MakeDirReturns(errors.New("blarg"))
+			})
+
+			It("returns without creating the directory", func() {
+				Expect(store.Initialize).Should(Panic())
+				Expect(mockReadWriter.ExistsCallCount()).To(Equal(1))
+				Expect(mockReadWriter.MakeDirCallCount()).To(Equal(1))
+			})
+		})
 	})
 
 	Describe("Save", func() {
@@ -131,8 +223,9 @@ var _ = Describe("Persistence", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(packageID).To(Equal(p.PackageID("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d")))
 			Expect(mockReadWriter.WriteFileCallCount()).To(Equal(1))
-			pkgDataFile, pkgData, _ := mockReadWriter.WriteFileArgsForCall(0)
-			Expect(pkgDataFile).To(Equal("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d.bin"))
+			pkgDataFilePath, pkgDataFileName, pkgData := mockReadWriter.WriteFileArgsForCall(0)
+			Expect(pkgDataFilePath).To(Equal(""))
+			Expect(pkgDataFileName).To(Equal("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d.bin"))
 			Expect(pkgData).To(Equal([]byte("testpkg")))
 		})
 

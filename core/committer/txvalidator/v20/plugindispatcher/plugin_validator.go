@@ -12,12 +12,12 @@ import (
 
 	ledger2 "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/policies"
-	vp "github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
+	txvalidatorplugin "github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
-	p "github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
+	vc "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
+	vi "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
+	vp "github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
+	vs "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/policy"
 	"github.com/mcc-github/blockchain/msp"
@@ -28,6 +28,24 @@ import (
 
 
 
+
+type Mapper interface {
+	txvalidatorplugin.Mapper
+}
+
+
+
+
+type PluginFactory interface {
+	validation.PluginFactory
+}
+
+
+
+
+type Plugin interface {
+	validation.Plugin
+}
 
 
 
@@ -57,11 +75,11 @@ func (c Context) String() string {
 
 type PluginValidator struct {
 	sync.Mutex
-	pluginChannelMapping map[vp.Name]*pluginsByChannel
-	vp.Mapper
+	pluginChannelMapping map[txvalidatorplugin.Name]*pluginsByChannel
+	txvalidatorplugin.Mapper
 	QueryExecutorCreator
 	msp.IdentityDeserializer
-	capabilities Capabilities
+	capabilities vc.Capabilities
 	policies.ChannelPolicyManagerGetter
 	CollectionResources
 }
@@ -69,12 +87,29 @@ type PluginValidator struct {
 
 
 
+type Capabilities interface {
+	vc.Capabilities
+}
 
 
-func NewPluginValidator(pm vp.Mapper, qec QueryExecutorCreator, deserializer msp.IdentityDeserializer, capabilities Capabilities, cpmg policies.ChannelPolicyManagerGetter, cor CollectionResources) *PluginValidator {
+
+
+type IdentityDeserializer interface {
+	msp.IdentityDeserializer
+}
+
+
+
+
+type ChannelPolicyManagerGetter interface {
+	policies.ChannelPolicyManagerGetter
+}
+
+
+func NewPluginValidator(pm txvalidatorplugin.Mapper, qec QueryExecutorCreator, deserializer msp.IdentityDeserializer, capabilities vc.Capabilities, cpmg policies.ChannelPolicyManagerGetter, cor CollectionResources) *PluginValidator {
 	return &PluginValidator{
 		capabilities:               capabilities,
-		pluginChannelMapping:       make(map[vp.Name]*pluginsByChannel),
+		pluginChannelMapping:       make(map[txvalidatorplugin.Name]*pluginsByChannel),
 		Mapper:                     pm,
 		QueryExecutorCreator:       qec,
 		IdentityDeserializer:       deserializer,
@@ -90,7 +125,7 @@ func (pv *PluginValidator) ValidateWithPlugin(ctx *Context) error {
 			Reason: fmt.Sprintf("plugin with name %s couldn't be used: %v", ctx.PluginName, err),
 		}
 	}
-	err = plugin.Validate(ctx.Block, ctx.Namespace, ctx.Seq, 0, vp.SerializedPolicy(ctx.Policy))
+	err = plugin.Validate(ctx.Block, ctx.Namespace, ctx.Seq, 0, txvalidatorplugin.SerializedPolicy(ctx.Policy))
 	validityStatus := "valid"
 	if err != nil {
 		validityStatus = fmt.Sprintf("invalid: %v", err)
@@ -100,27 +135,27 @@ func (pv *PluginValidator) ValidateWithPlugin(ctx *Context) error {
 }
 
 func (pv *PluginValidator) getOrCreatePlugin(ctx *Context) (validation.Plugin, error) {
-	pluginFactory := pv.FactoryByName(vp.Name(ctx.PluginName))
+	pluginFactory := pv.FactoryByName(txvalidatorplugin.Name(ctx.PluginName))
 	if pluginFactory == nil {
 		return nil, errors.Errorf("plugin with name %s wasn't found", ctx.PluginName)
 	}
 
-	pluginsByChannel := pv.getOrCreatePluginChannelMapping(vp.Name(ctx.PluginName), pluginFactory)
+	pluginsByChannel := pv.getOrCreatePluginChannelMapping(txvalidatorplugin.Name(ctx.PluginName), pluginFactory)
 	return pluginsByChannel.createPluginIfAbsent(ctx.Channel)
 
 }
 
-func (pv *PluginValidator) getOrCreatePluginChannelMapping(plugin vp.Name, pf validation.PluginFactory) *pluginsByChannel {
+func (pv *PluginValidator) getOrCreatePluginChannelMapping(plugin txvalidatorplugin.Name, pf validation.PluginFactory) *pluginsByChannel {
 	pv.Lock()
 	defer pv.Unlock()
-	endorserChannelMapping, exists := pv.pluginChannelMapping[vp.Name(plugin)]
+	endorserChannelMapping, exists := pv.pluginChannelMapping[txvalidatorplugin.Name(plugin)]
 	if !exists {
 		endorserChannelMapping = &pluginsByChannel{
 			pluginFactory:    pf,
 			channels2Plugins: make(map[string]validation.Plugin),
 			pv:               pv,
 		}
-		pv.pluginChannelMapping[vp.Name(plugin)] = endorserChannelMapping
+		pv.pluginChannelMapping[txvalidatorplugin.Name(plugin)] = endorserChannelMapping
 	}
 	return endorserChannelMapping
 }
@@ -172,7 +207,7 @@ func (pbc *pluginsByChannel) initPlugin(plugin validation.Plugin, channel string
 
 type PolicyEvaluatorWrapper struct {
 	msp.IdentityDeserializer
-	p.PolicyEvaluator
+	vp.PolicyEvaluator
 }
 
 
@@ -181,7 +216,7 @@ func (id *PolicyEvaluatorWrapper) Evaluate(policyBytes []byte, signatureSet []*p
 }
 
 
-func (id *PolicyEvaluatorWrapper) DeserializeIdentity(serializedIdentity []byte) (Identity, error) {
+func (id *PolicyEvaluatorWrapper) DeserializeIdentity(serializedIdentity []byte) (vi.Identity, error) {
 	mspIdentity, err := id.IdentityDeserializer.DeserializeIdentity(serializedIdentity)
 	if err != nil {
 		return nil, err
@@ -193,9 +228,9 @@ type identity struct {
 	msp.Identity
 }
 
-func (i *identity) GetIdentityIdentifier() *IdentityIdentifier {
+func (i *identity) GetIdentityIdentifier() *vi.IdentityIdentifier {
 	identifier := i.Identity.GetIdentifier()
-	return &IdentityIdentifier{
+	return &vi.IdentityIdentifier{
 		Id:    identifier.Id,
 		Mspid: identifier.Mspid,
 	}
@@ -205,7 +240,7 @@ type StateFetcherImpl struct {
 	QueryExecutorCreator
 }
 
-func (sf *StateFetcherImpl) FetchState() (State, error) {
+func (sf *StateFetcherImpl) FetchState() (vs.State, error) {
 	qe, err := sf.NewQueryExecutor()
 	if err != nil {
 		return nil, err
@@ -217,7 +252,7 @@ type StateImpl struct {
 	ledger.QueryExecutor
 }
 
-func (s *StateImpl) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error) {
+func (s *StateImpl) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (vs.ResultsIterator, error) {
 	it, err := s.QueryExecutor.GetStateRangeScanIterator(namespace, startKey, endKey)
 	if err != nil {
 		return nil, err
@@ -229,6 +264,6 @@ type ResultsIteratorImpl struct {
 	ledger2.ResultsIterator
 }
 
-func (it *ResultsIteratorImpl) Next() (QueryResult, error) {
+func (it *ResultsIteratorImpl) Next() (vs.QueryResult, error) {
 	return it.ResultsIterator.Next()
 }

@@ -18,6 +18,44 @@ import (
 )
 
 
+
+
+type Policy interface {
+	policies.Policy
+}
+
+
+
+
+type ChannelPolicyManagerGetter interface {
+	policies.ChannelPolicyManagerGetter
+}
+
+
+
+
+type PolicyManager interface {
+	policies.Manager
+}
+
+
+
+
+type IdentityDeserializer interface {
+	msp.IdentityDeserializer
+}
+
+
+
+
+type Identity interface {
+	msp.Identity
+}
+
+
+
+
+
 type SignaturePolicyProvider interface {
 	
 	NewPolicy(signaturePolicy *common.SignaturePolicyEnvelope) (policies.Policy, error)
@@ -28,12 +66,6 @@ type ChannelPolicyReferenceProvider interface {
 	
 	NewPolicy(channelConfigPolicyReference string) (policies.Policy, error)
 }
-
-
-
-
-
-
 
 type ApplicationPolicyEvaluator struct {
 	signaturePolicyProvider        SignaturePolicyProvider

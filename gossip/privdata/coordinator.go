@@ -14,7 +14,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	vsccErrors "github.com/mcc-github/blockchain/common/errors"
-	util2 "github.com/mcc-github/blockchain/common/util"
+	commonutil "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/committer"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
 	"github.com/mcc-github/blockchain/core/common/privdata"
@@ -28,7 +28,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/peer"
-	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
+	protostransientstore "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
@@ -40,11 +40,22 @@ var logger = util.GetLogger(util.PrivateDataLogger, "")
 
 
 
+type CollectionStore interface {
+	privdata.CollectionStore
+}
+
+
+
+
+type Committer interface {
+	committer.Committer
+}
+
 
 type TransientStore interface {
 	
 	
-	PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *transientstore2.TxPvtReadWriteSetWithConfigInfo) error
+	PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *protostransientstore.TxPvtReadWriteSetWithConfigInfo) error
 
 	
 	Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error
@@ -74,7 +85,7 @@ type Coordinator interface {
 	StoreBlock(block *common.Block, data util.PvtDataCollections) error
 
 	
-	StorePvtData(txid string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
+	StorePvtData(txid string, privData *protostransientstore.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
 
 	
 	
@@ -138,7 +149,7 @@ func NewCoordinator(support Support, selfSignedData protoutil.SignedData, metric
 }
 
 
-func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blkHeight uint64) error {
+func (c *coordinator) StorePvtData(txID string, privData *protostransientstore.TxPvtReadWriteSetWithConfigInfo, blkHeight uint64) error {
 	return c.TransientStore.PersistWithConfig(txID, blkHeight, privData)
 }
 
@@ -291,7 +302,7 @@ func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][
 	for _, element := range fetchedData.AvailableElements {
 		dig := element.Digest
 		for _, rws := range element.Payload {
-			hash := hex.EncodeToString(util2.ComputeSHA256(rws))
+			hash := hex.EncodeToString(commonutil.ComputeSHA256(rws))
 			key := rwSetKey{
 				txID:       dig.TxId,
 				namespace:  dig.Namespace,
@@ -366,7 +377,7 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 					seqInBlock: txAndSeq.seqInBlock,
 					collection: col.CollectionName,
 					namespace:  ns.Namespace,
-					hash:       hex.EncodeToString(util2.ComputeSHA256(col.Rwset)),
+					hash:       hex.EncodeToString(commonutil.ComputeSHA256(col.Rwset)),
 				}
 				
 				ownedRWsets[key] = col.Rwset
@@ -400,7 +411,7 @@ func computeOwnedRWsets(block *common.Block, blockPvtData util.PvtDataCollection
 		}
 		for _, ns := range txPvtData.WriteSet.NsPvtRwset {
 			for _, col := range ns.CollectionPvtRwset {
-				computedHash := hex.EncodeToString(util2.ComputeSHA256(col.Rwset))
+				computedHash := hex.EncodeToString(commonutil.ComputeSHA256(col.Rwset))
 				ownedRWsets[rwSetKey{
 					txID:       chdr.TxId,
 					seqInBlock: txPvtData.SeqInBlock,

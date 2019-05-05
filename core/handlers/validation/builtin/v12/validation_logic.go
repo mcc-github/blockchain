@@ -21,10 +21,10 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
-	. "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
+	vc "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
+	vi "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
+	vp "github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
+	vs "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/internal/car"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/scc/lscc"
@@ -47,11 +47,34 @@ var validCollectionNameRegex = regexp.MustCompile(ccmetadata.AllowedCharsCollect
 
 
 
+type Capabilities interface {
+	vc.Capabilities
+}
 
 
 
 
-func New(c Capabilities, s StateFetcher, d IdentityDeserializer, pe PolicyEvaluator) *Validator {
+type StateFetcher interface {
+	vs.StateFetcher
+}
+
+
+
+
+type IdentityDeserializer interface {
+	vi.IdentityDeserializer
+}
+
+
+
+
+type PolicyEvaluator interface {
+	vp.PolicyEvaluator
+}
+
+
+
+func New(c vc.Capabilities, s vs.StateFetcher, d vi.IdentityDeserializer, pe vp.PolicyEvaluator) *Validator {
 	return &Validator{
 		capabilities:    c,
 		stateFetcher:    s,
@@ -65,10 +88,10 @@ func New(c Capabilities, s StateFetcher, d IdentityDeserializer, pe PolicyEvalua
 
 
 type Validator struct {
-	deserializer    IdentityDeserializer
-	capabilities    Capabilities
-	stateFetcher    StateFetcher
-	policyEvaluator PolicyEvaluator
+	deserializer    vi.IdentityDeserializer
+	capabilities    vc.Capabilities
+	stateFetcher    vs.StateFetcher
+	policyEvaluator vp.PolicyEvaluator
 }
 
 
@@ -335,7 +358,7 @@ func (vscc *Validator) validateRWSetAndCollection(
 	cdRWSet *ccprovider.ChaincodeData,
 	lsccArgs [][]byte,
 	lsccFunc string,
-	ac Capabilities,
+	ac vc.Capabilities,
 	channelName string,
 ) commonerrors.TxValidationError {
 	
@@ -455,7 +478,7 @@ func (vscc *Validator) ValidateLSCCInvocation(
 	env *common.Envelope,
 	cap *pb.ChaincodeActionPayload,
 	payl *common.Payload,
-	ac Capabilities,
+	ac vc.Capabilities,
 ) commonerrors.TxValidationError {
 	cpp, err := protoutil.GetChaincodeProposalPayload(cap.ChaincodeProposalPayload)
 	if err != nil {
@@ -776,7 +799,7 @@ func (vscc *Validator) deduplicateIdentity(cap *pb.ChaincodeActionPayload) ([]*p
 }
 
 type state struct {
-	State
+	vs.State
 }
 
 

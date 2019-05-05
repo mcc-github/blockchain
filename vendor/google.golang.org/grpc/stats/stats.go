@@ -11,6 +11,8 @@ import (
 	"context"
 	"net"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 )
 
 
@@ -156,6 +158,9 @@ type End struct {
 	BeginTime time.Time
 	
 	EndTime time.Time
+	
+	
+	Trailer metadata.MD
 	
 	
 	

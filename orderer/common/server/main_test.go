@@ -15,6 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain/common/capabilities"
+	"github.com/mcc-github/blockchain/common/configtx"
+	"github.com/mcc-github/blockchain/common/ledger/blockledger"
+	"github.com/mcc-github/blockchain/protoutil"
+	"github.com/stretchr/testify/require"
+
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
@@ -34,6 +40,7 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/multichannel"
+	multichannel_mocks "github.com/mcc-github/blockchain/orderer/common/multichannel/mocks"
 	server_mocks "github.com/mcc-github/blockchain/orderer/common/server/mocks"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -234,6 +241,104 @@ func TestInitializeBootstrapChannel(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExtractSysChanLastConfig(t *testing.T) {
+	rlf := ramledger.New(10)
+	conf := configtxgentest.Load(genesisconfig.SampleInsecureSoloProfile)
+	genesisBlock := encoder.New(conf).GenesisBlock()
+
+	lastConf := extractSysChanLastConfig(rlf, genesisBlock)
+	assert.Nil(t, lastConf)
+
+	rl, err := rlf.GetOrCreate(genesisconfig.TestChainID)
+	require.NoError(t, err)
+
+	err = rl.Append(genesisBlock)
+	require.NoError(t, err)
+
+	lastConf = extractSysChanLastConfig(rlf, genesisBlock)
+	assert.NotNil(t, lastConf)
+	assert.Equal(t, uint64(0), lastConf.Header.Number)
+
+	assert.Panics(t, func() {
+		_ = extractSysChanLastConfig(rlf, nil)
+	})
+
+	nextBlock := blockledger.CreateNextBlock(rl, []*common.Envelope{makeConfigTx(t, genesisconfig.TestChainID, 1)})
+	nextBlock.Metadata.Metadata[common.BlockMetadataIndex_LAST_CONFIG] = protoutil.MarshalOrPanic(&common.Metadata{
+		Value: protoutil.MarshalOrPanic(&common.LastConfig{Index: rl.Height()}),
+	})
+	err = rl.Append(nextBlock)
+	require.NoError(t, err)
+
+	lastConf = extractSysChanLastConfig(rlf, genesisBlock)
+	assert.NotNil(t, lastConf)
+	assert.Equal(t, uint64(1), lastConf.Header.Number)
+}
+
+func TestSelectClusterBootBlock(t *testing.T) {
+	bootstrapBlock := &common.Block{Header: &common.BlockHeader{Number: 100}}
+	lastConfBlock := &common.Block{Header: &common.BlockHeader{Number: 100}}
+
+	clusterBoot := selectClusterBootBlock(bootstrapBlock, nil)
+	assert.NotNil(t, clusterBoot)
+	assert.Equal(t, bootstrapBlock.Header.Number, clusterBoot.Header.Number)
+	assert.Equal(t, bootstrapBlock, clusterBoot)
+
+	clusterBoot = selectClusterBootBlock(bootstrapBlock, lastConfBlock)
+	assert.NotNil(t, clusterBoot)
+	assert.Equal(t, bootstrapBlock.Header.Number, clusterBoot.Header.Number)
+	assert.Equal(t, bootstrapBlock, clusterBoot)
+
+	lastConfBlock.Header.Number = 200
+	clusterBoot = selectClusterBootBlock(bootstrapBlock, lastConfBlock)
+	assert.NotNil(t, clusterBoot)
+	assert.Equal(t, lastConfBlock.Header.Number, clusterBoot.Header.Number)
+	assert.Equal(t, lastConfBlock, clusterBoot)
+
+	bootstrapBlock.Header.Number = 300
+	clusterBoot = selectClusterBootBlock(bootstrapBlock, lastConfBlock)
+	assert.NotNil(t, clusterBoot)
+	assert.Equal(t, bootstrapBlock.Header.Number, clusterBoot.Header.Number)
+	assert.Equal(t, bootstrapBlock, clusterBoot)
+}
+
+func mockCrypto() *multichannel_mocks.SignerSerializer {
+	return &multichannel_mocks.SignerSerializer{}
+}
+
+func makeConfigTx(t *testing.T, chainID string, i int) *common.Envelope {
+	gConf := configtxgentest.Load(genesisconfig.SampleInsecureSoloProfile)
+	gConf.Orderer.Capabilities = map[string]bool{
+		capabilities.OrdererV2_0: true,
+	}
+	gConf.Orderer.OrdererType = "kafka"
+	channelGroup, err := encoder.NewChannelGroup(gConf)
+	if err != nil {
+		return nil
+	}
+
+	configUpdateEnv := &common.ConfigUpdateEnvelope{
+		ConfigUpdate: protoutil.MarshalOrPanic(&common.ConfigUpdate{
+			WriteSet: channelGroup,
+		}),
+	}
+
+	configUpdateTx, err := protoutil.CreateSignedEnvelope(common.HeaderType_CONFIG_UPDATE, chainID, mockCrypto(), configUpdateEnv, 0, 0)
+	if err != nil {
+		panic(err)
+	}
+
+	configTx, err := protoutil.CreateSignedEnvelope(common.HeaderType_CONFIG, chainID, mockCrypto(), &common.ConfigEnvelope{
+		Config: &common.Config{
+			Sequence:     1,
+			ChannelGroup: configtx.UnmarshalConfigUpdateOrPanic(configUpdateEnv.ConfigUpdate).WriteSet},
+		LastUpdate: configUpdateTx},
+		0, 0)
+	require.NoError(t, err)
+
+	return configTx
 }
 
 func TestInitializeLocalMsp(t *testing.T) {

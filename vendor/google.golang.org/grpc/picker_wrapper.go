@@ -149,6 +149,11 @@ func (bp *pickerWrapper) pick(ctx context.Context, failfast bool, opts balancer.
 			}
 			return t, done, nil
 		}
+		if done != nil {
+			
+			
+			done(balancer.DoneInfo{})
+		}
 		grpclog.Infof("blockingPicker: the picked transport is not ready, loop back to repick")
 		
 		

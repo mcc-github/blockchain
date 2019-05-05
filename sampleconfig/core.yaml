@@ -10,11 +10,13 @@
 ###############################################################################
 peer:
 
-    # The Peer id is used for identifying this Peer instance.
+    # The peer id provides a name for this peer instance and is used when
+    # naming docker resources.
     id: jdoe
 
-    # The networkId allows for logical separation of networks
-    networkId: dev
+    # The networkId allows for logical separation of networks and is used when
+    # naming docker resources.
+    networkID: dev
 
     # The Address at local network interface this Peer will listen on.
     # By default, it will listen on all network interfaces
@@ -228,8 +230,6 @@ peer:
             maxRetries: 3
 
     # TLS Settings
-    # Note that peer-chaincode connections through chaincodeListenAddress is
-    # not mutual TLS auth. See comments on chaincodeListenAddress for more info
     tls:
         # Require server-side TLS
         enabled:  false

@@ -311,8 +311,7 @@ func (s *Stream) TrailersOnly() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	
-	return s.noHeaders && atomic.LoadUint32(&s.headerDone) == 1, nil
+	return s.noHeaders, nil
 }
 
 
@@ -594,6 +593,9 @@ type ClientTransport interface {
 
 	
 	GetGoAwayReason() GoAwayReason
+
+	
+	RemoteAddr() net.Addr
 
 	
 	IncrMsgSent()

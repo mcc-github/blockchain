@@ -32,6 +32,8 @@ const (
 	defaultDNSSvrPort = "53"
 	golang            = "GO"
 	
+	txtPrefix = "_grpc_config."
+	
 	
 	txtAttribute = "grpc_config="
 )
@@ -266,7 +268,7 @@ func (d *dnsResolver) lookupSRV() []resolver.Address {
 }
 
 func (d *dnsResolver) lookupTXT() string {
-	ss, err := d.resolver.LookupTXT(d.ctx, d.host)
+	ss, err := d.resolver.LookupTXT(d.ctx, txtPrefix+d.host)
 	if err != nil {
 		grpclog.Infof("grpc: failed dns TXT record lookup due to %v.\n", err)
 		return ""

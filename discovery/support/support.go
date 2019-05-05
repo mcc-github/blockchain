@@ -6,7 +6,24 @@ SPDX-License-Identifier: Apache-2.0
 
 package support
 
-import "github.com/mcc-github/blockchain/discovery"
+import (
+	"github.com/mcc-github/blockchain/discovery"
+	"github.com/mcc-github/blockchain/discovery/support/acl"
+)
+
+
+
+
+type GossipSupport interface {
+	discovery.GossipSupport
+}
+
+
+
+
+type ChannelPolicyManagerGetter interface {
+	acl.ChannelPolicyManagerGetter
+}
 
 
 type DiscoverySupport struct {

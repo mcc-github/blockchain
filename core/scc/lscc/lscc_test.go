@@ -23,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/aclmgmt/mocks"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
+	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
@@ -1148,6 +1149,11 @@ func TestCheckChaincodeName(t *testing.T) {
 	err = lscc.isValidChaincodeName("a-_b")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid chaincode name 'a-_b'")
+}
+
+func TestLifecycleChaincodeRegularExpressionsMatch(t *testing.T) {
+	assert.Equal(t, chaincodeNameRegExp.String(), lifecycle.ChaincodeNameRegExp.String())
+	assert.Equal(t, chaincodeVersionRegExp.String(), lifecycle.ChaincodeVersionRegExp.String())
 }
 
 var id msp.SigningIdentity

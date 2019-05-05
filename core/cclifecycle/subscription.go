@@ -4,7 +4,7 @@ Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package cc
+package cclifecycle
 
 import (
 	"bytes"
@@ -24,7 +24,9 @@ type Subscription struct {
 	pendingUpdates []*cceventmgmt.ChaincodeDefinition
 }
 
-type depCCsRetriever func(Query, ChaincodePredicate, bool, ...string) (chaincode.MetadataSet, error)
+type deployedCCsRetrieverFunc func(Query, ChaincodePredicate, bool, ...string) (chaincode.MetadataSet, error)
+
+
 
 
 
@@ -81,11 +83,11 @@ func (sub *Subscription) ChaincodeDeployDone(succeeded bool) {
 	}()
 }
 
-func queryChaincodeDefinitions(query Query, ccs []chaincode.InstalledChaincode, deployedCCs depCCsRetriever) (chaincode.MetadataSet, error) {
+func queryChaincodeDefinitions(query Query, installedCCs []chaincode.InstalledChaincode, deployedCCs deployedCCsRetrieverFunc) (chaincode.MetadataSet, error) {
 	
-	installedCCsToIDs := make(map[nameVersion][]byte)
+	installedCCsToIDs := map[nameVersion][]byte{}
 	
-	for _, cc := range ccs {
+	for _, cc := range installedCCs {
 		Logger.Debug("Chaincode", cc, "'s version is", cc.Version, "and Id is", cc.Hash)
 		installedCCsToIDs[installedCCToNameVersion(cc)] = cc.Hash
 	}
@@ -103,5 +105,5 @@ func queryChaincodeDefinitions(query Query, ccs []chaincode.InstalledChaincode, 
 		return true
 	}
 
-	return deployedCCs(query, filter, false, names(ccs)...)
+	return deployedCCs(query, filter, false, names(installedCCs)...)
 }

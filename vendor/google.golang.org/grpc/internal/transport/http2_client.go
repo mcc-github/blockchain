@@ -1124,15 +1124,27 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 	if !ok {
 		return
 	}
+	endStream := frame.StreamEnded()
 	atomic.StoreUint32(&s.bytesReceived, 1)
-	var state decodeState
-	if err := state.decodeHeader(frame); err != nil {
-		t.closeStream(s, err, true, http2.ErrCodeProtocol, status.New(codes.Internal, err.Error()), nil, false)
+	initialHeader := atomic.SwapUint32(&s.headerDone, 1) == 0
+
+	if !initialHeader && !endStream {
 		
+		
+		st := status.New(codes.Internal, "a HEADERS frame cannot appear in the middle of a stream")
+		t.closeStream(s, st.Err(), true, http2.ErrCodeProtocol, st, nil, false)
 		return
 	}
 
-	endStream := frame.StreamEnded()
+	state := &decodeState{}
+	
+	
+	state.data.isGRPC = !initialHeader
+	if err := state.decodeHeader(frame); err != nil {
+		t.closeStream(s, err, true, http2.ErrCodeProtocol, status.Convert(err), nil, endStream)
+		return
+	}
+
 	var isHeader bool
 	defer func() {
 		if t.statsHandler != nil {
@@ -1151,29 +1163,30 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 			}
 		}
 	}()
+
 	
-	if atomic.SwapUint32(&s.headerDone, 1) == 0 {
+	if initialHeader {
 		if !endStream {
 			
 			isHeader = true
 			
 			
 			
-			s.recvCompress = state.encoding
-			if len(state.mdata) > 0 {
-				s.header = state.mdata
+			s.recvCompress = state.data.encoding
+			if len(state.data.mdata) > 0 {
+				s.header = state.data.mdata
 			}
-		} else {
-			s.noHeaders = true
+			close(s.headerChan)
+			return
 		}
+		
+		s.noHeaders = true
 		close(s.headerChan)
 	}
-	if !endStream {
-		return
-	}
+
 	
 	rst := s.getState() == streamActive
-	t.closeStream(s, io.EOF, rst, http2.ErrCodeNo, state.status(), state.mdata, true)
+	t.closeStream(s, io.EOF, rst, http2.ErrCodeNo, state.status(), state.data.mdata, true)
 }
 
 
@@ -1339,6 +1352,8 @@ func (t *http2Client) ChannelzMetric() *channelz.SocketInternalMetric {
 	s.RemoteFlowControlWindow = t.getOutFlowWindow()
 	return &s
 }
+
+func (t *http2Client) RemoteAddr() net.Addr { return t.remoteAddr }
 
 func (t *http2Client) IncrMsgSent() {
 	atomic.AddInt64(&t.czData.msgSent, 1)

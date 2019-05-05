@@ -16,12 +16,12 @@ import (
 	"strings"
 	"testing"
 
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/common/metadata"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
-
 
 func TestDockerPull(t *testing.T) {
 	codepackage, output := io.Pipe()
@@ -46,12 +46,20 @@ func TestDockerPull(t *testing.T) {
 	
 	
 	image := fmt.Sprintf("mcc-github/blockchain-ccenv:%s-1.1.0", runtime.GOARCH)
-	err := DockerBuild(DockerBuildOptions{
-		Image:        image,
-		Cmd:          "/bin/true",
-		InputStream:  codepackage,
-		OutputStream: binpackage,
-	})
+	client, err := docker.NewClientFromEnv()
+	if err != nil {
+		t.Errorf("failed to get docker client: %s", err)
+	}
+
+	err = DockerBuild(
+		DockerBuildOptions{
+			Image:        image,
+			Cmd:          "/bin/true",
+			InputStream:  codepackage,
+			OutputStream: binpackage,
+		},
+		client,
+	)
 	if err != nil {
 		t.Errorf("Error during build: %s", err)
 	}

@@ -11,7 +11,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
@@ -29,7 +29,7 @@ type PlatformRegistry interface {
 
 
 type Writer interface {
-	WriteFile(string, []byte, os.FileMode) error
+	WriteFile(string, string, []byte) error
 }
 
 
@@ -139,7 +139,8 @@ func (p *Packager) Package() error {
 		return err
 	}
 
-	err = p.Writer.WriteFile(p.Input.OutputFile, pkgTarGzBytes, 0600)
+	dir, name := filepath.Split(p.Input.OutputFile)
+	err = p.Writer.WriteFile(dir, name, pkgTarGzBytes)
 	if err != nil {
 		err = errors.Wrapf(err, "error writing chaincode package to %s", p.Input.OutputFile)
 		logger.Error(err.Error())

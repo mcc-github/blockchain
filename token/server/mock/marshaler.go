@@ -2,10 +2,10 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	token "github.com/mcc-github/blockchain/protos/token"
-	server "github.com/mcc-github/blockchain/token/server"
+	"github.com/mcc-github/blockchain/protos/token"
+	"github.com/mcc-github/blockchain/token/server"
 )
 
 type Marshaler struct {

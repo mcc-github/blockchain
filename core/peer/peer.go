@@ -9,7 +9,6 @@ package peer
 import (
 	"fmt"
 	"net"
-	"runtime"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/channelconfig"
@@ -47,7 +46,6 @@ import (
 	"github.com/mcc-github/blockchain/token/tms/manager"
 	"github.com/mcc-github/blockchain/token/transaction"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
 var peerLogger = flogging.MustGetLogger("peer")
@@ -229,11 +227,8 @@ func Initialize(
 	legacyLifecycleValidation plugindispatcher.LifecycleResources,
 	newLifecycleValidation plugindispatcher.CollectionAndLifecycleResources,
 	ledgerConfig *ledger.Config,
+	nWorkers int,
 ) {
-	nWorkers := viper.GetInt("peer.validatorPoolSize")
-	if nWorkers <= 0 {
-		nWorkers = runtime.NumCPU()
-	}
 	validationWorkersSemaphore = semaphore.New(nWorkers)
 
 	pluginMapper = pm

@@ -36,7 +36,7 @@ import (
 	"github.com/mcc-github/blockchain/internal/peer/gossip/mocks"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/peer"
@@ -319,7 +319,7 @@ type mockDeliverServiceFactory struct {
 	service *mockDeliverService
 }
 
-func (mf *mockDeliverServiceFactory) Service(g GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverclient.DeliverService, error) {
+func (mf *mockDeliverServiceFactory) Service(g GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverservice.DeliverService, error) {
 	return mf.service, nil
 }
 
@@ -727,7 +727,7 @@ func newGossipInstance(port int, id int, gRPCServer *comm.GRPCServer, certs *gos
 		chains:          make(map[string]state.GossipStateProvider),
 		leaderElection:  make(map[string]election.LeaderElectionService),
 		privateHandlers: make(map[string]privateHandler),
-		deliveryService: make(map[string]deliverclient.DeliverService),
+		deliveryService: make(map[string]deliverservice.DeliverService),
 		deliveryFactory: &deliveryFactoryImpl{},
 		peerIdentity:    api.PeerIdentityType(conf.InternalEndpoint),
 		metrics:         metrics,

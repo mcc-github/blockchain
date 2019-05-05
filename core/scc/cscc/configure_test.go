@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/config"
 	"github.com/mcc-github/blockchain/common/configtx"
@@ -33,7 +34,7 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/inproccontroller"
-	deliverclient "github.com/mcc-github/blockchain/core/deliverservice"
+	"github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
 	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/core/peer"
@@ -104,7 +105,7 @@ func (*mockDeliveryClient) Stop() {
 type mockDeliveryClientFactory struct {
 }
 
-func (*mockDeliveryClientFactory) Service(g service.GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverclient.DeliverService, error) {
+func (*mockDeliveryClientFactory) Service(g service.GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverservice.DeliverService, error) {
 	return &mockDeliveryClient{}, nil
 }
 
@@ -234,22 +235,30 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	certGenerator := accesscontrol.NewAuthenticator(ca)
 	config := chaincode.GlobalConfig()
 	config.StartupTimeout = 30 * time.Second
-	chaincode.NewChaincodeSupport(
-		config,
-		peerEndpoint,
-		false,
-		ca.CertBytes(),
-		certGenerator,
-		&PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
-		nil,
-		mockAclProvider,
-		container.NewVMController(
+
+	client, err := docker.NewClientFromEnv()
+	require.NoError(t, err, "failed to acquire Docker client")
+	containerRuntime := &chaincode.ContainerRuntime{
+		CACert:        ca.CertBytes(),
+		CertGenerator: certGenerator,
+		DockerClient:  client,
+		PeerAddress:   peerEndpoint,
+		Processor: container.NewVMController(
 			map[string]container.VMProvider{
 				inproccontroller.ContainerType: inproccontroller.NewRegistry(),
 			},
 		),
+		PlatformRegistry: platforms.NewRegistry(&golang.Platform{}),
+	}
+
+	chaincode.NewChaincodeSupport(
+		config,
+		false,
+		containerRuntime,
+		&PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
+		nil,
+		mockAclProvider,
 		mp,
-		platforms.NewRegistry(&golang.Platform{}),
 		peer.DefaultSupport,
 		&disabled.Provider{},
 		&ledgermock.DeployedChaincodeInfoProvider{},

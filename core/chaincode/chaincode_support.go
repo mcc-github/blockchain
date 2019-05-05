@@ -15,7 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/util"
 	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
@@ -70,21 +69,18 @@ type ChaincodeSupport struct {
 	HandlerMetrics         *HandlerMetrics
 	LaunchMetrics          *LaunchMetrics
 	DeployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
+	TotalQueryLimit        int
 }
 
 
 func NewChaincodeSupport(
 	config *Config,
-	peerAddress string,
 	userRunsCC bool,
-	caCert []byte,
-	certGenerator CertGenerator,
+	containerRuntime *ContainerRuntime,
 	packageProvider PackageProvider,
 	lifecycle Lifecycle,
 	aclProvider ACLProvider,
-	processor Processor,
 	SystemCCProvider sysccprovider.SystemChaincodeProvider,
-	platformRegistry *platforms.Registry,
 	appConfig ApplicationConfigRetriever,
 	metricsProvider metrics.Provider,
 	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
@@ -101,25 +97,10 @@ func NewChaincodeSupport(
 		HandlerMetrics:         NewHandlerMetrics(metricsProvider),
 		LaunchMetrics:          NewLaunchMetrics(metricsProvider),
 		DeployedCCInfoProvider: deployedCCInfoProvider,
+		TotalQueryLimit:        config.TotalQueryLimit,
 	}
 
-	
-	if !config.TLSEnabled {
-		certGenerator = nil
-	}
-
-	cs.Runtime = &ContainerRuntime{
-		CertGenerator:    certGenerator,
-		Processor:        processor,
-		CACert:           caCert,
-		PeerAddress:      peerAddress,
-		PlatformRegistry: platformRegistry,
-		CommonEnv: []string{
-			"CORE_CHAINCODE_LOGGING_LEVEL=" + config.LogLevel,
-			"CORE_CHAINCODE_LOGGING_SHIM=" + config.ShimLogLevel,
-			"CORE_CHAINCODE_LOGGING_FORMAT=" + config.LogFormat,
-		},
-	}
+	cs.Runtime = containerRuntime
 
 	cs.Launcher = &RuntimeLauncher{
 		Runtime:         cs.Runtime,
@@ -189,6 +170,7 @@ func (cs *ChaincodeSupport) HandleChaincodeStream(stream ccintf.ChaincodeStream)
 		DeployedCCInfoProvider:     cs.DeployedCCInfoProvider,
 		AppConfig:                  cs.AppConfig,
 		Metrics:                    cs.HandlerMetrics,
+		TotalQueryLimit:            cs.TotalQueryLimit,
 	}
 
 	return handler.ProcessStream(stream)
