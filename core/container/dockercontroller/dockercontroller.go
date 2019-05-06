@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/container"
@@ -38,6 +38,8 @@ var (
 	vmRegExp     = regexp.MustCompile("[^a-zA-Z0-9-_.]")
 	imageRegExp  = regexp.MustCompile("^[a-z0-9]+(([._-][a-z0-9]+)+)?$")
 )
+
+
 
 
 type dockerClient interface {

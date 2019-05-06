@@ -2053,7 +2053,7 @@ var _ = Describe("Chain", func() {
 				})
 
 				When("two type B config are sent back-to-back", func() {
-					It("discards the second", func() {
+					It("discards or rejects the second", func() {
 						
 						
 						
@@ -2071,7 +2071,15 @@ var _ = Describe("Chain", func() {
 						c1.support.ProcessConfigMsgReturns(configEnvRm, 1, nil)
 
 						Expect(c1.Configure(configEnvAdd, 0)).To(Succeed())
-						Expect(c1.Configure(configEnvRm, 0)).To(Succeed())
+						
+						
+						
+						
+						
+						Expect(c1.Configure(configEnvRm, 0)).To(Or(
+							Succeed(),
+							MatchError("update of more than one consenter at a time is not supported, requested changes: add 0 node(s), remove 2 node(s)"),
+						))
 						network.exec(func(c *chain) {
 							Eventually(c.support.WriteConfigBlockCallCount, LongEventualTimeout).Should(Equal(1))
 							Consistently(c.support.WriteConfigBlockCallCount).Should(Equal(1))

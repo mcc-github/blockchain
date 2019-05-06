@@ -14,7 +14,6 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	fileledger "github.com/mcc-github/blockchain/common/ledger/blockledger/file"
-	jsonledger "github.com/mcc-github/blockchain/common/ledger/blockledger/json"
 	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
 	config "github.com/mcc-github/blockchain/orderer/common/localconfig"
 )
@@ -35,13 +34,6 @@ func createLedgerFactory(conf *config.TopLevel) (blockledger.Factory, string) {
 		
 		
 		createSubDir(ld, fsblkstorage.ChainsDir)
-	case "json":
-		ld = conf.FileLedger.Location
-		if ld == "" {
-			ld = createTempDir(conf.FileLedger.Prefix)
-		}
-		logger.Debug("Ledger dir:", ld)
-		lf = jsonledger.New(ld)
 	case "ram":
 		fallthrough
 	default:

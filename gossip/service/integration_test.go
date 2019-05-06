@@ -126,7 +126,7 @@ func TestLeaderYield(t *testing.T) {
 	
 	addPeersToChannel(t, n, channelName, gossips, peerIndexes)
 	
-	waitForFullMembership(t, gossips, n, time.Second*30, time.Millisecond*100)
+	waitForFullMembershipOrFailNow(t, gossips, n, time.Second*30, time.Millisecond*100)
 
 	endpoint, socket := getAvailablePort(t)
 	socket.Close()

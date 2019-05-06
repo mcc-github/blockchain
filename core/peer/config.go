@@ -159,6 +159,11 @@ type Config struct {
 	StatsdAaddress      string
 	StatsdWriteInterval time.Duration
 	StatsdPrefix        string
+
+	
+	DockerCert string
+	DockerKey  string
+	DockerCA   string
 }
 
 func GlobalConfig() (*Config, error) {
@@ -223,6 +228,10 @@ func (c *Config) load() error {
 	c.StatsdAaddress = viper.GetString("metrics.statsd.address")
 	c.StatsdWriteInterval = viper.GetDuration("metrics.statsd.writeInterval")
 	c.StatsdPrefix = viper.GetString("metrics.statsd.prefix")
+
+	c.DockerCert = config.GetPath("vm.docker.tls.cert.file")
+	c.DockerKey = config.GetPath("vm.docker.tls.key.file")
+	c.DockerCA = config.GetPath("vm.docker.tls.ca.file")
 
 	return nil
 }
