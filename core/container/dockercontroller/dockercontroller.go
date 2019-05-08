@@ -58,9 +58,6 @@ type dockerClient interface {
 	BuildImage(opts docker.BuildImageOptions) error
 	
 	
-	RemoveImageExtended(id string, opts docker.RemoveImageOptions) error
-	
-	
 	StopContainer(id string, timeout uint) error
 	
 	

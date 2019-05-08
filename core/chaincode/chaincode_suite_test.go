@@ -66,6 +66,9 @@ type packageProvider interface {
 }
 
 
+type lifecycle interface {
+	chaincode.Lifecycle
+}
 
 
 type chaincodeDefinition interface {

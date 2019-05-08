@@ -58,7 +58,7 @@ func (mc *MembershipChanges) Rotated() bool {
 }
 
 
-func EndpointconfigFromFromSupport(support consensus.ConsenterSupport) (*cluster.EndpointConfig, error) {
+func EndpointconfigFromFromSupport(support consensus.ConsenterSupport) ([]cluster.EndpointCriteria, error) {
 	lastConfigBlock, err := lastConfigBlockFromSupport(support)
 	if err != nil {
 		return nil, err
@@ -92,28 +92,22 @@ func newBlockPuller(support consensus.ConsenterSupport,
 		return cluster.VerifyBlocks(blocks, support)
 	}
 
-	secureConfig, err := baseDialer.ClientConfig()
-	if err != nil {
-		return nil, err
-	}
-	secureConfig.AsyncConnect = false
 	stdDialer := &cluster.StandardDialer{
-		Dialer: cluster.NewTLSPinningDialer(secureConfig),
+		Config: baseDialer.Config.Clone(),
 	}
+	stdDialer.Config.AsyncConnect = false
+	stdDialer.Config.SecOpts.VerifyCertificate = nil
 
 	
-	endpointConfig, err := EndpointconfigFromFromSupport(support)
+	endpoints, err := EndpointconfigFromFromSupport(support)
 	if err != nil {
 		return nil, err
 	}
-	
-	secureConfig.SecOpts.ServerRootCAs = endpointConfig.TLSRootCAs
-	stdDialer.Dialer.SetConfig(secureConfig)
 
-	der, _ := pem.Decode(secureConfig.SecOpts.Certificate)
+	der, _ := pem.Decode(stdDialer.Config.SecOpts.Certificate)
 	if der == nil {
 		return nil, errors.Errorf("client certificate isn't in PEM format: %v",
-			string(secureConfig.SecOpts.Certificate))
+			string(stdDialer.Config.SecOpts.Certificate))
 	}
 
 	bp := &cluster.BlockPuller{
@@ -122,7 +116,7 @@ func newBlockPuller(support consensus.ConsenterSupport,
 		RetryTimeout:        clusterConfig.ReplicationRetryTimeout,
 		MaxTotalBufferBytes: clusterConfig.ReplicationBufferSize,
 		FetchTimeout:        clusterConfig.ReplicationPullTimeout,
-		Endpoints:           endpointConfig.Endpoints,
+		Endpoints:           endpoints,
 		Signer:              support,
 		TLSCert:             der.Bytes,
 		Channel:             support.ChainID(),

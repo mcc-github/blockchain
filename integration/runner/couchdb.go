@@ -22,7 +22,7 @@ import (
 	"github.com/tedsuo/ifrit"
 )
 
-const CouchDBDefaultImage = "mcc-github/blockchain-couchdb:latest"
+const CouchDBDefaultImage = "couchdb:2.3"
 
 
 

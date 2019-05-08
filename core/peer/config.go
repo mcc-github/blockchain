@@ -35,16 +35,7 @@ import (
 )
 
 
-
-
-
-
 type Config struct {
-	
-	
-	
-	
-	
 	
 	LocalMSPID string
 	
@@ -56,8 +47,8 @@ type Config struct {
 	
 	
 	
-	
 	PeerAddress string
+	
 	
 	
 	NetworkID string
@@ -72,15 +63,18 @@ type Config struct {
 	
 	
 	
-	
-	
 	ValidatorPoolSize int
 
 	
 	
+
 	
-	ProfileEnabled       bool
+	ProfileEnabled bool
+	
+	
 	ProfileListenAddress string
+
+	
 
 	
 	
@@ -90,7 +84,6 @@ type Config struct {
 
 	
 	DiscoveryEnabled bool
-	
 	
 	DiscoveryOrgMembersAllowed bool
 	
@@ -103,6 +96,7 @@ type Config struct {
 
 	
 	
+	
 
 	
 	
@@ -110,8 +104,12 @@ type Config struct {
 
 	
 	
+	
+
+	
 	PeerTLSEnabled bool
 
+	
 	
 	
 	
@@ -123,48 +121,73 @@ type Config struct {
 	
 	
 	
-
 	
+
 	
 	
 	AdminListenAddress string
 
 	
-	
-	
-	
 	VMEndpoint string
 
 	
+	
+
 	
 	VMDockerTLSEnabled   bool
 	VMDockerAttachStdout bool
 
 	
-	
-	
 	ChaincodePull bool
 
 	
-	OperationsListenAddress         string
-	OperationsTLSEnabled            bool
-	OperationsTLSCertFile           string
-	OperationsTLSKeyFile            string
-	OperationsTLSClientAuthRequired bool
-	OperationsTLSClientRootCAs      []string
+	
 
 	
-	MetricsProvider     string
-	StatsdNetwork       string
-	StatsdAaddress      string
-	StatsdWriteInterval time.Duration
-	StatsdPrefix        string
+	OperationsListenAddress string
+	
+	OperationsTLSEnabled bool
+	
+	
+	OperationsTLSCertFile string
+	
+	
+	OperationsTLSKeyFile string
+	
+	
+	OperationsTLSClientAuthRequired bool
+	
+	
+	OperationsTLSClientRootCAs []string
 
+	
+	
+
+	
+	
+	MetricsProvider string
+	
+	StatsdNetwork string
+	
+	StatsdAaddress string
+	
+	
+	StatsdWriteInterval time.Duration
+	
+	StatsdPrefix string
+
+	
+
+	
 	
 	DockerCert string
-	DockerKey  string
-	DockerCA   string
+	
+	DockerKey string
+	
+	DockerCA string
 }
+
+
 
 func GlobalConfig() (*Config, error) {
 	c := &Config{}

@@ -11,14 +11,6 @@ import (
 	"encoding/hex"
 )
 
-func init() {
-	
-	
-	switch true {
-
-	}
-}
-
 
 
 type PKIidType []byte

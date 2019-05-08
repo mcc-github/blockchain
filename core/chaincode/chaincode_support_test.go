@@ -26,7 +26,6 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	mockpeer "github.com/mcc-github/blockchain/common/mocks/peer"
 	"github.com/mcc-github/blockchain/common/util"
-	"github.com/mcc-github/blockchain/core/aclmgmt/mocks"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
@@ -53,7 +52,6 @@ import (
 	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
-	ma "github.com/stretchr/testify/mock"
 )
 
 var globalBlockNum map[string]uint64
@@ -144,8 +142,6 @@ func (meqe *mockExecQuerySimulator) GetTxSimulationResults() ([]byte, error) {
 	return simRes.GetPubSimulationBytes()
 }
 
-var mockAclProvider *mocks.MockACLProvider
-
 type PackageProviderWrapper struct {
 	FS *ccprovider.CCInfoFSImpl
 }
@@ -166,10 +162,12 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
 	}
 
 	ipRegistry := inproccontroller.NewRegistry()
-	sccp := &scc.Provider{Peer: peer.Default, PeerSupport: msi, Registrar: ipRegistry}
-
-	mockAclProvider = &mocks.MockACLProvider{}
-	mockAclProvider.Reset()
+	sccp := &scc.Provider{
+		Peer:        peer.Default,
+		PeerSupport: msi,
+		Registrar:   ipRegistry,
+		Whitelist:   scc.GlobalWhitelist(),
+	}
 
 	ledgerCleanup, err := peer.MockInitialize()
 	if err != nil {
@@ -191,6 +189,7 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
 		ledgerCleanup()
 	}
 
+	mockAclProvider := &mock.ACLProvider{}
 	ccprovider.SetChaincodesPath(tempdir)
 	ca, _ := tlsgen.NewCA()
 	certGenerator := accesscontrol.NewAuthenticator(ca)
@@ -200,27 +199,27 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
 	pr := platforms.NewRegistry(&golang.Platform{})
 	lsccImpl := lscc.New(sccp, mockAclProvider, pr)
 	ml := &mock.Lifecycle{}
-	ml.On("ChaincodeContainerInfo", ma.Anything, "shimTestCC", ma.Anything).Return(
-		&ccprovider.ChaincodeContainerInfo{
-			Name:      "shimTestCC",
-			Version:   "0",
-			PackageID: persistence.PackageID("shimTestCC:0"),
-		}, nil)
-	ml.On("ChaincodeContainerInfo", ma.Anything, "calledCC", ma.Anything).Return(
-		&ccprovider.ChaincodeContainerInfo{
-			Name:      "calledCC",
-			Version:   "0",
-			PackageID: persistence.PackageID("calledCC:0"),
-		}, nil)
-	ml.On("ChaincodeContainerInfo", ma.Anything, "lscc", ma.Anything).Return(
-		&ccprovider.ChaincodeContainerInfo{
-			Name:      "lscc",
-			Version:   util.GetSysCCVersion(),
-			PackageID: persistence.PackageID("lscc:" + util.GetSysCCVersion()),
-		}, nil)
-	ml.On("ChaincodeContainerInfo", ma.Anything, "badccname", ma.Anything).Return(nil, errors.New("get lost"))
+	ml.ChaincodeContainerInfoStub = func(_, name string, _ ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
+		switch name {
+		case "shimTestCC", "calledCC":
+			return &ccprovider.ChaincodeContainerInfo{
+				Name:      name,
+				Version:   "0",
+				PackageID: persistence.PackageID(name + ":0"),
+			}, nil
+		case "lscc":
+			return &ccprovider.ChaincodeContainerInfo{
+				Name:      "lscc",
+				Version:   util.GetSysCCVersion(),
+				PackageID: persistence.PackageID("lscc:" + util.GetSysCCVersion()),
+			}, nil
+		default:
+			return nil, errors.New("oh-bother-no-chaincode-info")
+		}
+	}
+
 	fakeCCDefinition := &mock.ChaincodeDefinition{}
-	ml.On("ChaincodeDefinition", ma.Anything, "calledCC", ma.Anything).Return(fakeCCDefinition, nil)
+	ml.ChaincodeDefinitionReturns(fakeCCDefinition, nil)
 	client, err := docker.NewClientFromEnv()
 	if err != nil {
 		panic(err)
@@ -246,19 +245,31 @@ func initMockPeer(chainIDs ...string) (*ChaincodeSupport, func(), error) {
 	if !globalConfig.TLSEnabled {
 		containerRuntime.CertGenerator = nil
 	}
-
-	chaincodeSupport := NewChaincodeSupport(
-		globalConfig,
-		true,
-		containerRuntime,
-		&PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
-		ml,
-		mockAclProvider,
-		sccp,
-		peer.DefaultSupport,
-		&disabled.Provider{},
-		&ledgermock.DeployedChaincodeInfoProvider{},
-	)
+	userRunsCC := true
+	metricsProviders := &disabled.Provider{}
+	chaincodeHandlerRegistry := NewHandlerRegistry(userRunsCC)
+	chaincodeLauncher := &RuntimeLauncher{
+		Metrics:         NewLaunchMetrics(metricsProviders),
+		PackageProvider: &PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
+		Runtime:         containerRuntime,
+		Registry:        chaincodeHandlerRegistry,
+		StartupTimeout:  globalConfig.StartupTimeout,
+	}
+	chaincodeSupport := &ChaincodeSupport{
+		ACLProvider:            mockAclProvider,
+		AppConfig:              peer.DefaultSupport,
+		DeployedCCInfoProvider: &ledgermock.DeployedChaincodeInfoProvider{},
+		ExecuteTimeout:         globalConfig.ExecuteTimeout,
+		HandlerMetrics:         NewHandlerMetrics(metricsProviders),
+		HandlerRegistry:        chaincodeHandlerRegistry,
+		Keepalive:              globalConfig.Keepalive,
+		Launcher:               chaincodeLauncher,
+		Lifecycle:              ml,
+		Runtime:                containerRuntime,
+		SystemCCProvider:       sccp,
+		TotalQueryLimit:        globalConfig.TotalQueryLimit,
+		UserRunsCC:             userRunsCC,
+	}
 	ipRegistry.ChaincodeSupport = chaincodeSupport
 
 	
@@ -473,12 +484,6 @@ func initializeCC(t *testing.T, chainID, ccname string, ccSide *mockpeer.MockCCC
 	txParams, txsim := startTx(t, chainID, cis, txid)
 
 	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
-
-	
 	resp := &mockpeer.MockResponse{
 		RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION},
 		RespMsg: &pb.ChaincodeMessage{
@@ -562,12 +567,6 @@ func invokeCC(t *testing.T, chainID, ccname string, ccSide *mockpeer.MockCCComm,
 	txid := util.GenerateUUID()
 	txParams, txsim := startTx(t, chainID, cis, txid)
 
-	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
-
 	respSet := &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: nil,
@@ -621,7 +620,6 @@ func invokeCC(t *testing.T, chainID, ccname string, ccSide *mockpeer.MockCCComm,
 
 func getQueryStateByRange(t *testing.T, collection, chainID, ccname string, ccSide *mockpeer.MockCCComm, chaincodeSupport *ChaincodeSupport) error {
 	done := setuperror()
-
 	errorFunc := func(ind int, err error) {
 		done <- err
 	}
@@ -631,12 +629,6 @@ func getQueryStateByRange(t *testing.T, collection, chainID, ccname string, ccSi
 	cis := &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: ci}}
 	txid := util.GenerateUUID()
 	txParams, txsim := startTx(t, chainID, cis, txid)
-
-	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
 
 	
 	queryStateNextFunc := func(reqMsg *pb.ChaincodeMessage) *pb.ChaincodeMessage {
@@ -721,13 +713,6 @@ func cc2cc(t *testing.T, chainID, chainID2, ccname string, ccSide *mockpeer.Mock
 	
 	txParams, txsim := startTx(t, chainID, cis, txid)
 
-	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Peer_ChaincodeToChaincode, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
-
 	cccid := &ccprovider.CCContext{
 		Name:    calledCC,
 		Version: "0",
@@ -744,16 +729,6 @@ func cc2cc(t *testing.T, chainID, chainID2, ccname string, ccSide *mockpeer.Mock
 	cis = &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: ci}}
 	txid = util.GenerateUUID()
 	txParams, txsim = startTx(t, chainID, cis, txid)
-
-	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Peer_ChaincodeToChaincode, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_ChaincodeToChaincode, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
 
 	sysCCVers := util.GetSysCCVersion()
 	
@@ -793,14 +768,14 @@ func cc2cc(t *testing.T, chainID, chainID2, ccname string, ccSide *mockpeer.Mock
 	txid = util.GenerateUUID()
 	txParams, txsim = startTx(t, chainID, cis, txid)
 
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Peer_ChaincodeToChaincode, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_ChaincodeToChaincode, chainID, txParams.SignedProp).Return(errors.New("Bad ACL calling CC"))
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
+	mockAclProvider := chaincodeSupport.ACLProvider.(*mock.ACLProvider)
+	mockAclProvider.CheckACLStub = func(resource, channel string, _ interface{}) error {
+		if resource == resources.Peer_ChaincodeToChaincode && channel == chainID {
+			return errors.New("bad-acl-calling-cc")
+		}
+		return nil
+	}
+
 	
 	respSet = &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
@@ -844,11 +819,6 @@ func getQueryResult(t *testing.T, collection, chainID, ccname string, ccSide *mo
 	cis := &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: ci}}
 	txid := util.GenerateUUID()
 	txParams, txsim := startTx(t, chainID, cis, txid)
-
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
 
 	kvs := make([]*plgr.KV, 1000)
 	for i := 0; i < 1000; i++ {
@@ -933,11 +903,6 @@ func getHistory(t *testing.T, chainID, ccname string, ccSide *mockpeer.MockCCCom
 	cis := &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: ci}}
 	txid := util.GenerateUUID()
 	txParams, txsim := startTx(t, chainID, cis, txid)
-
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
 
 	kvs := make([]*plgr.KV, 1000)
 	for i := 0; i < 1000; i++ {
@@ -1289,13 +1254,6 @@ func cc2SameCC(t *testing.T, chainID, chainID2, ccname string, ccSide *mockpeer.
 	txid := util.GenerateUUID()
 	txParams, txsim := startTx(t, chainID2, cis, txid)
 
-	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Peer_ChaincodeToChaincode, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID2, txParams.SignedProp).Return(nil)
-
 	cccid := &ccprovider.CCContext{
 		Name:    ccname,
 		Version: "0",
@@ -1318,16 +1276,6 @@ func cc2SameCC(t *testing.T, chainID, chainID2, ccname string, ccSide *mockpeer.
 	cis = &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: ci}}
 	txid = util.GenerateUUID()
 	txParams, txsim = startTx(t, chainID, cis, txid)
-
-	mockAclProvider.On("CheckACL", resources.Peer_ChaincodeToChaincode, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID, txParams.SignedProp).Return(nil)
-
-	mockAclProvider.On("CheckACL", resources.Peer_ChaincodeToChaincode, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetDeploymentSpec, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Lscc_GetChaincodeData, chainID2, txParams.SignedProp).Return(nil)
-	mockAclProvider.On("CheckACL", resources.Peer_Propose, chainID2, txParams.SignedProp).Return(nil)
 
 	txid = "cctosamecctx"
 	respSet := &mockpeer.MockResponseSet{
@@ -1392,6 +1340,8 @@ func TestCCFramework(t *testing.T) {
 
 	
 	cc2cc(t, chainID, chainID2, ccname, ccSide, chaincodeSupport)
+	
+	chaincodeSupport.ACLProvider = &mock.ACLProvider{}
 
 	
 	getQueryResult(t, "", chainID, ccname, ccSide, chaincodeSupport)

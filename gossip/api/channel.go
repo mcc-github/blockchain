@@ -10,14 +10,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/common"
 )
 
-func init() {
-	
-	
-	switch true {
-
-	}
-}
-
 
 
 

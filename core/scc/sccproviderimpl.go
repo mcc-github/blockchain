@@ -16,20 +16,12 @@ import (
 )
 
 
-func NewProvider(pOps peer.Operations, pSup peer.Support, r Registrar) *Provider {
-	return &Provider{
-		Peer:        pOps,
-		PeerSupport: pSup,
-		Registrar:   r,
-	}
-}
-
-
 type Provider struct {
 	Peer        peer.Operations
 	PeerSupport peer.Support
 	Registrar   Registrar
 	SysCCs      []SelfDescribingSysCC
+	Whitelist   Whitelist
 }
 
 

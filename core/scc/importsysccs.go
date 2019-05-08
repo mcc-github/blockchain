@@ -14,7 +14,7 @@ import (
 
 func (p *Provider) DeploySysCCs(chainID string, ccp ccprovider.ChaincodeProvider) {
 	for _, sysCC := range p.SysCCs {
-		deploySysCC(chainID, ccp, sysCC)
+		p.deploySysCC(chainID, ccp, sysCC)
 	}
 }
 

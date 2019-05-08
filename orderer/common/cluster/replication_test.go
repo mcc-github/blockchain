@@ -946,7 +946,7 @@ func testBlockPullerFromConfig(t *testing.T, blockVerifiers []cluster.BlockVerif
 
 	
 	injectTLSCACert(t, validBlock, caCert)
-	injectOrdererEndpoint(t, validBlock, osn.srv.Address())
+	injectGlobalOrdererEndpoint(t, validBlock, osn.srv.Address())
 	validBlock.Header.DataHash = protoutil.BlockDataHash(validBlock.Data)
 
 	for attempt := 0; attempt < iterations; attempt++ {
@@ -1080,7 +1080,7 @@ func TestNoopBlockVerifier(t *testing.T) {
 	assert.Nil(t, v.VerifyBlockSignature(nil, nil))
 }
 
-func injectOrdererEndpoint(t *testing.T, block *common.Block, endpoint string) {
+func injectGlobalOrdererEndpoint(t *testing.T, block *common.Block, endpoint string) {
 	ordererAddresses := channelconfig.OrdererAddressesValue([]string{endpoint})
 	
 	env, err := protoutil.ExtractEnvelope(block, 0)
@@ -1091,6 +1091,14 @@ func injectOrdererEndpoint(t *testing.T, block *common.Block, endpoint string) {
 	assert.NoError(t, err)
 	
 	confEnv.Config.ChannelGroup.Values[ordererAddresses.Key()].Value = protoutil.MarshalOrPanic(ordererAddresses.Value())
+	
+	ordererGrps := confEnv.Config.ChannelGroup.Groups[channelconfig.OrdererGroupKey].Groups
+	for _, grp := range ordererGrps {
+		if grp.Values[channelconfig.EndpointsKey] == nil {
+			continue
+		}
+		grp.Values[channelconfig.EndpointsKey].Value = nil
+	}
 	
 	payload.Data = protoutil.MarshalOrPanic(confEnv)
 	env.Payload = protoutil.MarshalOrPanic(payload)

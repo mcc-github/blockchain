@@ -13,12 +13,10 @@ import (
 	"testing"
 	"time"
 
-	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/config"
 	"github.com/mcc-github/blockchain/common/configtx"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
-	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/genesis"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/mocks/scc"
@@ -27,16 +25,10 @@ import (
 	aclmocks "github.com/mcc-github/blockchain/core/aclmgmt/mocks"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode"
-	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/container"
-	"github.com/mcc-github/blockchain/core/container/inproccontroller"
 	"github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
-	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
 	policymocks "github.com/mcc-github/blockchain/core/policy/mocks"
@@ -231,38 +223,8 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 
 	peerEndpoint := "127.0.0.1:13611"
 
-	ca, _ := tlsgen.NewCA()
-	certGenerator := accesscontrol.NewAuthenticator(ca)
 	config := chaincode.GlobalConfig()
 	config.StartupTimeout = 30 * time.Second
-
-	client, err := docker.NewClientFromEnv()
-	require.NoError(t, err, "failed to acquire Docker client")
-	containerRuntime := &chaincode.ContainerRuntime{
-		CACert:        ca.CertBytes(),
-		CertGenerator: certGenerator,
-		DockerClient:  client,
-		PeerAddress:   peerEndpoint,
-		Processor: container.NewVMController(
-			map[string]container.VMProvider{
-				inproccontroller.ContainerType: inproccontroller.NewRegistry(),
-			},
-		),
-		PlatformRegistry: platforms.NewRegistry(&golang.Platform{}),
-	}
-
-	chaincode.NewChaincodeSupport(
-		config,
-		false,
-		containerRuntime,
-		&PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
-		nil,
-		mockAclProvider,
-		mp,
-		peer.DefaultSupport,
-		&disabled.Provider{},
-		&ledgermock.DeployedChaincodeInfoProvider{},
-	)
 
 	
 	policyManagerGetter := &policymocks.MockChannelPolicyManagerGetter{

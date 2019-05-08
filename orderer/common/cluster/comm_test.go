@@ -211,9 +211,8 @@ func (cn *clusterNode) renewCertificates() {
 	cn.serverConfig.SecOpts.Certificate = serverKeyPair.Cert
 	cn.serverConfig.SecOpts.Key = serverKeyPair.Key
 
-	cn.clientConfig.SecOpts.Key = clientKeyPair.Key
-	cn.clientConfig.SecOpts.Certificate = clientKeyPair.Cert
-	cn.dialer.SetConfig(cn.clientConfig)
+	cn.dialer.Config.SecOpts.Key = clientKeyPair.Key
+	cn.dialer.Config.SecOpts.Certificate = clientKeyPair.Cert
 }
 
 func newTestNodeWithMetrics(t *testing.T, metrics cluster.MetricsProvider, tlsConnGauge metrics.Gauge) *clusterNode {
@@ -236,7 +235,9 @@ func newTestNodeWithMetrics(t *testing.T, metrics cluster.MetricsProvider, tlsCo
 		},
 	}
 
-	dialer := cluster.NewTLSPinningDialer(clientConfig)
+	dialer := &cluster.PredicateDialer{
+		Config: clientConfig,
+	}
 
 	srvConfig := comm_utils.ServerConfig{
 		SecOpts: &comm_utils.SecureOptions{
@@ -510,13 +511,11 @@ func TestUnavailableHosts(t *testing.T) {
 	
 	node1 := newTestNode(t)
 
-	clientConfig, err := node1.dialer.ClientConfig()
-	assert.NoError(t, err)
+	clientConfig := node1.dialer.Config
 	
 	
 	
 	clientConfig.Timeout = time.Hour
-	node1.dialer.SetConfig(clientConfig)
 	defer node1.stop()
 
 	node2 := newTestNode(t)
@@ -819,10 +818,8 @@ func TestReconnect(t *testing.T) {
 
 	node1 := newTestNode(t)
 	defer node1.stop()
-	conf, err := node1.dialer.ClientConfig()
-	assert.NoError(t, err)
+	conf := node1.dialer.Config
 	conf.Timeout = time.Hour
-	node1.dialer.SetConfig(conf)
 
 	node2 := newTestNode(t)
 	node2.handler.On("OnSubmit", testChannel, node1.nodeInfo.ID, mock.Anything).Return(nil)

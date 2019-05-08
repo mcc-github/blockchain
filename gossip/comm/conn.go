@@ -18,7 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/util"
 	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/pkg/errors"
-	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 )
 
@@ -272,7 +271,7 @@ func (conn *connection) toDie() bool {
 
 func (conn *connection) send(msg *protoext.SignedGossipMessage, onErr func(error), shouldBlock blockingBehavior) {
 	if conn.toDie() {
-		conn.logger.Debug("Aborting send() to ", conn.info.Endpoint, "because connection is closing")
+		conn.logger.Debugf("Aborting send() to %s because connection is closing", conn.info.Endpoint)
 		return
 	}
 
@@ -281,17 +280,17 @@ func (conn *connection) send(msg *protoext.SignedGossipMessage, onErr func(error
 		onErr:    onErr,
 	}
 
-	if len(conn.outBuff) == cap(conn.outBuff) {
-		if conn.logger.IsEnabledFor(zapcore.DebugLevel) {
-			conn.logger.Debug("Buffer to", conn.info.Endpoint, "overflowed, dropping message", msg.String())
+	select {
+	case conn.outBuff <- m:
+		
+	default: 
+		if shouldBlock {
+			conn.outBuff <- m 
+		} else {
 			conn.metrics.BufferOverflow.Add(1)
-		}
-		if !shouldBlock {
-			return
+			conn.logger.Debugf("Buffer to %s overflowed, dropping message %s", conn.info.Endpoint, msg)
 		}
 	}
-
-	conn.outBuff <- m
 }
 
 func (conn *connection) serviceConnection() error {
@@ -349,8 +348,13 @@ func (conn *connection) writeToStream() {
 
 func (conn *connection) drainOutputBuffer() {
 	
-	for len(conn.outBuff) > 0 {
-		<-conn.outBuff
+	
+	for {
+		select {
+		case <-conn.outBuff:
+		default:
+			return
+		}
 	}
 }
 

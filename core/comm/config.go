@@ -80,6 +80,20 @@ type ClientConfig struct {
 }
 
 
+func (cc ClientConfig) Clone() ClientConfig {
+	shallowClone := cc
+	if shallowClone.SecOpts != nil {
+		secOptsClone := *cc.SecOpts
+		shallowClone.SecOpts = &secOptsClone
+	}
+	if shallowClone.KaOpts != nil {
+		kaOptsClone := *cc.KaOpts
+		shallowClone.KaOpts = &kaOptsClone
+	}
+	return shallowClone
+}
+
+
 
 type SecureOptions struct {
 	
