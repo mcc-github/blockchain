@@ -114,4 +114,7 @@ type ConsenterSupport interface {
 	
 	
 	Append(block *cb.Block) error
+
+	
+	DetectConsensusMigration() bool
 }

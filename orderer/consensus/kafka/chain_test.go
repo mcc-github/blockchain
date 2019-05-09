@@ -3801,3 +3801,7 @@ func (c *mockConsenterSupport) Append(block *cb.Block) error {
 	c.Called(block)
 	return nil
 }
+
+func (c *mockConsenterSupport) DetectConsensusMigration() bool {
+	return false
+}

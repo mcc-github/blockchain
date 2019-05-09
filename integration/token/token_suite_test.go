@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/mcc-github/blockchain/integration"
 	"github.com/mcc-github/blockchain/integration/nwo"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -22,7 +23,7 @@ func TestEndToEnd(t *testing.T) {
 }
 
 var components *nwo.Components
-var suiteBase = 30000
+var suiteBase = integration.TokenBasePort
 
 var _ = SynchronizedBeforeSuite(func() []byte {
 	components = &nwo.Components{}
