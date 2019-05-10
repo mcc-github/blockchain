@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package support
 
 import (
+	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/discovery"
 	"github.com/mcc-github/blockchain/discovery/support/acl"
 )
@@ -23,6 +24,12 @@ type GossipSupport interface {
 
 type ChannelPolicyManagerGetter interface {
 	acl.ChannelPolicyManagerGetter
+}
+
+
+
+type PolicyManager interface {
+	policies.Manager
 }
 
 

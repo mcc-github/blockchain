@@ -28,7 +28,6 @@ import (
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
-	policiesmocks "github.com/mcc-github/blockchain/common/mocks/policies"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/util"
 	cc "github.com/mcc-github/blockchain/core/cclifecycle"
@@ -87,16 +86,19 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	var err error
 	if err := buildBinaries(); err != nil {
-		fmt.Printf("failed generating artifacts: +%v", err)
-		return
+		fmt.Printf("failed to build binaries: +%v", err)
+		gexec.CleanupBuildArtifacts()
+		os.Exit(1)
 	}
 
+	var err error
 	testdir, err = generateChannelArtifacts()
 	if err != nil {
-		fmt.Printf("failed generating artifacts: +%v", err)
-		return
+		fmt.Printf("failed to generate channel artifacts: +%v", err)
+		os.RemoveAll(testdir)
+		gexec.CleanupBuildArtifacts()
+		os.Exit(1)
 	}
 
 	peerDirPrefix := filepath.Join(testdir, "crypto-config", "peerOrganizations")
@@ -574,13 +576,10 @@ func createPolicyManagerGetter(t *testing.T, mspMgr msp.MSPManager) *mocks.Chann
 	assert.NoError(t, err)
 	org1Org2MembersPolicy, _, err := cauthdsl.NewPolicyProvider(mspMgr).NewPolicy(protoutil.MarshalOrPanic(org1Org2Members))
 	assert.NoError(t, err)
-	_ = org1Org2MembersPolicy
+
 	polMgr := &mocks.ChannelPolicyManagerGetter{}
-	policyMgr := &policiesmocks.Manager{
-		PolicyMap: map[string]policies.Policy{
-			policies.ChannelApplicationWriters: org1Org2MembersPolicy,
-		},
-	}
+	policyMgr := &mocks.PolicyManager{}
+	policyMgr.On("GetPolicy", policies.ChannelApplicationWriters).Return(org1Org2MembersPolicy, true)
 	polMgr.On("Manager", "mychannel").Return(policyMgr, false)
 	return polMgr
 }
@@ -608,7 +607,7 @@ func generateChannelArtifacts() (string, error) {
 	args := []string{
 		"generate",
 		fmt.Sprintf("--output=%s", cryptoConfigDir),
-		fmt.Sprintf("--config=%s", filepath.Join("..", "..", "examples", "e2e_cli", "crypto-config.yaml")),
+		fmt.Sprintf("--config=%s", filepath.Join("testdata", "crypto-config.yaml")),
 	}
 	b, err := exec.Command(cryptogen, args...).CombinedOutput()
 	if err != nil {
@@ -624,8 +623,8 @@ func generateChannelArtifacts() (string, error) {
 }
 
 func createGenesisBlock(cryptoConfigDir string) *common.Block {
-	appConfig := genesisconfig.Load("TwoOrgsChannel", filepath.Join("..", "..", "examples", "e2e_cli"))
-	ordererConfig := genesisconfig.Load("TwoOrgsOrdererGenesis", filepath.Join("..", "..", "examples", "e2e_cli"))
+	appConfig := genesisconfig.Load("TwoOrgsChannel", "testdata")
+	ordererConfig := genesisconfig.Load("TwoOrgsOrdererGenesis", "testdata")
 	
 	appConfig.Orderer = ordererConfig.Orderer
 	channelConfig := appConfig

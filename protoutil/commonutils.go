@@ -7,12 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package protoutil
 
 import (
+	"crypto/rand"
 	"fmt"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -46,7 +46,7 @@ func CreateNonceOrPanic() []byte {
 
 
 func CreateNonce() ([]byte, error) {
-	nonce, err := crypto.GetRandomNonce()
+	nonce, err := getRandomNonce()
 	return nonce, errors.WithMessage(err, "error generating random nonce")
 }
 
@@ -354,4 +354,14 @@ func EnvelopeToConfigUpdate(configtx *cb.Envelope) (*cb.ConfigUpdateEnvelope, er
 		return nil, err
 	}
 	return configUpdateEnv, nil
+}
+
+func getRandomNonce() ([]byte, error) {
+	key := make([]byte, 24)
+
+	_, err := rand.Read(key)
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting random bytes")
+	}
+	return key, nil
 }

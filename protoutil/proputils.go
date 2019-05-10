@@ -14,7 +14,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
-	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
@@ -240,7 +239,7 @@ func CreateChaincodeProposal(typ common.HeaderType, chainID string, cis *peer.Ch
 
 func CreateChaincodeProposalWithTransient(typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, creator []byte, transientMap map[string][]byte) (*peer.Proposal, string, error) {
 	
-	nonce, err := crypto.GetRandomNonce()
+	nonce, err := getRandomNonce()
 	if err != nil {
 		return nil, "", err
 	}
@@ -259,7 +258,7 @@ func CreateChaincodeProposalWithTransient(typ common.HeaderType, chainID string,
 
 func CreateChaincodeProposalWithTxIDAndTransient(typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, creator []byte, txid string, transientMap map[string][]byte) (*peer.Proposal, string, error) {
 	
-	nonce, err := crypto.GetRandomNonce()
+	nonce, err := getRandomNonce()
 	if err != nil {
 		return nil, "", err
 	}
@@ -455,7 +454,7 @@ func GetActionFromEnvelopeMsg(env *common.Envelope) (*peer.ChaincodeAction, erro
 
 
 func CreateProposalFromCISAndTxid(txid string, typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, creator []byte) (*peer.Proposal, string, error) {
-	nonce, err := crypto.GetRandomNonce()
+	nonce, err := getRandomNonce()
 	if err != nil {
 		return nil, "", err
 	}
