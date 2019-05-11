@@ -2022,7 +2022,6 @@ func TestChangesInPeers(t *testing.T) {
 	
 	
 	
-	t.Parallel()
 	type testCase struct {
 		name                     string
 		oldMembers               map[string]struct{}
@@ -2104,21 +2103,20 @@ func TestChangesInPeers(t *testing.T) {
 			expectedTotal:            2,
 		},
 	}
-	invokedReport := false
-	
-	chForString := make(chan string, 1)
-	defer func() {
-		invokedReport = false
-	}()
-	funcLogger := func(a ...interface{}) {
-		invokedReport = true
-		chForString <- fmt.Sprint(a...)
-	}
 
 	for _, test := range cases {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			
+			chForString := make(chan string, 1)
+			
+			funcLogger := func(a ...interface{}) {
+				chForString <- fmt.Sprint(a...)
+			}
+
 			tickChan := make(chan time.Time)
-			i := 0
 
 			buildMembers := func(rangeMembers map[string]struct{}) []discovery.NetworkMember {
 				var members []discovery.NetworkMember
@@ -2133,18 +2131,20 @@ func TestChangesInPeers(t *testing.T) {
 				return members
 			}
 
-			stopChan := make(chan struct{}, 1)
+			stopChan := make(chan struct{})
 
+			getPeersToTrackCallCount := 0
 			getListOfPeers := func() []discovery.NetworkMember {
 				var members []discovery.NetworkMember
-				if i == 1 {
-					members = buildMembers(test.newMembers)
-					i++
-					stopChan <- struct{}{}
-				}
-				if i == 0 {
+				if getPeersToTrackCallCount == 0 {
 					members = buildMembers(test.oldMembers)
-					i++
+					getPeersToTrackCallCount++
+				} else if getPeersToTrackCallCount == 1 {
+					members = buildMembers(test.newMembers)
+					getPeersToTrackCallCount++
+					close(stopChan) 
+				} else {
+					t.Fatal("getPeersToTrack called too many times")
 				}
 				return members
 			}
@@ -2167,16 +2167,22 @@ func TestChangesInPeers(t *testing.T) {
 				mt.trackMembershipChanges()
 				wgMT.Done()
 			}()
-			defer wgMT.Wait()
 
 			tickChan <- time.Time{}
-			if test.name == "noChanges" {
-				test.entryInChannel(chForString)
+
+			test.entryInChannel(chForString) 
+			actual := <-chForString
+
+			
+			assert.Contains(t, test.expected, actual)
+
+			
+			wgMT.Wait()
+			if testMetricProvider.FakeTotalGauge.WithCallCount() < 1 {
+				t.Fatal("did not get With() call")
 			}
-			select {
-			case actual, _ := <-chForString:
-				assert.Contains(t, test.expected, actual)
-				assert.Equal(t, test.expectedReportInvocation, invokedReport)
+			if testMetricProvider.FakeTotalGauge.SetCallCount() < 1 {
+				t.Fatal("did not get Set() call")
 			}
 			assert.Equal(t, []string{"channel", "test"}, testMetricProvider.FakeTotalGauge.WithArgsForCall(0))
 			assert.EqualValues(t, test.expectedTotal, testMetricProvider.FakeTotalGauge.SetArgsForCall(0))

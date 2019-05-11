@@ -1083,23 +1083,19 @@ func (mt *membershipTracker) createSetOfPeers(peersToMakeSet []discovery.Network
 }
 
 func (mt *membershipTracker) trackMembershipChanges() {
-	prevSetPeers := make(map[string]struct{})
 	prev := mt.getPeersToTrack()
-	prevSetPeers = mt.createSetOfPeers(prev)
+	prevSetPeers := mt.createSetOfPeers(prev)
 	for {
-		currSetPeers := make(map[string]struct{})
 		
 		select {
 		case <-mt.stopChan:
 			return
 		case <-mt.tickerChannel:
-			
 			currPeers := mt.getPeersToTrack()
 			mt.metrics.Total.With("channel", string(mt.chainID)).Set(float64(len(currPeers)))
-			currSetPeers = mt.createSetOfPeers(currPeers)
+			currSetPeers := mt.createSetOfPeers(currPeers)
 			mt.checkIfPeersChanged(prev, currPeers, prevSetPeers, currSetPeers)
 			prev = currPeers
-			prevSetPeers = map[string]struct{}{}
 			prevSetPeers = mt.createSetOfPeers(prev)
 		}
 	}
