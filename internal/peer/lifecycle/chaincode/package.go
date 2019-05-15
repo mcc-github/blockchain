@@ -140,6 +140,11 @@ func (p *Packager) Package() error {
 	}
 
 	dir, name := filepath.Split(p.Input.OutputFile)
+	
+	
+	if dir, err = filepath.Abs(dir); err != nil {
+		return err
+	}
 	err = p.Writer.WriteFile(dir, name, pkgTarGzBytes)
 	if err != nil {
 		err = errors.Wrapf(err, "error writing chaincode package to %s", p.Input.OutputFile)
