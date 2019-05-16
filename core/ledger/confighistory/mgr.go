@@ -64,9 +64,9 @@ func (m *mgr) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
 	if err != nil {
 		return err
 	}
+	
+	
 	if len(updatedCCs) == 0 {
-		logger.Errorf("Config history manager is expected to recieve events only if at least one chaincode is updated stateUpdates = %#v",
-			trigger.StateUpdates)
 		return nil
 	}
 	updatedCollConfigs := map[string]*common.CollectionConfigPackage{}
@@ -75,7 +75,10 @@ func (m *mgr) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
 		if err != nil {
 			return err
 		}
-		if ccInfo.ExplicitCollectionConfigPkg == nil {
+
+		
+		
+		if ccInfo.ExplicitCollectionConfigPkg == nil || len(ccInfo.ExplicitCollectionConfigPkg.Config) == 0 {
 			continue
 		}
 		updatedCollConfigs[ccInfo.Name] = ccInfo.ExplicitCollectionConfigPkg
