@@ -17,7 +17,7 @@ import (
 
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
-	cc "github.com/mcc-github/blockchain/core/cclifecycle"
+	"github.com/mcc-github/blockchain/core/cclifecycle"
 	"github.com/mcc-github/blockchain/core/cclifecycle/mocks"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
@@ -32,13 +32,13 @@ import (
 
 func TestNewQuery(t *testing.T) {
 	
-	var q cc.Query
-	queryCreator := func() (cc.Query, error) {
+	var q cclifecycle.Query
+	queryCreator := func() (cclifecycle.Query, error) {
 		q := &mocks.Query{}
 		q.On("Done")
 		return q, nil
 	}
-	q, _ = cc.QueryCreatorFunc(queryCreator).NewQuery()
+	q, _ = cclifecycle.QueryCreatorFunc(queryCreator).NewQuery()
 	q.Done()
 }
 
@@ -47,14 +47,14 @@ func TestHandleMetadataUpdate(t *testing.T) {
 		assert.Len(t, chaincodes, 2)
 		assert.Equal(t, "mychannel", channel)
 	}
-	cc.HandleMetadataUpdateFunc(f).HandleMetadataUpdate("mychannel", chaincode.MetadataSet{{}, {}})
+	cclifecycle.HandleMetadataUpdateFunc(f).HandleMetadataUpdate("mychannel", chaincode.MetadataSet{{}, {}})
 }
 
 func TestEnumerate(t *testing.T) {
 	f := func() ([]chaincode.InstalledChaincode, error) {
 		return []chaincode.InstalledChaincode{{}, {}}, nil
 	}
-	ccs, err := cc.EnumerateFunc(f).Enumerate()
+	ccs, err := cclifecycle.EnumerateFunc(f).Enumerate()
 	assert.NoError(t, err)
 	assert.Len(t, ccs, 2)
 }
@@ -62,8 +62,8 @@ func TestEnumerate(t *testing.T) {
 func TestLifecycleInitFailure(t *testing.T) {
 	listCCs := &mocks.Enumerator{}
 	listCCs.On("Enumerate").Return(nil, errors.New("failed accessing DB"))
-	lc, err := cc.NewLifecycle(listCCs)
-	assert.Nil(t, lc)
+	m, err := cclifecycle.NewMetadataManager(listCCs)
+	assert.Nil(t, m)
 	assert.Contains(t, err.Error(), "failed accessing DB")
 }
 
@@ -119,14 +119,14 @@ func TestHandleChaincodeDeployGreenPath(t *testing.T) {
 		},
 	}, nil)
 
-	lc, err := cc.NewLifecycle(enum)
+	m, err := cclifecycle.NewMetadataManager(enum)
 	assert.NoError(t, err)
 
-	lsnr := &mocks.LifecycleChangeListener{}
+	lsnr := &mocks.MetadataChangeListener{}
 	lsnr.On("HandleMetadataUpdate", mock.Anything, mock.Anything)
-	lc.AddListener(lsnr)
+	m.AddListener(lsnr)
 
-	sub, err := lc.NewChannelSubscription("mychannel", queryCreator)
+	sub, err := m.NewChannelSubscription("mychannel", queryCreator)
 	assert.NoError(t, err)
 	assert.NotNil(t, sub)
 
@@ -212,16 +212,16 @@ func TestHandleChaincodeDeployFailures(t *testing.T) {
 		},
 	}, nil)
 
-	lc, err := cc.NewLifecycle(enum)
+	m, err := cclifecycle.NewMetadataManager(enum)
 	assert.NoError(t, err)
 
-	lsnr := &mocks.LifecycleChangeListener{}
+	lsnr := &mocks.MetadataChangeListener{}
 	lsnr.On("HandleMetadataUpdate", mock.Anything, mock.Anything)
-	lc.AddListener(lsnr)
+	m.AddListener(lsnr)
 
 	
 	queryCreator.On("NewQuery").Return(nil, errors.New("failed accessing DB")).Once()
-	sub, err := lc.NewChannelSubscription("mychannel", queryCreator)
+	sub, err := m.NewChannelSubscription("mychannel", queryCreator)
 	assert.Nil(t, sub)
 	assert.Contains(t, err.Error(), "failed accessing DB")
 	lsnr.AssertNumberOfCalls(t, "HandleMetadataUpdate", 0)
@@ -231,7 +231,7 @@ func TestHandleChaincodeDeployFailures(t *testing.T) {
 	queryCreator.On("NewQuery").Return(query, nil).Once()
 	queryCreator.On("NewQuery").Return(nil, errors.New("failed accessing DB")).Once()
 	query.On("GetState", "lscc", "cc1").Return(cc1Bytes, nil).Once()
-	sub, err = lc.NewChannelSubscription("mychannel", queryCreator)
+	sub, err = m.NewChannelSubscription("mychannel", queryCreator)
 	assert.NoError(t, err)
 	assert.NotNil(t, sub)
 	lsnr.AssertNumberOfCalls(t, "HandleMetadataUpdate", 1)
@@ -245,7 +245,7 @@ func TestHandleChaincodeDeployFailures(t *testing.T) {
 	
 	queryCreator.On("NewQuery").Return(query, nil).Once()
 	query.On("GetState", "lscc", "cc1").Return(nil, errors.New("failed accessing DB")).Once()
-	sub, err = lc.NewChannelSubscription("mychannel", queryCreator)
+	sub, err = m.NewChannelSubscription("mychannel", queryCreator)
 	assert.NoError(t, err)
 	assert.NotNil(t, sub)
 	lsnr.AssertNumberOfCalls(t, "HandleMetadataUpdate", 2)
@@ -257,7 +257,7 @@ func TestHandleChaincodeDeployFailures(t *testing.T) {
 	
 	
 	
-	sub, err = lc.NewChannelSubscription("mychannel", queryCreator)
+	sub, err = m.NewChannelSubscription("mychannel", queryCreator)
 	lsnr.AssertNumberOfCalls(t, "HandleMetadataUpdate", 3)
 	assert.NoError(t, err)
 	assert.NotNil(t, sub)
@@ -305,18 +305,18 @@ func TestMultipleUpdates(t *testing.T) {
 		},
 	}, nil)
 
-	lc, err := cc.NewLifecycle(enum)
+	m, err := cclifecycle.NewMetadataManager(enum)
 	assert.NoError(t, err)
 
 	var lsnrCalled sync.WaitGroup
 	lsnrCalled.Add(3)
-	lsnr := &mocks.LifecycleChangeListener{}
+	lsnr := &mocks.MetadataChangeListener{}
 	lsnr.On("HandleMetadataUpdate", mock.Anything, mock.Anything).Run(func(arguments mock.Arguments) {
 		lsnrCalled.Done()
 	})
-	lc.AddListener(lsnr)
+	m.AddListener(lsnr)
 
-	sub, err := lc.NewChannelSubscription("mychannel", queryCreator)
+	sub, err := m.NewChannelSubscription("mychannel", queryCreator)
 	assert.NoError(t, err)
 
 	sub.HandleChaincodeDeploy(&cceventmgmt.ChaincodeDefinition{Name: "cc1", Version: "1.1", Hash: []byte{42}}, nil)
@@ -381,11 +381,11 @@ func TestMetadata(t *testing.T) {
 		},
 	}, nil)
 
-	lc, err := cc.NewLifecycle(enum)
+	m, err := cclifecycle.NewMetadataManager(enum)
 	assert.NoError(t, err)
 
 	
-	md := lc.Metadata("mychannel", "cc1", false)
+	md := m.Metadata("mychannel", "cc1", false)
 	assert.Nil(t, md)
 	assertLogged(t, recorder, "Requested Metadata for non-existent channel mychannel")
 
@@ -393,11 +393,11 @@ func TestMetadata(t *testing.T) {
 	
 	query.On("GetState", "lscc", "cc1").Return(cc1Bytes, nil).Once()
 	queryCreator.On("NewQuery").Return(query, nil).Once()
-	sub, err := lc.NewChannelSubscription("mychannel", queryCreator)
+	sub, err := m.NewChannelSubscription("mychannel", queryCreator)
 	defer sub.ChaincodeDeployDone(true)
 	assert.NoError(t, err)
 	assert.NotNil(t, sub)
-	md = lc.Metadata("mychannel", "cc1", false)
+	md = m.Metadata("mychannel", "cc1", false)
 	assert.Equal(t, &chaincode.Metadata{
 		Name:    "cc1",
 		Version: "1.0",
@@ -409,7 +409,7 @@ func TestMetadata(t *testing.T) {
 	
 	
 	queryCreator.On("NewQuery").Return(nil, errors.New("failed obtaining query executor")).Once()
-	md = lc.Metadata("mychannel", "cc2", false)
+	md = m.Metadata("mychannel", "cc2", false)
 	assert.Nil(t, md)
 	assertLogged(t, recorder, "Failed obtaining new query for channel mychannel : failed obtaining query executor")
 
@@ -417,7 +417,7 @@ func TestMetadata(t *testing.T) {
 	
 	queryCreator.On("NewQuery").Return(query, nil).Once()
 	query.On("GetState", "lscc", "cc2").Return(nil, errors.New("GetState failed")).Once()
-	md = lc.Metadata("mychannel", "cc2", false)
+	md = m.Metadata("mychannel", "cc2", false)
 	assert.Nil(t, md)
 	assertLogged(t, recorder, "Failed querying LSCC for channel mychannel : GetState failed")
 
@@ -425,7 +425,7 @@ func TestMetadata(t *testing.T) {
 	
 	queryCreator.On("NewQuery").Return(query, nil).Once()
 	query.On("GetState", "lscc", "cc2").Return(nil, nil).Once()
-	md = lc.Metadata("mychannel", "cc2", false)
+	md = m.Metadata("mychannel", "cc2", false)
 	assert.Nil(t, md)
 	assertLogged(t, recorder, "Chaincode cc2 isn't defined in channel mychannel")
 
@@ -433,7 +433,7 @@ func TestMetadata(t *testing.T) {
 	
 	queryCreator.On("NewQuery").Return(query, nil).Once()
 	query.On("GetState", "lscc", "cc2").Return(cc2Bytes, nil).Once()
-	md = lc.Metadata("mychannel", "cc2", false)
+	md = m.Metadata("mychannel", "cc2", false)
 	assert.Equal(t, &chaincode.Metadata{
 		Name:    "cc2",
 		Version: "1.0",
@@ -446,7 +446,7 @@ func TestMetadata(t *testing.T) {
 	queryCreator.On("NewQuery").Return(query, nil).Once()
 	query.On("GetState", "lscc", "cc1").Return(cc1Bytes, nil).Once()
 	query.On("GetState", "lscc", privdata.BuildCollectionKVSKey("cc1")).Return([]byte{10, 10, 10}, nil).Once()
-	md = lc.Metadata("mychannel", "cc1", true)
+	md = m.Metadata("mychannel", "cc1", true)
 	assert.Equal(t, &chaincode.Metadata{
 		Name:              "cc1",
 		Version:           "1.0",
@@ -462,18 +462,18 @@ func TestMetadata(t *testing.T) {
 	queryCreator.On("NewQuery").Return(query, nil).Once()
 	query.On("GetState", "lscc", "cc1").Return(cc1Bytes, nil).Once()
 	query.On("GetState", "lscc", privdata.BuildCollectionKVSKey("cc1")).Return(nil, errors.New("foo")).Once()
-	md = lc.Metadata("mychannel", "cc1", true)
+	md = m.Metadata("mychannel", "cc1", true)
 	assert.Nil(t, md)
 	assertLogged(t, recorder, "Failed querying lscc namespace for cc1~collection: foo")
 }
 
 func newLogRecorder(t *testing.T) (*floggingtest.Recorder, func()) {
-	oldLogger := cc.Logger
+	oldLogger := cclifecycle.Logger
 
 	logger, recorder := floggingtest.NewTestLogger(t)
-	cc.Logger = logger
+	cclifecycle.Logger = logger
 
-	return recorder, func() { cc.Logger = oldLogger }
+	return recorder, func() { cclifecycle.Logger = oldLogger }
 }
 
 func assertLogged(t *testing.T, r *floggingtest.Recorder, msg string) {

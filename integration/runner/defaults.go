@@ -12,7 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/integration/helpers"
 )
 
-const DefaultStartTimeout = 30 * time.Second
+const DefaultStartTimeout = 45 * time.Second
 
 
 var DefaultNamer NameFunc = helpers.UniqueName
