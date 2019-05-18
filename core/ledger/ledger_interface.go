@@ -22,12 +22,13 @@ import (
 
 
 type Initializer struct {
-	StateListeners                []StateListener
-	DeployedChaincodeInfoProvider DeployedChaincodeInfoProvider
-	MembershipInfoProvider        MembershipInfoProvider
-	MetricsProvider               metrics.Provider
-	HealthCheckRegistry           HealthCheckRegistry
-	Config                        *Config
+	StateListeners                  []StateListener
+	DeployedChaincodeInfoProvider   DeployedChaincodeInfoProvider
+	MembershipInfoProvider          MembershipInfoProvider
+	ChaincodeLifecycleEventProvider ChaincodeLifecycleEventProvider
+	MetricsProvider                 metrics.Provider
+	HealthCheckRegistry             HealthCheckRegistry
+	Config                          *Config
 }
 
 
@@ -573,6 +574,40 @@ type MembershipInfoProvider interface {
 type HealthCheckRegistry interface {
 	RegisterChecker(string, healthz.HealthChecker) error
 }
+
+
+
+
+
+
+
+type ChaincodeLifecycleEventListener interface {
+	
+	
+	
+	
+	HandleChaincodeDeploy(chaincodeDefinition *ChaincodeDefinition, dbArtifactsTar []byte) error
+	
+	
+	ChaincodeDeployDone(succeeded bool)
+}
+
+
+type ChaincodeDefinition struct {
+	Name              string
+	Hash              []byte
+	Version           string
+	CollectionConfigs *common.CollectionConfigPackage
+}
+
+func (cdef *ChaincodeDefinition) String() string {
+	return fmt.Sprintf("Name=%s, Version=%s, Hash=%#v", cdef.Name, cdef.Version, cdef.Hash)
+}
+
+type ChaincodeLifecycleEventProvider interface {
+	RegisterListener(channelID string, listener ChaincodeLifecycleEventListener)
+}
+
 
 
 

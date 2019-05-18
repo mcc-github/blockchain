@@ -17,12 +17,16 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
+	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/discovery/support/config"
 	"github.com/mcc-github/blockchain/discovery/support/mocks"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/discovery"
+	"github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/onsi/gomega/gexec"
 	"github.com/stretchr/testify/assert"
 )
@@ -316,4 +320,118 @@ func TestValidateConfigEnvelope(t *testing.T) {
 		})
 	}
 
+}
+
+func TestOrdererEndpoints(t *testing.T) {
+	t.Run("Global endpoints", func(t *testing.T) {
+		block, err := test.MakeGenesisBlock("mychannel")
+		assert.NoError(t, err)
+
+		fakeBlockGetter := &mocks.ConfigBlockGetter{}
+		cs := config.NewDiscoverySupport(fakeBlockGetter)
+
+		fakeBlockGetter.GetCurrConfigBlockReturnsOnCall(0, block)
+
+		injectGlobalOrdererEndpoint(t, block, "globalEndpoint:7050")
+
+		res, err := cs.Config("test")
+		assert.NoError(t, err)
+		assert.Equal(t, map[string]*discovery.Endpoints{
+			"SampleOrg": {Endpoint: []*discovery.Endpoint{{Host: "globalEndpoint", Port: 7050}}},
+		}, res.Orderers)
+	})
+
+	t.Run("Per org endpoints", func(t *testing.T) {
+		block, err := test.MakeGenesisBlock("mychannel")
+		assert.NoError(t, err)
+
+		fakeBlockGetter := &mocks.ConfigBlockGetter{}
+		cs := config.NewDiscoverySupport(fakeBlockGetter)
+
+		fakeBlockGetter.GetCurrConfigBlockReturnsOnCall(0, block)
+
+		injectAdditionalEndpointPair(t, block, "perOrgEndpoint:7050", "anotherOrg")
+		injectAdditionalEndpointPair(t, block, "endpointWithoutAPortName", "aBadOrg")
+
+		res, err := cs.Config("test")
+		assert.NoError(t, err)
+		assert.Equal(t, map[string]*discovery.Endpoints{
+			"SampleOrg":  {Endpoint: []*discovery.Endpoint{{Host: "127.0.0.1", Port: 7050}}},
+			"anotherOrg": {Endpoint: []*discovery.Endpoint{{Host: "perOrgEndpoint", Port: 7050}}},
+			"aBadOrg":    {},
+		}, res.Orderers)
+	})
+}
+
+func injectGlobalOrdererEndpoint(t *testing.T, block *common.Block, endpoint string) {
+	ordererAddresses := channelconfig.OrdererAddressesValue([]string{endpoint})
+	
+	env, err := protoutil.ExtractEnvelope(block, 0)
+	assert.NoError(t, err)
+	payload, err := protoutil.ExtractPayload(env)
+	assert.NoError(t, err)
+	confEnv, err := configtx.UnmarshalConfigEnvelope(payload.Data)
+	assert.NoError(t, err)
+	
+	confEnv.Config.ChannelGroup.Values[ordererAddresses.Key()].Value = protoutil.MarshalOrPanic(ordererAddresses.Value())
+	
+	ordererGrps := confEnv.Config.ChannelGroup.Groups[channelconfig.OrdererGroupKey].Groups
+	for _, grp := range ordererGrps {
+		if grp.Values[channelconfig.EndpointsKey] == nil {
+			continue
+		}
+		grp.Values[channelconfig.EndpointsKey].Value = nil
+	}
+	
+	payload.Data = protoutil.MarshalOrPanic(confEnv)
+	env.Payload = protoutil.MarshalOrPanic(payload)
+	block.Data.Data[0] = protoutil.MarshalOrPanic(env)
+}
+
+func injectAdditionalEndpointPair(t *testing.T, block *common.Block, endpoint string, orgName string) {
+	
+	env, err := protoutil.ExtractEnvelope(block, 0)
+	assert.NoError(t, err)
+	payload, err := protoutil.ExtractPayload(env)
+	assert.NoError(t, err)
+	confEnv, err := configtx.UnmarshalConfigEnvelope(payload.Data)
+	assert.NoError(t, err)
+	ordererGrp := confEnv.Config.ChannelGroup.Groups[channelconfig.OrdererGroupKey].Groups
+	
+	var firstOrdererConfig *common.ConfigGroup
+	for _, grp := range ordererGrp {
+		firstOrdererConfig = grp
+		break
+	}
+	
+	secondOrdererConfig := proto.Clone(firstOrdererConfig).(*common.ConfigGroup)
+	ordererGrp[orgName] = secondOrdererConfig
+	
+	mspConfig := &msp.MSPConfig{}
+	err = proto.Unmarshal(secondOrdererConfig.Values[channelconfig.MSPKey].Value, mspConfig)
+	assert.NoError(t, err)
+
+	blockchainConfig := &msp.FabricMSPConfig{}
+	err = proto.Unmarshal(mspConfig.Config, blockchainConfig)
+	assert.NoError(t, err)
+
+	
+	blockchainConfig.Name = orgName
+
+	
+	secondOrdererConfig.Values[channelconfig.MSPKey].Value = protoutil.MarshalOrPanic(&msp.MSPConfig{
+		Config: protoutil.MarshalOrPanic(blockchainConfig),
+		Type:   mspConfig.Type,
+	})
+
+	
+	ordererOrgProtos := &common.OrdererAddresses{
+		Addresses: []string{endpoint},
+	}
+	secondOrdererConfig.Values[channelconfig.EndpointsKey].Value = protoutil.MarshalOrPanic(ordererOrgProtos)
+
+	
+	payload.Data = protoutil.MarshalOrPanic(confEnv)
+	env.Payload = protoutil.MarshalOrPanic(payload)
+	block.Data.Data[0] = protoutil.MarshalOrPanic(env)
 }

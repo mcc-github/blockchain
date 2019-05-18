@@ -16,7 +16,7 @@ import (
 	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 	"github.com/mcc-github/blockchain/protoutil"
 
-	p "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
+	ccpersistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/pkg/errors"
 )
 
@@ -27,7 +27,7 @@ type LocalChaincodeInfo struct {
 }
 
 type ChaincodeInstallInfo struct {
-	PackageID p.PackageID
+	PackageID ccpersistence.PackageID
 	Type      string
 	Path      string
 	Label     string
@@ -71,6 +71,7 @@ type Cache struct {
 	
 	
 	localChaincodes map[string]*LocalChaincode
+	eventBroker     *EventBroker
 }
 
 type LocalChaincode struct {
@@ -84,6 +85,7 @@ func NewCache(resources *Resources, myOrgMSPID string) *Cache {
 		localChaincodes:   map[string]*LocalChaincode{},
 		Resources:         resources,
 		MyOrgMSPID:        myOrgMSPID,
+		eventBroker:       NewEventBroker(resources.ChaincodeStore, resources.PackageParser),
 	}
 }
 
@@ -108,7 +110,7 @@ func (c *Cache) InitializeLocalChaincodes() error {
 		if err != nil {
 			return errors.WithMessagef(err, "could not parse chaincode with pakcage ID '%s'", ccPackage.PackageID.String())
 		}
-		c.handleChaincodeInstalledWhileLocked(parsedCCPackage.Metadata, ccPackage.PackageID)
+		c.handleChaincodeInstalledWhileLocked(true, parsedCCPackage.Metadata, ccPackage.PackageID)
 	}
 
 	logger.Infof("Initialized lifecycle cache with %d already installed chaincodes", len(c.localChaincodes))
@@ -161,17 +163,17 @@ func (c *Cache) Initialize(channelID string, qe ledger.SimpleQueryExecutor) erro
 		}
 	}
 
-	return c.update(channelID, dirtyChaincodes, qe)
+	return c.update(true, channelID, dirtyChaincodes, qe)
 }
 
 
-func (c *Cache) HandleChaincodeInstalled(md *persistence.ChaincodePackageMetadata, packageID p.PackageID) {
+func (c *Cache) HandleChaincodeInstalled(md *persistence.ChaincodePackageMetadata, packageID ccpersistence.PackageID) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	c.handleChaincodeInstalledWhileLocked(md, packageID)
+	c.handleChaincodeInstalledWhileLocked(false, md, packageID)
 }
 
-func (c *Cache) handleChaincodeInstalledWhileLocked(md *persistence.ChaincodePackageMetadata, packageID p.PackageID) {
+func (c *Cache) handleChaincodeInstalledWhileLocked(initializing bool, md *persistence.ChaincodePackageMetadata, packageID ccpersistence.PackageID) {
 	
 	
 	encodedCCHash := protoutil.MarshalOrPanic(&lb.StateData{
@@ -197,6 +199,11 @@ func (c *Cache) handleChaincodeInstalledWhileLocked(md *persistence.ChaincodePac
 			logger.Infof("Installed chaincode with package ID '%s' now available on channel %s for chaincode definition %s:%s", packageID, channelID, chaincodeName, cachedChaincode.Definition.EndorsementInfo.Version)
 		}
 	}
+
+	if !initializing {
+		c.eventBroker.ProcessInstallEvent(localChaincode)
+	}
+	return
 }
 
 
@@ -246,7 +253,7 @@ func (c *Cache) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
 		}
 	}
 
-	err := c.update(channelID, dirtyChaincodes, trigger.PostCommitQueryExecutor)
+	err := c.update(false, channelID, dirtyChaincodes, trigger.PostCommitQueryExecutor)
 	if err != nil {
 		return errors.WithMessage(err, "error updating cache")
 	}
@@ -270,6 +277,7 @@ func (c *Cache) StateCommitDone(channelName string) {
 	
 	
 	
+	c.eventBroker.ApproveOrDefineCommitted(channelName)
 }
 
 
@@ -294,7 +302,7 @@ func (c *Cache) ChaincodeInfo(channelID, name string) (*LocalChaincodeInfo, erro
 }
 
 
-func (c *Cache) update(channelID string, dirtyChaincodes map[string]struct{}, qe ledger.SimpleQueryExecutor) error {
+func (c *Cache) update(initializing bool, channelID string, dirtyChaincodes map[string]struct{}, qe ledger.SimpleQueryExecutor) error {
 	channelCache, ok := c.definedChaincodes[channelID]
 	if !ok {
 		channelCache = &ChannelCache{
@@ -406,7 +414,14 @@ func (c *Cache) update(channelID string, dirtyChaincodes map[string]struct{}, qe
 		}
 
 		channelReferences[name] = cachedChaincode
+		if !initializing {
+			c.eventBroker.ProcessApproveOrDefineEvent(channelID, name, cachedChaincode)
+		}
 	}
-
 	return nil
+}
+
+
+func (c *Cache) RegisterListener(channelID string, listener ledger.ChaincodeLifecycleEventListener) {
+	c.eventBroker.RegisterListener(channelID, listener)
 }

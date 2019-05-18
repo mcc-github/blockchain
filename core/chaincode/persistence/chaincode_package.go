@@ -33,6 +33,7 @@ const (
 type ChaincodePackage struct {
 	Metadata    *ChaincodePackageMetadata
 	CodePackage []byte
+	DBArtifacts []byte
 }
 
 
@@ -44,7 +45,15 @@ type ChaincodePackageMetadata struct {
 }
 
 
-type ChaincodePackageParser struct{}
+
+type MetadataProvider interface {
+	GetDBArtifacts(codePackage []byte) ([]byte, error)
+}
+
+
+type ChaincodePackageParser struct {
+	MetadataProvider MetadataProvider
+}
 
 
 
@@ -106,8 +115,14 @@ func (ccpp ChaincodePackageParser) Parse(source []byte) (*ChaincodePackage, erro
 		return nil, errors.New("empty label in package metadata")
 	}
 
+	dbArtifacts, err := ccpp.MetadataProvider.GetDBArtifacts(codePackage)
+	if err != nil {
+		return nil, errors.WithMessage(err, "error retrieving DB artifacts from code package")
+	}
+
 	return &ChaincodePackage{
 		Metadata:    ccPackageMetadata,
 		CodePackage: codePackage,
+		DBArtifacts: dbArtifacts,
 	}, nil
 }

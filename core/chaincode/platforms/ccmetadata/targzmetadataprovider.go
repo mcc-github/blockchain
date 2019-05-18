@@ -24,6 +24,19 @@ var logger = flogging.MustGetLogger("chaincode.platform.metadata")
 
 
 
+
+type PersistenceMetadataProvider struct{}
+
+
+
+func (t *PersistenceMetadataProvider) GetDBArtifacts(codePackage []byte) ([]byte, error) {
+	return (&TargzMetadataProvider{
+		Code: codePackage,
+	}).GetMetadataAsTarEntries()
+}
+
+
+
 type TargzMetadataProvider struct {
 	Code []byte
 }

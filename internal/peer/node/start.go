@@ -39,6 +39,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
+	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
@@ -175,7 +176,9 @@ func serve(args []string) error {
 
 	chaincodeInstallPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "lifecycle", "chaincodes")
 	ccStore := persistence.NewStore(chaincodeInstallPath)
-	ccPackageParser := &persistence.ChaincodePackageParser{}
+	ccPackageParser := &persistence.ChaincodePackageParser{
+		MetadataProvider: &ccmetadata.PersistenceMetadataProvider{},
+	}
 
 	
 	
@@ -201,14 +204,15 @@ func serve(args []string) error {
 	
 	ledgermgmt.Initialize(
 		&ledgermgmt.Initializer{
-			CustomTxProcessors:            peer.ConfigTxProcessors,
-			PlatformRegistry:              platformRegistry,
-			DeployedChaincodeInfoProvider: lifecycleValidatorCommitter,
-			MembershipInfoProvider:        membershipInfoProvider,
-			MetricsProvider:               metricsProvider,
-			HealthCheckRegistry:           opsSystem,
-			StateListeners:                []ledger.StateListener{lifecycleCache},
-			Config:                        ledgerConfig(),
+			CustomTxProcessors:              peer.ConfigTxProcessors,
+			PlatformRegistry:                platformRegistry,
+			DeployedChaincodeInfoProvider:   lifecycleValidatorCommitter,
+			MembershipInfoProvider:          membershipInfoProvider,
+			ChaincodeLifecycleEventProvider: lifecycleCache,
+			MetricsProvider:                 metricsProvider,
+			HealthCheckRegistry:             opsSystem,
+			StateListeners:                  []ledger.StateListener{lifecycleCache},
+			Config:                          ledgerConfig(),
 		},
 	)
 
