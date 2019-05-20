@@ -20,7 +20,7 @@ import (
 	"github.com/mcc-github/blockchain/gossip/metrics"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"

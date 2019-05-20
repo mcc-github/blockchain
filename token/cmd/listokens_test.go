@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/cmd/common"
-	"github.com/mcc-github/blockchain/token/cmd"
+	token "github.com/mcc-github/blockchain/token/cmd"
 	"github.com/mcc-github/blockchain/token/cmd/mocks"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

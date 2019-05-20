@@ -98,21 +98,11 @@ func (p *PackageProvider) getCodePackageFromLegacyPP(name, version string) ([]by
 
 
 
-func (p *PackageProvider) ListInstalledChaincodes() ([]chaincode.InstalledChaincode, error) {
-	
-	installedChaincodes, err := p.Store.ListInstalledChaincodes()
-	if err != nil {
-		
-		logger.Debugf("error getting installed chaincodes from persistence store: %s", err)
-	}
-
-	
+func (p *PackageProvider) ListInstalledChaincodesLegacy() ([]chaincode.InstalledChaincode, error) {
 	installedChaincodesLegacy, err := p.LegacyPP.ListInstalledChaincodes(p.Store.GetChaincodeInstallPath(), ioutil.ReadDir, ccprovider.LoadPackage)
 	if err != nil {
-		
-		logger.Debugf("error getting installed chaincodes from ccprovider: %s", err)
+		return nil, err
 	}
 
-	installedChaincodes = append(installedChaincodes, installedChaincodesLegacy...)
-	return installedChaincodes, nil
+	return installedChaincodesLegacy, nil
 }

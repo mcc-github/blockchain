@@ -11,7 +11,7 @@ package ccintf
 
 
 import (
-	"github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
+	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 

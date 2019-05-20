@@ -12,7 +12,7 @@ import (
 	"io"
 
 	"github.com/mcc-github/blockchain/cmd/common"
-	"github.com/mcc-github/blockchain/discovery/client"
+	discovery "github.com/mcc-github/blockchain/discovery/client"
 	"github.com/pkg/errors"
 )
 

@@ -8,20 +8,16 @@ package endorsement
 
 import (
 	"github.com/mcc-github/blockchain/common/policies"
-	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/gossip/api"
+	"github.com/mcc-github/blockchain/protos/common"
 	. "github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/pkg/errors"
 )
 
-func principalsFromCollectionConfig(configBytes []byte) (principalSetsByCollectionName, error) {
+func principalsFromCollectionConfig(ccp *common.CollectionConfigPackage) (principalSetsByCollectionName, error) {
 	principalSetsByCollections := make(principalSetsByCollectionName)
-	if len(configBytes) == 0 {
+	if ccp == nil {
 		return principalSetsByCollections, nil
-	}
-	ccp, err := privdata.ParseCollectionConfig(configBytes)
-	if err != nil {
-		return nil, errors.Wrapf(err, "invalid collection bytes")
 	}
 	for _, colConfig := range ccp.Config {
 		staticCol := colConfig.GetStaticCollectionConfig()

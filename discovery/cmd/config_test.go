@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/cmd/common"
-	"github.com/mcc-github/blockchain/discovery/cmd"
+	discovery "github.com/mcc-github/blockchain/discovery/cmd"
 	"github.com/mcc-github/blockchain/discovery/cmd/mocks"
 	. "github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/mcc-github/blockchain/protos/msp"

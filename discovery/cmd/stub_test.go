@@ -16,7 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/cmd/common/comm"
 	"github.com/mcc-github/blockchain/cmd/common/signer"
 	c "github.com/mcc-github/blockchain/core/comm"
-	"github.com/mcc-github/blockchain/discovery/client"
+	discovery "github.com/mcc-github/blockchain/discovery/client"
 	"github.com/stretchr/testify/assert"
 )
 

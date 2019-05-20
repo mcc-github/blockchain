@@ -17,7 +17,7 @@ import (
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api/state"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -98,6 +98,26 @@ type applicationCapabilities interface {
 
 type validationState interface {
 	validation.State
+}
+
+
+type metadataUpdateListener interface {
+	lifecycle.MetadataUpdateListener
+}
+
+
+type chaincodeInfoProvider interface {
+	lifecycle.ChaincodeInfoProvider
+}
+
+
+type legacyMetadataProvider interface {
+	lifecycle.LegacyMetadataProvider
+}
+
+
+type metadataHandler interface {
+	lifecycle.MetadataHandler
 }
 
 func TestLifecycle(t *testing.T) {

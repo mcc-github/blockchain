@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package endorsement
 
 import (
-	"github.com/mcc-github/blockchain/core/handlers/endorsement/api"
+	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 )
 

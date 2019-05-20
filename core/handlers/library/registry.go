@@ -17,7 +17,7 @@ import (
 	"github.com/mcc-github/blockchain/core/handlers/auth"
 	"github.com/mcc-github/blockchain/core/handlers/decoration"
 	endorsement2 "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 )
 
 var logger = flogging.MustGetLogger("core.handlers")

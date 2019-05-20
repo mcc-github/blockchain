@@ -187,6 +187,7 @@ func serve(args []string) error {
 	
 	
 	
+	
 	lifecycleResources := &lifecycle.Resources{
 		Serializer:          &lifecycle.Serializer{},
 		ChannelConfigSource: peer.Default,
@@ -199,7 +200,46 @@ func serve(args []string) error {
 		LegacyDeployedCCInfoProvider: &lscc.DeployedCCInfoProvider{},
 	}
 
-	lifecycleCache := lifecycle.NewCache(lifecycleResources, mspID)
+	packageProvider := &persistence.PackageProvider{
+		LegacyPP: &ccprovider.CCInfoFSImpl{},
+		Store:    ccStore,
+		Parser:   ccPackageParser,
+	}
+
+	
+	
+	legacyMetadataManager, err := cclifecycle.NewMetadataManager(
+		cclifecycle.EnumerateFunc(
+			func() ([]ccdef.InstalledChaincode, error) {
+				return packageProvider.ListInstalledChaincodesLegacy()
+			},
+		),
+	)
+	if err != nil {
+		logger.Panicf("Failed creating LegacyMetadataManager: +%v", err)
+	}
+
+	
+	
+	metadataManager := lifecycle.NewMetadataManager()
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+	lifecycleCache := lifecycle.NewCache(lifecycleResources, mspID, metadataManager)
 
 	
 	ledgermgmt.Initialize(
@@ -222,12 +262,6 @@ func serve(args []string) error {
 
 	if err := lifecycleCache.InitializeLocalChaincodes(); err != nil {
 		return errors.WithMessage(err, "could not initialize local chaincodes")
-	}
-
-	packageProvider := &persistence.PackageProvider{
-		LegacyPP: &ccprovider.CCInfoFSImpl{},
-		Store:    ccStore,
-		Parser:   ccPackageParser,
 	}
 
 	
@@ -505,35 +539,47 @@ func serve(args []string) error {
 	}
 
 	
-
-	
 	ccp := chaincode.NewProvider(chaincodeSupport)
 	sccp.DeploySysCCs("", ccp)
 	logger.Infof("Deployed system chaincodes")
 
-	installedCCs := func() ([]ccdef.InstalledChaincode, error) {
-		return packageProvider.ListInstalledChaincodes()
-	}
-	legacyMetadataManager, err := cclifecycle.NewMetadataManager(cclifecycle.EnumerateFunc(installedCCs))
-	if err != nil {
-		logger.Panicf("Failed creating lifecycle: +%v", err)
-	}
-	onUpdate := cclifecycle.HandleMetadataUpdateFunc(func(channel string, chaincodes ccdef.MetadataSet) {
+	
+	
+	
+	
+	legacyMetadataManager.AddListener(metadataManager)
+
+	
+	metadataManager.AddListener(lifecycle.HandleMetadataUpdateFunc(func(channel string, chaincodes ccdef.MetadataSet) {
 		service.GetGossipService().UpdateChaincodes(chaincodes.AsChaincodes(), gossipcommon.ChainID(channel))
-	})
-	legacyMetadataManager.AddListener(onUpdate)
+	}))
 
 	
 	peer.Initialize(
 		func(cid string) {
 			logger.Debugf("Deploying system CC, for channel <%s>", cid)
 			sccp.DeploySysCCs(cid, ccp)
+
+			
+			
+			
+			lifecycleCache.InitializeMetadata(cid)
+
+			
+			
+			
+			
+			
+			
 			sub, err := legacyMetadataManager.NewChannelSubscription(cid, cclifecycle.QueryCreatorFunc(func() (cclifecycle.Query, error) {
 				return peer.GetLedger(cid).NewQueryExecutor()
 			}))
 			if err != nil {
 				logger.Panicf("Failed subscribing to chaincode lifecycle updates")
 			}
+
+			
+			
 			cceventmgmt.GetMgr().Register(cid, sub)
 		},
 		sccp,
@@ -549,7 +595,10 @@ func serve(args []string) error {
 	)
 
 	if coreConfig.DiscoveryEnabled {
-		registerDiscoveryService(coreConfig, peerServer, policyMgr, legacyMetadataManager)
+		registerDiscoveryService(coreConfig, peerServer, policyMgr, &lifecycle.MetadataProvider{
+			ChaincodeInfoProvider:  lifecycleCache,
+			LegacyMetadataProvider: legacyMetadataManager,
+		})
 	}
 
 	logger.Infof("Starting peer with ID=[%s], network ID=[%s], address=[%s]", coreConfig.PeerID, coreConfig.NetworkID, coreConfig.PeerAddress)
@@ -637,7 +686,7 @@ func createSelfSignedData() protoutil.SignedData {
 	}
 }
 
-func registerDiscoveryService(coreConfig *peer.Config, peerServer *comm.GRPCServer, polMgr policies.ChannelPolicyManagerGetter, metadataManager *cclifecycle.MetadataManager) {
+func registerDiscoveryService(coreConfig *peer.Config, peerServer *comm.GRPCServer, polMgr policies.ChannelPolicyManagerGetter, metadataProvider *lifecycle.MetadataProvider) {
 	mspID := coreConfig.LocalMSPID
 	localAccessPolicy := localPolicy(cauthdsl.SignedByAnyAdmin([]string{mspID}))
 	if coreConfig.DiscoveryOrgMembersAllowed {
@@ -646,8 +695,8 @@ func registerDiscoveryService(coreConfig *peer.Config, peerServer *comm.GRPCServ
 	channelVerifier := discacl.NewChannelVerifier(policies.ChannelApplicationWriters, polMgr)
 	acl := discacl.NewDiscoverySupport(channelVerifier, localAccessPolicy, discacl.ChannelConfigGetterFunc(peer.GetStableChannelConfig))
 	gSup := gossip.NewDiscoverySupport(service.GetGossipService())
-	ccSup := ccsupport.NewDiscoverySupport(metadataManager)
-	ea := endorsement.NewEndorsementAnalyzer(gSup, ccSup, acl, metadataManager)
+	ccSup := ccsupport.NewDiscoverySupport(metadataProvider)
+	ea := endorsement.NewEndorsementAnalyzer(gSup, ccSup, acl, metadataProvider)
 	confSup := config.NewDiscoverySupport(config.CurrentConfigBlockGetterFunc(peer.GetCurrConfigBlock))
 	support := discsupport.NewDiscoverySupport(acl, gSup, ea, confSup, acl)
 	svc := discovery.NewService(discovery.Config{

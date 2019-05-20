@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain-lib-go/healthz"
 	"github.com/mcc-github/blockchain/integration/nwo"

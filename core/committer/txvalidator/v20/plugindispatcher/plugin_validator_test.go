@@ -16,7 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/v20/plugindispatcher"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/v20/plugindispatcher/mocks"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/v20/testdata"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	"github.com/mcc-github/blockchain/msp"
 	. "github.com/mcc-github/blockchain/msp/mocks"
 	"github.com/mcc-github/blockchain/protos/common"

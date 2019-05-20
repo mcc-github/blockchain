@@ -24,7 +24,7 @@ import (
 	"github.com/mcc-github/blockchain/internal/peer/common"
 	"github.com/mcc-github/blockchain/internal/peer/common/mock"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	"github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/spf13/viper"

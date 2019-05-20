@@ -11,7 +11,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	"github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
+	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	mockchannelconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"

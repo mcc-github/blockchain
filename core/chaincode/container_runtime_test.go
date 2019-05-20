@@ -12,7 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
-	"github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
+	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/ccintf"

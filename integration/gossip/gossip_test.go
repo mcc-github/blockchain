@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/integration/nwo"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	. "github.com/onsi/ginkgo"

@@ -9,7 +9,8 @@ package chaincode
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
+	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
+	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/gossip"
 )
 
@@ -32,7 +33,14 @@ type Metadata struct {
 	Version           string
 	Policy            []byte
 	Id                []byte
-	CollectionsConfig []byte
+	CollectionsConfig *common.CollectionConfigPackage
+	
+	
+	
+	
+	
+	Approved  bool
+	Installed bool
 }
 
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/cmd/common"
-	"github.com/mcc-github/blockchain/token/cmd"
+	token "github.com/mcc-github/blockchain/token/cmd"
 )
 
 func main() {

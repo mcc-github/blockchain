@@ -13,7 +13,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/cmd/common"
-	"github.com/mcc-github/blockchain/discovery/client"
+	discovery "github.com/mcc-github/blockchain/discovery/client"
 	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )

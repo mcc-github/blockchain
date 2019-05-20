@@ -9,7 +9,7 @@ package discovery_test
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/discovery/cmd"
+	discovery "github.com/mcc-github/blockchain/discovery/cmd"
 	"github.com/mcc-github/blockchain/discovery/cmd/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

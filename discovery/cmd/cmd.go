@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/cmd/common"
-	"github.com/mcc-github/blockchain/discovery/client"
+	discovery "github.com/mcc-github/blockchain/discovery/client"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 

@@ -11,9 +11,9 @@ import (
 	"github.com/mcc-github/blockchain/core/handlers/auth/filter"
 	"github.com/mcc-github/blockchain/core/handlers/decoration"
 	"github.com/mcc-github/blockchain/core/handlers/decoration/decorator"
-	"github.com/mcc-github/blockchain/core/handlers/endorsement/api"
+	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
 	"github.com/mcc-github/blockchain/core/handlers/endorsement/builtin"
-	"github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/builtin"
 )
 

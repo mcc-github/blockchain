@@ -9,7 +9,7 @@ package token_test
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/token/cmd"
+	token "github.com/mcc-github/blockchain/token/cmd"
 	"github.com/mcc-github/blockchain/token/cmd/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

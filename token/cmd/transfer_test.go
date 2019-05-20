@@ -11,7 +11,7 @@ import (
 
 	"github.com/mcc-github/blockchain/cmd/common"
 	ptoken "github.com/mcc-github/blockchain/protos/token"
-	"github.com/mcc-github/blockchain/token/cmd"
+	token "github.com/mcc-github/blockchain/token/cmd"
 	"github.com/mcc-github/blockchain/token/cmd/mocks"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
