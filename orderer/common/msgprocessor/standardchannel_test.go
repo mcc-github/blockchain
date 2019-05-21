@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/channelconfig"
+	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -22,6 +25,7 @@ type mockSystemChannelFilterSupport struct {
 	ProposeConfigUpdateVal *cb.ConfigEnvelope
 	ProposeConfigUpdateErr error
 	SequenceVal            uint64
+	ConsensusTypeStateVal  orderer.ConsensusType_State
 }
 
 func (ms *mockSystemChannelFilterSupport) ProposeConfigUpdate(env *cb.Envelope) (*cb.ConfigEnvelope, error) {
@@ -38,6 +42,14 @@ func (ms *mockSystemChannelFilterSupport) Signer() identity.SignerSerializer {
 
 func (ms *mockSystemChannelFilterSupport) ChainID() string {
 	return testChannelID
+}
+
+func (ms *mockSystemChannelFilterSupport) OrdererConfig() (channelconfig.Orderer, bool) {
+	return &mockconfig.Orderer{
+			CapabilitiesVal:       &mockconfig.OrdererCapabilities{ConsensusTypeMigrationVal: true},
+			ConsensusTypeStateVal: ms.ConsensusTypeStateVal,
+		},
+		true
 }
 
 func TestClassifyMsg(t *testing.T) {
@@ -60,12 +72,23 @@ func TestClassifyMsg(t *testing.T) {
 }
 
 func TestProcessNormalMsg(t *testing.T) {
-	ms := &mockSystemChannelFilterSupport{
-		SequenceVal: 7,
-	}
-	cs, err := NewStandardChannel(ms, NewRuleSet([]Rule{AcceptRule})).ProcessNormalMsg(nil)
-	assert.Equal(t, cs, ms.SequenceVal)
-	assert.Nil(t, err)
+	t.Run("Normal", func(t *testing.T) {
+		ms := &mockSystemChannelFilterSupport{
+			SequenceVal:           7,
+			ConsensusTypeStateVal: orderer.ConsensusType_STATE_NORMAL,
+		}
+		cs, err := NewStandardChannel(ms, NewRuleSet([]Rule{AcceptRule})).ProcessNormalMsg(nil)
+		assert.Equal(t, cs, ms.SequenceVal)
+		assert.Nil(t, err)
+	})
+	t.Run("Maintenance", func(t *testing.T) {
+		ms := &mockSystemChannelFilterSupport{
+			SequenceVal:           7,
+			ConsensusTypeStateVal: orderer.ConsensusType_STATE_MAINTENANCE,
+		}
+		_, err := NewStandardChannel(ms, NewRuleSet([]Rule{AcceptRule})).ProcessNormalMsg(nil)
+		assert.EqualError(t, err, "normal transactions are rejected: maintenance mode")
+	})
 }
 
 func TestConfigUpdateMsg(t *testing.T) {

@@ -170,7 +170,9 @@ func (s *server) Deliver(srv ab.AtomicBroadcast_DeliverServer) error {
 		if chain == nil {
 			return errors.Errorf("channel %s not found", channelID)
 		}
-		sf := msgprocessor.NewSigFilter(policies.ChannelReaders, chain)
+		
+		
+		sf := msgprocessor.NewSigFilter(policies.ChannelReaders, policies.ChannelOrdererReaders, chain)
 		return sf.Apply(env)
 	}
 	deliverServer := &deliver.Server{

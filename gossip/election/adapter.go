@@ -45,7 +45,7 @@ func (pi *peerImpl) ID() peerID {
 
 type gossip interface {
 	
-	Peers() []discovery.NetworkMember
+	PeersOfChannel(channel common.ChainID) []discovery.NetworkMember
 
 	
 	
@@ -55,6 +55,9 @@ type gossip interface {
 
 	
 	Gossip(msg *proto.GossipMessage)
+
+	
+	IsInMyOrg(member discovery.NetworkMember) bool
 }
 
 type adapterImpl struct {
@@ -147,11 +150,13 @@ func (ai *adapterImpl) CreateMessage(isDeclaration bool) Msg {
 }
 
 func (ai *adapterImpl) Peers() []Peer {
-	peers := ai.gossip.Peers()
+	peers := ai.gossip.PeersOfChannel(ai.channel)
 
 	var res []Peer
 	for _, peer := range peers {
-		res = append(res, &peerImpl{peer})
+		if ai.gossip.IsInMyOrg(peer) {
+			res = append(res, &peerImpl{peer})
+		}
 	}
 
 	return res

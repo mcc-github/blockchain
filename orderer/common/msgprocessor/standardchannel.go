@@ -11,6 +11,7 @@ import (
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 
 	"github.com/pkg/errors"
@@ -36,6 +37,8 @@ type StandardChannelSupport interface {
 	
 	
 	ProposeConfigUpdate(configtx *cb.Envelope) (*cb.ConfigEnvelope, error)
+
+	OrdererConfig() (channelconfig.Orderer, bool)
 }
 
 
@@ -53,6 +56,9 @@ func NewStandardChannel(support StandardChannelSupport, filters *RuleSet) *Stand
 }
 
 
+
+
+
 func CreateStandardChannelFilters(filterSupport channelconfig.Resources) *RuleSet {
 	ordererConfig, ok := filterSupport.OrdererConfig()
 	if !ok {
@@ -62,7 +68,7 @@ func CreateStandardChannelFilters(filterSupport channelconfig.Resources) *RuleSe
 		EmptyRejectRule,
 		NewExpirationRejectRule(filterSupport),
 		NewSizeFilter(ordererConfig),
-		NewSigFilter(policies.ChannelWriters, filterSupport),
+		NewSigFilter(policies.ChannelWriters, policies.ChannelOrdererWriters, filterSupport),
 	})
 }
 
@@ -85,6 +91,17 @@ func (s *StandardChannel) ClassifyMsg(chdr *cb.ChannelHeader) Classification {
 
 
 func (s *StandardChannel) ProcessNormalMsg(env *cb.Envelope) (configSeq uint64, err error) {
+	oc, ok := s.support.OrdererConfig()
+	if !ok {
+		logger.Panicf("Missing orderer config")
+	}
+	if oc.Capabilities().ConsensusTypeMigration() {
+		if oc.ConsensusState() != orderer.ConsensusType_STATE_NORMAL {
+			return 0, errors.WithMessage(
+				ErrMaintenanceMode, "normal transactions are rejected")
+		}
+	}
+
 	configSeq = s.support.Sequence()
 	err = s.filters.Apply(env)
 	return

@@ -42,6 +42,9 @@ func NewSystemChannel(support StandardChannelSupport, templator ChannelConfigTem
 }
 
 
+
+
+
 func CreateSystemChannelFilters(chainCreator ChainCreator, ledgerResources channelconfig.Resources) *RuleSet {
 	ordererConfig, ok := ledgerResources.OrdererConfig()
 	if !ok {
@@ -51,7 +54,7 @@ func CreateSystemChannelFilters(chainCreator ChainCreator, ledgerResources chann
 		EmptyRejectRule,
 		NewExpirationRejectRule(ledgerResources),
 		NewSizeFilter(ordererConfig),
-		NewSigFilter(policies.ChannelWriters, ledgerResources),
+		NewSigFilter(policies.ChannelWriters, policies.ChannelOrdererWriters, ledgerResources),
 		NewSystemChannelFilter(ledgerResources, chainCreator),
 	})
 }

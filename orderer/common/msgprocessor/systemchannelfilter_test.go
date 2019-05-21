@@ -19,6 +19,7 @@ import (
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor/mocks"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -173,6 +174,22 @@ func TestNumChainsExceeded(t *testing.T) {
 
 	assert.NotNil(t, err, "Transaction had created too many channels")
 	assert.Regexp(t, "exceed maximimum number", err)
+}
+
+func TestMaintenanceMode(t *testing.T) {
+	newChainID := "NewChainID"
+
+	mcc := newMockChainCreator()
+	mcc.ms.msc.ConsensusTypeStateVal = orderer.ConsensusType_STATE_MAINTENANCE
+
+	configUpdate, err := encoder.MakeChannelCreationTransaction(newChainID, nil, configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile))
+	assert.Nil(t, err, "Error constructing configtx")
+	ingressTx := makeConfigTxFromConfigUpdateTx(configUpdate)
+
+	wrapped := wrapConfigTx(ingressTx)
+
+	err = NewSystemChannelFilter(mcc.ms, mcc).Apply(wrapped)
+	assert.EqualError(t, err, "channel creation is not permitted: maintenance mode")
 }
 
 func TestBadProposal(t *testing.T) {

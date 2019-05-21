@@ -32,6 +32,10 @@ var ErrChannelDoesNotExist = errors.New("channel does not exist")
 var ErrPermissionDenied = errors.New("permission denied")
 
 
+
+var ErrMaintenanceMode = errors.New("maintenance mode")
+
+
 type Classification int
 
 const (

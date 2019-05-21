@@ -83,6 +83,9 @@ type Gossip interface {
 	IdentityInfo() api.PeerIdentitySet
 
 	
+	IsInMyOrg(member discovery.NetworkMember) bool
+
+	
 	Stop()
 }
 
