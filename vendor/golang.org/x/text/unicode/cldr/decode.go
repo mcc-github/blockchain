@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package cldr
 
@@ -17,7 +17,7 @@ import (
 	"regexp"
 )
 
-
+// A Decoder loads an archive of CLDR data.
 type Decoder struct {
 	dirFilter     []string
 	sectionFilter []string
@@ -26,21 +26,21 @@ type Decoder struct {
 	curLocale     string
 }
 
-
-
+// SetSectionFilter takes a list top-level LDML element names to which
+// evaluation of LDML should be limited.  It automatically calls SetDirFilter.
 func (d *Decoder) SetSectionFilter(filter ...string) {
 	d.sectionFilter = filter
-	
+	// TODO: automatically set dir filter
 }
 
-
-
-
+// SetDirFilter limits the loading of LDML XML files of the specied directories.
+// Note that sections may be split across directories differently for different CLDR versions.
+// For more robust code, use SetSectionFilter.
 func (d *Decoder) SetDirFilter(dir ...string) {
 	d.dirFilter = dir
 }
 
-
+// A Loader provides access to the files of a CLDR archive.
 type Loader interface {
 	Len() int
 	Path(i int) string
@@ -49,7 +49,7 @@ type Loader interface {
 
 var fileRe = regexp.MustCompile(`.*[/\\](.*)[/\\](.*)\.xml`)
 
-
+// Decode loads and decodes the files represented by l.
 func (d *Decoder) Decode(l Loader) (cldr *CLDR, err error) {
 	d.cldr = makeCLDR()
 	for i := 0; i < l.Len(); i++ {
@@ -58,9 +58,10 @@ func (d *Decoder) Decode(l Loader) (cldr *CLDR, err error) {
 			if len(d.dirFilter) > 0 && !in(d.dirFilter, m[1]) {
 				continue
 			}
-			var r io.Reader
+			var r io.ReadCloser
 			if r, err = l.Reader(i); err == nil {
 				err = d.decode(m[1], m[2], r)
+				r.Close()
 			}
 			if err != nil {
 				return nil, err
@@ -100,12 +101,12 @@ func (d *Decoder) decode(dir, id string, r io.Reader) error {
 		if l.Identity == nil {
 			return fmt.Errorf("%s/%s: missing identity element", dir, id)
 		}
-		
-		
-		
-		
-		
-		
+		// TODO: verify when CLDR bug https://unicode.org/cldr/trac/ticket/8970
+		// is resolved.
+		// path := strings.Split(id, "_")
+		// if lang := l.Identity.Language.Type; lang != path[0] {
+		// 	return fmt.Errorf("%s/%s: language was %s; want %s", dir, id, lang, path[0])
+		// }
 	}
 	return nil
 }
@@ -132,7 +133,7 @@ func (pl pathLoader) Reader(i int) (io.ReadCloser, error) {
 	return os.Open(pl[i])
 }
 
-
+// DecodePath loads CLDR data from the given path.
 func (d *Decoder) DecodePath(path string) (cldr *CLDR, err error) {
 	loader, err := makePathLoader(path)
 	if err != nil {
@@ -157,7 +158,7 @@ func (zl zipLoader) Reader(i int) (io.ReadCloser, error) {
 	return zl.r.File[i].Open()
 }
 
-
+// DecodeZip loads CLDR data from the zip archive for which r is the source.
 func (d *Decoder) DecodeZip(r io.Reader) (cldr *CLDR, err error) {
 	buffer, err := ioutil.ReadAll(r)
 	if err != nil {

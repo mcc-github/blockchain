@@ -5,7 +5,13 @@ import (
 	"sync"
 )
 
+/*
+PrefixedWriter wraps an io.Writer, emiting the passed in prefix at the beginning of each new line.
+This can be useful when running multiple gexec.Sessions concurrently - you can prefix the log output of each
+session by passing in a PrefixedWriter:
 
+gexec.Start(cmd, NewPrefixedWriter("[my-cmd] ", GinkgoWriter), NewPrefixedWriter("[my-cmd] ", GinkgoWriter))
+*/
 type PrefixedWriter struct {
 	prefix        []byte
 	writer        io.Writer

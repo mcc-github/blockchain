@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2014 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
@@ -30,15 +30,15 @@ func createTarStream(srcPath, dockerfilePath string) (io.ReadCloser, error) {
 
 	includes := []string{"."}
 
-	
-	
-	
-	
-	
-	
-	
-	
-	
+	// If .dockerignore mentions .dockerignore or the Dockerfile
+	// then make sure we send both files over to the daemon
+	// because Dockerfile is, obviously, needed no matter what, and
+	// .dockerignore is needed to know if either one needs to be
+	// removed.  The deamon will remove them for us, if needed, after it
+	// parses the Dockerfile.
+	//
+	// https://github.com/docker/docker/issues/8330
+	//
 	forceIncludeFiles := []string{".dockerignore", dockerfilePath}
 
 	for _, includeFile := range forceIncludeFiles {
@@ -66,12 +66,12 @@ func createTarStream(srcPath, dockerfilePath string) (io.ReadCloser, error) {
 	return archive.TarWithOptions(srcPath, tarOpts)
 }
 
-
-
-
+// validateContextDirectory checks if all the contents of the directory
+// can be read and returns an error if some files can't be read.
+// Symlinks which point to non-existing files don't trigger an error
 func validateContextDirectory(srcPath string, excludes []string) error {
 	return filepath.Walk(filepath.Join(srcPath, "."), func(filePath string, f os.FileInfo, err error) error {
-		
+		// skip this directory/file if it's not in the path, it won't get added to the context
 		if relFilePath, relErr := filepath.Rel(srcPath, filePath); relErr != nil {
 			return relErr
 		} else if skip, matchErr := fileutils.Matches(relFilePath, excludes); matchErr != nil {
@@ -93,8 +93,8 @@ func validateContextDirectory(srcPath string, excludes []string) error {
 			return err
 		}
 
-		
-		
+		// skip checking if symlinks point to non-existing files, such symlinks can be useful
+		// also skip named pipes, because they hanging on open
 		if f.Mode()&(os.ModeSymlink|os.ModeNamedPipe) != 0 {
 			return nil
 		}

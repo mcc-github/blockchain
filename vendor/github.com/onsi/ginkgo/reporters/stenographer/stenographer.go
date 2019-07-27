@@ -1,4 +1,8 @@
+/*
+The stenographer is used by Ginkgo's reporters to generate output.
 
+Move along, nothing to see here.
+*/
 
 package stenographer
 
@@ -8,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable"
 	"github.com/onsi/ginkgo/types"
 )
 
@@ -58,7 +61,7 @@ type Stenographer interface {
 	SummarizeFailures(summaries []*types.SpecSummary)
 }
 
-func New(color bool, enableFlakes bool) Stenographer {
+func New(color bool, enableFlakes bool, writer io.Writer) Stenographer {
 	denoter := "•"
 	if runtime.GOOS == "windows" {
 		denoter = "+"
@@ -68,7 +71,7 @@ func New(color bool, enableFlakes bool) Stenographer {
 		denoter:      denoter,
 		cursorState:  cursorStateTop,
 		enableFlakes: enableFlakes,
-		w:            colorable.NewColorableStdout(),
+		w:            writer,
 	}
 }
 
@@ -280,7 +283,7 @@ func (s *consoleStenographer) AnnouncePendingSpec(spec *types.SpecSummary, noisy
 }
 
 func (s *consoleStenographer) AnnounceSkippedSpec(spec *types.SpecSummary, succinct bool, fullTrace bool) {
-	
+	// Skips at runtime will have a non-empty spec.Failure. All others should be succinct.
 	if succinct || spec.Failure == (types.SpecFailure{}) {
 		s.print(0, s.colorize(cyanColor, "S"))
 		s.stream()

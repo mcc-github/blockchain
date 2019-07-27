@@ -1,4 +1,4 @@
-package system 
+package system // import "github.com/docker/docker/pkg/system"
 
 import (
 	"unsafe"
@@ -12,8 +12,8 @@ var (
 	procGlobalMemoryStatusEx = modkernel32.NewProc("GlobalMemoryStatusEx")
 )
 
-
-
+// https://msdn.microsoft.com/en-us/library/windows/desktop/aa366589(v=vs.85).aspx
+// https://msdn.microsoft.com/en-us/library/windows/desktop/aa366770(v=vs.85).aspx
 type memorystatusex struct {
 	dwLength                uint32
 	dwMemoryLoad            uint32
@@ -26,8 +26,8 @@ type memorystatusex struct {
 	ullAvailExtendedVirtual uint64
 }
 
-
-
+// ReadMemInfo retrieves memory statistics of the host system and returns a
+//  MemInfo type.
 func ReadMemInfo() (*MemInfo, error) {
 	msi := &memorystatusex{
 		dwLength: 64,

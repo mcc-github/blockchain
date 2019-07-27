@@ -1,13 +1,13 @@
+// Copyright 2012 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
-
-
-
-
+// The trie in this file is used to associate the first full character
+// in a UTF-8 string to a collation element.
+// All but the last byte in a UTF-8 byte sequence are
+// used to look up offsets in the index table to be used for the next byte.
+// The last byte is used to index into a table of collation elements.
+// This file contains the code for the generation of the trie.
 
 package build
 
@@ -20,12 +20,12 @@ import (
 
 const (
 	blockSize   = 64
-	blockOffset = 2 
+	blockOffset = 2 // Subtract 2 blocks to compensate for the 0x80 added to continuation bytes.
 )
 
 type trieHandle struct {
-	lookupStart uint16 
-	valueStart  uint16 
+	lookupStart uint16 // offset in table for first byte
+	valueStart  uint16 // offset in table for first byte
 }
 
 type trie struct {
@@ -33,7 +33,7 @@ type trie struct {
 	values []uint32
 }
 
-
+// trieNode is the intermediate trie structure used for generating a trie.
 type trieNode struct {
 	index    []*trieNode
 	value    []uint32
@@ -45,7 +45,7 @@ type trieNode struct {
 func newNode() *trieNode {
 	return &trieNode{
 		index: make([]*trieNode, 64),
-		value: make([]uint32, 128), 
+		value: make([]uint32, 128), // root node size is 128 instead of 64
 	}
 }
 
@@ -54,7 +54,7 @@ func (n *trieNode) isInternal() bool {
 }
 
 func (n *trieNode) insert(r rune, value uint32) {
-	const maskx = 0x3F 
+	const maskx = 0x3F // mask out two most-significant bits
 	str := string(r)
 	if len(str) == 1 {
 		n.value[str[0]] = value
@@ -98,8 +98,8 @@ func newTrieBuilder() *trieBuilder {
 	index.valueBlocks = make([]*trieNode, 0)
 	index.lookupBlockIdx = make(map[uint32]*trieNode)
 	index.valueBlockIdx = make(map[uint32]*trieNode)
-	
-	
+	// The third nil is the default null block.  The other two blocks
+	// are used to guarantee an offset of at least 3 for each block.
 	index.lookupBlocks = append(index.lookupBlocks, nil, nil, nil)
 	index.t = &trie{}
 	return index
@@ -157,7 +157,7 @@ func (b *trieBuilder) addStartValueBlock(n *trieNode) uint16 {
 		n.refValue = uint16(len(b.valueBlocks))
 		n.refIndex = n.refValue
 		b.valueBlocks = append(b.valueBlocks, n)
-		
+		// Add a dummy block to accommodate the double block size.
 		b.valueBlocks = append(b.valueBlocks, nil)
 		b.valueBlockIdx[h] = n
 	} else {
@@ -193,19 +193,19 @@ func (b *trieBuilder) addTrie(n *trieNode) *trieHandle {
 	b.roots = append(b.roots, h)
 	h.valueStart = b.addStartValueBlock(n)
 	if len(b.roots) == 1 {
-		
-		
-		
-		
+		// We insert a null block after the first start value block.
+		// This ensures that continuation bytes UTF-8 sequences of length
+		// greater than 2 will automatically hit a null block if there
+		// was an undefined entry.
 		b.valueBlocks = append(b.valueBlocks, nil)
 	}
 	n = b.computeOffsets(n)
-	
+	// Offset by one extra block as the first byte starts at 0xC0 instead of 0x80.
 	h.lookupStart = n.refIndex - 1
 	return h
 }
 
-
+// generate generates and returns the trie for n.
 func (b *trieBuilder) generate() (t *trie, err error) {
 	t = b.t
 	if len(b.valueBlocks) >= 1<<16 {
@@ -238,13 +238,13 @@ func (t *trie) printArrays(w io.Writer, name string) (n, size int, err error) {
 		}
 	}
 	nv := len(t.values)
-	p("
-	p("
+	p("// %sValues: %d entries, %d bytes\n", name, nv, nv*4)
+	p("// Block 2 is the null block.\n")
 	p("var %sValues = [%d]uint32 {", name, nv)
 	var printnewline bool
 	for i, v := range t.values {
 		if i%blockSize == 0 {
-			p("\n\t
+			p("\n\t// Block %#x, offset %#x", i/blockSize, i)
 		}
 		if i%4 == 0 {
 			printnewline = true
@@ -259,13 +259,13 @@ func (t *trie) printArrays(w io.Writer, name string) (n, size int, err error) {
 	}
 	p("\n}\n\n")
 	ni := len(t.index)
-	p("
-	p("
+	p("// %sLookup: %d entries, %d bytes\n", name, ni, ni*2)
+	p("// Block 0 is the null block.\n")
 	p("var %sLookup = [%d]uint16 {", name, ni)
 	printnewline = false
 	for i, v := range t.index {
 		if i%blockSize == 0 {
-			p("\n\t
+			p("\n\t// Block %#x, offset %#x", i/blockSize, i)
 		}
 		if i%8 == 0 {
 			printnewline = true

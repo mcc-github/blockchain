@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2016 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
@@ -12,7 +12,7 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-
+// NoSuchTask is the error returned when a given task does not exist.
 type NoSuchTask struct {
 	ID  string
 	Err error
@@ -25,17 +25,17 @@ func (err *NoSuchTask) Error() string {
 	return "No such task: " + err.ID
 }
 
-
-
-
+// ListTasksOptions specify parameters to the ListTasks function.
+//
+// See http://goo.gl/rByLzw for more details.
 type ListTasksOptions struct {
 	Filters map[string][]string
 	Context context.Context
 }
 
-
-
-
+// ListTasks returns a slice of tasks matching the given criteria.
+//
+// See http://goo.gl/rByLzw for more details.
 func (c *Client) ListTasks(opts ListTasksOptions) ([]swarm.Task, error) {
 	path := "/tasks?" + queryString(opts)
 	resp, err := c.do("GET", path, doOptions{context: opts.Context})
@@ -50,9 +50,9 @@ func (c *Client) ListTasks(opts ListTasksOptions) ([]swarm.Task, error) {
 	return tasks, nil
 }
 
-
-
-
+// InspectTask returns information about a task by its ID.
+//
+// See http://goo.gl/kyziuq for more details.
 func (c *Client) InspectTask(id string) (*swarm.Task, error) {
 	resp, err := c.do("GET", "/tasks/"+id, doOptions{})
 	if err != nil {

@@ -24,14 +24,14 @@ type reparseDataBuffer struct {
 	PrintNameLength      uint16
 }
 
-
+// ReparsePoint describes a Win32 symlink or mount point.
 type ReparsePoint struct {
 	Target       string
 	IsMountPoint bool
 }
 
-
-
+// UnsupportedReparsePointError is returned when trying to decode a non-symlink or
+// mount point reparse point.
 type UnsupportedReparsePointError struct {
 	Tag uint32
 }
@@ -40,8 +40,8 @@ func (e *UnsupportedReparsePointError) Error() string {
 	return fmt.Sprintf("unsupported reparse point %x", e.Tag)
 }
 
-
-
+// DecodeReparsePoint decodes a Win32 REPARSE_DATA_BUFFER structure containing either a symlink
+// or a mount point.
 func DecodeReparsePoint(b []byte) (*ReparsePoint, error) {
 	tag := binary.LittleEndian.Uint32(b[0:4])
 	return DecodeReparsePointData(tag, b[8:])
@@ -73,10 +73,10 @@ func isDriveLetter(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
-
-
+// EncodeReparsePoint encodes a Win32 REPARSE_DATA_BUFFER structure describing a symlink or
+// mount point.
 func EncodeReparsePoint(rp *ReparsePoint) []byte {
-	
+	// Generate an NT path and determine if this is a relative path.
 	var ntTarget string
 	relative := false
 	if strings.HasPrefix(rp.Target, `\\?\`) {
@@ -90,7 +90,7 @@ func EncodeReparsePoint(rp *ReparsePoint) []byte {
 		relative = true
 	}
 
-	
+	// The paths must be NUL-terminated even though they are counted strings.
 	target16 := utf16.Encode([]rune(rp.Target + "\x00"))
 	ntTarget16 := utf16.Encode([]rune(ntTarget + "\x00"))
 
@@ -100,7 +100,7 @@ func EncodeReparsePoint(rp *ReparsePoint) []byte {
 	tag := uint32(reparseTagMountPoint)
 	if !rp.IsMountPoint {
 		tag = reparseTagSymlink
-		size += 4 
+		size += 4 // Add room for symlink flags
 	}
 
 	data := reparseDataBuffer{

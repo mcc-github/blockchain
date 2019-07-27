@@ -40,15 +40,15 @@ func unfocus(component string) {
 		return
 	}
 	for _, f := range files {
-		
+		// Exclude "vendor" directory
 		if f.IsDir() && f.Name() == "vendor" {
 			continue
 		}
-		
+		// Exclude non-go files in the current directory
 		if !f.IsDir() && !strings.HasSuffix(f.Name(), ".go") {
 			continue
 		}
-		
+		// Recursively run `gofmt` otherwise
 		cmd := exec.Command("gofmt", fmt.Sprintf("-r=F%s -> %s", component, component), "-w", f.Name())
 		out, err := cmd.CombinedOutput()
 		if err != nil {

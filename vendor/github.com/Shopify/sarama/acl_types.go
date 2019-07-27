@@ -2,7 +2,7 @@ package sarama
 
 type AclOperation int
 
-
+// ref: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/acl/AclOperation.java
 const (
 	AclOperationUnknown         AclOperation = 0
 	AclOperationAny             AclOperation = 1
@@ -21,7 +21,7 @@ const (
 
 type AclPermissionType int
 
-
+// ref: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/acl/AclPermissionType.java
 const (
 	AclPermissionUnknown AclPermissionType = 0
 	AclPermissionAny     AclPermissionType = 1
@@ -31,7 +31,7 @@ const (
 
 type AclResourceType int
 
-
+// ref: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/resource/ResourceType.java
 const (
 	AclResourceUnknown         AclResourceType = 0
 	AclResourceAny             AclResourceType = 1

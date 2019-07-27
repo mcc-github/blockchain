@@ -7,7 +7,10 @@ import (
 	"github.com/tedsuo/ifrit"
 )
 
-
+/*
+NewParallel starts it's members simultaneously.  Use a parallel group to describe a set
+of concurrent but independent processes.
+*/
 func NewParallel(terminationSignal os.Signal, members Members) ifrit.Runner {
 	return parallelGroup{
 		terminationSignal: terminationSignal,
@@ -160,7 +163,7 @@ func (g *parallelGroup) stop(signal os.Signal, signals <-chan os.Signal, errTrac
 		Chan: reflect.ValueOf(signals),
 	})
 
-	
+	// account for the signals channel
 	for numExited := 1; numExited < len(cases); numExited++ {
 		chosen, recv, _ := reflect.Select(cases)
 		cases[chosen].Chan = reflect.Zero(cases[chosen].Chan.Type())

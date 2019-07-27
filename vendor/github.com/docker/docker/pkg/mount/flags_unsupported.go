@@ -1,8 +1,8 @@
+// +build !linux,!freebsd freebsd,!cgo
 
+package mount // import "github.com/docker/docker/pkg/mount"
 
-package mount 
-
-
+// These flags are unsupported.
 const (
 	BIND        = 0
 	DIRSYNC     = 0

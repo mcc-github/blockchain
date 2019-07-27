@@ -1,5 +1,5 @@
-
-
+// +build windows
+// +build !go1.4
 
 package mousetrap
 
@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	
+	// defined by the Win32 API
 	th32cs_snapprocess uintptr = 0x2
 )
 
@@ -22,7 +22,7 @@ var (
 	Process32Next            = kernel.MustFindProc("Process32NextW")
 )
 
-
+// ProcessEntry32 structure defined by the Win32 API
 type processEntry32 struct {
 	dwSize              uint32
 	cntUsage            uint32
@@ -76,12 +76,12 @@ func getppid() (pid int, err error) {
 	return
 }
 
-
-
-
-
-
-
+// StartedByExplorer returns true if the program was invoked by the user double-clicking
+// on the executable from explorer.exe
+//
+// It is conservative and returns false if any of the internal calls fail.
+// It does not guarantee that the program was run from a terminal. It only can tell you
+// whether it was launched from explorer.exe
 func StartedByExplorer() bool {
 	ppid, err := getppid()
 	if err != nil {

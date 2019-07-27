@@ -1,7 +1,7 @@
+// Copyright 2016 Michal Witkowski. All Rights Reserved.
+// See LICENSE for licensing terms.
 
-
-
-
+// gRPC Server Interceptor chaining middleware.
 
 package grpc_middleware
 
@@ -10,11 +10,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-
-
-
-
-
+// ChainUnaryServer creates a single interceptor out of a chain of many interceptors.
+//
+// Execution is done in left-to-right order, including passing of context.
+// For example ChainUnaryServer(one, two, three) will execute one before two before three, and three
+// will see context changes of one and two.
 func ChainUnaryServer(interceptors ...grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
 	n := len(interceptors)
 
@@ -44,17 +44,17 @@ func ChainUnaryServer(interceptors ...grpc.UnaryServerInterceptor) grpc.UnarySer
 		return interceptors[0]
 	}
 
-	
+	// n == 0; Dummy interceptor maintained for backward compatibility to avoid returning nil.
 	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		return handler(ctx, req)
 	}
 }
 
-
-
-
-
-
+// ChainStreamServer creates a single interceptor out of a chain of many interceptors.
+//
+// Execution is done in left-to-right order, including passing of context.
+// For example ChainUnaryServer(one, two, three) will execute one before two before three.
+// If you want to pass context between interceptors, use WrapServerStream.
 func ChainStreamServer(interceptors ...grpc.StreamServerInterceptor) grpc.StreamServerInterceptor {
 	n := len(interceptors)
 
@@ -84,16 +84,16 @@ func ChainStreamServer(interceptors ...grpc.StreamServerInterceptor) grpc.Stream
 		return interceptors[0]
 	}
 
-	
+	// n == 0; Dummy interceptor maintained for backward compatibility to avoid returning nil.
 	return func(srv interface{}, stream grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		return handler(srv, stream)
 	}
 }
 
-
-
-
-
+// ChainUnaryClient creates a single interceptor out of a chain of many interceptors.
+//
+// Execution is done in left-to-right order, including passing of context.
+// For example ChainUnaryClient(one, two, three) will execute one before two before three.
 func ChainUnaryClient(interceptors ...grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
 	n := len(interceptors)
 
@@ -123,16 +123,16 @@ func ChainUnaryClient(interceptors ...grpc.UnaryClientInterceptor) grpc.UnaryCli
 		return interceptors[0]
 	}
 
-	
+	// n == 0; Dummy interceptor maintained for backward compatibility to avoid returning nil.
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
 
-
-
-
-
+// ChainStreamClient creates a single interceptor out of a chain of many interceptors.
+//
+// Execution is done in left-to-right order, including passing of context.
+// For example ChainStreamClient(one, two, three) will execute one before two before three.
 func ChainStreamClient(interceptors ...grpc.StreamClientInterceptor) grpc.StreamClientInterceptor {
 	n := len(interceptors)
 
@@ -162,22 +162,22 @@ func ChainStreamClient(interceptors ...grpc.StreamClientInterceptor) grpc.Stream
 		return interceptors[0]
 	}
 
-	
+	// n == 0; Dummy interceptor maintained for backward compatibility to avoid returning nil.
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 		return streamer(ctx, desc, cc, method, opts...)
 	}
 }
 
-
-
-
-
+// Chain creates a single interceptor out of a chain of many interceptors.
+//
+// WithUnaryServerChain is a grpc.Server config option that accepts multiple unary interceptors.
+// Basically syntactic sugar.
 func WithUnaryServerChain(interceptors ...grpc.UnaryServerInterceptor) grpc.ServerOption {
 	return grpc.UnaryInterceptor(ChainUnaryServer(interceptors...))
 }
 
-
-
+// WithStreamServerChain is a grpc.Server config option that accepts multiple stream interceptors.
+// Basically syntactic sugar.
 func WithStreamServerChain(interceptors ...grpc.StreamServerInterceptor) grpc.ServerOption {
 	return grpc.StreamInterceptor(ChainStreamServer(interceptors...))
 }

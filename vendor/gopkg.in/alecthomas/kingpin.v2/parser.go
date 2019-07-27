@@ -10,7 +10,7 @@ import (
 
 type TokenType int
 
-
+// Token types.
 const (
 	TokenShort TokenType = iota
 	TokenLong
@@ -74,30 +74,30 @@ func (t *Token) String() string {
 	}
 }
 
-
+// A union of possible elements in a parse stack.
 type ParseElement struct {
-	
+	// Clause is either *CmdClause, *ArgClause or *FlagClause.
 	Clause interface{}
-	
+	// Value is corresponding value for an ArgClause or FlagClause (if any).
 	Value *string
 }
 
-
-
-
-
+// ParseContext holds the current context of the parser. When passed to
+// Action() callbacks Elements will be fully populated with *FlagClause,
+// *ArgClause and *CmdClause values and their corresponding arguments (if
+// any).
 type ParseContext struct {
 	SelectedCommand *CmdClause
 	ignoreDefault   bool
 	argsOnly        bool
 	peek            []*Token
-	argi            int 
+	argi            int // Index of current command-line arg we're processing.
 	args            []string
 	rawArgs         []string
 	flags           *flagGroup
 	arguments       *argGroup
-	argumenti       int 
-	
+	argumenti       int // Cursor into arguments
+	// Flags, arguments and commands encountered and collected during parse.
 	Elements []*ParseElement
 }
 
@@ -117,8 +117,8 @@ func (p *ParseContext) next() {
 	p.args = p.args[1:]
 }
 
-
-
+// HasTrailingArgs returns true if there are unparsed command-line arguments.
+// This can occur if the parser can not match remaining arguments.
 func (p *ParseContext) HasTrailingArgs() bool {
 	return len(p.args) > 0
 }
@@ -157,13 +157,13 @@ func (p *ParseContext) Error() bool {
 	return p.Peek().Type == TokenError
 }
 
-
+// Next token in the parse context.
 func (p *ParseContext) Next() *Token {
 	if len(p.peek) > 0 {
 		return p.pop()
 	}
 
-	
+	// End of tokens.
 	if len(p.args) == 0 {
 		return &Token{Index: p.argi, Type: TokenEOL}
 	}
@@ -175,7 +175,7 @@ func (p *ParseContext) Next() *Token {
 		return &Token{p.argi, TokenArg, arg}
 	}
 
-	
+	// All remaining args are passed directly.
 	if arg == "--" {
 		p.argsOnly = true
 		return p.Next()
@@ -197,12 +197,12 @@ func (p *ParseContext) Next() *Token {
 		shortRune, size := utf8.DecodeRuneInString(arg[1:])
 		short := string(shortRune)
 		flag, ok := p.flags.short[short]
-		
+		// Not a known short flag, we'll just return it anyway.
 		if !ok {
 		} else if fb, ok := flag.value.(boolFlag); ok && fb.IsBoolFlag() {
-			
+			// Bool short flag.
 		} else {
-			
+			// Short flag with combined argument: -fARG
 			token := &Token{p.argi, TokenShort, short}
 			if len(arg) > size+1 {
 				p.Push(&Token{p.argi, TokenArg, arg[size+1:]})
@@ -268,7 +268,7 @@ func (p *ParseContext) matchedCmd(cmd *CmdClause) {
 	p.SelectedCommand = cmd
 }
 
-
+// Expand arguments from a file. Lines starting with # will be treated as comments.
 func ExpandArgsFromFile(filename string) (out []string, err error) {
 	if filename == "" {
 		return nil, fmt.Errorf("expected @ file to expand arguments from")
@@ -346,7 +346,7 @@ loop:
 				}
 			} else if context.arguments.have() {
 				if app.noInterspersed {
-					
+					// no more flags
 					context.argsOnly = true
 				}
 				arg := context.nextArg()
@@ -364,7 +364,7 @@ loop:
 		}
 	}
 
-	
+	// Move to innermost default command.
 	for !ignoreDefault {
 		if cmd := cmds.defaultSubcommand(); cmd != nil {
 			cmd.completionAlts = cmds.cmdNames()
@@ -383,7 +383,7 @@ loop:
 		return fmt.Errorf("unexpected %s", context.Peek())
 	}
 
-	
+	// Set defaults for all remaining args.
 	for arg := context.nextArg(); arg != nil && !arg.consumesRemainder(); arg = context.nextArg() {
 		for _, defaultValue := range arg.defaultValues {
 			if err := arg.value.Set(defaultValue); err != nil {

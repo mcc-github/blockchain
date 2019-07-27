@@ -6,7 +6,9 @@ import (
 	"github.com/onsi/ginkgo"
 )
 
-
+/*
+TableEntry represents an entry in a table test.  You generally use the `Entry` constructor.
+*/
 type TableEntry struct {
 	Description string
 	Parameters  []interface{}
@@ -45,22 +47,35 @@ func (t TableEntry) generateIt(itBody reflect.Value) {
 	}
 }
 
+/*
+Entry constructs a TableEntry.
 
+The first argument is a required description (this becomes the content of the generated Ginkgo `It`).
+Subsequent parameters are saved off and sent to the callback passed in to `DescribeTable`.
+
+Each Entry ends up generating an individual Ginkgo It.
+*/
 func Entry(description string, parameters ...interface{}) TableEntry {
 	return TableEntry{description, parameters, false, false}
 }
 
-
+/*
+You can focus a particular entry with FEntry.  This is equivalent to FIt.
+*/
 func FEntry(description string, parameters ...interface{}) TableEntry {
 	return TableEntry{description, parameters, false, true}
 }
 
-
+/*
+You can mark a particular entry as pending with PEntry.  This is equivalent to PIt.
+*/
 func PEntry(description string, parameters ...interface{}) TableEntry {
 	return TableEntry{description, parameters, true, false}
 }
 
-
+/*
+You can mark a particular entry as pending with XEntry.  This is equivalent to XIt.
+*/
 func XEntry(description string, parameters ...interface{}) TableEntry {
 	return TableEntry{description, parameters, true, false}
 }

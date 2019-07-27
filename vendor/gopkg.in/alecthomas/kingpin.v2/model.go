@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-
+// Data model for Kingpin command-line structure.
 
 type FlagGroupModel struct {
 	Flags []*FlagModel

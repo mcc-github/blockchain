@@ -1,5 +1,5 @@
-
-
+// Package zaplogfmt provides a zap encoder that formats log entries in
+// "logfmt" format.
 package zaplogfmt
 
 import (
@@ -44,7 +44,7 @@ type logfmtEncoder struct {
 	arrayLiteral bool
 }
 
-
+// NewEncoder creates an encoder writes logfmt formatted log entries.
 func NewEncoder(cfg zapcore.EncoderConfig) zapcore.Encoder {
 	return &logfmtEncoder{
 		EncoderConfig: &cfg,
@@ -174,7 +174,7 @@ func (enc *logfmtEncoder) AppendComplex64(v complex64) { enc.AppendComplex128(co
 func (enc *logfmtEncoder) AppendComplex128(value complex128) {
 	enc.addSeparator()
 
-	
+	// Cast to a platform-independent, fixed-size type.
 	r, i := float64(real(value)), float64(imag(value))
 	enc.buf.AppendFloat(r, 64)
 	enc.buf.AppendByte('+')
@@ -348,8 +348,8 @@ func (enc *logfmtEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field)
 			final.EncodeLevel(ent.Level, final)
 		}
 		if cur == final.buf.Len() {
-			
-			
+			// User-supplied EncodeLevel was a no-op. Fall back to strings to keep
+			// output valid.
 			final.AppendString(ent.Level.String())
 		}
 	}
@@ -360,8 +360,8 @@ func (enc *logfmtEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field)
 			final.EncodeName(ent.LoggerName, final)
 		}
 		if cur == final.buf.Len() {
-			
-			
+			// User-supplied EncodeName was a no-op. Fall back to strings to
+			// keep output valid.
 			final.AppendString(ent.LoggerName)
 		}
 	}
@@ -372,8 +372,8 @@ func (enc *logfmtEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field)
 			final.EncodeCaller(ent.Caller, final)
 		}
 		if cur == final.buf.Len() {
-			
-			
+			// User-supplied EncodeCaller was a no-op. Fall back to strings to
+			// keep output valid.
 			final.AppendString(ent.Caller.String())
 		}
 	}
@@ -426,9 +426,9 @@ func (enc *logfmtEncoder) addKey(key string) {
 	enc.buf.AppendByte('=')
 }
 
-
-
-
+// safeAddString JSON-escapes a string and appends it to the internal buffer.
+// Unlike the standard library's encoder, it doesn't attempt to protect the
+// user from browser vulnerabilities or JSONP-related problems.
 func (enc *logfmtEncoder) safeAddString(s string) {
 	for i := 0; i < len(s); {
 		if enc.tryAddRuneSelf(s[i]) {
@@ -445,7 +445,7 @@ func (enc *logfmtEncoder) safeAddString(s string) {
 	}
 }
 
-
+// safeAddByteString is no-alloc equivalent of safeAddString(string(s)) for s []byte.
 func (enc *logfmtEncoder) safeAddByteString(s []byte) {
 	for i := 0; i < len(s); {
 		if enc.tryAddRuneSelf(s[i]) {
@@ -462,7 +462,7 @@ func (enc *logfmtEncoder) safeAddByteString(s []byte) {
 	}
 }
 
-
+// tryAddRuneSelf appends b if it is valid UTF-8 character represented in a single byte.
 func (enc *logfmtEncoder) tryAddRuneSelf(b byte) bool {
 	if b >= utf8.RuneSelf {
 		return false
@@ -485,7 +485,7 @@ func (enc *logfmtEncoder) tryAddRuneSelf(b byte) bool {
 		enc.buf.AppendByte('\\')
 		enc.buf.AppendByte('t')
 	default:
-		
+		// Encode bytes < 0x20, except for the escape sequences above.
 		const _hex = "0123456789abcdef"
 		enc.buf.AppendString(`\u00`)
 		enc.buf.AppendByte(_hex[b>>4])

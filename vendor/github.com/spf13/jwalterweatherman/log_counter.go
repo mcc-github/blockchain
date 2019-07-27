@@ -1,55 +1,46 @@
-
-
-
-
+// Copyright © 2016 Steve Francia <spf@spf13.com>.
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
 
 package jwalterweatherman
 
 import (
+	"io"
 	"sync/atomic"
 )
 
-type logCounter struct {
-	counter uint64
+// Counter is an io.Writer that increments a counter on Write.
+type Counter struct {
+	count uint64
 }
 
-func (c *logCounter) incr() {
-	atomic.AddUint64(&c.counter, 1)
+func (c *Counter) incr() {
+	atomic.AddUint64(&c.count, 1)
 }
 
-func (c *logCounter) resetCounter() {
-	atomic.StoreUint64(&c.counter, 0)
+// Reset resets the counter.
+func (c *Counter) Reset() {
+	atomic.StoreUint64(&c.count, 0)
 }
 
-func (c *logCounter) getCount() uint64 {
-	return atomic.LoadUint64(&c.counter)
+// Count returns the current count.
+func (c *Counter) Count() uint64 {
+	return atomic.LoadUint64(&c.count)
 }
 
-func (c *logCounter) Write(p []byte) (n int, err error) {
+func (c *Counter) Write(p []byte) (n int, err error) {
 	c.incr()
 	return len(p), nil
 }
 
-
-func (n *Notepad) LogCountForLevel(l Threshold) uint64 {
-	return n.logCounters[l].getCount()
-}
-
-
-
-func (n *Notepad) LogCountForLevelsGreaterThanorEqualTo(threshold Threshold) uint64 {
-	var cnt uint64
-
-	for i := int(threshold); i < len(n.logCounters); i++ {
-		cnt += n.LogCountForLevel(Threshold(i))
-	}
-
-	return cnt
-}
-
-
-func (n *Notepad) ResetLogCounters() {
-	for _, np := range n.logCounters {
-		np.resetCounter()
+// LogCounter creates a LogListener that counts log statements >= the given threshold.
+func LogCounter(counter *Counter, t1 Threshold) LogListener {
+	return func(t2 Threshold) io.Writer {
+		if t2 < t1 {
+			// Not interested in this threshold.
+			return nil
+		}
+		return counter
 	}
 }

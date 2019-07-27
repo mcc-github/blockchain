@@ -1,9 +1,9 @@
+// Copyright 2014 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
+// Defensive debug-only utility to track that functions run on the
+// goroutine that they're supposed to.
 
 package http2
 
@@ -53,7 +53,7 @@ func curGoroutineID() uint64 {
 	defer littleBuf.Put(bp)
 	b := *bp
 	b = b[:runtime.Stack(b, false)]
-	
+	// Parse the 4707 out of "goroutine 4707 ["
 	b = bytes.TrimPrefix(b, goroutineSpace)
 	i := bytes.IndexByte(b, ' ')
 	if i < 0 {
@@ -74,7 +74,7 @@ var littleBuf = sync.Pool{
 	},
 }
 
-
+// parseUintBytes is like strconv.ParseUint, but using a []byte.
 func parseUintBytes(s []byte, base int, bitSize int) (n uint64, err error) {
 	var cutoff, maxVal uint64
 
@@ -89,10 +89,10 @@ func parseUintBytes(s []byte, base int, bitSize int) (n uint64, err error) {
 		goto Error
 
 	case 2 <= base && base <= 36:
-		
+		// valid base; nothing to do
 
 	case base == 0:
-		
+		// Look for octal, hex prefix.
 		switch {
 		case s[0] == '0' && len(s) > 1 && (s[1] == 'x' || s[1] == 'X'):
 			base = 16
@@ -138,7 +138,7 @@ func parseUintBytes(s []byte, base int, bitSize int) (n uint64, err error) {
 		}
 
 		if n >= cutoff {
-			
+			// n*base overflows
 			n = 1<<64 - 1
 			err = strconv.ErrRange
 			goto Error
@@ -147,7 +147,7 @@ func parseUintBytes(s []byte, base int, bitSize int) (n uint64, err error) {
 
 		n1 := n + uint64(v)
 		if n1 < n || n1 > maxVal {
-			
+			// n+v overflows
 			n = 1<<64 - 1
 			err = strconv.ErrRange
 			goto Error
@@ -161,7 +161,7 @@ Error:
 	return n, &strconv.NumError{Func: "ParseUint", Num: string(s0), Err: err}
 }
 
-
+// Return the first number n such that n*base >= 1<<64.
 func cutoff64(base int) uint64 {
 	if base < 2 {
 		return 0

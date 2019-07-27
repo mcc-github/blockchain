@@ -2,7 +2,7 @@ package sarama
 
 import "encoding/binary"
 
-
+// LengthField implements the PushEncoder and PushDecoder interfaces for calculating 4-byte lengths.
 type lengthField struct {
 	startOffset int
 	length      int32

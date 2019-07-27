@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2015 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
@@ -13,13 +13,13 @@ import (
 	"net/url"
 )
 
-
-
+// ErrNetworkAlreadyExists is the error returned by CreateNetwork when the
+// network already exists.
 var ErrNetworkAlreadyExists = errors.New("network already exists")
 
-
-
-
+// Network represents a network.
+//
+// See https://goo.gl/6GugX3 for more details.
 type Network struct {
 	Name       string
 	ID         string `json:"Id"`
@@ -33,9 +33,9 @@ type Network struct {
 	Labels     map[string]string
 }
 
-
-
-
+// Endpoint contains network resources allocated and used for a container in a network
+//
+// See https://goo.gl/6GugX3 for more details.
 type Endpoint struct {
 	Name        string
 	ID          string `json:"EndpointID"`
@@ -44,9 +44,9 @@ type Endpoint struct {
 	IPv6Address string
 }
 
-
-
-
+// ListNetworks returns all networks.
+//
+// See https://goo.gl/6GugX3 for more details.
 func (c *Client) ListNetworks() ([]Network, error) {
 	resp, err := c.do("GET", "/networks", doOptions{})
 	if err != nil {
@@ -60,13 +60,13 @@ func (c *Client) ListNetworks() ([]Network, error) {
 	return networks, nil
 }
 
-
-
+// NetworkFilterOpts is an aggregation of key=value that Docker
+// uses to filter networks
 type NetworkFilterOpts map[string]map[string]bool
 
-
-
-
+// FilteredListNetworks returns all networks with the filters applied
+//
+// See goo.gl/zd2mx4 for more details.
 func (c *Client) FilteredListNetworks(opts NetworkFilterOpts) ([]Network, error) {
 	params, err := json.Marshal(opts)
 	if err != nil {
@@ -87,9 +87,9 @@ func (c *Client) FilteredListNetworks(opts NetworkFilterOpts) ([]Network, error)
 	return networks, nil
 }
 
-
-
-
+// NetworkInfo returns information about a network by its ID.
+//
+// See https://goo.gl/6GugX3 for more details.
 func (c *Client) NetworkInfo(id string) (*Network, error) {
 	path := "/networks/" + id
 	resp, err := c.do("GET", path, doOptions{})
@@ -107,10 +107,10 @@ func (c *Client) NetworkInfo(id string) (*Network, error) {
 	return &network, nil
 }
 
-
-
-
-
+// CreateNetworkOptions specify parameters to the CreateNetwork function and
+// (for now) is the expected body of the "create network" http request message
+//
+// See https://goo.gl/6GugX3 for more details.
 type CreateNetworkOptions struct {
 	Name           string                 `json:"Name" yaml:"Name" toml:"Name"`
 	Driver         string                 `json:"Driver" yaml:"Driver" toml:"Driver"`
@@ -123,18 +123,18 @@ type CreateNetworkOptions struct {
 	Context        context.Context        `json:"-"`
 }
 
-
-
-
+// IPAMOptions controls IP Address Management when creating a network
+//
+// See https://goo.gl/T8kRVH for more details.
 type IPAMOptions struct {
 	Driver  string            `json:"Driver" yaml:"Driver" toml:"Driver"`
 	Config  []IPAMConfig      `json:"Config" yaml:"Config" toml:"Config"`
 	Options map[string]string `json:"Options" yaml:"Options" toml:"Options"`
 }
 
-
-
-
+// IPAMConfig represents IPAM configurations
+//
+// See https://goo.gl/T8kRVH for more details.
 type IPAMConfig struct {
 	Subnet     string            `json:",omitempty"`
 	IPRange    string            `json:",omitempty"`
@@ -142,10 +142,10 @@ type IPAMConfig struct {
 	AuxAddress map[string]string `json:"AuxiliaryAddresses,omitempty"`
 }
 
-
-
-
-
+// CreateNetwork creates a new network, returning the network instance,
+// or an error in case of failure.
+//
+// See https://goo.gl/6GugX3 for more details.
 func (c *Client) CreateNetwork(opts CreateNetworkOptions) (*Network, error) {
 	resp, err := c.do(
 		"POST",
@@ -178,9 +178,9 @@ func (c *Client) CreateNetwork(opts CreateNetworkOptions) (*Network, error) {
 	return &network, nil
 }
 
-
-
-
+// RemoveNetwork removes a network or returns an error in case of failure.
+//
+// See https://goo.gl/6GugX3 for more details.
 func (c *Client) RemoveNetwork(id string) error {
 	resp, err := c.do("DELETE", "/networks/"+id, doOptions{})
 	if err != nil {
@@ -193,25 +193,25 @@ func (c *Client) RemoveNetwork(id string) error {
 	return nil
 }
 
-
-
-
-
+// NetworkConnectionOptions specify parameters to the ConnectNetwork and
+// DisconnectNetwork function.
+//
+// See https://goo.gl/RV7BJU for more details.
 type NetworkConnectionOptions struct {
 	Container string
 
-	
+	// EndpointConfig is only applicable to the ConnectNetwork call
 	EndpointConfig *EndpointConfig `json:"EndpointConfig,omitempty"`
 
-	
+	// Force is only applicable to the DisconnectNetwork call
 	Force bool
 
 	Context context.Context `json:"-"`
 }
 
-
-
-
+// EndpointConfig stores network endpoint details
+//
+// See https://goo.gl/RV7BJU for more details.
 type EndpointConfig struct {
 	IPAMConfig          *EndpointIPAMConfig `json:"IPAMConfig,omitempty" yaml:"IPAMConfig,omitempty" toml:"IPAMConfig,omitempty"`
 	Links               []string            `json:"Links,omitempty" yaml:"Links,omitempty" toml:"Links,omitempty"`
@@ -227,19 +227,19 @@ type EndpointConfig struct {
 	MacAddress          string              `json:"MacAddress,omitempty" yaml:"MacAddress,omitempty" toml:"MacAddress,omitempty"`
 }
 
-
-
-
-
+// EndpointIPAMConfig represents IPAM configurations for an
+// endpoint
+//
+// See https://goo.gl/RV7BJU for more details.
 type EndpointIPAMConfig struct {
 	IPv4Address string `json:",omitempty"`
 	IPv6Address string `json:",omitempty"`
 }
 
-
-
-
-
+// ConnectNetwork adds a container to a network or returns an error in case of
+// failure.
+//
+// See https://goo.gl/6GugX3 for more details.
 func (c *Client) ConnectNetwork(id string, opts NetworkConnectionOptions) error {
 	resp, err := c.do("POST", "/networks/"+id+"/connect", doOptions{
 		data:    opts,
@@ -255,10 +255,10 @@ func (c *Client) ConnectNetwork(id string, opts NetworkConnectionOptions) error 
 	return nil
 }
 
-
-
-
-
+// DisconnectNetwork removes a container from a network or returns an error in
+// case of failure.
+//
+// See https://goo.gl/6GugX3 for more details.
 func (c *Client) DisconnectNetwork(id string, opts NetworkConnectionOptions) error {
 	resp, err := c.do("POST", "/networks/"+id+"/disconnect", doOptions{data: opts})
 	if err != nil {
@@ -271,24 +271,24 @@ func (c *Client) DisconnectNetwork(id string, opts NetworkConnectionOptions) err
 	return nil
 }
 
-
-
-
+// PruneNetworksOptions specify parameters to the PruneNetworks function.
+//
+// See https://goo.gl/kX0S9h for more details.
 type PruneNetworksOptions struct {
 	Filters map[string][]string
 	Context context.Context
 }
 
-
-
-
+// PruneNetworksResults specify results from the PruneNetworks function.
+//
+// See https://goo.gl/kX0S9h for more details.
 type PruneNetworksResults struct {
 	NetworksDeleted []string
 }
 
-
-
-
+// PruneNetworks deletes networks which are unused.
+//
+// See https://goo.gl/kX0S9h for more details.
 func (c *Client) PruneNetworks(opts PruneNetworksOptions) (*PruneNetworksResults, error) {
 	path := "/networks/prune?" + queryString(opts)
 	resp, err := c.do("POST", path, doOptions{context: opts.Context})
@@ -303,7 +303,7 @@ func (c *Client) PruneNetworks(opts PruneNetworksOptions) (*PruneNetworksResults
 	return &results, nil
 }
 
-
+// NoSuchNetwork is the error returned when a given network does not exist.
 type NoSuchNetwork struct {
 	ID string
 }
@@ -312,8 +312,8 @@ func (err *NoSuchNetwork) Error() string {
 	return fmt.Sprintf("No such network: %s", err.ID)
 }
 
-
-
+// NoSuchNetworkOrContainer is the error returned when a given network or
+// container does not exist.
 type NoSuchNetworkOrContainer struct {
 	NetworkID   string
 	ContainerID string

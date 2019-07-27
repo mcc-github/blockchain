@@ -12,8 +12,8 @@ type lexerState struct {
 	validNextKinds []TokenKind
 }
 
-
-
+// lexer states.
+// Constant for all purposes except compiler.
 var validLexerStates = []lexerState{
 
 	lexerState{
@@ -305,7 +305,7 @@ func checkExpressionSyntax(tokens []ExpressionToken) error {
 
 		if !state.canTransitionTo(token.Kind) {
 
-			
+			// call out a specific error for tokens looking like they want to be functions.
 			if lastToken.Kind == VARIABLE && token.Kind == CLAUSE {
 				return errors.New("Undefined function " + lastToken.Value.(string))
 			}

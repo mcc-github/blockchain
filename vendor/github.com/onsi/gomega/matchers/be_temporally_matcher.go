@@ -22,7 +22,7 @@ func (matcher *BeTemporallyMatcher) NegatedFailureMessage(actual interface{}) (m
 }
 
 func (matcher *BeTemporallyMatcher) Match(actual interface{}) (bool, error) {
-	
+	// predicate to test for time.Time type
 	isTime := func(t interface{}) bool {
 		_, ok := t.(time.Time)
 		return ok

@@ -8,8 +8,8 @@ import (
 	"unicode"
 )
 
-
-
+// IEC Sizes.
+// kibis of bits
 const (
 	Byte = 1 << (iota * 10)
 	KiByte
@@ -20,7 +20,7 @@ const (
 	EiByte
 )
 
-
+// SI Sizes.
 const (
 	IByte = 1
 	KByte = IByte * 1000
@@ -45,7 +45,7 @@ var bytesSizeTable = map[string]uint64{
 	"pb":  PByte,
 	"eib": EiByte,
 	"eb":  EByte,
-	
+	// Without suffix
 	"":   Byte,
 	"ki": KiByte,
 	"k":  KByte,
@@ -80,33 +80,33 @@ func humanateBytes(s uint64, base float64, sizes []string) string {
 	return fmt.Sprintf(f, val, suffix)
 }
 
-
-
-
-
-
+// Bytes produces a human readable representation of an SI size.
+//
+// See also: ParseBytes.
+//
+// Bytes(82854982) -> 83 MB
 func Bytes(s uint64) string {
 	sizes := []string{"B", "kB", "MB", "GB", "TB", "PB", "EB"}
 	return humanateBytes(s, 1000, sizes)
 }
 
-
-
-
-
-
+// IBytes produces a human readable representation of an IEC size.
+//
+// See also: ParseBytes.
+//
+// IBytes(82854982) -> 79 MiB
 func IBytes(s uint64) string {
 	sizes := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
 	return humanateBytes(s, 1024, sizes)
 }
 
-
-
-
-
-
-
-
+// ParseBytes parses a string representation of bytes into the number
+// of bytes it represents.
+//
+// See Also: Bytes, IBytes.
+//
+// ParseBytes("42 MB") -> 42000000, nil
+// ParseBytes("42 mib") -> 44040192, nil
 func ParseBytes(s string) (uint64, error) {
 	lastDigit := 0
 	hasComma := false

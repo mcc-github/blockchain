@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package leveldb
 
@@ -21,7 +21,7 @@ type byteReader interface {
 	io.ByteReader
 }
 
-
+// These numbers are written to disk and should not be changed.
 const (
 	recComparer    = 1
 	recJournalNum  = 2
@@ -30,7 +30,7 @@ const (
 	recCompPtr     = 5
 	recDelTable    = 6
 	recAddTable    = 7
-	
+	// 8 was used for large value refs
 	recPrevJournalNum = 9
 )
 

@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2012 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package colltab
 
@@ -10,14 +10,14 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-
+// Table holds all collation data for a given collation ordering.
 type Table struct {
-	Index Trie 
+	Index Trie // main trie
 
-	
+	// expansion info
 	ExpandElem []uint32
 
-	
+	// contraction info
 	ContractTries  ContractTrieSet
 	ContractElem   []uint32
 	MaxContractLen int
@@ -33,17 +33,17 @@ func (t *Table) AppendNextString(w []Elem, s string) (res []Elem, n int) {
 }
 
 func (t *Table) Start(p int, b []byte) int {
-	
+	// TODO: implement
 	panic("not implemented")
 }
 
 func (t *Table) StartString(p int, s string) int {
-	
+	// TODO: implement
 	panic("not implemented")
 }
 
 func (t *Table) Domain() []string {
-	
+	// TODO: implement
 	panic("not implemented")
 }
 
@@ -92,11 +92,11 @@ func (src *source) properties(f norm.Form) norm.Properties {
 	return f.Properties(src.bytes)
 }
 
-
-
-
-
-
+// appendNext appends the weights corresponding to the next rune or
+// contraction in s.  If a contraction is matched to a discontinuous
+// sequence of runes, the weights for the interstitial runes are
+// appended as well.  It returns a new slice that includes the appended
+// weights and the number of bytes consumed from s.
 func (t *Table) appendNext(w []Elem, src source) (res []Elem, n int) {
 	ce, sz := src.lookup(t)
 	tp := ce.ctype()
@@ -109,9 +109,9 @@ func (t *Table) appendNext(w []Elem, src source) (res []Elem, n int) {
 				lastHangul  = 0xD7A3
 			)
 			if r >= firstHangul && r <= lastHangul {
-				
+				// TODO: performance can be considerably improved here.
 				n = sz
-				var buf [16]byte 
+				var buf [16]byte // Used for decomposing Hangul.
 				for b := src.nfd(buf[:0], hangulSize); len(b) > 0; b = b[sz:] {
 					ce, sz = t.Index.lookup(b)
 					w = append(w, ce)
@@ -133,7 +133,7 @@ func (t *Table) appendNext(w []Elem, src source) (res []Elem, n int) {
 		}
 		sz += n
 	} else if tp == ceDecompose {
-		
+		// Decompose using NFKD and replace tertiary weights.
 		t1, t2 := splitDecompose(ce)
 		i := len(w)
 		nfkd := src.properties(norm.NFKD).Decomposition()
@@ -170,15 +170,15 @@ func (t *Table) matchContraction(w []Elem, ce Elem, suffix []byte) ([]Elem, int)
 	p := scan.scan(0)
 
 	if !scan.done && p < len(suffix) && suffix[p] >= utf8.RuneSelf {
-		
+		// By now we should have filtered most cases.
 		p0 := p
 		bufn := 0
 		rune := norm.NFD.Properties(suffix[p:])
 		p += rune.Size()
 		if rune.LeadCCC() != 0 {
 			prevCC := rune.TrailCCC()
-			
-			
+			// A gap may only occur in the last normalization segment.
+			// This also ensures that len(scan.s) < norm.MaxSegmentSize.
 			if end := norm.NFD.FirstBoundary(suffix[p:]); end != -1 {
 				scan.s = suffix[:p+end]
 			}
@@ -189,7 +189,7 @@ func (t *Table) matchContraction(w []Elem, ce Elem, suffix []byte) ([]Elem, int)
 				}
 				prevCC = rune.TrailCCC()
 				if pp := scan.scan(p); pp != p {
-					
+					// Copy the interstitial runes for later processing.
 					bufn += copy(buf[bufn:], suffix[p0:p])
 					if scan.pindex == pp {
 						bufp = bufn
@@ -201,7 +201,7 @@ func (t *Table) matchContraction(w []Elem, ce Elem, suffix []byte) ([]Elem, int)
 			}
 		}
 	}
-	
+	// Append weights for the matched contraction, which may be an expansion.
 	i, n := scan.result()
 	ce = Elem(t.ContractElem[i+offset])
 	if ce.ctype() == ceNormal {
@@ -209,16 +209,16 @@ func (t *Table) matchContraction(w []Elem, ce Elem, suffix []byte) ([]Elem, int)
 	} else {
 		w = t.appendExpansion(w, ce)
 	}
-	
+	// Append weights for the runes in the segment not part of the contraction.
 	for b, p := buf[:bufp], 0; len(b) > 0; b = b[p:] {
 		w, p = t.appendNext(w, source{bytes: b})
 	}
 	return w, n
 }
 
-
-
-
+// TODO: unify the two implementations. This is best done after first simplifying
+// the algorithm taking into account the inclusion of both NFC and NFD forms
+// in the table.
 func (t *Table) matchContractionString(w []Elem, ce Elem, suffix string) ([]Elem, int) {
 	index, n, offset := splitContractIndex(ce)
 
@@ -228,15 +228,15 @@ func (t *Table) matchContractionString(w []Elem, ce Elem, suffix string) ([]Elem
 	p := scan.scan(0)
 
 	if !scan.done && p < len(suffix) && suffix[p] >= utf8.RuneSelf {
-		
+		// By now we should have filtered most cases.
 		p0 := p
 		bufn := 0
 		rune := norm.NFD.PropertiesString(suffix[p:])
 		p += rune.Size()
 		if rune.LeadCCC() != 0 {
 			prevCC := rune.TrailCCC()
-			
-			
+			// A gap may only occur in the last normalization segment.
+			// This also ensures that len(scan.s) < norm.MaxSegmentSize.
 			if end := norm.NFD.FirstBoundaryInString(suffix[p:]); end != -1 {
 				scan.s = suffix[:p+end]
 			}
@@ -247,7 +247,7 @@ func (t *Table) matchContractionString(w []Elem, ce Elem, suffix string) ([]Elem
 				}
 				prevCC = rune.TrailCCC()
 				if pp := scan.scan(p); pp != p {
-					
+					// Copy the interstitial runes for later processing.
 					bufn += copy(buf[bufn:], suffix[p0:p])
 					if scan.pindex == pp {
 						bufp = bufn
@@ -259,7 +259,7 @@ func (t *Table) matchContractionString(w []Elem, ce Elem, suffix string) ([]Elem
 			}
 		}
 	}
-	
+	// Append weights for the matched contraction, which may be an expansion.
 	i, n := scan.result()
 	ce = Elem(t.ContractElem[i+offset])
 	if ce.ctype() == ceNormal {
@@ -267,7 +267,7 @@ func (t *Table) matchContractionString(w []Elem, ce Elem, suffix string) ([]Elem
 	} else {
 		w = t.appendExpansion(w, ce)
 	}
-	
+	// Append weights for the runes in the segment not part of the contraction.
 	for b, p := buf[:bufp], 0; len(b) > 0; b = b[p:] {
 		w, p = t.appendNext(w, source{bytes: b})
 	}

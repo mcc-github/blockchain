@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package iterator
 
@@ -284,16 +284,16 @@ func (i *mergedIterator) SetErrorCallback(f func(err error)) {
 	i.errf = f
 }
 
-
-
-
-
-
-
-
-
-
-
+// NewMergedIterator returns an iterator that merges its input. Walking the
+// resultant iterator will return all key/value pairs of all input iterators
+// in strictly increasing key order, as defined by cmp.
+// The input's key ranges may overlap, but there are assumed to be no duplicate
+// keys: if iters[i] contains a key k then iters[j] will not contain that key k.
+// None of the iters may be nil.
+//
+// If strict is true the any 'corruption errors' (i.e errors.IsCorrupted(err) == true)
+// won't be ignored and will halt 'merged iterator', otherwise the iterator will
+// continue to the next 'input iterator'.
 func NewMergedIterator(iters []Iterator, cmp comparer.Comparer, strict bool) Iterator {
 	return &mergedIterator{
 		iters:  iters,

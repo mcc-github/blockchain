@@ -5,19 +5,19 @@ import (
 	"time"
 )
 
+// Offset Manager
 
-
-
+// OffsetManager uses Kafka to store and fetch consumed partition offsets.
 type OffsetManager interface {
-	
-	
-	
+	// ManagePartition creates a PartitionOffsetManager on the given topic/partition.
+	// It will return an error if this OffsetManager is already managing the given
+	// topic/partition.
 	ManagePartition(topic string, partition int32) (PartitionOffsetManager, error)
 
-	
-	
-	
-	
+	// Close stops the OffsetManager from managing offsets. It is required to call
+	// this function before an OffsetManager object passes out of scope, as it
+	// will otherwise leak memory. You must call this after all the
+	// PartitionOffsetManagers are closed.
 	Close() error
 }
 
@@ -41,14 +41,14 @@ type offsetManager struct {
 	closed    chan none
 }
 
-
-
+// NewOffsetManagerFromClient creates a new OffsetManager from the given client.
+// It is still necessary to call Close() on the underlying client when finished with the partition manager.
 func NewOffsetManagerFromClient(group string, client Client) (OffsetManager, error) {
 	return newOffsetManagerFromClient(group, "", GroupGenerationUndefined, client)
 }
 
 func newOffsetManagerFromClient(group, memberID string, generation int32, client Client) (*offsetManager, error) {
-	
+	// Check that we are not dealing with a closed Client before processing any other arguments
 	if client.Closed() {
 		return nil, ErrClosedClient
 	}
@@ -97,14 +97,14 @@ func (om *offsetManager) ManagePartition(topic string, partition int32) (Partiti
 
 func (om *offsetManager) Close() error {
 	om.closeOnce.Do(func() {
-		
+		// exit the mainLoop
 		close(om.closing)
 		<-om.closed
 
-		
+		// mark all POMs as closed
 		om.asyncClosePOMs()
 
-		
+		// flush one last time
 		for attempt := 0; attempt <= om.conf.Consumer.Offsets.Retry.Max; attempt++ {
 			om.flushToBroker()
 			if om.releasePOMs(false) == 0 {
@@ -317,22 +317,22 @@ func (om *offsetManager) handleResponse(broker *Broker, req *OffsetCommitRequest
 				pom.updateCommitted(block.offset, block.metadata)
 			case ErrNotLeaderForPartition, ErrLeaderNotAvailable,
 				ErrConsumerCoordinatorNotAvailable, ErrNotCoordinatorForConsumer:
-				
+				// not a critical error, we just need to redispatch
 				om.releaseCoordinator(broker)
 			case ErrOffsetMetadataTooLarge, ErrInvalidCommitOffsetSize:
-				
+				// nothing we can do about this, just tell the user and carry on
 				pom.handleError(err)
 			case ErrOffsetsLoadInProgress:
-				
+				// nothing wrong but we didn't commit, we'll get it next time round
 				break
 			case ErrUnknownTopicOrPartition:
-				
-				
-				
-				
+				// let the user know *and* try redispatching - if topic-auto-create is
+				// enabled, redispatching should trigger a metadata req and create the
+				// topic; if not then re-dispatching won't help, but we've let the user
+				// know and it shouldn't hurt either (see https://github.com/Shopify/sarama/issues/706)
 				fallthrough
 			default:
-				
+				// dunno, tell the user and try redispatching
 				pom.handleError(err)
 				om.releaseCoordinator(broker)
 			}
@@ -362,7 +362,7 @@ func (om *offsetManager) asyncClosePOMs() {
 	}
 }
 
-
+// Releases/removes closed POMs once they are clean (or when forced)
 func (om *offsetManager) releasePOMs(force bool) (remaining int) {
 	om.pomsLock.Lock()
 	defer om.pomsLock.Unlock()
@@ -399,58 +399,58 @@ func (om *offsetManager) findPOM(topic string, partition int32) *partitionOffset
 	return nil
 }
 
+// Partition Offset Manager
 
-
-
-
-
+// PartitionOffsetManager uses Kafka to store and fetch consumed partition offsets. You MUST call Close()
+// on a partition offset manager to avoid leaks, it will not be garbage-collected automatically when it passes
+// out of scope.
 type PartitionOffsetManager interface {
-	
-	
-	
-	
-	
+	// NextOffset returns the next offset that should be consumed for the managed
+	// partition, accompanied by metadata which can be used to reconstruct the state
+	// of the partition consumer when it resumes. NextOffset() will return
+	// `config.Consumer.Offsets.Initial` and an empty metadata string if no offset
+	// was committed for this partition yet.
 	NextOffset() (int64, string)
 
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+	// MarkOffset marks the provided offset, alongside a metadata string
+	// that represents the state of the partition consumer at that point in time. The
+	// metadata string can be used by another consumer to restore that state, so it
+	// can resume consumption.
+	//
+	// To follow upstream conventions, you are expected to mark the offset of the
+	// next message to read, not the last message read. Thus, when calling `MarkOffset`
+	// you should typically add one to the offset of the last consumed message.
+	//
+	// Note: calling MarkOffset does not necessarily commit the offset to the backend
+	// store immediately for efficiency reasons, and it may never be committed if
+	// your application crashes. This means that you may end up processing the same
+	// message twice, and your processing should ideally be idempotent.
 	MarkOffset(offset int64, metadata string)
 
-	
-	
-	
-	
-	
+	// ResetOffset resets to the provided offset, alongside a metadata string that
+	// represents the state of the partition consumer at that point in time. Reset
+	// acts as a counterpart to MarkOffset, the difference being that it allows to
+	// reset an offset to an earlier or smaller value, where MarkOffset only
+	// allows incrementing the offset. cf MarkOffset for more details.
 	ResetOffset(offset int64, metadata string)
 
-	
-	
-	
-	
+	// Errors returns a read channel of errors that occur during offset management, if
+	// enabled. By default, errors are logged and not returned over this channel. If
+	// you want to implement any custom error handling, set your config's
+	// Consumer.Return.Errors setting to true, and read from this channel.
 	Errors() <-chan *ConsumerError
 
-	
-	
-	
-	
-	
+	// AsyncClose initiates a shutdown of the PartitionOffsetManager. This method will
+	// return immediately, after which you should wait until the 'errors' channel has
+	// been drained and closed. It is required to call this function, or Close before
+	// a consumer object passes out of scope, as it will otherwise leak memory. You
+	// must call this before calling Close on the underlying client.
 	AsyncClose()
 
-	
-	
-	
-	
+	// Close stops the PartitionOffsetManager from managing offsets. It is required to
+	// call this function (or AsyncClose) before a PartitionOffsetManager object
+	// passes out of scope, as it will otherwise leak memory. You must call this
+	// before calling Close on the underlying client.
 	Close() error
 }
 

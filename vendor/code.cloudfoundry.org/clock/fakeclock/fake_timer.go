@@ -76,9 +76,9 @@ func (ft *fakeTimer) timeUpdated(now time.Time) {
 	select {
 	case ft.channel <- now:
 	default:
-		
-		
-		
+		// drop on the floor. timers have a buffered channel anyway. according to
+		// godoc of the `time' package a ticker can loose ticks in case of a slow
+		// receiver
 	}
 
 	if ft.repeatable() {

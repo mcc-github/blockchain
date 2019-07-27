@@ -1,8 +1,8 @@
+// Copyright 2015 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
+// +build ignore
 
 package main
 
@@ -76,7 +76,7 @@ func main() {
 	fmt.Fprintln(w, "var localeMap = []htmlEncoding{")
 	for _, loc := range locales {
 		tags = append(tags, loc.tag)
-		fmt.Fprintf(w, "%s, 
+		fmt.Fprintf(w, "%s, // %s \n", consts[loc.name], loc.tag)
 	}
 	fmt.Fprint(w, "}\n\n")
 
@@ -85,7 +85,7 @@ func main() {
 	gen.WriteGoFile("tables.go", "htmlindex", w.Bytes())
 }
 
-
+// consts maps canonical encoding name to internal constant.
 var consts = map[string]string{
 	"utf-8":          "utf8",
 	"ibm866":         "ibm866",
@@ -118,7 +118,7 @@ var consts = map[string]string{
 	"x-mac-cyrillic": "macintoshCyrillic",
 	"gbk":            "gbk",
 	"gb18030":        "gb18030",
-	
+	// "hz-gb-2312":     "hzgb2312", // Was removed from WhatWG
 	"big5":           "big5",
 	"euc-jp":         "eucjp",
 	"iso-2022-jp":    "iso2022jp",
@@ -130,12 +130,12 @@ var consts = map[string]string{
 	"x-user-defined": "xUserDefined",
 }
 
-
-
+// locales is taken from
+// https://html.spec.whatwg.org/multipage/syntax.html#encoding-sniffing-algorithm.
 var locales = []struct{ tag, name string }{
-	
-	
-	
+	// The default value. Explicitly state latin to benefit from the exact
+	// script option, while still making 1252 the default encoding for languages
+	// written in Latin script.
 	{"und_Latn", "windows-1252"},
 	{"ar", "windows-1256"},
 	{"ba", "windows-1251"},

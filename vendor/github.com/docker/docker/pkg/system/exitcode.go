@@ -1,4 +1,4 @@
-package system 
+package system // import "github.com/docker/docker/pkg/system"
 
 import (
 	"fmt"
@@ -6,8 +6,8 @@ import (
 	"syscall"
 )
 
-
-
+// GetExitCode returns the ExitStatus of the specified error if its type is
+// exec.ExitError, returns 0 and an error otherwise.
 func GetExitCode(err error) (int, error) {
 	exitCode := 0
 	if exiterr, ok := err.(*exec.ExitError); ok {

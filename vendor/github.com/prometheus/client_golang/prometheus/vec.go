@@ -1,15 +1,15 @@
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright 2014 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package prometheus
 
@@ -20,22 +20,22 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-
-
-
-
-
+// metricVec is a Collector to bundle metrics of the same name that differ in
+// their label values. metricVec is not used directly (and therefore
+// unexported). It is used as a building block for implementations of vectors of
+// a given metric type, like GaugeVec, CounterVec, SummaryVec, and HistogramVec.
+// It also handles label currying. It uses basicMetricVec internally.
 type metricVec struct {
 	*metricMap
 
 	curry []curriedLabelValue
 
-	
+	// hashAdd and hashAddByte can be replaced for testing collision handling.
 	hashAdd     func(h uint64, s string) uint64
 	hashAddByte func(h uint64, b byte) uint64
 }
 
-
+// newMetricVec returns an initialized metricVec.
 func newMetricVec(desc *Desc, newMetric func(lvs ...string) Metric) *metricVec {
 	return &metricVec{
 		metricMap: &metricMap{
@@ -48,21 +48,21 @@ func newMetricVec(desc *Desc, newMetric func(lvs ...string) Metric) *metricVec {
 	}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// DeleteLabelValues removes the metric where the variable labels are the same
+// as those passed in as labels (same order as the VariableLabels in Desc). It
+// returns true if a metric was deleted.
+//
+// It is not an error if the number of label values is not the same as the
+// number of VariableLabels in Desc. However, such inconsistent label count can
+// never match an actual metric, so the method will always return false in that
+// case.
+//
+// Note that for more than one label value, this method is prone to mistakes
+// caused by an incorrect order of arguments. Consider Delete(Labels) as an
+// alternative to avoid that type of mistake. For higher label numbers, the
+// latter has a much more readable (albeit more verbose) syntax, but it comes
+// with a performance overhead (for creating and processing the Labels map).
+// See also the CounterVec example.
 func (m *metricVec) DeleteLabelValues(lvs ...string) bool {
 	h, err := m.hashLabelValues(lvs)
 	if err != nil {
@@ -72,16 +72,16 @@ func (m *metricVec) DeleteLabelValues(lvs ...string) bool {
 	return m.metricMap.deleteByHashWithLabelValues(h, lvs, m.curry)
 }
 
-
-
-
-
-
-
-
-
-
-
+// Delete deletes the metric where the variable labels are the same as those
+// passed in as labels. It returns true if a metric was deleted.
+//
+// It is not an error if the number and names of the Labels are inconsistent
+// with those of the VariableLabels in Desc. However, such inconsistent Labels
+// can never match an actual metric, so the method will always return false in
+// that case.
+//
+// This method is used for the same purpose as DeleteLabelValues(...string). See
+// there for pros and cons of the two methods.
 func (m *metricVec) Delete(labels Labels) bool {
 	h, err := m.hashLabels(labels)
 	if err != nil {
@@ -107,7 +107,7 @@ func (m *metricVec) curryWith(labels Labels) (*metricVec, error) {
 			iCurry++
 		} else {
 			if !ok {
-				continue 
+				continue // Label stays uncurried.
 			}
 			newCurry = append(newCurry, curriedLabelValue{i, val})
 		}
@@ -194,35 +194,35 @@ func (m *metricVec) hashLabels(labels Labels) (uint64, error) {
 	return h, nil
 }
 
-
-
+// metricWithLabelValues provides the metric and its label values for
+// disambiguation on hash collision.
 type metricWithLabelValues struct {
 	values []string
 	metric Metric
 }
 
-
+// curriedLabelValue sets the curried value for a label at the given index.
 type curriedLabelValue struct {
 	index int
 	value string
 }
 
-
-
+// metricMap is a helper for metricVec and shared between differently curried
+// metricVecs.
 type metricMap struct {
-	mtx       sync.RWMutex 
+	mtx       sync.RWMutex // Protects metrics.
 	metrics   map[uint64][]metricWithLabelValues
 	desc      *Desc
 	newMetric func(labelValues ...string) Metric
 }
 
-
-
+// Describe implements Collector. It will send exactly one Desc to the provided
+// channel.
 func (m *metricMap) Describe(ch chan<- *Desc) {
 	ch <- m.desc
 }
 
-
+// Collect implements Collector.
 func (m *metricMap) Collect(ch chan<- Metric) {
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
@@ -234,7 +234,7 @@ func (m *metricMap) Collect(ch chan<- Metric) {
 	}
 }
 
-
+// Reset deletes all metrics in this vector.
 func (m *metricMap) Reset() {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
@@ -244,9 +244,9 @@ func (m *metricMap) Reset() {
 	}
 }
 
-
-
-
+// deleteByHashWithLabelValues removes the metric from the hash bucket h. If
+// there are multiple matches in the bucket, use lvs to select a metric and
+// remove only that metric.
 func (m *metricMap) deleteByHashWithLabelValues(
 	h uint64, lvs []string, curry []curriedLabelValue,
 ) bool {
@@ -271,9 +271,9 @@ func (m *metricMap) deleteByHashWithLabelValues(
 	return true
 }
 
-
-
-
+// deleteByHashWithLabels removes the metric from the hash bucket h. If there
+// are multiple matches in the bucket, use lvs to select a metric and remove
+// only that metric.
 func (m *metricMap) deleteByHashWithLabels(
 	h uint64, labels Labels, curry []curriedLabelValue,
 ) bool {
@@ -297,10 +297,10 @@ func (m *metricMap) deleteByHashWithLabels(
 	return true
 }
 
-
-
-
-
+// getOrCreateMetricWithLabelValues retrieves the metric by hash and label value
+// or creates it and returns the new one.
+//
+// This function holds the mutex.
 func (m *metricMap) getOrCreateMetricWithLabelValues(
 	hash uint64, lvs []string, curry []curriedLabelValue,
 ) Metric {
@@ -322,10 +322,10 @@ func (m *metricMap) getOrCreateMetricWithLabelValues(
 	return metric
 }
 
-
-
-
-
+// getOrCreateMetricWithLabelValues retrieves the metric by hash and label value
+// or creates it and returns the new one.
+//
+// This function holds the mutex.
 func (m *metricMap) getOrCreateMetricWithLabels(
 	hash uint64, labels Labels, curry []curriedLabelValue,
 ) Metric {
@@ -347,8 +347,8 @@ func (m *metricMap) getOrCreateMetricWithLabels(
 	return metric
 }
 
-
-
+// getMetricWithHashAndLabelValues gets a metric while handling possible
+// collisions in the hash space. Must be called while holding the read mutex.
 func (m *metricMap) getMetricWithHashAndLabelValues(
 	h uint64, lvs []string, curry []curriedLabelValue,
 ) (Metric, bool) {
@@ -361,8 +361,8 @@ func (m *metricMap) getMetricWithHashAndLabelValues(
 	return nil, false
 }
 
-
-
+// getMetricWithHashAndLabels gets a metric while handling possible collisions in
+// the hash space. Must be called while holding read mutex.
 func (m *metricMap) getMetricWithHashAndLabels(
 	h uint64, labels Labels, curry []curriedLabelValue,
 ) (Metric, bool) {
@@ -375,8 +375,8 @@ func (m *metricMap) getMetricWithHashAndLabels(
 	return nil, false
 }
 
-
-
+// findMetricWithLabelValues returns the index of the matching metric or
+// len(metrics) if not found.
 func findMetricWithLabelValues(
 	metrics []metricWithLabelValues, lvs []string, curry []curriedLabelValue,
 ) int {
@@ -388,8 +388,8 @@ func findMetricWithLabelValues(
 	return len(metrics)
 }
 
-
-
+// findMetricWithLabels returns the index of the matching metric or len(metrics)
+// if not found.
 func findMetricWithLabels(
 	desc *Desc, metrics []metricWithLabelValues, labels Labels, curry []curriedLabelValue,
 ) int {

@@ -1,4 +1,4 @@
-
+// +build linux darwin freebsd netbsd openbsd solaris dragonfly windows
 
 package pb
 
@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-
-
+// Create and start new pool with given bars
+// You need call pool.Stop() after work
 func StartPool(pbs ...*ProgressBar) (pool *Pool, err error) {
 	pool = new(Pool)
 	if err = pool.Start(); err != nil {
@@ -19,8 +19,8 @@ func StartPool(pbs ...*ProgressBar) (pool *Pool, err error) {
 	return
 }
 
-
-
+// NewPool initialises a pool with progress bars, but
+// doesn't start it. You need to call Start manually
 func NewPool(pbs ...*ProgressBar) (pool *Pool) {
 	pool = new(Pool)
 	pool.Add(pbs...)
@@ -38,7 +38,7 @@ type Pool struct {
 	finishOnce    sync.Once
 }
 
-
+// Add progress bars.
 func (p *Pool) Add(pbs ...*ProgressBar) {
 	p.m.Lock()
 	defer p.m.Unlock()
@@ -87,13 +87,15 @@ func (p *Pool) writer() {
 	}
 }
 
-
+// Restore terminal state and close pool
 func (p *Pool) Stop() error {
 	p.finishOnce.Do(func() {
-		close(p.shutdownCh)
+		if p.shutdownCh != nil {
+			close(p.shutdownCh)
+		}
 	})
 
-	
+	// Wait for the worker to complete
 	select {
 	case <-p.workerCh:
 	}

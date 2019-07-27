@@ -1,6 +1,6 @@
+// +build linux freebsd darwin
 
-
-package system 
+package system // import "github.com/docker/docker/pkg/system"
 
 import (
 	"syscall"
@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-
+// IsProcessAlive returns true if process with a given pid is running.
 func IsProcessAlive(pid int) bool {
 	err := unix.Kill(pid, syscall.Signal(0))
 	if err == nil || err == unix.EPERM {
@@ -18,7 +18,7 @@ func IsProcessAlive(pid int) bool {
 	return false
 }
 
-
+// KillProcess force-stops a process.
 func KillProcess(pid int) {
 	unix.Kill(pid, unix.SIGKILL)
 }

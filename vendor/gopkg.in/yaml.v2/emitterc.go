@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-
+// Flush the buffer if needed.
 func flush(emitter *yaml_emitter_t) bool {
 	if emitter.buffer_pos+5 >= len(emitter.buffer) {
 		return yaml_emitter_flush(emitter)
@@ -13,7 +13,7 @@ func flush(emitter *yaml_emitter_t) bool {
 	return true
 }
 
-
+// Put a character to the output buffer.
 func put(emitter *yaml_emitter_t, value byte) bool {
 	if emitter.buffer_pos+5 >= len(emitter.buffer) && !yaml_emitter_flush(emitter) {
 		return false
@@ -24,7 +24,7 @@ func put(emitter *yaml_emitter_t, value byte) bool {
 	return true
 }
 
-
+// Put a line break to the output buffer.
 func put_break(emitter *yaml_emitter_t) bool {
 	if emitter.buffer_pos+5 >= len(emitter.buffer) && !yaml_emitter_flush(emitter) {
 		return false
@@ -48,7 +48,7 @@ func put_break(emitter *yaml_emitter_t) bool {
 	return true
 }
 
-
+// Copy a character from a string into buffer.
 func write(emitter *yaml_emitter_t, s []byte, i *int) bool {
 	if emitter.buffer_pos+5 >= len(emitter.buffer) && !yaml_emitter_flush(emitter) {
 		return false
@@ -76,7 +76,7 @@ func write(emitter *yaml_emitter_t, s []byte, i *int) bool {
 	return true
 }
 
-
+// Write a whole string into buffer.
 func write_all(emitter *yaml_emitter_t, s []byte) bool {
 	for i := 0; i < len(s); {
 		if !write(emitter, s, &i) {
@@ -86,7 +86,7 @@ func write_all(emitter *yaml_emitter_t, s []byte) bool {
 	return true
 }
 
-
+// Copy a line break character from a string into buffer.
 func write_break(emitter *yaml_emitter_t, s []byte, i *int) bool {
 	if s[*i] == '\n' {
 		if !put_break(emitter) {
@@ -103,14 +103,14 @@ func write_break(emitter *yaml_emitter_t, s []byte, i *int) bool {
 	return true
 }
 
-
+// Set an emitter error and return false.
 func yaml_emitter_set_emitter_error(emitter *yaml_emitter_t, problem string) bool {
 	emitter.error = yaml_EMITTER_ERROR
 	emitter.problem = problem
 	return false
 }
 
-
+// Emit an event.
 func yaml_emitter_emit(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	emitter.events = append(emitter.events, *event)
 	for !yaml_emitter_need_more_events(emitter) {
@@ -127,13 +127,13 @@ func yaml_emitter_emit(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	return true
 }
 
-
-
-
-
-
-
-
+// Check if we need to accumulate more events before emitting.
+//
+// We accumulate extra
+//  - 1 event for DOCUMENT-START
+//  - 2 events for SEQUENCE-START
+//  - 3 events for MAPPING-START
+//
 func yaml_emitter_need_more_events(emitter *yaml_emitter_t) bool {
 	if emitter.events_head == len(emitter.events) {
 		return true
@@ -170,7 +170,7 @@ func yaml_emitter_need_more_events(emitter *yaml_emitter_t) bool {
 	return true
 }
 
-
+// Append a directive to the directives stack.
 func yaml_emitter_append_tag_directive(emitter *yaml_emitter_t, value *yaml_tag_directive_t, allow_duplicates bool) bool {
 	for i := 0; i < len(emitter.tag_directives); i++ {
 		if bytes.Equal(value.handle, emitter.tag_directives[i].handle) {
@@ -181,8 +181,8 @@ func yaml_emitter_append_tag_directive(emitter *yaml_emitter_t, value *yaml_tag_
 		}
 	}
 
-	
-	
+	// [Go] Do we actually need to copy this given garbage collection
+	// and the lack of deallocating destructors?
 	tag_copy := yaml_tag_directive_t{
 		handle: make([]byte, len(value.handle)),
 		prefix: make([]byte, len(value.prefix)),
@@ -193,7 +193,7 @@ func yaml_emitter_append_tag_directive(emitter *yaml_emitter_t, value *yaml_tag_
 	return true
 }
 
-
+// Increase the indentation level.
 func yaml_emitter_increase_indent(emitter *yaml_emitter_t, flow, indentless bool) bool {
 	emitter.indents = append(emitter.indents, emitter.indent)
 	if emitter.indent < 0 {
@@ -208,7 +208,7 @@ func yaml_emitter_increase_indent(emitter *yaml_emitter_t, flow, indentless bool
 	return true
 }
 
-
+// State dispatcher.
 func yaml_emitter_state_machine(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	switch emitter.state {
 	default:
@@ -269,7 +269,7 @@ func yaml_emitter_state_machine(emitter *yaml_emitter_t, event *yaml_event_t) bo
 	panic("invalid emitter state")
 }
 
-
+// Expect STREAM-START.
 func yaml_emitter_emit_stream_start(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	if event.typ != yaml_STREAM_START_EVENT {
 		return yaml_emitter_set_emitter_error(emitter, "expected STREAM-START")
@@ -308,7 +308,7 @@ func yaml_emitter_emit_stream_start(emitter *yaml_emitter_t, event *yaml_event_t
 	return true
 }
 
-
+// Expect DOCUMENT-START or STREAM-END.
 func yaml_emitter_emit_document_start(emitter *yaml_emitter_t, event *yaml_event_t, first bool) bool {
 
 	if event.typ == yaml_DOCUMENT_START_EVENT {
@@ -422,13 +422,13 @@ func yaml_emitter_emit_document_start(emitter *yaml_emitter_t, event *yaml_event
 	return yaml_emitter_set_emitter_error(emitter, "expected DOCUMENT-START or STREAM-END")
 }
 
-
+// Expect the root node.
 func yaml_emitter_emit_document_content(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	emitter.states = append(emitter.states, yaml_EMIT_DOCUMENT_END_STATE)
 	return yaml_emitter_emit_node(emitter, event, true, false, false, false)
 }
 
-
+// Expect DOCUMENT-END.
 func yaml_emitter_emit_document_end(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	if event.typ != yaml_DOCUMENT_END_EVENT {
 		return yaml_emitter_set_emitter_error(emitter, "expected DOCUMENT-END")
@@ -437,7 +437,7 @@ func yaml_emitter_emit_document_end(emitter *yaml_emitter_t, event *yaml_event_t
 		return false
 	}
 	if !event.implicit {
-		
+		// [Go] Allocate the slice elsewhere.
 		if !yaml_emitter_write_indicator(emitter, []byte("..."), true, false, false) {
 			return false
 		}
@@ -453,7 +453,7 @@ func yaml_emitter_emit_document_end(emitter *yaml_emitter_t, event *yaml_event_t
 	return true
 }
 
-
+// Expect a flow item node.
 func yaml_emitter_emit_flow_sequence_item(emitter *yaml_emitter_t, event *yaml_event_t, first bool) bool {
 	if first {
 		if !yaml_emitter_write_indicator(emitter, []byte{'['}, true, true, false) {
@@ -501,7 +501,7 @@ func yaml_emitter_emit_flow_sequence_item(emitter *yaml_emitter_t, event *yaml_e
 	return yaml_emitter_emit_node(emitter, event, false, true, false, false)
 }
 
-
+// Expect a flow key node.
 func yaml_emitter_emit_flow_mapping_key(emitter *yaml_emitter_t, event *yaml_event_t, first bool) bool {
 	if first {
 		if !yaml_emitter_write_indicator(emitter, []byte{'{'}, true, true, false) {
@@ -555,7 +555,7 @@ func yaml_emitter_emit_flow_mapping_key(emitter *yaml_emitter_t, event *yaml_eve
 	return yaml_emitter_emit_node(emitter, event, false, false, true, false)
 }
 
-
+// Expect a flow value node.
 func yaml_emitter_emit_flow_mapping_value(emitter *yaml_emitter_t, event *yaml_event_t, simple bool) bool {
 	if simple {
 		if !yaml_emitter_write_indicator(emitter, []byte{':'}, false, false, false) {
@@ -575,7 +575,7 @@ func yaml_emitter_emit_flow_mapping_value(emitter *yaml_emitter_t, event *yaml_e
 	return yaml_emitter_emit_node(emitter, event, false, false, true, false)
 }
 
-
+// Expect a block item node.
 func yaml_emitter_emit_block_sequence_item(emitter *yaml_emitter_t, event *yaml_event_t, first bool) bool {
 	if first {
 		if !yaml_emitter_increase_indent(emitter, false, emitter.mapping_context && !emitter.indention) {
@@ -599,7 +599,7 @@ func yaml_emitter_emit_block_sequence_item(emitter *yaml_emitter_t, event *yaml_
 	return yaml_emitter_emit_node(emitter, event, false, true, false, false)
 }
 
-
+// Expect a block key node.
 func yaml_emitter_emit_block_mapping_key(emitter *yaml_emitter_t, event *yaml_event_t, first bool) bool {
 	if first {
 		if !yaml_emitter_increase_indent(emitter, false, false) {
@@ -627,7 +627,7 @@ func yaml_emitter_emit_block_mapping_key(emitter *yaml_emitter_t, event *yaml_ev
 	return yaml_emitter_emit_node(emitter, event, false, false, true, false)
 }
 
-
+// Expect a block value node.
 func yaml_emitter_emit_block_mapping_value(emitter *yaml_emitter_t, event *yaml_event_t, simple bool) bool {
 	if simple {
 		if !yaml_emitter_write_indicator(emitter, []byte{':'}, false, false, false) {
@@ -645,7 +645,7 @@ func yaml_emitter_emit_block_mapping_value(emitter *yaml_emitter_t, event *yaml_
 	return yaml_emitter_emit_node(emitter, event, false, false, true, false)
 }
 
-
+// Expect a node.
 func yaml_emitter_emit_node(emitter *yaml_emitter_t, event *yaml_event_t,
 	root bool, sequence bool, mapping bool, simple_key bool) bool {
 
@@ -669,7 +669,7 @@ func yaml_emitter_emit_node(emitter *yaml_emitter_t, event *yaml_event_t,
 	}
 }
 
-
+// Expect ALIAS.
 func yaml_emitter_emit_alias(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	if !yaml_emitter_process_anchor(emitter) {
 		return false
@@ -679,7 +679,7 @@ func yaml_emitter_emit_alias(emitter *yaml_emitter_t, event *yaml_event_t) bool 
 	return true
 }
 
-
+// Expect SCALAR.
 func yaml_emitter_emit_scalar(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	if !yaml_emitter_select_scalar_style(emitter, event) {
 		return false
@@ -703,7 +703,7 @@ func yaml_emitter_emit_scalar(emitter *yaml_emitter_t, event *yaml_event_t) bool
 	return true
 }
 
-
+// Expect SEQUENCE-START.
 func yaml_emitter_emit_sequence_start(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	if !yaml_emitter_process_anchor(emitter) {
 		return false
@@ -720,7 +720,7 @@ func yaml_emitter_emit_sequence_start(emitter *yaml_emitter_t, event *yaml_event
 	return true
 }
 
-
+// Expect MAPPING-START.
 func yaml_emitter_emit_mapping_start(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 	if !yaml_emitter_process_anchor(emitter) {
 		return false
@@ -737,12 +737,12 @@ func yaml_emitter_emit_mapping_start(emitter *yaml_emitter_t, event *yaml_event_
 	return true
 }
 
-
+// Check if the document content is an empty scalar.
 func yaml_emitter_check_empty_document(emitter *yaml_emitter_t) bool {
-	return false 
+	return false // [Go] Huh?
 }
 
-
+// Check if the next events represent an empty sequence.
 func yaml_emitter_check_empty_sequence(emitter *yaml_emitter_t) bool {
 	if len(emitter.events)-emitter.events_head < 2 {
 		return false
@@ -751,7 +751,7 @@ func yaml_emitter_check_empty_sequence(emitter *yaml_emitter_t) bool {
 		emitter.events[emitter.events_head+1].typ == yaml_SEQUENCE_END_EVENT
 }
 
-
+// Check if the next events represent an empty mapping.
 func yaml_emitter_check_empty_mapping(emitter *yaml_emitter_t) bool {
 	if len(emitter.events)-emitter.events_head < 2 {
 		return false
@@ -760,7 +760,7 @@ func yaml_emitter_check_empty_mapping(emitter *yaml_emitter_t) bool {
 		emitter.events[emitter.events_head+1].typ == yaml_MAPPING_END_EVENT
 }
 
-
+// Check if the next node can be expressed as a simple key.
 func yaml_emitter_check_simple_key(emitter *yaml_emitter_t) bool {
 	length := 0
 	switch emitter.events[emitter.events_head].typ {
@@ -794,7 +794,7 @@ func yaml_emitter_check_simple_key(emitter *yaml_emitter_t) bool {
 	return length <= 128
 }
 
-
+// Determine an acceptable scalar style.
 func yaml_emitter_select_scalar_style(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 
 	no_tag := len(emitter.tag_data.handle) == 0 && len(emitter.tag_data.suffix) == 0
@@ -843,7 +843,7 @@ func yaml_emitter_select_scalar_style(emitter *yaml_emitter_t, event *yaml_event
 	return true
 }
 
-
+// Write an anchor.
 func yaml_emitter_process_anchor(emitter *yaml_emitter_t) bool {
 	if emitter.anchor_data.anchor == nil {
 		return true
@@ -858,7 +858,7 @@ func yaml_emitter_process_anchor(emitter *yaml_emitter_t) bool {
 	return yaml_emitter_write_anchor(emitter, emitter.anchor_data.anchor)
 }
 
-
+// Write a tag.
 func yaml_emitter_process_tag(emitter *yaml_emitter_t) bool {
 	if len(emitter.tag_data.handle) == 0 && len(emitter.tag_data.suffix) == 0 {
 		return true
@@ -873,7 +873,7 @@ func yaml_emitter_process_tag(emitter *yaml_emitter_t) bool {
 			}
 		}
 	} else {
-		
+		// [Go] Allocate these slices elsewhere.
 		if !yaml_emitter_write_indicator(emitter, []byte("!<"), true, false, false) {
 			return false
 		}
@@ -887,7 +887,7 @@ func yaml_emitter_process_tag(emitter *yaml_emitter_t) bool {
 	return true
 }
 
-
+// Write a scalar.
 func yaml_emitter_process_scalar(emitter *yaml_emitter_t) bool {
 	switch emitter.scalar_data.style {
 	case yaml_PLAIN_SCALAR_STYLE:
@@ -908,7 +908,7 @@ func yaml_emitter_process_scalar(emitter *yaml_emitter_t) bool {
 	panic("unknown scalar style")
 }
 
-
+// Check if a %YAML directive is valid.
 func yaml_emitter_analyze_version_directive(emitter *yaml_emitter_t, version_directive *yaml_version_directive_t) bool {
 	if version_directive.major != 1 || version_directive.minor != 1 {
 		return yaml_emitter_set_emitter_error(emitter, "incompatible %YAML directive")
@@ -916,7 +916,7 @@ func yaml_emitter_analyze_version_directive(emitter *yaml_emitter_t, version_dir
 	return true
 }
 
-
+// Check if a %TAG directive is valid.
 func yaml_emitter_analyze_tag_directive(emitter *yaml_emitter_t, tag_directive *yaml_tag_directive_t) bool {
 	handle := tag_directive.handle
 	prefix := tag_directive.prefix
@@ -940,7 +940,7 @@ func yaml_emitter_analyze_tag_directive(emitter *yaml_emitter_t, tag_directive *
 	return true
 }
 
-
+// Check if an anchor is valid.
 func yaml_emitter_analyze_anchor(emitter *yaml_emitter_t, anchor []byte, alias bool) bool {
 	if len(anchor) == 0 {
 		problem := "anchor value must not be empty"
@@ -963,7 +963,7 @@ func yaml_emitter_analyze_anchor(emitter *yaml_emitter_t, anchor []byte, alias b
 	return true
 }
 
-
+// Check if a tag is valid.
 func yaml_emitter_analyze_tag(emitter *yaml_emitter_t, tag []byte) bool {
 	if len(tag) == 0 {
 		return yaml_emitter_set_emitter_error(emitter, "tag value must not be empty")
@@ -980,7 +980,7 @@ func yaml_emitter_analyze_tag(emitter *yaml_emitter_t, tag []byte) bool {
 	return true
 }
 
-
+// Check if a scalar is valid.
 func yaml_emitter_analyze_scalar(emitter *yaml_emitter_t, value []byte) bool {
 	var (
 		block_indicators   = false
@@ -1088,7 +1088,7 @@ func yaml_emitter_analyze_scalar(emitter *yaml_emitter_t, value []byte) bool {
 			previous_break = false
 		}
 
-		
+		// [Go]: Why 'z'? Couldn't be the end of the string as that's the loop condition.
 		preceded_by_whitespace = is_blankz(value, i)
 	}
 
@@ -1129,7 +1129,7 @@ func yaml_emitter_analyze_scalar(emitter *yaml_emitter_t, value []byte) bool {
 	return true
 }
 
-
+// Check if the event data is valid.
 func yaml_emitter_analyze_event(emitter *yaml_emitter_t, event *yaml_event_t) bool {
 
 	emitter.anchor_data.anchor = nil
@@ -1185,7 +1185,7 @@ func yaml_emitter_analyze_event(emitter *yaml_emitter_t, event *yaml_event_t) bo
 	return true
 }
 
-
+// Write the BOM character.
 func yaml_emitter_write_bom(emitter *yaml_emitter_t) bool {
 	if !flush(emitter) {
 		return false

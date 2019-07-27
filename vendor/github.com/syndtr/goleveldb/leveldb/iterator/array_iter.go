@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2014, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package iterator
 
@@ -10,29 +10,29 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-
+// BasicArray is the interface that wraps basic Len and Search method.
 type BasicArray interface {
-	
+	// Len returns length of the array.
 	Len() int
 
-	
-	
+	// Search finds smallest index that point to a key that is greater
+	// than or equal to the given key.
 	Search(key []byte) int
 }
 
-
+// Array is the interface that wraps BasicArray and basic Index method.
 type Array interface {
 	BasicArray
 
-	
+	// Index returns key/value pair with index of i.
 	Index(i int) (key, value []byte)
 }
 
-
+// Array is the interface that wraps BasicArray and basic Get method.
 type ArrayIndexer interface {
 	BasicArray
 
-	
+	// Get returns a new data iterator with index of i.
 	Get(i int) Iterator
 }
 
@@ -166,7 +166,7 @@ func (i *arrayIteratorIndexer) Get() Iterator {
 	return nil
 }
 
-
+// NewArrayIterator returns an iterator from the given array.
 func NewArrayIterator(array Array) Iterator {
 	return &arrayIterator{
 		basicArrayIterator: basicArrayIterator{array: array, pos: -1},
@@ -175,7 +175,7 @@ func NewArrayIterator(array Array) Iterator {
 	}
 }
 
-
+// NewArrayIndexer returns an index iterator from the given array.
 func NewArrayIndexer(array ArrayIndexer) IteratorIndexer {
 	return &arrayIteratorIndexer{
 		basicArrayIterator: basicArrayIterator{array: array, pos: -1},

@@ -1,12 +1,12 @@
-package versions 
+package versions // import "github.com/docker/docker/api/types/versions"
 
 import (
 	"strconv"
 	"strings"
 )
 
-
-
+// compare compares two version strings
+// returns -1 if v1 < v2, 1 if v1 > v2, 0 otherwise.
 func compare(v1, v2 string) int {
 	var (
 		currTab  = strings.Split(v1, ".")
@@ -36,27 +36,27 @@ func compare(v1, v2 string) int {
 	return 0
 }
 
-
+// LessThan checks if a version is less than another
 func LessThan(v, other string) bool {
 	return compare(v, other) == -1
 }
 
-
+// LessThanOrEqualTo checks if a version is less than or equal to another
 func LessThanOrEqualTo(v, other string) bool {
 	return compare(v, other) <= 0
 }
 
-
+// GreaterThan checks if a version is greater than another
 func GreaterThan(v, other string) bool {
 	return compare(v, other) == 1
 }
 
-
+// GreaterThanOrEqualTo checks if a version is greater than or equal to another
 func GreaterThanOrEqualTo(v, other string) bool {
 	return compare(v, other) >= 0
 }
 
-
+// Equal checks if a version is equal to another
 func Equal(v, other string) bool {
 	return compare(v, other) == 0
 }

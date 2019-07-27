@@ -1,4 +1,124 @@
+/*
+The Ginkgo CLI
 
+The Ginkgo CLI is fully documented [here](http://onsi.github.io/ginkgo/#the_ginkgo_cli)
+
+You can also learn more by running:
+
+	ginkgo help
+
+Here are some of the more commonly used commands:
+
+To install:
+
+	go install github.com/onsi/ginkgo/ginkgo
+
+To run tests:
+
+	ginkgo
+
+To run tests in all subdirectories:
+
+	ginkgo -r
+
+To run tests in particular packages:
+
+	ginkgo <flags> /path/to/package /path/to/another/package
+
+To pass arguments/flags to your tests:
+
+	ginkgo <flags> <packages> -- <pass-throughs>
+
+To run tests in parallel
+
+	ginkgo -p
+
+this will automatically detect the optimal number of nodes to use.  Alternatively, you can specify the number of nodes with:
+
+	ginkgo -nodes=N
+
+(note that you don't need to provide -p in this case).
+
+By default the Ginkgo CLI will spin up a server that the individual test processes send test output to.  The CLI aggregates this output and then presents coherent test output, one test at a time, as each test completes.
+An alternative is to have the parallel nodes run and stream interleaved output back.  This useful for debugging, particularly in contexts where tests hang/fail to start.  To get this interleaved output:
+
+	ginkgo -nodes=N -stream=true
+
+On windows, the default value for stream is true.
+
+By default, when running multiple tests (with -r or a list of packages) Ginkgo will abort when a test fails.  To have Ginkgo run subsequent test suites instead you can:
+
+	ginkgo -keepGoing
+
+To fail if there are ginkgo tests in a directory but no test suite (missing `RunSpecs`)
+
+	ginkgo -requireSuite
+
+To monitor packages and rerun tests when changes occur:
+
+	ginkgo watch <-r> </path/to/package>
+
+passing `ginkgo watch` the `-r` flag will recursively detect all test suites under the current directory and monitor them.
+`watch` does not detect *new* packages. Moreover, changes in package X only rerun the tests for package X, tests for packages
+that depend on X are not rerun.
+
+[OSX & Linux only] To receive (desktop) notifications when a test run completes:
+
+	ginkgo -notify
+
+this is particularly useful with `ginkgo watch`.  Notifications are currently only supported on OS X and require that you `brew install terminal-notifier`
+
+Sometimes (to suss out race conditions/flakey tests, for example) you want to keep running a test suite until it fails.  You can do this with:
+
+	ginkgo -untilItFails
+
+To bootstrap a test suite:
+
+	ginkgo bootstrap
+
+To generate a test file:
+
+	ginkgo generate <test_file_name>
+
+To bootstrap/generate test files without using "." imports:
+
+	ginkgo bootstrap --nodot
+	ginkgo generate --nodot
+
+this will explicitly export all the identifiers in Ginkgo and Gomega allowing you to rename them to avoid collisions.  When you pull to the latest Ginkgo/Gomega you'll want to run
+
+	ginkgo nodot
+
+to refresh this list and pull in any new identifiers.  In particular, this will pull in any new Gomega matchers that get added.
+
+To convert an existing XUnit style test suite to a Ginkgo-style test suite:
+
+	ginkgo convert .
+
+To unfocus tests:
+
+	ginkgo unfocus
+
+or
+
+	ginkgo blur
+
+To compile a test suite:
+
+	ginkgo build <path-to-package>
+
+will output an executable file named `package.test`.  This can be run directly or by invoking
+
+	ginkgo <path-to-package.test>
+
+To print out Ginkgo's version:
+
+	ginkgo version
+
+To get more help:
+
+	ginkgo help
+*/
 package main
 
 import (

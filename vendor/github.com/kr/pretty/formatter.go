@@ -16,21 +16,21 @@ type formatter struct {
 	quote bool
 }
 
-
-
-
-
-
-
-
-
-
+// Formatter makes a wrapper, f, that will format x as go source with line
+// breaks and tabs. Object f responds to the "%v" formatting verb when both the
+// "#" and " " (space) flags are set, for example:
+//
+//     fmt.Sprintf("%# v", Formatter(x))
+//
+// If one of these two flags is not set, or any other verb is used, f will
+// format x according to the usual rules of package fmt.
+// In particular, if x satisfies fmt.Formatter, then x.Format will be called.
 func Formatter(x interface{}) (f fmt.Formatter) {
 	return formatter{v: reflect.ValueOf(x), quote: true}
 }
 
 func (fo formatter) String() string {
-	return fmt.Sprint(fo.v.Interface()) 
+	return fmt.Sprint(fo.v.Interface()) // unwrap it
 }
 
 func (fo formatter) passThrough(f fmt.State, c rune) {
@@ -84,8 +84,8 @@ func (p *printer) printInline(v reflect.Value, x interface{}, showType bool) {
 	}
 }
 
-
-
+// printValue must keep track of already-printed pointer values to avoid
+// infinite recursion.
 type visit struct {
 	v   uintptr
 	typ reflect.Type
@@ -153,7 +153,7 @@ func (p *printer) printValue(v reflect.Value, showType, quote bool) {
 			vis := visit{addr, t}
 			if vd, ok := p.visited[vis]; ok && vd < p.depth {
 				p.fmtString(t.String()+"{(CYCLIC REFERENCE)}", false)
-				break 
+				break // don't print v again
 			}
 			p.visited[vis] = p.depth
 		}

@@ -1,10 +1,17 @@
+/*
 
+JUnit XML Reporter for Ginkgo
+
+For usage instructions: http://onsi.github.io/ginkgo/#generating_junit_xml_output
+
+*/
 
 package reporters
 
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -18,6 +25,7 @@ type JUnitTestSuite struct {
 	Name      string          `xml:"name,attr"`
 	Tests     int             `xml:"tests,attr"`
 	Failures  int             `xml:"failures,attr"`
+	Errors    int             `xml:"errors,attr"`
 	Time      float64         `xml:"time,attr"`
 }
 
@@ -45,7 +53,7 @@ type JUnitReporter struct {
 	testSuiteName string
 }
 
-
+//NewJUnitReporter creates a new JUnit XML reporter.  The XML will be stored in the passed in filename.
 func NewJUnitReporter(filename string) *JUnitReporter {
 	return &JUnitReporter{
 		filename: filename,
@@ -113,8 +121,9 @@ func (reporter *JUnitReporter) SpecDidComplete(specSummary *types.SpecSummary) {
 
 func (reporter *JUnitReporter) SpecSuiteDidEnd(summary *types.SuiteSummary) {
 	reporter.suite.Tests = summary.NumberOfSpecsThatWillBeRun
-	reporter.suite.Time = summary.RunTime.Seconds()
+	reporter.suite.Time = math.Trunc(summary.RunTime.Seconds()*1000) / 1000
 	reporter.suite.Failures = summary.NumberOfFailedSpecs
+	reporter.suite.Errors = 0
 	file, err := os.Create(reporter.filename)
 	if err != nil {
 		fmt.Printf("Failed to create JUnit report file: %s\n\t%s", reporter.filename, err.Error())

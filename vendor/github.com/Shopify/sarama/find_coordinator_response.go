@@ -38,8 +38,8 @@ func (f *FindCoordinatorResponse) decode(pd packetDecoder, version int16) (err e
 	}
 
 	coordinator := new(Broker)
-	
-	
+	// The version is hardcoded to 0, as version 1 of the Broker-decode
+	// contains the rack-field which is not present in the FindCoordinatorResponse.
 	if err := coordinator.decode(pd, 0); err != nil {
 		return err
 	}

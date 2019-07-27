@@ -1,4 +1,4 @@
-
+// +build windows
 
 package winio
 
@@ -14,14 +14,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-
-
-
-
-
-
-
-
+//sys adjustTokenPrivileges(token windows.Token, releaseAll bool, input *byte, outputSize uint32, output *byte, requiredSize *uint32) (success bool, err error) [true] = advapi32.AdjustTokenPrivileges
+//sys impersonateSelf(level uint32) (err error) = advapi32.ImpersonateSelf
+//sys revertToSelf() (err error) = advapi32.RevertToSelf
+//sys openThreadToken(thread syscall.Handle, accessMask uint32, openAsSelf bool, token *windows.Token) (err error) = advapi32.OpenThreadToken
+//sys getCurrentThread() (h syscall.Handle) = GetCurrentThread
+//sys lookupPrivilegeValue(systemName string, name string, luid *uint64) (err error) = advapi32.LookupPrivilegeValueW
+//sys lookupPrivilegeName(systemName string, luid *uint64, buffer *uint16, size *uint32) (err error) = advapi32.LookupPrivilegeNameW
+//sys lookupPrivilegeDisplayName(systemName string, name *uint16, buffer *uint16, size *uint32, languageId *uint32) (err error) = advapi32.LookupPrivilegeDisplayNameW
 
 const (
 	SE_PRIVILEGE_ENABLED = 2
@@ -44,7 +44,7 @@ var (
 	privNameMutex sync.Mutex
 )
 
-
+// PrivilegeError represents an error enabling privileges.
 type PrivilegeError struct {
 	privileges []uint64
 }
@@ -67,12 +67,12 @@ func (e *PrivilegeError) Error() string {
 	return s
 }
 
-
+// RunWithPrivilege enables a single privilege for a function call.
 func RunWithPrivilege(name string, fn func() error) error {
 	return RunWithPrivileges([]string{name}, fn)
 }
 
-
+// RunWithPrivileges enables privileges for a function call.
 func RunWithPrivileges(names []string, fn func() error) error {
 	privileges, err := mapPrivileges(names)
 	if err != nil {
@@ -110,12 +110,12 @@ func mapPrivileges(names []string) ([]uint64, error) {
 	return privileges, nil
 }
 
-
+// EnableProcessPrivileges enables privileges globally for the process.
 func EnableProcessPrivileges(names []string) error {
 	return enableDisableProcessPrivilege(names, SE_PRIVILEGE_ENABLED)
 }
 
-
+// DisableProcessPrivileges disables privileges globally for the process.
 func DisableProcessPrivileges(names []string) error {
 	return enableDisableProcessPrivilege(names, 0)
 }

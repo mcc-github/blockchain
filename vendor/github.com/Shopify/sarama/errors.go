@@ -5,52 +5,52 @@ import (
 	"fmt"
 )
 
-
-
+// ErrOutOfBrokers is the error returned when the client has run out of brokers to talk to because all of them errored
+// or otherwise failed to respond.
 var ErrOutOfBrokers = errors.New("kafka: client has run out of available brokers to talk to (Is your cluster reachable?)")
 
-
+// ErrClosedClient is the error returned when a method is called on a client that has been closed.
 var ErrClosedClient = errors.New("kafka: tried to use a client that was closed")
 
-
-
+// ErrIncompleteResponse is the error returned when the server returns a syntactically valid response, but it does
+// not contain the expected information.
 var ErrIncompleteResponse = errors.New("kafka: response did not contain all the expected topic/partition blocks")
 
-
-
+// ErrInvalidPartition is the error returned when a partitioner returns an invalid partition index
+// (meaning one outside of the range [0...numPartitions-1]).
 var ErrInvalidPartition = errors.New("kafka: partitioner returned an invalid partition index")
 
-
+// ErrAlreadyConnected is the error returned when calling Open() on a Broker that is already connected or connecting.
 var ErrAlreadyConnected = errors.New("kafka: broker connection already initiated")
 
-
+// ErrNotConnected is the error returned when trying to send or call Close() on a Broker that is not connected.
 var ErrNotConnected = errors.New("kafka: broker not connected")
 
-
-
-
+// ErrInsufficientData is returned when decoding and the packet is truncated. This can be expected
+// when requesting messages, since as an optimization the server is allowed to return a partial message at the end
+// of the message set.
 var ErrInsufficientData = errors.New("kafka: insufficient data to decode packet, more bytes expected")
 
-
+// ErrShuttingDown is returned when a producer receives a message during shutdown.
 var ErrShuttingDown = errors.New("kafka: message received by producer in process of shutting down")
 
-
+// ErrMessageTooLarge is returned when the next message to consume is larger than the configured Consumer.Fetch.Max
 var ErrMessageTooLarge = errors.New("kafka: message is larger than Consumer.Fetch.Max")
 
-
-
+// ErrConsumerOffsetNotAdvanced is returned when a partition consumer didn't advance its offset after parsing
+// a RecordBatch.
 var ErrConsumerOffsetNotAdvanced = errors.New("kafka: consumer offset was not advanced after a RecordBatch")
 
-
-
+// ErrControllerNotAvailable is returned when server didn't give correct controller id. May be kafka server's version
+// is lower than 0.10.0.0.
 var ErrControllerNotAvailable = errors.New("kafka: controller is not available")
 
-
-
+// ErrNoTopicsToUpdateMetadata is returned when Meta.Full is set to false but no specific topics were found to update
+// the metadata.
 var ErrNoTopicsToUpdateMetadata = errors.New("kafka: no specific topics to update metadata")
 
-
-
+// PacketEncodingError is returned from a failure while encoding a Kafka packet. This can happen, for example,
+// if you try to encode a string over 2^15 characters in length, since Kafka's encoding rules do not permit that.
 type PacketEncodingError struct {
 	Info string
 }
@@ -59,8 +59,8 @@ func (err PacketEncodingError) Error() string {
 	return fmt.Sprintf("kafka: error encoding packet: %s", err.Info)
 }
 
-
-
+// PacketDecodingError is returned when there was an error (other than truncated data) decoding the Kafka broker's response.
+// This can be a bad CRC or length field, or any other invalid value.
 type PacketDecodingError struct {
 	Info string
 }
@@ -69,19 +69,19 @@ func (err PacketDecodingError) Error() string {
 	return fmt.Sprintf("kafka: error decoding packet: %s", err.Info)
 }
 
-
-
+// ConfigurationError is the type of error returned from a constructor (e.g. NewClient, or NewConsumer)
+// when the specified configuration is invalid.
 type ConfigurationError string
 
 func (err ConfigurationError) Error() string {
 	return "kafka: invalid configuration (" + string(err) + ")"
 }
 
-
-
+// KError is the type of error that can be returned directly by the Kafka broker.
+// See https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-ErrorCodes
 type KError int16
 
-
+// Numeric error codes returned by the Kafka server.
 const (
 	ErrNoError                            KError = 0
 	ErrUnknown                            KError = -1
@@ -145,11 +145,23 @@ const (
 	ErrSASLAuthenticationFailed           KError = 58
 	ErrUnknownProducerID                  KError = 59
 	ErrReassignmentInProgress             KError = 60
+	ErrDelegationTokenAuthDisabled        KError = 61
+	ErrDelegationTokenNotFound            KError = 62
+	ErrDelegationTokenOwnerMismatch       KError = 63
+	ErrDelegationTokenRequestNotAllowed   KError = 64
+	ErrDelegationTokenAuthorizationFailed KError = 65
+	ErrDelegationTokenExpired             KError = 66
+	ErrInvalidPrincipalType               KError = 67
+	ErrNonEmptyGroup                      KError = 68
+	ErrGroupIDNotFound                    KError = 69
+	ErrFetchSessionIDNotFound             KError = 70
+	ErrInvalidFetchSessionEpoch           KError = 71
+	ErrListenerNotFound                   KError = 72
 )
 
 func (err KError) Error() string {
-	
-	
+	// Error messages stolen/adapted from
+	// https://kafka.apache.org/protocol#protocol_error_codes
 	switch err {
 	case ErrNoError:
 		return "kafka server: Not an error, why are you printing me?"
@@ -275,6 +287,30 @@ func (err KError) Error() string {
 		return "kafka server: The broker could not locate the producer metadata associated with the Producer ID."
 	case ErrReassignmentInProgress:
 		return "kafka server: A partition reassignment is in progress."
+	case ErrDelegationTokenAuthDisabled:
+		return "kafka server: Delegation Token feature is not enabled."
+	case ErrDelegationTokenNotFound:
+		return "kafka server: Delegation Token is not found on server."
+	case ErrDelegationTokenOwnerMismatch:
+		return "kafka server: Specified Principal is not valid Owner/Renewer."
+	case ErrDelegationTokenRequestNotAllowed:
+		return "kafka server: Delegation Token requests are not allowed on PLAINTEXT/1-way SSL channels and on delegation token authenticated channels."
+	case ErrDelegationTokenAuthorizationFailed:
+		return "kafka server: Delegation Token authorization failed."
+	case ErrDelegationTokenExpired:
+		return "kafka server: Delegation Token is expired."
+	case ErrInvalidPrincipalType:
+		return "kafka server: Supplied principalType is not supported."
+	case ErrNonEmptyGroup:
+		return "kafka server: The group is not empty."
+	case ErrGroupIDNotFound:
+		return "kafka server: The group id does not exist."
+	case ErrFetchSessionIDNotFound:
+		return "kafka server: The fetch session ID was not found."
+	case ErrInvalidFetchSessionEpoch:
+		return "kafka server: The fetch session epoch is invalid."
+	case ErrListenerNotFound:
+		return "kafka server: There is no listener on the leader broker that matches the listener on which metadata request was processed."
 	}
 
 	return fmt.Sprintf("Unknown error, how did this happen? Error code = %d", err)

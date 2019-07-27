@@ -4,8 +4,8 @@ import (
 	"fmt"
 )
 
-
-
+// TestReporter has methods matching go's testing.T to avoid importing
+// `testing` in the main part of the library.
 type TestReporter interface {
 	Error(...interface{})
 	Errorf(string, ...interface{})
@@ -13,15 +13,15 @@ type TestReporter interface {
 	Fatalf(string, ...interface{})
 }
 
-
-
-
+// MockResponse is a response builder interface it defines one method that
+// allows generating a response based on a request body. MockResponses are used
+// to program behavior of MockBroker in tests.
 type MockResponse interface {
 	For(reqBody versionedDecoder) (res encoder)
 }
 
-
-
+// MockWrapper is a mock response builder that returns a particular concrete
+// response regardless of the actual request passed to the `For` method.
 type MockWrapper struct {
 	res encoder
 }
@@ -34,10 +34,10 @@ func NewMockWrapper(res encoder) *MockWrapper {
 	return &MockWrapper{res: res}
 }
 
-
-
-
-
+// MockSequence is a mock response builder that is created from a sequence of
+// concrete responses. Every time when a `MockBroker` calls its `For` method
+// the next response from the sequence is returned. When the end of the
+// sequence is reached the last element from the sequence is returned.
 type MockSequence struct {
 	responses []MockResponse
 }
@@ -66,7 +66,7 @@ func (mc *MockSequence) For(reqBody versionedDecoder) (res encoder) {
 	return res
 }
 
-
+// MockMetadataResponse is a `MetadataResponse` builder.
 type MockMetadataResponse struct {
 	controllerID int32
 	leaders      map[string]map[int32]int32
@@ -127,7 +127,7 @@ func (mmr *MockMetadataResponse) For(reqBody versionedDecoder) encoder {
 	return metadataResponse
 }
 
-
+// MockOffsetResponse is an `OffsetResponse` builder.
 type MockOffsetResponse struct {
 	offsets map[string]map[int32]map[int64]int64
 	t       TestReporter
@@ -189,7 +189,7 @@ func (mor *MockOffsetResponse) getOffset(topic string, partition int32, time int
 	return offset
 }
 
-
+// MockFetchResponse is a `FetchResponse` builder.
 type MockFetchResponse struct {
 	messages       map[string]map[int32]map[int64]Encoder
 	highWaterMarks map[string]map[int32]int64
@@ -298,7 +298,7 @@ func (mfr *MockFetchResponse) getHighWaterMark(topic string, partition int32) in
 	return partitions[partition]
 }
 
-
+// MockConsumerMetadataResponse is a `ConsumerMetadataResponse` builder.
 type MockConsumerMetadataResponse struct {
 	coordinators map[string]interface{}
 	t            TestReporter
@@ -335,7 +335,7 @@ func (mr *MockConsumerMetadataResponse) For(reqBody versionedDecoder) encoder {
 	return res
 }
 
-
+// MockFindCoordinatorResponse is a `FindCoordinatorResponse` builder.
 type MockFindCoordinatorResponse struct {
 	groupCoordinators map[string]interface{}
 	transCoordinators map[string]interface{}
@@ -389,7 +389,7 @@ func (mr *MockFindCoordinatorResponse) For(reqBody versionedDecoder) encoder {
 	return res
 }
 
-
+// MockOffsetCommitResponse is a `OffsetCommitResponse` builder.
 type MockOffsetCommitResponse struct {
 	errors map[string]map[string]map[int32]KError
 	t      TestReporter
@@ -445,7 +445,7 @@ func (mr *MockOffsetCommitResponse) getError(group, topic string, partition int3
 	return kerror
 }
 
-
+// MockProduceResponse is a `ProduceResponse` builder.
 type MockProduceResponse struct {
 	version int16
 	errors  map[string]map[int32]KError
@@ -499,7 +499,7 @@ func (mr *MockProduceResponse) getError(topic string, partition int32) KError {
 	return kerror
 }
 
-
+// MockOffsetFetchResponse is a `OffsetFetchResponse` builder.
 type MockOffsetFetchResponse struct {
 	offsets map[string]map[string]map[int32]*OffsetFetchResponseBlock
 	t       TestReporter
@@ -523,7 +523,7 @@ func (mr *MockOffsetFetchResponse) SetOffset(group, topic string, partition int3
 		partitions = make(map[int32]*OffsetFetchResponseBlock)
 		topics[topic] = partitions
 	}
-	partitions[partition] = &OffsetFetchResponseBlock{offset, metadata, kerror}
+	partitions[partition] = &OffsetFetchResponseBlock{offset, 0, metadata, kerror}
 	return mr
 }
 

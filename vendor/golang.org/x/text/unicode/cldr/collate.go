@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package cldr
 
@@ -15,8 +15,8 @@ import (
 	"unicode/utf8"
 )
 
-
-
+// RuleProcessor can be passed to Collator's Process method, which
+// parses the rules and calls the respective method for each rule found.
 type RuleProcessor interface {
 	Reset(anchor string, before int) error
 	Insert(level int, str, context, extend string) error
@@ -24,19 +24,19 @@ type RuleProcessor interface {
 }
 
 const (
-	
-	
-	
-	
+	// cldrIndex is a Unicode-reserved sentinel value used to mark the start
+	// of a grouping within an index.
+	// We ignore any rule that starts with this rune.
+	// See https://unicode.org/reports/tr35/#Collation_Elements for details.
 	cldrIndex = "\uFDD0"
 
-	
-	
+	// specialAnchor is the format in which to represent logical reset positions,
+	// such as "first tertiary ignorable".
 	specialAnchor = "<%s/>"
 )
 
-
-
+// Process parses the rules for the tailorings of this collation
+// and calls the respective methods of p for each rule found.
 func (c Collation) Process(p RuleProcessor) (err error) {
 	if len(c.Cr) > 0 {
 		if len(c.Cr) > 1 {
@@ -50,8 +50,8 @@ func (c Collation) Process(p RuleProcessor) (err error) {
 	return errors.New("no tailoring data")
 }
 
-
-
+// processRules parses rules in the Collation Rule Syntax defined in
+// https://www.unicode.org/reports/tr35/tr35-collation.html#Collation_Tailorings.
 func processRules(p RuleProcessor, s string) (err error) {
 	chk := func(s string, e error) string {
 		if err == nil {
@@ -59,27 +59,27 @@ func processRules(p RuleProcessor, s string) (err error) {
 		}
 		return s
 	}
-	i := 0 
+	i := 0 // Save the line number for use after the loop.
 	scanner := bufio.NewScanner(strings.NewReader(s))
 	for ; scanner.Scan() && err == nil; i++ {
 		for s := skipSpace(scanner.Text()); s != "" && s[0] != '#'; s = skipSpace(s) {
 			level := 5
 			var ch byte
 			switch ch, s = s[0], s[1:]; ch {
-			case '&': 
+			case '&': // followed by <anchor> or '[' <key> ']'
 				if s = skipSpace(s); consume(&s, '[') {
 					s = chk(parseSpecialAnchor(p, s))
 				} else {
 					s = chk(parseAnchor(p, 0, s))
 				}
-			case '<': 
+			case '<': // sort relation '<'{1,4}, optionally followed by '*'.
 				for level = 1; consume(&s, '<'); level++ {
 				}
 				if level > 4 {
 					err = fmt.Errorf("level %d > 4", level)
 				}
 				fallthrough
-			case '=': 
+			case '=': // identity relation, optionally followed by *.
 				if consume(&s, '*') {
 					s = chk(parseSequence(p, level, s))
 				} else {
@@ -97,11 +97,11 @@ func processRules(p RuleProcessor, s string) (err error) {
 	return nil
 }
 
-
-
-
-
-
+// parseSpecialAnchor parses the anchor syntax which is either of the form
+//    ['before' <level>] <anchor>
+// or
+//    [<label>]
+// The starting should already be consumed.
 func parseSpecialAnchor(p RuleProcessor, s string) (tail string, err error) {
 	i := strings.IndexByte(s, ']')
 	if i == -1 {
@@ -149,12 +149,12 @@ func parseOrder(p RuleProcessor, level int, s string) (tail string, err error) {
 	return s, p.Insert(level, value, context, extend)
 }
 
-
+// scanString scans a single input string.
 func scanString(s string) (str, tail string, err error) {
 	if s = skipSpace(s); s == "" {
 		return s, s, errors.New("missing string")
 	}
-	buf := [16]byte{} 
+	buf := [16]byte{} // small but enough to hold most cases.
 	value := buf[:0]
 	for s != "" {
 		if consume(&s, '\'') {
@@ -190,7 +190,7 @@ func parseSequence(p RuleProcessor, level int, s string) (tail string, err error
 		s = s[sz:]
 
 		if r == '-' {
-			
+			// We have a range. The first element was already written.
 			if last == 0 {
 				return s, errors.New("range without starter value")
 			}
@@ -212,7 +212,7 @@ func parseSequence(p RuleProcessor, level int, s string) (tail string, err error
 			break
 		}
 
-		
+		// normal case
 		if err := p.Insert(level, string(r), "", ""); err != nil {
 			return s, err
 		}
@@ -225,8 +225,8 @@ func skipSpace(s string) string {
 	return strings.TrimLeftFunc(s, unicode.IsSpace)
 }
 
-
-
+// consumes returns whether the next byte is ch. If so, it gobbles it by
+// updating s.
 func consume(s *string, ch byte) (ok bool) {
 	if *s == "" || (*s)[0] != ch {
 		return false
@@ -235,7 +235,7 @@ func consume(s *string, ch byte) (ok bool) {
 	return true
 }
 
-
+// The following code parses Collation rules of CLDR version 24 and before.
 
 var lmap = map[byte]int{
 	'p': 1,
@@ -266,7 +266,7 @@ type rule struct {
 var emptyValueError = errors.New("cldr: empty rule value")
 
 func (r *rule) value() (string, error) {
-	
+	// Convert hexadecimal Unicode codepoint notation to a string.
 	s := charRe.ReplaceAllStringFunc(r.Value, replaceUnicode)
 	r.Value = s
 	if s == "" {
@@ -308,9 +308,9 @@ func (r rule) process(p RuleProcessor, name, context, extend string) error {
 	return nil
 }
 
-
+// processXML parses the format of CLDR versions 24 and older.
 func (c Collation) processXML(p RuleProcessor) (err error) {
-	
+	// Collation is generated and defined in xml.go.
 	var v string
 	for _, r := range c.Rules.Any {
 		switch r.XMLName.Local {

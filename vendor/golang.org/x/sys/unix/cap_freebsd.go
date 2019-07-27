@@ -1,8 +1,8 @@
+// Copyright 2017 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
+// +build freebsd
 
 package unix
 
@@ -11,10 +11,10 @@ import (
 	"fmt"
 )
 
-
+// Go implementation of C mostly found in /usr/src/sys/kern/subr_capability.c
 
 const (
-	
+	// This is the version of CapRights this package understands. See C implementation for parallels.
 	capRightsGoVersion = CAP_RIGHTS_VERSION_00
 	capArSizeMin       = CAP_RIGHTS_VERSION_00 + 2
 	capArSizeMax       = capRightsGoVersion + 2
@@ -51,9 +51,9 @@ func caparsize(rights *CapRights) int {
 	return capver(rights) + 2
 }
 
-
+// CapRightsSet sets the permissions in setrights in rights.
 func CapRightsSet(rights *CapRights, setrights []uint64) error {
-	
+	// This is essentially a copy of cap_rights_vset()
 	if capver(rights) != CAP_RIGHTS_VERSION_00 {
 		return fmt.Errorf("bad rights version %d", capver(rights))
 	}
@@ -86,9 +86,9 @@ func CapRightsSet(rights *CapRights, setrights []uint64) error {
 	return nil
 }
 
-
+// CapRightsClear clears the permissions in clearrights from rights.
 func CapRightsClear(rights *CapRights, clearrights []uint64) error {
-	
+	// This is essentially a copy of cap_rights_vclear()
 	if capver(rights) != CAP_RIGHTS_VERSION_00 {
 		return fmt.Errorf("bad rights version %d", capver(rights))
 	}
@@ -121,9 +121,9 @@ func CapRightsClear(rights *CapRights, clearrights []uint64) error {
 	return nil
 }
 
-
+// CapRightsIsSet checks whether all the permissions in setrights are present in rights.
 func CapRightsIsSet(rights *CapRights, setrights []uint64) (bool, error) {
-	
+	// This is essentially a copy of cap_rights_is_vset()
 	if capver(rights) != CAP_RIGHTS_VERSION_00 {
 		return false, fmt.Errorf("bad rights version %d", capver(rights))
 	}
@@ -159,8 +159,8 @@ func capright(idx uint64, bit uint64) uint64 {
 	return ((1 << (57 + idx)) | bit)
 }
 
-
-
+// CapRightsInit returns a pointer to an initialised CapRights structure filled with rights.
+// See man cap_rights_init(3) and rights(4).
 func CapRightsInit(rights []uint64) (*CapRights, error) {
 	var r CapRights
 	r.Rights[0] = (capRightsGoVersion << 62) | capright(0, 0)
@@ -173,15 +173,15 @@ func CapRightsInit(rights []uint64) (*CapRights, error) {
 	return &r, nil
 }
 
-
-
-
+// CapRightsLimit reduces the operations permitted on fd to at most those contained in rights.
+// The capability rights on fd can never be increased by CapRightsLimit.
+// See man cap_rights_limit(2) and rights(4).
 func CapRightsLimit(fd uintptr, rights *CapRights) error {
 	return capRightsLimit(int(fd), rights)
 }
 
-
-
+// CapRightsGet returns a CapRights structure containing the operations permitted on fd.
+// See man cap_rights_get(3) and rights(4).
 func CapRightsGet(fd uintptr) (*CapRights, error) {
 	r, err := CapRightsInit(nil)
 	if err != nil {

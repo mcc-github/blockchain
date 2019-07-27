@@ -1,7 +1,23 @@
+/*
+ *
+ * Copyright 2018 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
-
-
-
+// Package dns implements a dns resolver to be installed as the default resolver
+// in grpc.
 package dns
 
 import (
@@ -31,25 +47,28 @@ const (
 	defaultFreq       = time.Minute * 30
 	defaultDNSSvrPort = "53"
 	golang            = "GO"
-	
+	// txtPrefix is the prefix string to be prepended to the host name for txt record lookup.
 	txtPrefix = "_grpc_config."
-	
-	
+	// In DNS, service config is encoded in a TXT record via the mechanism
+	// described in RFC-1464 using the attribute name grpc_config.
 	txtAttribute = "grpc_config="
 )
 
 var (
 	errMissingAddr = errors.New("dns resolver: missing address")
 
-	
-	
-	
-	
+	// Addresses ending with a colon that is supposed to be the separator
+	// between host and port is not allowed.  E.g. "::" is a valid address as
+	// it is an IPv6 address (host only) and "[::]:" is invalid as it ends with
+	// a colon as the host and port separator
 	errEndsWithColon = errors.New("dns resolver: missing port after port-separator colon")
 )
 
 var (
 	defaultResolver netResolver = net.DefaultResolver
+	// To prevent excessive re-resolution, we enforce a rate limit on DNS
+	// resolution requests.
+	minDNSResRate = 30 * time.Second
 )
 
 var customAuthorityDialler = func(authority string) func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -73,24 +92,24 @@ var customAuthorityResolver = func(authority string) (netResolver, error) {
 	}, nil
 }
 
-
+// NewBuilder creates a dnsBuilder which is used to factory DNS resolvers.
 func NewBuilder() resolver.Builder {
 	return &dnsBuilder{minFreq: defaultFreq}
 }
 
 type dnsBuilder struct {
-	
+	// minimum frequency of polling the DNS server.
 	minFreq time.Duration
 }
 
-
+// Build creates and starts a DNS resolver that watches the name resolution of the target.
 func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOption) (resolver.Resolver, error) {
 	host, port, err := parseTarget(target.Endpoint, defaultPort)
 	if err != nil {
 		return nil, err
 	}
 
-	
+	// IP address.
 	if net.ParseIP(host) != nil {
 		host, _ = formatIP(host)
 		addr := []resolver.Address{{Addr: host + ":" + port}}
@@ -105,7 +124,7 @@ func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts 
 		return i, nil
 	}
 
-	
+	// DNS address (non-IP).
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &dnsResolver{
 		freq:                 b.minFreq,
@@ -134,7 +153,7 @@ func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts 
 	return d, nil
 }
 
-
+// Scheme returns the naming scheme of this resolver builder, which is "dns".
 func (b *dnsBuilder) Scheme() string {
 	return "dns"
 }
@@ -145,16 +164,16 @@ type netResolver interface {
 	LookupTXT(ctx context.Context, name string) (txts []string, err error)
 }
 
-
+// ipResolver watches for the name resolution update for an IP address.
 type ipResolver struct {
 	cc resolver.ClientConn
 	ip []resolver.Address
-	
+	// rn channel is used by ResolveNow() to force an immediate resolution of the target.
 	rn chan struct{}
 	q  chan struct{}
 }
 
-
+// ResolveNow resend the address it stores, no resolution is needed.
 func (i *ipResolver) ResolveNow(opt resolver.ResolveNowOption) {
 	select {
 	case i.rn <- struct{}{}:
@@ -162,7 +181,7 @@ func (i *ipResolver) ResolveNow(opt resolver.ResolveNowOption) {
 	}
 }
 
-
+// Close closes the ipResolver.
 func (i *ipResolver) Close() {
 	close(i.q)
 }
@@ -178,7 +197,7 @@ func (i *ipResolver) watcher() {
 	}
 }
 
-
+// dnsResolver watches for the name resolution update for a non-IP target.
 type dnsResolver struct {
 	freq       time.Duration
 	backoff    backoff.Exponential
@@ -189,20 +208,20 @@ type dnsResolver struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	cc         resolver.ClientConn
-	
+	// rn channel is used by ResolveNow() to force an immediate resolution of the target.
 	rn chan struct{}
 	t  *time.Timer
-	
-	
-	
-	
-	
-	
+	// wg is used to enforce Close() to return after the watcher() goroutine has finished.
+	// Otherwise, data race will be possible. [Race Example] in dns_resolver_test we
+	// replace the real lookup functions with mocked ones to facilitate testing.
+	// If Close() doesn't wait for watcher() goroutine finishes, race detector sometimes
+	// will warns lookup (READ the lookup function pointers) inside watcher() goroutine
+	// has data race with replaceNetFunc (WRITE the lookup function pointers).
 	wg                   sync.WaitGroup
 	disableServiceConfig bool
 }
 
-
+// ResolveNow invoke an immediate resolution of the target that this dnsResolver watches.
 func (d *dnsResolver) ResolveNow(opt resolver.ResolveNowOption) {
 	select {
 	case d.rn <- struct{}{}:
@@ -210,7 +229,7 @@ func (d *dnsResolver) ResolveNow(opt resolver.ResolveNowOption) {
 	}
 }
 
-
+// Close closes the dnsResolver.
 func (d *dnsResolver) Close() {
 	d.cancel()
 	d.wg.Wait()
@@ -225,10 +244,16 @@ func (d *dnsResolver) watcher() {
 			return
 		case <-d.t.C:
 		case <-d.rn:
+			if !d.t.Stop() {
+				// Before resetting a timer, it should be stopped to prevent racing with
+				// reads on it's channel.
+				<-d.t.C
+			}
 		}
+
 		result, sc := d.lookup()
-		
-		
+		// Next lookup should happen within an interval defined by d.freq. It may be
+		// more often due to exponential retry on empty address list.
 		if len(result) == 0 {
 			d.retryCount++
 			d.t.Reset(d.backoff.Backoff(d.retryCount))
@@ -238,6 +263,16 @@ func (d *dnsResolver) watcher() {
 		}
 		d.cc.NewServiceConfig(sc)
 		d.cc.NewAddress(result)
+
+		// Sleep to prevent excessive re-resolutions. Incoming resolution requests
+		// will be queued in d.rn.
+		t := time.NewTimer(minDNSResRate)
+		select {
+		case <-t.C:
+		case <-d.ctx.Done():
+			t.Stop()
+			return
+		}
 	}
 }
 
@@ -278,7 +313,7 @@ func (d *dnsResolver) lookupTXT() string {
 		res += s
 	}
 
-	
+	// TXT record must have "grpc_config=" attribute in order to be used as service config.
 	if !strings.HasPrefix(res, txtAttribute) {
 		grpclog.Warningf("grpc: TXT record %v missing %v attribute", res, txtAttribute)
 		return ""
@@ -307,7 +342,7 @@ func (d *dnsResolver) lookupHost() []resolver.Address {
 
 func (d *dnsResolver) lookup() ([]resolver.Address, string) {
 	newAddrs := d.lookupSRV()
-	
+	// Support fallback to non-balancer address.
 	newAddrs = append(newAddrs, d.lookupHost()...)
 	if d.disableServiceConfig {
 		return newAddrs, ""
@@ -316,9 +351,9 @@ func (d *dnsResolver) lookup() ([]resolver.Address, string) {
 	return newAddrs, canaryingSC(sc)
 }
 
-
-
-
+// formatIP returns ok = false if addr is not a valid textual representation of an IP address.
+// If addr is an IPv4 address, return the addr and ok = true.
+// If addr is an IPv6 address, return the addr enclosed in square brackets and ok = true.
 func formatIP(addr string) (addrIP string, ok bool) {
 	ip := net.ParseIP(addr)
 	if ip == nil {
@@ -330,37 +365,37 @@ func formatIP(addr string) (addrIP string, ok bool) {
 	return "[" + addr + "]", true
 }
 
-
-
-
-
-
-
-
-
-
+// parseTarget takes the user input target string and default port, returns formatted host and port info.
+// If target doesn't specify a port, set the port to be the defaultPort.
+// If target is in IPv6 format and host-name is enclosed in square brackets, brackets
+// are stripped when setting the host.
+// examples:
+// target: "www.google.com" defaultPort: "443" returns host: "www.google.com", port: "443"
+// target: "ipv4-host:80" defaultPort: "443" returns host: "ipv4-host", port: "80"
+// target: "[ipv6-host]" defaultPort: "443" returns host: "ipv6-host", port: "443"
+// target: ":80" defaultPort: "443" returns host: "localhost", port: "80"
 func parseTarget(target, defaultPort string) (host, port string, err error) {
 	if target == "" {
 		return "", "", errMissingAddr
 	}
 	if ip := net.ParseIP(target); ip != nil {
-		
+		// target is an IPv4 or IPv6(without brackets) address
 		return target, defaultPort, nil
 	}
 	if host, port, err = net.SplitHostPort(target); err == nil {
 		if port == "" {
-			
+			// If the port field is empty (target ends with colon), e.g. "[::1]:", this is an error.
 			return "", "", errEndsWithColon
 		}
-		
+		// target has port, i.e ipv4-host:port, [ipv6-host]:port, host-name:port
 		if host == "" {
-			
+			// Keep consistent with net.Dial(): If the host is empty, as in ":80", the local system is assumed.
 			host = "localhost"
 		}
 		return host, port, nil
 	}
 	if host, port, err = net.SplitHostPort(target + ":" + defaultPort); err == nil {
-		
+		// target doesn't have port
 		return host, port, nil
 	}
 	return "", "", fmt.Errorf("invalid target address %v, error info: %v", target, err)

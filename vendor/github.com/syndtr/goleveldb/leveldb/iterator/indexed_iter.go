@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package iterator
 
@@ -11,13 +11,13 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-
-
+// IteratorIndexer is the interface that wraps CommonIterator and basic Get
+// method. IteratorIndexer provides index for indexed iterator.
 type IteratorIndexer interface {
 	CommonIterator
 
-	
-	
+	// Get returns a new data iterator for the current position, or nil if
+	// done.
 	Get() Iterator
 }
 
@@ -229,14 +229,14 @@ func (i *indexedIterator) SetErrorCallback(f func(err error)) {
 	i.errf = f
 }
 
-
-
-
-
-
-
-
-
+// NewIndexedIterator returns an 'indexed iterator'. An index is iterator
+// that returns another iterator, a 'data iterator'. A 'data iterator' is the
+// iterator that contains actual key/value pairs.
+//
+// If strict is true the any 'corruption errors' (i.e errors.IsCorrupted(err) == true)
+// won't be ignored and will halt 'indexed iterator', otherwise the iterator will
+// continue to the next 'data iterator'. Corruption on 'index iterator' will not be
+// ignored and will halt the iterator.
 func NewIndexedIterator(index IteratorIndexer, strict bool) Iterator {
 	return &indexedIterator{index: index, strict: strict}
 }

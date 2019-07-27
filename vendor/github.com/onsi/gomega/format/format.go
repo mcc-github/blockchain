@@ -1,4 +1,6 @@
-
+/*
+Gomega's format package pretty-prints objects.  It explores input objects recursively and generates formatted, indented output with type information.
+*/
 package format
 
 import (
@@ -9,20 +11,30 @@ import (
 	"time"
 )
 
-
+// Use MaxDepth to set the maximum recursion depth when printing deeply nested objects
 var MaxDepth = uint(10)
 
+/*
+By default, all objects (even those that implement fmt.Stringer and fmt.GoStringer) are recursively inspected to generate output.
 
+Set UseStringerRepresentation = true to use GoString (for fmt.GoStringers) or String (for fmt.Stringer) instead.
+
+Note that GoString and String don't always have all the information you need to understand why a test failed!
+*/
 var UseStringerRepresentation = false
 
+/*
+Print the content of context objects. By default it will be suppressed.
 
+Set PrintContextObjects = true to enable printing of the context internals.
+*/
 var PrintContextObjects = false
 
-
+// TruncatedDiff choose if we should display a truncated pretty diff or not
 var TruncatedDiff = true
 
-
-
+// Ctx interface defined here to keep backwards compatability with go < 1.7
+// It matches the context.Context interface
 type Ctx interface {
 	Deadline() (deadline time.Time, ok bool)
 	Done() <-chan struct{}
@@ -33,12 +45,25 @@ type Ctx interface {
 var contextType = reflect.TypeOf((*Ctx)(nil)).Elem()
 var timeType = reflect.TypeOf(time.Time{})
 
-
+//The default indentation string emitted by the format package
 var Indent = "    "
 
 var longFormThreshold = 20
 
+/*
+Generates a formatted matcher success/failure message of the form:
 
+	Expected
+		<pretty printed actual>
+	<message>
+		<pretty printed expected>
+
+If expected is omited, then the message looks like:
+
+	Expected
+		<pretty printed actual>
+	<message>
+*/
 func Message(actual interface{}, message string, expected ...interface{}) string {
 	if len(expected) == 0 {
 		return fmt.Sprintf("Expected\n%s\n%s", Object(actual, 1), message)
@@ -46,7 +71,18 @@ func Message(actual interface{}, message string, expected ...interface{}) string
 	return fmt.Sprintf("Expected\n%s\n%s\n%s", Object(actual, 1), message, Object(expected[0], 1))
 }
 
+/*
 
+Generates a nicely formatted matcher success / failure message
+
+Much like Message(...), but it attempts to pretty print diffs in strings
+
+Expected
+    <string>: "...aaaaabaaaaa..."
+to equal               |
+    <string>: "...aaaaazaaaaa..."
+
+*/
 
 func MessageWithDiff(actual, message, expected string) string {
 	if TruncatedDiff && len(actual) >= truncateThreshold && len(expected) >= truncateThreshold {
@@ -74,7 +110,7 @@ func truncateAndFormat(str string, index int) string {
 		leftPadding = ""
 	}
 
-	
+	// slice index must include the mis-matched character
 	lengthOfMismatchedCharacter := 1
 	end := index + charactersAroundMismatchToInclude + lengthOfMismatchedCharacter
 	if end > len(str) {
@@ -110,14 +146,26 @@ const (
 	charactersAroundMismatchToInclude = 5
 )
 
+/*
+Pretty prints the passed in object at the passed in indentation level.
 
+Object recurses into deeply nested objects emitting pretty-printed representations of their components.
+
+Modify format.MaxDepth to control how deep the recursion is allowed to go
+Set format.UseStringerRepresentation to true to return object.GoString() or object.String() when available instead of
+recursing into the object.
+
+Set PrintContextObjects to true to print the content of objects implementing context.Context
+*/
 func Object(object interface{}, indentation uint) string {
 	indent := strings.Repeat(Indent, int(indentation))
 	value := reflect.ValueOf(object)
 	return fmt.Sprintf("%s<%s>: %s", indent, formatType(object), formatValue(value, indentation))
 }
 
-
+/*
+IndentString takes a string and indents each line by the specified amount.
+*/
 func IndentString(s string, indentation uint) string {
 	components := strings.Split(s, "\n")
 	result := ""
@@ -321,7 +369,9 @@ func isNilValue(a reflect.Value) bool {
 	return false
 }
 
-
+/*
+Returns true when the string is entirely made of printable runes, false otherwise.
+*/
 func isPrintableString(str string) bool {
 	for _, runeValue := range str {
 		if !strconv.IsPrint(runeValue) {

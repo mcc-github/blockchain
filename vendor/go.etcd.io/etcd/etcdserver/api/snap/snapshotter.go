@@ -1,16 +1,16 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright 2015 The etcd Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package snap
 
@@ -45,7 +45,7 @@ var (
 	ErrCRCMismatch   = errors.New("snap: crc mismatch")
 	crcTable         = crc32.MakeTable(crc32.Castagnoli)
 
-	
+	// A map of valid files that can be present in the snap folder.
 	validFiles = map[string]bool{
 		"db": true,
 	}
@@ -148,7 +148,7 @@ func loadSnap(lg *zap.Logger, dir, name string) (*raftpb.Snapshot, error) {
 	return snap, err
 }
 
-
+// Read reads the snapshot named by snapname and returns the snapshot.
 func Read(lg *zap.Logger, snapname string) (*raftpb.Snapshot, error) {
 	b, err := ioutil.ReadFile(snapname)
 	if err != nil {
@@ -214,8 +214,8 @@ func Read(lg *zap.Logger, snapname string) (*raftpb.Snapshot, error) {
 	return &snap, nil
 }
 
-
-
+// snapNames returns the filename of the snapshots in logical time order (from newest to oldest).
+// If there is no available snapshots, an ErrNoSnapshot will be returned.
 func (s *Snapshotter) snapNames() ([]string, error) {
 	dir, err := os.Open(s.dir)
 	if err != nil {
@@ -240,8 +240,8 @@ func checkSuffix(lg *zap.Logger, names []string) []string {
 		if strings.HasSuffix(names[i], snapSuffix) {
 			snaps = append(snaps, names[i])
 		} else {
-			
-			
+			// If we find a file which is not a snapshot then check if it's
+			// a vaild file. If not throw out a warning.
 			if _, ok := validFiles[names[i]]; !ok {
 				if lg != nil {
 					lg.Warn("found unexpected non-snap file; skipping", zap.String("path", names[i]))

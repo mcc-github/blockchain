@@ -1,10 +1,10 @@
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-
-
-
-
-
-
+// Package cache provides interface and implementation of a cache algorithms.
 package cache
 
 import (
@@ -15,53 +15,53 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-
-
+// Cacher provides interface to implements a caching functionality.
+// An implementation must be safe for concurrent use.
 type Cacher interface {
-	
+	// Capacity returns cache capacity.
 	Capacity() int
 
-	
+	// SetCapacity sets cache capacity.
 	SetCapacity(capacity int)
 
-	
+	// Promote promotes the 'cache node'.
 	Promote(n *Node)
 
-	
+	// Ban evicts the 'cache node' and prevent subsequent 'promote'.
 	Ban(n *Node)
 
-	
+	// Evict evicts the 'cache node'.
 	Evict(n *Node)
 
-	
+	// EvictNS evicts 'cache node' with the given namespace.
 	EvictNS(ns uint64)
 
-	
+	// EvictAll evicts all 'cache node'.
 	EvictAll()
 
-	
+	// Close closes the 'cache tree'
 	Close() error
 }
 
-
-
+// Value is a 'cacheable object'. It may implements util.Releaser, if
+// so the the Release method will be called once object is released.
 type Value interface{}
 
-
+// NamespaceGetter provides convenient wrapper for namespace.
 type NamespaceGetter struct {
 	Cache *Cache
 	NS    uint64
 }
 
-
+// Get simply calls Cache.Get() method.
 func (g *NamespaceGetter) Get(key uint64, setFunc func() (size int, value Value)) *Handle {
 	return g.Cache.Get(g.NS, key, setFunc)
 }
 
-
-
-
-
+// The hash tables implementation is based on:
+// "Dynamic-Sized Nonblocking Hash Tables", by Yujie Liu,
+// Kunlong Zhang, and Michael Spear.
+// ACM Symposium on Principles of Distributed Computing, Jul 2014.
 
 const (
 	mInitialSize           = 1 << 4
@@ -92,7 +92,7 @@ func (b *mBucket) get(r *Cache, h *mNode, hash uint32, ns, key uint64, noset boo
 		return
 	}
 
-	
+	// Scan the node.
 	for _, n := range b.node {
 		if n.hash == hash && n.ns == ns && n.key == key {
 			atomic.AddInt32(&n.ref, 1)
@@ -101,13 +101,13 @@ func (b *mBucket) get(r *Cache, h *mNode, hash uint32, ns, key uint64, noset boo
 		}
 	}
 
-	
+	// Get only.
 	if noset {
 		b.mu.Unlock()
 		return true, false, nil
 	}
 
-	
+	// Create node.
 	n = &Node{
 		r:    r,
 		hash: hash,
@@ -115,18 +115,18 @@ func (b *mBucket) get(r *Cache, h *mNode, hash uint32, ns, key uint64, noset boo
 		key:  key,
 		ref:  1,
 	}
-	
+	// Add node to bucket.
 	b.node = append(b.node, n)
 	bLen := len(b.node)
 	b.mu.Unlock()
 
-	
+	// Update counter.
 	grow := atomic.AddInt32(&r.nodes, 1) >= h.growThreshold
 	if bLen > mOverflowThreshold {
 		grow = grow || atomic.AddInt32(&h.overflow, 1) >= mOverflowGrowThreshold
 	}
 
-	
+	// Grow.
 	if grow && atomic.CompareAndSwapInt32(&h.resizeInProgess, 0, 1) {
 		nhLen := len(h.buckets) << 1
 		nh := &mNode{
@@ -154,7 +154,7 @@ func (b *mBucket) delete(r *Cache, h *mNode, hash uint32, ns, key uint64) (done,
 		return
 	}
 
-	
+	// Scan the node.
 	var (
 		n    *Node
 		bLen int
@@ -165,7 +165,7 @@ func (b *mBucket) delete(r *Cache, h *mNode, hash uint32, ns, key uint64) (done,
 			if atomic.LoadInt32(&n.ref) == 0 {
 				deleted = true
 
-				
+				// Call releaser.
 				if n.value != nil {
 					if r, ok := n.value.(util.Releaser); ok {
 						r.Release()
@@ -173,7 +173,7 @@ func (b *mBucket) delete(r *Cache, h *mNode, hash uint32, ns, key uint64) (done,
 					n.value = nil
 				}
 
-				
+				// Remove node from bucket.
 				b.node = append(b.node[:i], b.node[i+1:]...)
 				bLen = len(b.node)
 			}
@@ -183,19 +183,19 @@ func (b *mBucket) delete(r *Cache, h *mNode, hash uint32, ns, key uint64) (done,
 	b.mu.Unlock()
 
 	if deleted {
-		
+		// Call OnDel.
 		for _, f := range n.onDel {
 			f()
 		}
 
-		
+		// Update counter.
 		atomic.AddInt32(&r.size, int32(n.size)*-1)
 		shrink := atomic.AddInt32(&r.nodes, -1) < h.shrinkThreshold
 		if bLen >= mOverflowThreshold {
 			atomic.AddInt32(&h.overflow, -1)
 		}
 
-		
+		// Shrink.
 		if shrink && len(h.buckets) > mInitialSize && atomic.CompareAndSwapInt32(&h.resizeInProgess, 0, 1) {
 			nhLen := len(h.buckets) >> 1
 			nh := &mNode{
@@ -217,9 +217,9 @@ func (b *mBucket) delete(r *Cache, h *mNode, hash uint32, ns, key uint64) (done,
 }
 
 type mNode struct {
-	buckets         []unsafe.Pointer 
+	buckets         []unsafe.Pointer // []*mBucket
 	mask            uint32
-	pred            unsafe.Pointer 
+	pred            unsafe.Pointer // *mNode
 	resizeInProgess int32
 
 	overflow        int32
@@ -236,20 +236,20 @@ func (n *mNode) initBucket(i uint32) *mBucket {
 	if p != nil {
 		var node []*Node
 		if n.mask > p.mask {
-			
+			// Grow.
 			pb := (*mBucket)(atomic.LoadPointer(&p.buckets[i&p.mask]))
 			if pb == nil {
 				pb = p.initBucket(i & p.mask)
 			}
 			m := pb.freeze()
-			
+			// Split nodes.
 			for _, x := range m {
 				if x.hash&n.mask == i {
 					node = append(node, x)
 				}
 			}
 		} else {
-			
+			// Shrink.
 			pb0 := (*mBucket)(atomic.LoadPointer(&p.buckets[i]))
 			if pb0 == nil {
 				pb0 = p.initBucket(i)
@@ -260,7 +260,7 @@ func (n *mNode) initBucket(i uint32) *mBucket {
 			}
 			m0 := pb0.freeze()
 			m1 := pb1.freeze()
-			
+			// Merge nodes.
 			node = make([]*Node, 0, len(m0)+len(m1))
 			node = append(node, m0...)
 			node = append(node, m1...)
@@ -284,18 +284,18 @@ func (n *mNode) initBuckets() {
 	atomic.StorePointer(&n.pred, nil)
 }
 
-
+// Cache is a 'cache map'.
 type Cache struct {
 	mu     sync.RWMutex
-	mHead  unsafe.Pointer 
+	mHead  unsafe.Pointer // *mNode
 	nodes  int32
 	size   int32
 	cacher Cacher
 	closed bool
 }
 
-
-
+// NewCache creates a new 'cache map'. The cacher is optional and
+// may be nil.
 func NewCache(cacher Cacher) *Cache {
 	h := &mNode{
 		buckets:         make([]unsafe.Pointer, mInitialSize),
@@ -331,20 +331,19 @@ func (r *Cache) delete(n *Node) bool {
 			return deleted
 		}
 	}
-	return false
 }
 
-
+// Nodes returns number of 'cache node' in the map.
 func (r *Cache) Nodes() int {
 	return int(atomic.LoadInt32(&r.nodes))
 }
 
-
+// Size returns sums of 'cache node' size in the map.
 func (r *Cache) Size() int {
 	return int(atomic.LoadInt32(&r.size))
 }
 
-
+// Capacity returns cache capacity.
 func (r *Cache) Capacity() int {
 	if r.cacher == nil {
 		return 0
@@ -352,19 +351,19 @@ func (r *Cache) Capacity() int {
 	return r.cacher.Capacity()
 }
 
-
+// SetCapacity sets cache capacity.
 func (r *Cache) SetCapacity(capacity int) {
 	if r.cacher != nil {
 		r.cacher.SetCapacity(capacity)
 	}
 }
 
-
-
-
-
-
-
+// Get gets 'cache node' with the given namespace and key.
+// If cache node is not found and setFunc is not nil, Get will atomically creates
+// the 'cache node' by calling setFunc. Otherwise Get will returns nil.
+//
+// The returned 'cache handle' should be released after use by calling Release
+// method.
 func (r *Cache) Get(ns, key uint64, setFunc func() (size int, value Value)) *Handle {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -408,15 +407,15 @@ func (r *Cache) Get(ns, key uint64, setFunc func() (size int, value Value)) *Han
 	return nil
 }
 
-
-
-
-
-
-
-
-
-
+// Delete removes and ban 'cache node' with the given namespace and key.
+// A banned 'cache node' will never inserted into the 'cache tree'. Ban
+// only attributed to the particular 'cache node', so when a 'cache node'
+// is recreated it will not be banned.
+//
+// If onDel is not nil, then it will be executed if such 'cache node'
+// doesn't exist or once the 'cache node' is released.
+//
+// Delete return true is such 'cache node' exist.
 func (r *Cache) Delete(ns, key uint64, onDel func()) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -453,10 +452,10 @@ func (r *Cache) Delete(ns, key uint64, onDel func()) bool {
 	return false
 }
 
-
-
-
-
+// Evict evicts 'cache node' with the given namespace and key. This will
+// simply call Cacher.Evict.
+//
+// Evict return true is such 'cache node' exist.
 func (r *Cache) Evict(ns, key uint64) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -484,8 +483,8 @@ func (r *Cache) Evict(ns, key uint64) bool {
 	return false
 }
 
-
-
+// EvictNS evicts 'cache node' with the given namespace. This will
+// simply call Cacher.EvictNS.
 func (r *Cache) EvictNS(ns uint64) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -498,7 +497,7 @@ func (r *Cache) EvictNS(ns uint64) {
 	}
 }
 
-
+// EvictAll evicts all 'cache node'. This will simply call Cacher.EvictAll.
 func (r *Cache) EvictAll() {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -511,7 +510,7 @@ func (r *Cache) EvictAll() {
 	}
 }
 
-
+// Close closes the 'cache map' and forcefully releases all 'cache node'.
 func (r *Cache) Close() error {
 	r.mu.Lock()
 	if !r.closed {
@@ -523,7 +522,7 @@ func (r *Cache) Close() error {
 		for i := range h.buckets {
 			b := (*mBucket)(h.buckets[i])
 			for _, n := range b.node {
-				
+				// Call releaser.
 				if n.value != nil {
 					if r, ok := n.value.(util.Releaser); ok {
 						r.Release()
@@ -531,7 +530,7 @@ func (r *Cache) Close() error {
 					n.value = nil
 				}
 
-				
+				// Call OnDel.
 				for _, f := range n.onDel {
 					f()
 				}
@@ -541,7 +540,7 @@ func (r *Cache) Close() error {
 	}
 	r.mu.Unlock()
 
-	
+	// Avoid deadlock.
 	if r.cacher != nil {
 		if err := r.cacher.Close(); err != nil {
 			return err
@@ -550,8 +549,8 @@ func (r *Cache) Close() error {
 	return nil
 }
 
-
-
+// CloseWeak closes the 'cache map' and evict all 'cache node' from cacher, but
+// unlike Close it doesn't forcefully releases 'cache node'.
 func (r *Cache) CloseWeak() error {
 	r.mu.Lock()
 	if !r.closed {
@@ -559,7 +558,7 @@ func (r *Cache) CloseWeak() error {
 	}
 	r.mu.Unlock()
 
-	
+	// Avoid deadlock.
 	if r.cacher != nil {
 		r.cacher.EvictAll()
 		if err := r.cacher.Close(); err != nil {
@@ -569,7 +568,7 @@ func (r *Cache) CloseWeak() error {
 	return nil
 }
 
-
+// Node is a 'cache node'.
 type Node struct {
 	r *Cache
 
@@ -586,32 +585,32 @@ type Node struct {
 	CacheData unsafe.Pointer
 }
 
-
+// NS returns this 'cache node' namespace.
 func (n *Node) NS() uint64 {
 	return n.ns
 }
 
-
+// Key returns this 'cache node' key.
 func (n *Node) Key() uint64 {
 	return n.key
 }
 
-
+// Size returns this 'cache node' size.
 func (n *Node) Size() int {
 	return n.size
 }
 
-
+// Value returns this 'cache node' value.
 func (n *Node) Value() Value {
 	return n.value
 }
 
-
+// Ref returns this 'cache node' ref counter.
 func (n *Node) Ref() int32 {
 	return atomic.LoadInt32(&n.ref)
 }
 
-
+// GetHandle returns an handle for this 'cache node'.
 func (n *Node) GetHandle() *Handle {
 	if atomic.AddInt32(&n.ref, 1) <= 1 {
 		panic("BUG: Node.GetHandle on zero ref")
@@ -635,12 +634,12 @@ func (n *Node) unrefLocked() {
 	}
 }
 
-
+// Handle is a 'cache handle' of a 'cache node'.
 type Handle struct {
-	n unsafe.Pointer 
+	n unsafe.Pointer // *Node
 }
 
-
+// Value returns the value of the 'cache node'.
 func (h *Handle) Value() Value {
 	n := (*Node)(atomic.LoadPointer(&h.n))
 	if n != nil {
@@ -649,8 +648,8 @@ func (h *Handle) Value() Value {
 	return nil
 }
 
-
-
+// Release releases this 'cache handle'.
+// It is safe to call release multiple times.
 func (h *Handle) Release() {
 	nPtr := atomic.LoadPointer(&h.n)
 	if nPtr != nil && atomic.CompareAndSwapPointer(&h.n, nPtr, nil) {

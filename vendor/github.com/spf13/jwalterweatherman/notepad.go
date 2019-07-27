@@ -1,13 +1,14 @@
-
-
-
-
+// Copyright © 2016 Steve Francia <spf@spf13.com>.
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
 
 package jwalterweatherman
 
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 )
 
@@ -37,7 +38,7 @@ var prefixes map[Threshold]string = map[Threshold]string{
 	LevelFatal:    "FATAL",
 }
 
-
+// Notepad is where you leave a note!
 type Notepad struct {
 	TRACE    *log.Logger
 	DEBUG    *log.Logger
@@ -58,13 +59,28 @@ type Notepad struct {
 	prefix          string
 	flags           int
 
-	
-	logCounters [7]*logCounter
+	logListeners []LogListener
 }
 
+// A LogListener can ble supplied to a Notepad to listen on log writes for a given
+// threshold. This can be used to capture log events in unit tests and similar.
+// Note that this function will be invoked once for each log threshold. If
+// the given threshold is not of interest to you, return nil.
+// Note that these listeners will receive log events for a given threshold, even
+// if the current configuration says not to log it. That way you can count ERRORs even
+// if you don't print them to the console.
+type LogListener func(t Threshold) io.Writer
 
-func NewNotepad(outThreshold Threshold, logThreshold Threshold, outHandle, logHandle io.Writer, prefix string, flags int) *Notepad {
-	n := &Notepad{}
+// NewNotepad creates a new Notepad.
+func NewNotepad(
+	outThreshold Threshold,
+	logThreshold Threshold,
+	outHandle, logHandle io.Writer,
+	prefix string, flags int,
+	logListeners ...LogListener,
+) *Notepad {
+
+	n := &Notepad{logListeners: logListeners}
 
 	n.loggers = [7]**log.Logger{&n.TRACE, &n.DEBUG, &n.INFO, &n.WARN, &n.ERROR, &n.CRITICAL, &n.FATAL}
 	n.outHandle = outHandle
@@ -89,66 +105,81 @@ func NewNotepad(outThreshold Threshold, logThreshold Threshold, outHandle, logHa
 	return n
 }
 
-
+// init creates the loggers for each level depending on the notepad thresholds.
 func (n *Notepad) init() {
 	logAndOut := io.MultiWriter(n.outHandle, n.logHandle)
 
 	for t, logger := range n.loggers {
 		threshold := Threshold(t)
-		counter := &logCounter{}
-		n.logCounters[t] = counter
 		prefix := n.prefix + threshold.String() + " "
 
 		switch {
 		case threshold >= n.logThreshold && threshold >= n.stdoutThreshold:
-			*logger = log.New(io.MultiWriter(counter, logAndOut), prefix, n.flags)
+			*logger = log.New(n.createLogWriters(threshold, logAndOut), prefix, n.flags)
 
 		case threshold >= n.logThreshold:
-			*logger = log.New(io.MultiWriter(counter, n.logHandle), prefix, n.flags)
+			*logger = log.New(n.createLogWriters(threshold, n.logHandle), prefix, n.flags)
 
 		case threshold >= n.stdoutThreshold:
-			*logger = log.New(io.MultiWriter(counter, n.outHandle), prefix, n.flags)
+			*logger = log.New(n.createLogWriters(threshold, n.outHandle), prefix, n.flags)
 
 		default:
-			
-			
-			*logger = log.New(counter, "", 0)
+			*logger = log.New(n.createLogWriters(threshold, ioutil.Discard), prefix, n.flags)
 		}
 	}
 }
 
+func (n *Notepad) createLogWriters(t Threshold, handle io.Writer) io.Writer {
+	if len(n.logListeners) == 0 {
+		return handle
+	}
+	writers := []io.Writer{handle}
+	for _, l := range n.logListeners {
+		w := l(t)
+		if w != nil {
+			writers = append(writers, w)
+		}
+	}
 
+	if len(writers) == 1 {
+		return handle
+	}
 
+	return io.MultiWriter(writers...)
+}
+
+// SetLogThreshold changes the threshold above which messages are written to the
+// log file.
 func (n *Notepad) SetLogThreshold(threshold Threshold) {
 	n.logThreshold = threshold
 	n.init()
 }
 
-
+// SetLogOutput changes the file where log messages are written.
 func (n *Notepad) SetLogOutput(handle io.Writer) {
 	n.logHandle = handle
 	n.init()
 }
 
-
+// GetStdoutThreshold returns the defined Treshold for the log logger.
 func (n *Notepad) GetLogThreshold() Threshold {
 	return n.logThreshold
 }
 
-
-
+// SetStdoutThreshold changes the threshold above which messages are written to the
+// standard output.
 func (n *Notepad) SetStdoutThreshold(threshold Threshold) {
 	n.stdoutThreshold = threshold
 	n.init()
 }
 
-
+// GetStdoutThreshold returns the Treshold for the stdout logger.
 func (n *Notepad) GetStdoutThreshold() Threshold {
 	return n.stdoutThreshold
 }
 
-
-
+// SetPrefix changes the prefix used by the notepad. Prefixes are displayed between
+// brackets at the beginning of the line. An empty prefix won't be displayed at all.
 func (n *Notepad) SetPrefix(prefix string) {
 	if len(prefix) != 0 {
 		n.prefix = "[" + prefix + "] "
@@ -158,15 +189,15 @@ func (n *Notepad) SetPrefix(prefix string) {
 	n.init()
 }
 
-
-
+// SetFlags choose which flags the logger will display (after prefix and message
+// level). See the package log for more informations on this.
 func (n *Notepad) SetFlags(flags int) {
 	n.flags = flags
 	n.init()
 }
 
-
-
+// Feedback writes plainly to the outHandle while
+// logging with the standard extra information (date, file, etc).
 type Feedback struct {
 	out *log.Logger
 	log *log.Logger

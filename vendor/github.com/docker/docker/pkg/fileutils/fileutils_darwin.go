@@ -1,4 +1,4 @@
-package fileutils 
+package fileutils // import "github.com/docker/docker/pkg/fileutils"
 
 import (
 	"os"
@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-
-
+// GetTotalUsedFds returns the number of used File Descriptors by
+// executing `lsof -p PID`
 func GetTotalUsedFds() int {
 	pid := os.Getpid()
 

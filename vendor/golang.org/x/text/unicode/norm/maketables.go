@@ -1,17 +1,18 @@
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// +build ignore
 
-
-
-
-
-
-
-
+// Normalization table generator.
+// Data read from the web.
+// See forminfo.go for a description of the trie values associated with each rune.
 
 package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -53,13 +54,13 @@ var (
 		"write data to stdout as it is parsed")
 )
 
-const MaxChar = 0x10FFFF 
+const MaxChar = 0x10FFFF // anything above this shouldn't exist
 
-
-
-
-
-
+// Quick Check properties of runes allow us to quickly
+// determine whether a rune may occur in a normal form.
+// For a given normal form, a rune may be guaranteed to occur
+// verbatim (QC=Yes), may or may not combine with another
+// rune (QC=Maybe), or may not occur (QC=No).
 type QCResult int
 
 const (
@@ -82,30 +83,30 @@ func (r QCResult) String() string {
 }
 
 const (
-	FCanonical     = iota 
-	FCompatibility        
+	FCanonical     = iota // NFC or NFD
+	FCompatibility        // NFKC or NFKD
 	FNumberOfFormTypes
 )
 
 const (
-	MComposed   = iota 
-	MDecomposed        
+	MComposed   = iota // NFC or NFKC
+	MDecomposed        // NFD or NFKD
 	MNumberOfModes
 )
 
-
+// This contains only the properties we're interested in.
 type Char struct {
 	name          string
-	codePoint     rune  
-	ccc           uint8 
+	codePoint     rune  // if zero, this index is not a valid code point.
+	ccc           uint8 // canonical combining class
 	origCCC       uint8
-	excludeInComp bool 
-	compatDecomp  bool 
+	excludeInComp bool // from CompositionExclusions.txt
+	compatDecomp  bool // it has a compatibility expansion
 
 	nTrailingNonStarters uint8
-	nLeadingNonStarters  uint8 
+	nLeadingNonStarters  uint8 // must be equal to trailing if non-zero
 
-	forms [FNumberOfFormTypes]FormInfo 
+	forms [FNumberOfFormTypes]FormInfo // For FCanonical and FCompatibility
 
 	state State
 }
@@ -129,14 +130,14 @@ func (c Char) String() string {
 	return buf.String()
 }
 
-
-
-
-
+// In UnicodeData.txt, some ranges are marked like this:
+//	3400;<CJK Ideograph Extension A, First>;Lo;0;L;;;;;N;;;;;
+//	4DB5;<CJK Ideograph Extension A, Last>;Lo;0;L;;;;;N;;;;;
+// parseCharacter keeps a state variable indicating the weirdness.
 type State int
 
 const (
-	SNormal State = iota 
+	SNormal State = iota // known to be zero for the type
 	SFirst
 	SLast
 	SMissing
@@ -149,13 +150,13 @@ func (c Char) isValid() bool {
 }
 
 type FormInfo struct {
-	quickCheck [MNumberOfModes]QCResult 
-	verified   [MNumberOfModes]bool     
+	quickCheck [MNumberOfModes]QCResult // index: MComposed or MDecomposed
+	verified   [MNumberOfModes]bool     // index: MComposed or MDecomposed
 
-	combinesForward  bool 
-	combinesBackward bool 
-	isOneWay         bool 
-	inDecomp         bool 
+	combinesForward  bool // May combine with rune on the right
+	combinesBackward bool // May combine with rune on the left
+	isOneWay         bool // Never appears in result
+	inDecomp         bool // Some decompositions result in this char.
 	decomp           Decomposition
 	expandedDecomp   Decomposition
 }
@@ -232,8 +233,8 @@ func loadUnicodeData() {
 	}
 }
 
-
-
+// compactCCC converts the sparse set of CCC values to a continguous one,
+// reducing the number of bits needed from 8 to 6.
 func compactCCC() {
 	m := make(map[uint8]uint8)
 	for i := range chars {
@@ -259,9 +260,9 @@ func compactCCC() {
 	}
 }
 
-
-
-
+// CompositionExclusions.txt has form:
+// 0958    # ...
+// See https://unicode.org/reports/tr44/ for full explanation
 func loadCompositionExclusions() {
 	f := gen.OpenUCDFile("CompositionExclusions.txt")
 	defer f.Close()
@@ -278,9 +279,9 @@ func loadCompositionExclusions() {
 	}
 }
 
-
-
-
+// hasCompatDecomp returns true if any of the recursive
+// decompositions contains a compatibility expansion.
+// In this case, the character may not occur in NFK*.
 func hasCompatDecomp(r rune) bool {
 	c := &chars[r]
 	if c.compatDecomp {
@@ -294,10 +295,10 @@ func hasCompatDecomp(r rune) bool {
 	return false
 }
 
-
+// Hangul related constants.
 const (
 	HangulBase = 0xAC00
-	HangulEnd  = 0xD7A4 
+	HangulEnd  = 0xD7A4 // hangulBase + Jamo combinations (19 * 21 * 28)
 
 	JamoLBase = 0x1100
 	JamoLEnd  = 0x1113
@@ -326,13 +327,13 @@ func ccc(r rune) uint8 {
 	return chars[r].ccc
 }
 
-
+// Insert a rune in a buffer, ordered by Canonical Combining Class.
 func insertOrdered(b Decomposition, r rune) Decomposition {
 	n := len(b)
 	b = append(b, 0)
 	cc := ccc(r)
 	if cc > 0 {
-		
+		// Use bubble sort.
 		for ; n > 0; n-- {
 			if ccc(b[n-1]) <= cc {
 				break
@@ -344,7 +345,7 @@ func insertOrdered(b Decomposition, r rune) Decomposition {
 	return b
 }
 
-
+// Recursively decompose.
 func decomposeRecursive(form int, r rune, d Decomposition) Decomposition {
 	dcomp := chars[r].forms[form].decomp
 	if len(dcomp) == 0 {
@@ -357,7 +358,7 @@ func decomposeRecursive(form int, r rune, d Decomposition) Decomposition {
 }
 
 func completeCharFields(form int) {
-	
+	// Phase 0: pre-expand decomposition.
 	for i := range chars {
 		f := &chars[i].forms[form]
 		if len(f.decomp) == 0 {
@@ -370,24 +371,24 @@ func completeCharFields(form int) {
 		f.expandedDecomp = exp
 	}
 
-	
+	// Phase 1: composition exclusion, mark decomposition.
 	for i := range chars {
 		c := &chars[i]
 		f := &c.forms[form]
 
-		
+		// Marks script-specific exclusions and version restricted.
 		f.isOneWay = c.excludeInComp
 
-		
+		// Singletons
 		f.isOneWay = f.isOneWay || len(f.decomp) == 1
 
-		
+		// Non-starter decompositions
 		if len(f.decomp) > 1 {
 			chk := c.ccc != 0 || chars[f.decomp[0]].ccc != 0
 			f.isOneWay = f.isOneWay || chk
 		}
 
-		
+		// Runes that decompose into more than two runes.
 		f.isOneWay = f.isOneWay || len(f.decomp) > 2
 
 		if form == FCompatibility {
@@ -399,7 +400,7 @@ func completeCharFields(form int) {
 		}
 	}
 
-	
+	// Phase 2: forward and backward combining.
 	for i := range chars {
 		c := &chars[i]
 		f := &c.forms[form]
@@ -419,7 +420,7 @@ func completeCharFields(form int) {
 		}
 	}
 
-	
+	// Phase 3: quick check values.
 	for i := range chars {
 		c := &chars[i]
 		f := &c.forms[form]
@@ -458,18 +459,18 @@ func completeCharFields(form int) {
 }
 
 func computeNonStarterCounts() {
-	
+	// Phase 4: leading and trailing non-starter count
 	for i := range chars {
 		c := &chars[i]
 
 		runes := []rune{rune(i)}
-		
-		
+		// We always use FCompatibility so that the CGJ insertion points do not
+		// change for repeated normalizations with different forms.
 		if exp := c.forms[FCompatibility].expandedDecomp; len(exp) > 0 {
 			runes = exp
 		}
-		
-		
+		// We consider runes that combine backwards to be non-starters for the
+		// purpose of Stream-Safe Text Processing.
 		for _, r := range runes {
 			if cr := &chars[r]; cr.ccc == 0 && !cr.forms[FCompatibility].combinesBackward {
 				break
@@ -503,12 +504,12 @@ func computeNonStarterCounts() {
 }
 
 func printBytes(w io.Writer, b []byte, name string) {
-	fmt.Fprintf(w, "
+	fmt.Fprintf(w, "// %s: %d bytes\n", name, len(b))
 	fmt.Fprintf(w, "var %s = [...]byte {", name)
 	for i, c := range b {
 		switch {
 		case i%64 == 0:
-			fmt.Fprintf(w, "\n
+			fmt.Fprintf(w, "\n// Bytes %x - %x\n", i, i+63)
 		case i%8 == 0:
 			fmt.Fprintf(w, "\n")
 		}
@@ -517,7 +518,7 @@ func printBytes(w io.Writer, b []byte, name string) {
 	fmt.Fprint(w, "\n}\n\n")
 }
 
-
+// See forminfo.go for format.
 func makeEntry(f *FormInfo, c *Char) uint16 {
 	e := uint16(0)
 	if r := c.codePoint; HangulBase <= r && r < HangulEnd {
@@ -542,8 +543,8 @@ func makeEntry(f *FormInfo, c *Char) uint16 {
 	return e
 }
 
-
-
+// decompSet keeps track of unique decompositions, grouped by whether
+// the decomposition is followed by a trailing and/or leading CCC.
 type decompSet [7]map[string]bool
 
 const (
@@ -630,11 +631,11 @@ func printCharInfoTables(w io.Writer) int {
 	}
 
 	decompSet := makeDecompSet()
-	const nLeadStr = "\x00\x01" 
+	const nLeadStr = "\x00\x01" // 0-byte length and tccc with nTrail.
 	decompSet.insert(firstStarterWithNLead, nLeadStr)
 
-	
-	
+	// Store the uniqued decompositions in a byte buffer,
+	// preceded by their byte length.
 	for _, c := range chars {
 		for _, f := range c.forms {
 			if len(f.expandedDecomp) == 0 {
@@ -685,14 +686,14 @@ func printCharInfoTables(w io.Writer) int {
 				_, key := mkstr(c.codePoint, &f)
 				trie.Insert(rune(r), uint64(positionMap[key]))
 				if c.ccc != ccc(d[0]) {
-					
+					// We assume the lead ccc of a decomposition !=0 in this case.
 					if ccc(d[0]) == 0 {
 						log.Fatalf("Expected leading CCC to be non-zero; ccc is %d", c.ccc)
 					}
 				}
 			} else if c.nLeadingNonStarters > 0 && len(f.expandedDecomp) == 0 && c.ccc == 0 && !f.combinesBackward {
-				
-				
+				// Handle cases where it can't be detected that the nLead should be equal
+				// to nTrail.
 				trie.Insert(c.codePoint, uint64(positionMap[nLeadStr]))
 			} else if v := makeEntry(&f, &c)<<8 | uint16(c.ccc); v != 0 {
 				trie.Insert(c.codePoint, uint64(0x8000|v))
@@ -728,26 +729,28 @@ func makeTables() {
 		list = []string{"recomp", "info"}
 	}
 
-	
+	// Compute maximum decomposition size.
 	max := 0
 	for _, c := range chars {
 		if n := len(string(c.forms[FCompatibility].expandedDecomp)); n > max {
 			max = n
 		}
 	}
+	fmt.Fprintln(w, `import "sync"`)
+	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "const (")
-	fmt.Fprintln(w, "\t
+	fmt.Fprintln(w, "\t// Version is the Unicode edition from which the tables are derived.")
 	fmt.Fprintf(w, "\tVersion = %q\n", gen.UnicodeVersion())
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "\t
-	fmt.Fprintln(w, "\t
-	fmt.Fprintln(w, "\t
-	fmt.Fprintln(w, "\t
+	fmt.Fprintln(w, "\t// MaxTransformChunkSize indicates the maximum number of bytes that Transform")
+	fmt.Fprintln(w, "\t// may need to write atomically for any Form. Making a destination buffer at")
+	fmt.Fprintln(w, "\t// least this size ensures that Transform can always make progress and that")
+	fmt.Fprintln(w, "\t// the user does not need to grow the buffer on an ErrShortDst.")
 	fmt.Fprintf(w, "\tMaxTransformChunkSize = %d+maxNonStarters*4\n", len(string(0x034F))+max)
 	fmt.Fprintln(w, ")\n")
 
-	
+	// Print the CCC remap table.
 	size += len(cccMap)
 	fmt.Fprintf(w, "var ccc = [%d]uint8{", len(cccMap))
 	for i := 0; i < len(cccMap); i++ {
@@ -763,15 +766,15 @@ func makeTables() {
 	}
 
 	if contains(list, "recomp") {
-		
-		
-		
-		
-		
-		
-		
+		// Note that we use 32 bit keys, instead of 64 bit.
+		// This clips the bits of three entries, but we know
+		// this won't cause a collision. The compiler will catch
+		// any changes made to UnicodeData.txt that introduces
+		// a collision.
+		// Note that the recomposition map for NFC and NFKC
+		// are identical.
 
-		
+		// Recomposition map
 		nrentries := 0
 		for _, c := range chars {
 			f := c.forms[FCanonical]
@@ -781,20 +784,27 @@ func makeTables() {
 		}
 		sz := nrentries * 8
 		size += sz
-		fmt.Fprintf(w, "
-		fmt.Fprintln(w, "var recompMap = map[uint32]rune{")
+		fmt.Fprintf(w, "// recompMap: %d bytes (entries only)\n", sz)
+		fmt.Fprintln(w, "var recompMap map[uint32]rune")
+		fmt.Fprintln(w, "var recompMapOnce sync.Once\n")
+		fmt.Fprintln(w, `const recompMapPacked = "" +`)
+		var buf [8]byte
 		for i, c := range chars {
 			f := c.forms[FCanonical]
 			d := f.decomp
 			if !f.isOneWay && len(d) > 0 {
 				key := uint32(uint16(d[0]))<<16 + uint32(uint16(d[1]))
-				fmt.Fprintf(w, "0x%.8X: 0x%.4X,\n", key, i)
+				binary.BigEndian.PutUint32(buf[:4], key)
+				binary.BigEndian.PutUint32(buf[4:], uint32(i))
+				fmt.Fprintf(w, "\t\t%q + // 0x%.8X: 0x%.8X\n", string(buf[:]), key, uint32(i))
 			}
 		}
-		fmt.Fprintf(w, "}\n\n")
+		// hack so we don't have to special case the trailing plus sign
+		fmt.Fprintf(w, `	""`)
+		fmt.Fprintln(w)
 	}
 
-	fmt.Fprintf(w, "
+	fmt.Fprintf(w, "// Total size of tables: %dKB (%d bytes)\n", (size+512)/1024, size)
 	gen.WriteVersionedGoFile("tables.go", "norm", w.Bytes())
 }
 
@@ -809,7 +819,7 @@ func printChars() {
 	}
 }
 
-
+// verifyComputed does various consistency tests.
 func verifyComputed() {
 	for i, c := range chars {
 		for _, f := range c.forms {
@@ -830,15 +840,15 @@ func verifyComputed() {
 				continue
 			}
 			if a, b := c.nLeadingNonStarters > 0, (c.ccc > 0 || f.combinesBackward); a != b {
-				
-				
-				
-				
-				
-				
-				
-				
-				
+				// We accept these runes to be treated differently (it only affects
+				// segment breaking in iteration, most likely on improper use), but
+				// reconsider if more characters are added.
+				// U+FF9E HALFWIDTH KATAKANA VOICED SOUND MARK;Lm;0;L;<narrow> 3099;;;;N;;;;;
+				// U+FF9F HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK;Lm;0;L;<narrow> 309A;;;;N;;;;;
+				// U+3133 HANGUL LETTER KIYEOK-SIOS;Lo;0;L;<compat> 11AA;;;;N;HANGUL LETTER GIYEOG SIOS;;;;
+				// U+318E HANGUL LETTER ARAEAE;Lo;0;L;<compat> 11A1;;;;N;HANGUL LETTER ALAE AE;;;;
+				// U+FFA3 HALFWIDTH HANGUL LETTER KIYEOK-SIOS;Lo;0;L;<narrow> 3133;;;;N;HALFWIDTH HANGUL LETTER GIYEOG SIOS;;;;
+				// U+FFDC HALFWIDTH HANGUL LETTER I;Lo;0;L;<narrow> 3163;;;;N;;;;;
 				if i != 0xFF9E && i != 0xFF9F && !(0x3133 <= i && i <= 0x318E) && !(0xFFA3 <= i && i <= 0xFFDC) {
 					log.Fatalf("%U: nLead was %v; want %v", i, a, b)
 				}
@@ -852,12 +862,12 @@ func verifyComputed() {
 	}
 }
 
-
-
-
-
-
-
+// Use values in DerivedNormalizationProps.txt to compare against the
+// values we computed.
+// DerivedNormalizationProps.txt has form:
+// 00C0..00C5    ; NFD_QC; N # ...
+// 0374          ; NFD_QC; N # ...
+// See https://unicode.org/reports/tr44/ for full explanation
 func testDerived() {
 	f := gen.OpenUCDFile("DerivedNormalizationProps.txt")
 	defer f.Close()
@@ -899,7 +909,7 @@ func testDerived() {
 	if err := p.Err(); err != nil {
 		log.Fatal(err)
 	}
-	
+	// Any unspecified value must be QCYes. Verify this.
 	for i, c := range chars {
 		for j, fd := range c.forms {
 			for k, qr := range fd.quickCheck {
@@ -929,7 +939,7 @@ type runeData struct {
 	ccc    uint8
 	nLead  uint8
 	nTrail uint8
-	f      [2]formData 
+	f      [2]formData // 0: canonical; 1: compatibility
 }
 
 func f(qc uint8, cf bool, dec string) [2]formData {

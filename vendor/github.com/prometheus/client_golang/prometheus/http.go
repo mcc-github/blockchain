@@ -1,23 +1,21 @@
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright 2014 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package prometheus
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -29,98 +27,70 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-
-
-
-
+// TODO(beorn7): Remove this whole file. It is a partial mirror of
+// promhttp/http.go (to avoid circular import chains) where everything HTTP
+// related should live. The functions here are just for avoiding
+// breakage. Everything is deprecated.
 
 const (
 	contentTypeHeader     = "Content-Type"
-	contentLengthHeader   = "Content-Length"
 	contentEncodingHeader = "Content-Encoding"
 	acceptEncodingHeader  = "Accept-Encoding"
 )
 
-var bufPool sync.Pool
-
-func getBuf() *bytes.Buffer {
-	buf := bufPool.Get()
-	if buf == nil {
-		return &bytes.Buffer{}
-	}
-	return buf.(*bytes.Buffer)
+var gzipPool = sync.Pool{
+	New: func() interface{} {
+		return gzip.NewWriter(nil)
+	},
 }
 
-func giveBuf(buf *bytes.Buffer) {
-	buf.Reset()
-	bufPool.Put(buf)
-}
-
-
-
-
-
-
-
+// Handler returns an HTTP handler for the DefaultGatherer. It is
+// already instrumented with InstrumentHandler (using "prometheus" as handler
+// name).
+//
+// Deprecated: Please note the issues described in the doc comment of
+// InstrumentHandler. You might want to consider using promhttp.Handler instead.
 func Handler() http.Handler {
 	return InstrumentHandler("prometheus", UninstrumentedHandler())
 }
 
-
-
-
-
+// UninstrumentedHandler returns an HTTP handler for the DefaultGatherer.
+//
+// Deprecated: Use promhttp.HandlerFor(DefaultGatherer, promhttp.HandlerOpts{})
+// instead. See there for further documentation.
 func UninstrumentedHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	return http.HandlerFunc(func(rsp http.ResponseWriter, req *http.Request) {
 		mfs, err := DefaultGatherer.Gather()
 		if err != nil {
-			http.Error(w, "An error has occurred during metrics collection:\n\n"+err.Error(), http.StatusInternalServerError)
+			httpError(rsp, err)
 			return
 		}
 
 		contentType := expfmt.Negotiate(req.Header)
-		buf := getBuf()
-		defer giveBuf(buf)
-		writer, encoding := decorateWriter(req, buf)
-		enc := expfmt.NewEncoder(writer, contentType)
-		var lastErr error
+		header := rsp.Header()
+		header.Set(contentTypeHeader, string(contentType))
+
+		w := io.Writer(rsp)
+		if gzipAccepted(req.Header) {
+			header.Set(contentEncodingHeader, "gzip")
+			gz := gzipPool.Get().(*gzip.Writer)
+			defer gzipPool.Put(gz)
+
+			gz.Reset(w)
+			defer gz.Close()
+
+			w = gz
+		}
+
+		enc := expfmt.NewEncoder(w, contentType)
+
 		for _, mf := range mfs {
 			if err := enc.Encode(mf); err != nil {
-				lastErr = err
-				http.Error(w, "An error has occurred during metrics encoding:\n\n"+err.Error(), http.StatusInternalServerError)
+				httpError(rsp, err)
 				return
 			}
 		}
-		if closer, ok := writer.(io.Closer); ok {
-			closer.Close()
-		}
-		if lastErr != nil && buf.Len() == 0 {
-			http.Error(w, "No metrics encoded, last error:\n\n"+lastErr.Error(), http.StatusInternalServerError)
-			return
-		}
-		header := w.Header()
-		header.Set(contentTypeHeader, string(contentType))
-		header.Set(contentLengthHeader, fmt.Sprint(buf.Len()))
-		if encoding != "" {
-			header.Set(contentEncodingHeader, encoding)
-		}
-		w.Write(buf.Bytes())
 	})
-}
-
-
-
-
-func decorateWriter(request *http.Request, writer io.Writer) (io.Writer, string) {
-	header := request.Header.Get(acceptEncodingHeader)
-	parts := strings.Split(header, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "gzip" || strings.HasPrefix(part, "gzip;") {
-			return gzip.NewWriter(writer), "gzip"
-		}
-	}
-	return writer, ""
 }
 
 var instLabels = []string{"method", "code"}
@@ -139,35 +109,35 @@ var now nower = nowFunc(func() time.Time {
 	return time.Now()
 })
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// InstrumentHandler wraps the given HTTP handler for instrumentation. It
+// registers four metric collectors (if not already done) and reports HTTP
+// metrics to the (newly or already) registered collectors: http_requests_total
+// (CounterVec), http_request_duration_microseconds (Summary),
+// http_request_size_bytes (Summary), http_response_size_bytes (Summary). Each
+// has a constant label named "handler" with the provided handlerName as
+// value. http_requests_total is a metric vector partitioned by HTTP method
+// (label name "method") and HTTP status code (label name "code").
+//
+// Deprecated: InstrumentHandler has several issues. Use the tooling provided in
+// package promhttp instead. The issues are the following: (1) It uses Summaries
+// rather than Histograms. Summaries are not useful if aggregation across
+// multiple instances is required. (2) It uses microseconds as unit, which is
+// deprecated and should be replaced by seconds. (3) The size of the request is
+// calculated in a separate goroutine. Since this calculator requires access to
+// the request header, it creates a race with any writes to the header performed
+// during request handling.  httputil.ReverseProxy is a prominent example for a
+// handler performing such writes. (4) It has additional issues with HTTP/2, cf.
+// https://github.com/prometheus/client_golang/issues/272.
 func InstrumentHandler(handlerName string, handler http.Handler) http.HandlerFunc {
 	return InstrumentHandlerFunc(handlerName, handler.ServeHTTP)
 }
 
-
-
-
-
-
-
+// InstrumentHandlerFunc wraps the given function for instrumentation. It
+// otherwise works in the same way as InstrumentHandler (and shares the same
+// issues).
+//
+// Deprecated: InstrumentHandlerFunc is deprecated for the same reasons as
+// InstrumentHandler is. Use the tooling provided in package promhttp instead.
 func InstrumentHandlerFunc(handlerName string, handlerFunc func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	return InstrumentHandlerFuncWithOpts(
 		SummaryOpts{
@@ -179,45 +149,45 @@ func InstrumentHandlerFunc(handlerName string, handlerFunc func(http.ResponseWri
 	)
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// InstrumentHandlerWithOpts works like InstrumentHandler (and shares the same
+// issues) but provides more flexibility (at the cost of a more complex call
+// syntax). As InstrumentHandler, this function registers four metric
+// collectors, but it uses the provided SummaryOpts to create them. However, the
+// fields "Name" and "Help" in the SummaryOpts are ignored. "Name" is replaced
+// by "requests_total", "request_duration_microseconds", "request_size_bytes",
+// and "response_size_bytes", respectively. "Help" is replaced by an appropriate
+// help string. The names of the variable labels of the http_requests_total
+// CounterVec are "method" (get, post, etc.), and "code" (HTTP status code).
+//
+// If InstrumentHandlerWithOpts is called as follows, it mimics exactly the
+// behavior of InstrumentHandler:
+//
+//     prometheus.InstrumentHandlerWithOpts(
+//         prometheus.SummaryOpts{
+//              Subsystem:   "http",
+//              ConstLabels: prometheus.Labels{"handler": handlerName},
+//         },
+//         handler,
+//     )
+//
+// Technical detail: "requests_total" is a CounterVec, not a SummaryVec, so it
+// cannot use SummaryOpts. Instead, a CounterOpts struct is created internally,
+// and all its fields are set to the equally named fields in the provided
+// SummaryOpts.
+//
+// Deprecated: InstrumentHandlerWithOpts is deprecated for the same reasons as
+// InstrumentHandler is. Use the tooling provided in package promhttp instead.
 func InstrumentHandlerWithOpts(opts SummaryOpts, handler http.Handler) http.HandlerFunc {
 	return InstrumentHandlerFuncWithOpts(opts, handler.ServeHTTP)
 }
 
-
-
-
-
-
-
-
+// InstrumentHandlerFuncWithOpts works like InstrumentHandlerFunc (and shares
+// the same issues) but provides more flexibility (at the cost of a more complex
+// call syntax). See InstrumentHandlerWithOpts for details how the provided
+// SummaryOpts are used.
+//
+// Deprecated: InstrumentHandlerFuncWithOpts is deprecated for the same reasons
+// as InstrumentHandler is. Use the tooling provided in package promhttp instead.
 func InstrumentHandlerFuncWithOpts(opts SummaryOpts, handlerFunc func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	reqCnt := NewCounterVec(
 		CounterOpts{
@@ -300,8 +270,8 @@ func InstrumentHandlerFuncWithOpts(opts SummaryOpts, handlerFunc func(http.Respo
 }
 
 func computeApproximateRequestSize(r *http.Request) <-chan int {
-	
-	
+	// Get URL length in current goroutine for avoiding a race condition.
+	// HandlerFunc that runs in parallel may modify the URL.
 	s := 0
 	if r.URL != nil {
 		s += len(r.URL.String())
@@ -320,7 +290,7 @@ func computeApproximateRequestSize(r *http.Request) <-chan int {
 		}
 		s += len(r.Host)
 
-		
+		// N.B. r.Form and r.MultipartForm are assumed to be included in r.URL.
 
 		if r.ContentLength != -1 {
 			s += int(r.ContentLength)
@@ -360,6 +330,8 @@ type fancyResponseWriterDelegator struct {
 }
 
 func (f *fancyResponseWriterDelegator) CloseNotify() <-chan bool {
+	//lint:ignore SA1019 http.CloseNotifier is deprecated but we don't want to
+	//remove support from client_golang yet.
 	return f.ResponseWriter.(http.CloseNotifier).CloseNotify()
 }
 
@@ -502,4 +474,32 @@ func sanitizeCode(s int) string {
 	default:
 		return strconv.Itoa(s)
 	}
+}
+
+// gzipAccepted returns whether the client will accept gzip-encoded content.
+func gzipAccepted(header http.Header) bool {
+	a := header.Get(acceptEncodingHeader)
+	parts := strings.Split(a, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "gzip" || strings.HasPrefix(part, "gzip;") {
+			return true
+		}
+	}
+	return false
+}
+
+// httpError removes any content-encoding header and then calls http.Error with
+// the provided error and http.StatusInternalServerErrer. Error contents is
+// supposed to be uncompressed plain text. However, same as with a plain
+// http.Error, any header settings will be void if the header has already been
+// sent. The error message will still be written to the writer, but it will
+// probably be of limited use.
+func httpError(rsp http.ResponseWriter, err error) {
+	rsp.Header().Del(contentEncodingHeader)
+	http.Error(
+		rsp,
+		"An error has occurred while serving metrics:\n\n"+err.Error(),
+		http.StatusInternalServerError,
+	)
 }

@@ -108,7 +108,7 @@ func (n *Notifier) RunCommand(suite testsuite.TestSuite, suitePassed bool) {
 	command := n.commandFlags.AfterSuiteHook
 	if command != "" {
 
-		
+		// Allow for string replacement to pass input to the command
 		passed := "[FAIL]"
 		if suitePassed {
 			passed = "[PASS]"
@@ -116,7 +116,7 @@ func (n *Notifier) RunCommand(suite testsuite.TestSuite, suitePassed bool) {
 		command = strings.Replace(command, "(ginkgo-suite-passed)", passed, -1)
 		command = strings.Replace(command, "(ginkgo-suite-name)", suite.PackageName, -1)
 
-		
+		// Must break command into parts
 		splitArgs := regexp.MustCompile(`'.+'|".+"|\S+`)
 		parts := splitArgs.FindAllString(command, -1)
 

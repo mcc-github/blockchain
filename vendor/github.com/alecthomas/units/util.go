@@ -29,10 +29,10 @@ func ToString(n int64, scale int64, suffix, baseSuffix string) string {
 	return strings.Join(out, "")
 }
 
+// Below code ripped straight from http://golang.org/src/pkg/time/format.go?s=33392:33438#L1123
+var errLeadingInt = errors.New("units: bad [0-9]*") // never printed
 
-var errLeadingInt = errors.New("units: bad [0-9]*") 
-
-
+// leadingInt consumes the leading [0-9]* from s.
 func leadingInt(s string) (x int64, rem string, err error) {
 	i := 0
 	for ; i < len(s); i++ {
@@ -41,7 +41,7 @@ func leadingInt(s string) (x int64, rem string, err error) {
 			break
 		}
 		if x >= (1<<63-10)/10 {
-			
+			// overflow
 			return 0, "", errLeadingInt
 		}
 		x = x*10 + int64(c) - '0'
@@ -50,12 +50,12 @@ func leadingInt(s string) (x int64, rem string, err error) {
 }
 
 func ParseUnit(s string, unitMap map[string]float64) (int64, error) {
-	
+	// [-+]?([0-9]*(\.[0-9]*)?[a-z]+)+
 	orig := s
 	f := float64(0)
 	neg := false
 
-	
+	// Consume [-+]?
 	if s != "" {
 		c := s[0]
 		if c == '-' || c == '+' {
@@ -63,7 +63,7 @@ func ParseUnit(s string, unitMap map[string]float64) (int64, error) {
 			s = s[1:]
 		}
 	}
-	
+	// Special case: if all that is left is "0", this is zero.
 	if s == "0" {
 		return 0, nil
 	}
@@ -71,25 +71,25 @@ func ParseUnit(s string, unitMap map[string]float64) (int64, error) {
 		return 0, errors.New("units: invalid " + orig)
 	}
 	for s != "" {
-		g := float64(0) 
+		g := float64(0) // this element of the sequence
 
 		var x int64
 		var err error
 
-		
+		// The next character must be [0-9.]
 		if !(s[0] == '.' || ('0' <= s[0] && s[0] <= '9')) {
 			return 0, errors.New("units: invalid " + orig)
 		}
-		
+		// Consume [0-9]*
 		pl := len(s)
 		x, s, err = leadingInt(s)
 		if err != nil {
 			return 0, errors.New("units: invalid " + orig)
 		}
 		g = float64(x)
-		pre := pl != len(s) 
+		pre := pl != len(s) // whether we consumed anything before a period
 
-		
+		// Consume (\.[0-9]*)?
 		post := false
 		if s != "" && s[0] == '.' {
 			s = s[1:]
@@ -106,11 +106,11 @@ func ParseUnit(s string, unitMap map[string]float64) (int64, error) {
 			post = pl != len(s)
 		}
 		if !pre && !post {
-			
+			// no digits (e.g. ".s" or "-.s")
 			return 0, errors.New("units: invalid " + orig)
 		}
 
-		
+		// Consume unit.
 		i := 0
 		for ; i < len(s); i++ {
 			c := s[i]

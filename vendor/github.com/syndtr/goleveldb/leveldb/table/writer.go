@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package table
 
@@ -58,9 +58,9 @@ func (w *blockWriter) append(key, value []byte) {
 }
 
 func (w *blockWriter) finish() {
-	
+	// Write restarts entry.
 	if w.nEntries == 0 {
-		
+		// Must have at least one restart entry.
 		w.restarts = append(w.restarts, 0)
 	}
 	w.restarts = append(w.restarts, uint32(len(w.restarts)))
@@ -112,7 +112,7 @@ func (w *filterWriter) finish() {
 	if w.generator == nil {
 		return
 	}
-	
+	// Generate last keys.
 
 	if w.nKeys > 0 {
 		w.generate()
@@ -126,20 +126,20 @@ func (w *filterWriter) finish() {
 }
 
 func (w *filterWriter) generate() {
-	
+	// Record offset.
 	w.offsets = append(w.offsets, uint32(w.buf.Len()))
-	
+	// Generate filters.
 	if w.nKeys > 0 {
 		w.generator.Generate(&w.buf)
 		w.nKeys = 0
 	}
 }
 
-
+// Writer is a table writer.
 type Writer struct {
 	writer io.Writer
 	err    error
-	
+	// Options
 	cmp         comparer.Comparer
 	filter      filter.Filter
 	compression opt.Compression
@@ -151,19 +151,19 @@ type Writer struct {
 	pendingBH   blockHandle
 	offset      uint64
 	nEntries    int
-	
-	
-	
+	// Scratch allocated enough for 5 uvarint. Block writer should not use
+	// first 20-bytes since it will be used to encode block handle, which
+	// then passed to the block writer itself.
 	scratch            [50]byte
 	comparerScratch    []byte
 	compressionScratch []byte
 }
 
 func (w *Writer) writeBlock(buf *util.Buffer, compression opt.Compression) (bh blockHandle, err error) {
-	
+	// Compress the buffer if necessary.
 	var b []byte
 	if compression == opt.SnappyCompression {
-		
+		// Allocate scratch enough for compression and block trailer.
 		if n := snappy.MaxEncodedLen(buf.Len()) + blockTrailerLen; len(w.compressionScratch) < n {
 			w.compressionScratch = make([]byte, n)
 		}
@@ -177,12 +177,12 @@ func (w *Writer) writeBlock(buf *util.Buffer, compression opt.Compression) (bh b
 		b = buf.Bytes()
 	}
 
-	
+	// Calculate the checksum.
 	n := len(b) - 4
 	checksum := util.NewCRC(b[:n]).Value()
 	binary.LittleEndian.PutUint32(b[n:], checksum)
 
-	
+	// Write the buffer to the file.
 	_, err = w.writer.Write(b)
 	if err != nil {
 		return
@@ -208,11 +208,11 @@ func (w *Writer) flushPendingBH(key []byte) {
 		w.comparerScratch = separator
 	}
 	n := encodeBlockHandle(w.scratch[:20], w.pendingBH)
-	
+	// Append the block handle to the index block.
 	w.indexBlock.append(separator, w.scratch[:n])
-	
+	// Reset prev key of the data block.
 	w.dataBlock.prevKey = w.dataBlock.prevKey[:0]
-	
+	// Clear pending block handle.
 	w.pendingBH = blockHandle{}
 }
 
@@ -223,17 +223,17 @@ func (w *Writer) finishBlock() error {
 		return err
 	}
 	w.pendingBH = bh
-	
+	// Reset the data block.
 	w.dataBlock.reset()
-	
+	// Flush the filter block.
 	w.filterBlock.flush(w.offset)
 	return nil
 }
 
-
-
-
-
+// Append appends key/value pair to the table. The keys passed must
+// be in increasing order.
+//
+// It is safe to modify the contents of the arguments after Append returns.
 func (w *Writer) Append(key, value []byte) error {
 	if w.err != nil {
 		return w.err
@@ -244,12 +244,12 @@ func (w *Writer) Append(key, value []byte) error {
 	}
 
 	w.flushPendingBH(key)
-	
+	// Append key/value pair to the data block.
 	w.dataBlock.append(key, value)
-	
+	// Add key to the filter block.
 	w.filterBlock.add(key)
 
-	
+	// Finish the data block if block size target reached.
 	if w.dataBlock.bytesLen() >= w.blockSize {
 		if err := w.finishBlock(); err != nil {
 			w.err = err
@@ -260,36 +260,36 @@ func (w *Writer) Append(key, value []byte) error {
 	return nil
 }
 
-
+// BlocksLen returns number of blocks written so far.
 func (w *Writer) BlocksLen() int {
 	n := w.indexBlock.nEntries
 	if w.pendingBH.length > 0 {
-		
+		// Includes the pending block.
 		n++
 	}
 	return n
 }
 
-
+// EntriesLen returns number of entries added so far.
 func (w *Writer) EntriesLen() int {
 	return w.nEntries
 }
 
-
+// BytesLen returns number of bytes written so far.
 func (w *Writer) BytesLen() int {
 	return int(w.offset)
 }
 
-
-
-
+// Close will finalize the table. Calling Append is not possible
+// after Close, but calling BlocksLen, EntriesLen and BytesLen
+// is still possible.
 func (w *Writer) Close() error {
 	if w.err != nil {
 		return w.err
 	}
 
-	
-	
+	// Write the last data block. Or empty data block if there
+	// aren't any data blocks at all.
 	if w.dataBlock.nEntries > 0 || w.nEntries == 0 {
 		if err := w.finishBlock(); err != nil {
 			w.err = err
@@ -298,7 +298,7 @@ func (w *Writer) Close() error {
 	}
 	w.flushPendingBH(nil)
 
-	
+	// Write the filter block.
 	var filterBH blockHandle
 	w.filterBlock.finish()
 	if buf := &w.filterBlock.buf; buf.Len() > 0 {
@@ -308,7 +308,7 @@ func (w *Writer) Close() error {
 		}
 	}
 
-	
+	// Write the metaindex block.
 	if filterBH.length > 0 {
 		key := []byte("filter." + w.filter.Name())
 		n := encodeBlockHandle(w.scratch[:20], filterBH)
@@ -321,7 +321,7 @@ func (w *Writer) Close() error {
 		return w.err
 	}
 
-	
+	// Write the index block.
 	w.indexBlock.finish()
 	indexBH, err := w.writeBlock(&w.indexBlock.buf, w.compression)
 	if err != nil {
@@ -329,7 +329,7 @@ func (w *Writer) Close() error {
 		return w.err
 	}
 
-	
+	// Write the table footer.
 	footer := w.scratch[:footerLen]
 	for i := range footer {
 		footer[i] = 0
@@ -347,9 +347,9 @@ func (w *Writer) Close() error {
 	return nil
 }
 
-
-
-
+// NewWriter creates a new initialized table writer for the file.
+//
+// Table writer is not safe for concurrent use.
 func NewWriter(f io.Writer, o *opt.Options) *Writer {
 	w := &Writer{
 		writer:          f,
@@ -359,14 +359,14 @@ func NewWriter(f io.Writer, o *opt.Options) *Writer {
 		blockSize:       o.GetBlockSize(),
 		comparerScratch: make([]byte, 0),
 	}
-	
+	// data block
 	w.dataBlock.restartInterval = o.GetBlockRestartInterval()
-	
+	// The first 20-bytes are used for encoding block handle.
 	w.dataBlock.scratch = w.scratch[20:]
-	
+	// index block
 	w.indexBlock.restartInterval = 1
 	w.indexBlock.scratch = w.scratch[20:]
-	
+	// filter block
 	if w.filter != nil {
 		w.filterBlock.generator = w.filter.NewGenerator()
 		w.filterBlock.flush(0)

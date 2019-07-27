@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-
-
-
-
-
-
+// request message format is:
+// [topic] timeout(int32)
+// where topic is:
+//  name(string) [partition]
+// where partition is:
+//  id(int32) offset(int64)
 
 type DeleteRecordsRequest struct {
 	Topics  map[string]*DeleteRecordsRequestTopic
@@ -82,7 +82,7 @@ func (d *DeleteRecordsRequest) requiredVersion() KafkaVersion {
 }
 
 type DeleteRecordsRequestTopic struct {
-	PartitionOffsets map[int32]int64 
+	PartitionOffsets map[int32]int64 // partition => offset
 }
 
 func (t *DeleteRecordsRequestTopic) encode(pe packetEncoder) error {

@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2011 The Snappy-Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package snappy
 
@@ -11,24 +11,24 @@ import (
 )
 
 var (
-	
+	// ErrCorrupt reports that the input is invalid.
 	ErrCorrupt = errors.New("snappy: corrupt input")
-	
+	// ErrTooLarge reports that the uncompressed length is too large.
 	ErrTooLarge = errors.New("snappy: decoded block is too large")
-	
+	// ErrUnsupported reports that the input isn't supported.
 	ErrUnsupported = errors.New("snappy: unsupported input")
 
 	errUnsupportedLiteralLength = errors.New("snappy: unsupported literal length")
 )
 
-
+// DecodedLen returns the length of the decoded block.
 func DecodedLen(src []byte) (int, error) {
 	v, _, err := decodedLen(src)
 	return v, err
 }
 
-
-
+// decodedLen returns the length of the decoded block and the number of bytes
+// that the length header occupied.
 func decodedLen(src []byte) (blockLen, headerLen int, err error) {
 	v, n := binary.Uvarint(src)
 	if n <= 0 || v > 0xffffffff {
@@ -47,11 +47,11 @@ const (
 	decodeErrCodeUnsupportedLiteralLength = 2
 )
 
-
-
-
-
-
+// Decode returns the decoded form of src. The returned slice may be a sub-
+// slice of dst if dst was large enough to hold the entire decoded block.
+// Otherwise, a newly allocated slice will be returned.
+//
+// The dst and src must not overlap. It is valid to pass a nil dst.
 func Decode(dst, src []byte) ([]byte, error) {
 	dLen, s, err := decodedLen(src)
 	if err != nil {
@@ -71,9 +71,9 @@ func Decode(dst, src []byte) ([]byte, error) {
 	return nil, ErrCorrupt
 }
 
-
-
-
+// NewReader returns a new Reader that decompresses from r, using the framing
+// format described at
+// https://github.com/google/snappy/blob/master/framing_format.txt
 func NewReader(r io.Reader) *Reader {
 	return &Reader{
 		r:       r,
@@ -82,20 +82,20 @@ func NewReader(r io.Reader) *Reader {
 	}
 }
 
-
+// Reader is an io.Reader that can read Snappy-compressed bytes.
 type Reader struct {
 	r       io.Reader
 	err     error
 	decoded []byte
 	buf     []byte
-	
+	// decoded[i:j] contains decoded bytes that have not yet been passed on.
 	i, j       int
 	readHeader bool
 }
 
-
-
-
+// Reset discards any buffered data, resets all state, and switches the Snappy
+// reader to read from r. This permits reusing a Reader rather than allocating
+// a new one.
 func (r *Reader) Reset(reader io.Reader) {
 	r.r = reader
 	r.err = nil
@@ -114,7 +114,7 @@ func (r *Reader) readFull(p []byte, allowEOF bool) (ok bool) {
 	return true
 }
 
-
+// Read satisfies the io.Reader interface.
 func (r *Reader) Read(p []byte) (int, error) {
 	if r.err != nil {
 		return 0, r.err
@@ -142,11 +142,11 @@ func (r *Reader) Read(p []byte) (int, error) {
 			return 0, r.err
 		}
 
-		
-		
+		// The chunk types are specified at
+		// https://github.com/google/snappy/blob/master/framing_format.txt
 		switch chunkType {
 		case chunkTypeCompressedData:
-			
+			// Section 4.2. Compressed data (chunk type 0x00).
 			if chunkLen < checksumSize {
 				r.err = ErrCorrupt
 				return 0, r.err
@@ -179,7 +179,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 			continue
 
 		case chunkTypeUncompressedData:
-			
+			// Section 4.3. Uncompressed data (chunk type 0x01).
 			if chunkLen < checksumSize {
 				r.err = ErrCorrupt
 				return 0, r.err
@@ -189,7 +189,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 				return 0, r.err
 			}
 			checksum := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
-			
+			// Read directly into r.decoded instead of via r.buf.
 			n := chunkLen - checksumSize
 			if n > len(r.decoded) {
 				r.err = ErrCorrupt
@@ -206,7 +206,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 			continue
 
 		case chunkTypeStreamIdentifier:
-			
+			// Section 4.1. Stream identifier (chunk type 0xff).
 			if chunkLen != len(magicBody) {
 				r.err = ErrCorrupt
 				return 0, r.err
@@ -224,12 +224,12 @@ func (r *Reader) Read(p []byte) (int, error) {
 		}
 
 		if chunkType <= 0x7f {
-			
+			// Section 4.5. Reserved unskippable chunks (chunk types 0x02-0x7f).
 			r.err = ErrUnsupported
 			return 0, r.err
 		}
-		
-		
+		// Section 4.4 Padding (chunk type 0xfe).
+		// Section 4.6. Reserved skippable chunks (chunk types 0x80-0xfd).
 		if !r.readFull(r.buf[:chunkLen], false) {
 			return 0, r.err
 		}

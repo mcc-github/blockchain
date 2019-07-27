@@ -126,7 +126,7 @@ func (clock *FakeClock) addTimeWatcher(tw timeWatcher) {
 	clock.watchers[tw] = struct{}{}
 	clock.cond.L.Unlock()
 
-	
+	// force the timer to fire
 	clock.Increment(0)
 
 	clock.cond.Broadcast()

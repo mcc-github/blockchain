@@ -1,11 +1,11 @@
-
-
-
+// Copyright 2017 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package http2
 
-
-
+// A list of the possible cipher suite ids. Taken from
+// https://www.iana.org/assignments/tls-parameters/tls-parameters.txt
 
 const (
 	cipher_TLS_NULL_WITH_NULL_NULL               uint16 = 0x0000
@@ -36,7 +36,7 @@ const (
 	cipher_TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA uint16 = 0x0019
 	cipher_TLS_DH_anon_WITH_DES_CBC_SHA          uint16 = 0x001A
 	cipher_TLS_DH_anon_WITH_3DES_EDE_CBC_SHA     uint16 = 0x001B
-	
+	// Reserved uint16 =  0x001C-1D
 	cipher_TLS_KRB5_WITH_DES_CBC_SHA             uint16 = 0x001E
 	cipher_TLS_KRB5_WITH_3DES_EDE_CBC_SHA        uint16 = 0x001F
 	cipher_TLS_KRB5_WITH_RC4_128_SHA             uint16 = 0x0020
@@ -78,11 +78,11 @@ const (
 	cipher_TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA uint16 = 0x0044
 	cipher_TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA uint16 = 0x0045
 	cipher_TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA uint16 = 0x0046
-	
-	
-	
-	
-	
+	// Reserved uint16 =  0x0047-4F
+	// Reserved uint16 =  0x0050-58
+	// Reserved uint16 =  0x0059-5C
+	// Unassigned uint16 =  0x005D-5F
+	// Reserved uint16 =  0x0060-66
 	cipher_TLS_DHE_RSA_WITH_AES_128_CBC_SHA256 uint16 = 0x0067
 	cipher_TLS_DH_DSS_WITH_AES_256_CBC_SHA256  uint16 = 0x0068
 	cipher_TLS_DH_RSA_WITH_AES_256_CBC_SHA256  uint16 = 0x0069
@@ -90,7 +90,7 @@ const (
 	cipher_TLS_DHE_RSA_WITH_AES_256_CBC_SHA256 uint16 = 0x006B
 	cipher_TLS_DH_anon_WITH_AES_128_CBC_SHA256 uint16 = 0x006C
 	cipher_TLS_DH_anon_WITH_AES_256_CBC_SHA256 uint16 = 0x006D
-	
+	// Unassigned uint16 =  0x006E-83
 	cipher_TLS_RSA_WITH_CAMELLIA_256_CBC_SHA        uint16 = 0x0084
 	cipher_TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA     uint16 = 0x0085
 	cipher_TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA     uint16 = 0x0086
@@ -157,11 +157,11 @@ const (
 	cipher_TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256 uint16 = 0x00C3
 	cipher_TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256 uint16 = 0x00C4
 	cipher_TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256 uint16 = 0x00C5
-	
+	// Unassigned uint16 =  0x00C6-FE
 	cipher_TLS_EMPTY_RENEGOTIATION_INFO_SCSV uint16 = 0x00FF
-	
+	// Unassigned uint16 =  0x01-55,*
 	cipher_TLS_FALLBACK_SCSV uint16 = 0x5600
-	
+	// Unassigned                                   uint16 = 0x5601 - 0xC000
 	cipher_TLS_ECDH_ECDSA_WITH_NULL_SHA                 uint16 = 0xC001
 	cipher_TLS_ECDH_ECDSA_WITH_RC4_128_SHA              uint16 = 0xC002
 	cipher_TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA         uint16 = 0xC003
@@ -337,9 +337,9 @@ const (
 	cipher_TLS_ECDHE_ECDSA_WITH_AES_256_CCM             uint16 = 0xC0AD
 	cipher_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8           uint16 = 0xC0AE
 	cipher_TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8           uint16 = 0xC0AF
-	
-	
-	
+	// Unassigned uint16 =  0xC0B0-FF
+	// Unassigned uint16 =  0xC1-CB,*
+	// Unassigned uint16 =  0xCC00-A7
 	cipher_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256   uint16 = 0xCCA8
 	cipher_TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 uint16 = 0xCCA9
 	cipher_TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256     uint16 = 0xCCAA
@@ -349,13 +349,13 @@ const (
 	cipher_TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256     uint16 = 0xCCAE
 )
 
-
-
-
-
-
-
-
+// isBadCipher reports whether the cipher is blacklisted by the HTTP/2 spec.
+// References:
+// https://tools.ietf.org/html/rfc7540#appendix-A
+// Reject cipher suites from Appendix A.
+// "This list includes those cipher suites that do not
+// offer an ephemeral key exchange and those that are
+// based on the TLS null, stream or block cipher type"
 func isBadCipher(cipher uint16) bool {
 	switch cipher {
 	case cipher_TLS_NULL_WITH_NULL_NULL,

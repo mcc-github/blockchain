@@ -21,7 +21,7 @@ var (
 	errEaValueTooLarge = errors.New("extended attribute value too large")
 )
 
-
+// ExtendedAttribute represents a single Windows EA.
 type ExtendedAttribute struct {
 	Name  string
 	Value []byte
@@ -55,8 +55,8 @@ func parseEa(b []byte) (ea ExtendedAttribute, nb []byte, err error) {
 	return
 }
 
-
-
+// DecodeExtendedAttributes decodes a list of EAs from a FILE_FULL_EA_INFORMATION
+// buffer retrieved from BackupRead, ZwQueryEaFile, etc.
 func DecodeExtendedAttributes(b []byte) (eas []ExtendedAttribute, err error) {
 	for len(b) != 0 {
 		ea, nb, err := parseEa(b)
@@ -118,8 +118,8 @@ func writeEa(buf *bytes.Buffer, ea *ExtendedAttribute, last bool) error {
 	return nil
 }
 
-
-
+// EncodeExtendedAttributes encodes a list of EAs into a FILE_FULL_EA_INFORMATION
+// buffer for use with BackupWrite, ZwSetEaFile, etc.
 func EncodeExtendedAttributes(eas []ExtendedAttribute) ([]byte, error) {
 	var buf bytes.Buffer
 	for i := range eas {

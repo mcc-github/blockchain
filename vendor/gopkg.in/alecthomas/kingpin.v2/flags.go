@@ -18,15 +18,15 @@ func newFlagGroup() *flagGroup {
 	}
 }
 
-
-
-
-
+// GetFlag gets a flag definition.
+//
+// This allows existing flags to be modified after definition but before parsing. Useful for
+// modular applications.
 func (f *flagGroup) GetFlag(name string) *FlagClause {
 	return f.long[name]
 }
 
-
+// Flag defines a new flag with the given long name and help.
 func (f *flagGroup) Flag(name, help string) *FlagClause {
 	flag := newFlag(name, help)
 	f.long[name] = flag
@@ -140,7 +140,7 @@ loop:
 	return nil, nil
 }
 
-
+// FlagClause is a fluid interface used to build flags.
 type FlagClause struct {
 	parserMixin
 	actionMixin
@@ -165,7 +165,7 @@ func newFlag(name, help string) *FlagClause {
 func (f *FlagClause) setDefault() error {
 	if f.HasEnvarValue() {
 		if v, ok := f.value.(repeatableFlag); !ok || !v.IsCumulative() {
-			
+			// Use the value as-is
 			return f.value.Set(f.GetEnvarValue())
 		} else {
 			for _, value := range f.GetSplitEnvarValue() {
@@ -207,7 +207,7 @@ func (f *FlagClause) init() error {
 	return nil
 }
 
-
+// Dispatch to the given function after the flag is parsed and validated.
 func (f *FlagClause) Action(action Action) *FlagClause {
 	f.addAction(action)
 	return f
@@ -218,13 +218,13 @@ func (f *FlagClause) PreAction(action Action) *FlagClause {
 	return f
 }
 
-
+// HintAction registers a HintAction (function) for the flag to provide completions
 func (a *FlagClause) HintAction(action HintAction) *FlagClause {
 	a.addHintAction(action)
 	return a
 }
 
-
+// HintOptions registers any number of options for the flag to provide completions
 func (a *FlagClause) HintOptions(options ...string) *FlagClause {
 	a.addHintAction(func() []string {
 		return options
@@ -246,61 +246,61 @@ func (a *FlagClause) Enum(options ...string) (target *string) {
 	return a.parserMixin.Enum(options...)
 }
 
-
+// Default values for this flag. They *must* be parseable by the value of the flag.
 func (f *FlagClause) Default(values ...string) *FlagClause {
 	f.defaultValues = values
 	return f
 }
 
-
+// DEPRECATED: Use Envar(name) instead.
 func (f *FlagClause) OverrideDefaultFromEnvar(envar string) *FlagClause {
 	return f.Envar(envar)
 }
 
-
-
-
+// Envar overrides the default value(s) for a flag from an environment variable,
+// if it is set. Several default values can be provided by using new lines to
+// separate them.
 func (f *FlagClause) Envar(name string) *FlagClause {
 	f.envar = name
 	f.noEnvar = false
 	return f
 }
 
-
-
+// NoEnvar forces environment variable defaults to be disabled for this flag.
+// Most useful in conjunction with app.DefaultEnvars().
 func (f *FlagClause) NoEnvar() *FlagClause {
 	f.envar = ""
 	f.noEnvar = true
 	return f
 }
 
-
-
-
+// PlaceHolder sets the place-holder string used for flag values in the help. The
+// default behaviour is to use the value provided by Default() if provided,
+// then fall back on the capitalized flag name.
 func (f *FlagClause) PlaceHolder(placeholder string) *FlagClause {
 	f.placeholder = placeholder
 	return f
 }
 
-
+// Hidden hides a flag from usage but still allows it to be used.
 func (f *FlagClause) Hidden() *FlagClause {
 	f.hidden = true
 	return f
 }
 
-
+// Required makes the flag required. You can not provide a Default() value to a Required() flag.
 func (f *FlagClause) Required() *FlagClause {
 	f.required = true
 	return f
 }
 
-
+// Short sets the short flag name.
 func (f *FlagClause) Short(name rune) *FlagClause {
 	f.shorthand = name
 	return f
 }
 
-
+// Bool makes this flag a boolean flag.
 func (f *FlagClause) Bool() (target *bool) {
 	target = new(bool)
 	f.SetValue(newBoolValue(target))

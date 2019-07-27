@@ -1,42 +1,41 @@
+// Go support for Protocol Buffers - Google's data interchange format
+//
+// Copyright 2015 The Go Authors.  All rights reserved.
+// https://github.com/golang/protobuf
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//     * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Package grpc outputs gRPC service descriptions in Go code.
+// It runs as a plugin for the Go protocol buffer compiler plugin.
+// It is linked in to protoc-gen-go.
 package grpc
 
 import (
 	"fmt"
-	"path"
 	"strconv"
 	"strings"
 
@@ -44,16 +43,16 @@ import (
 	"github.com/golang/protobuf/protoc-gen-go/generator"
 )
 
-
-
-
-
+// generatedCodeVersion indicates a version of the generated code.
+// It is incremented whenever an incompatibility between the generated code and
+// the grpc package is introduced; the generated code references
+// a constant, grpc.SupportPackageIsVersionN (where N is generatedCodeVersion).
 const generatedCodeVersion = 4
 
-
-
+// Paths for packages used by code generated in this file,
+// relative to the import_prefix of the generator.Generator.
 const (
-	contextPkgPath = "golang.org/x/net/context"
+	contextPkgPath = "context"
 	grpcPkgPath    = "google.golang.org/grpc"
 )
 
@@ -61,61 +60,62 @@ func init() {
 	generator.RegisterPlugin(new(grpc))
 }
 
-
-
+// grpc is an implementation of the Go protocol buffer compiler's
+// plugin architecture.  It generates bindings for gRPC support.
 type grpc struct {
 	gen *generator.Generator
 }
 
-
+// Name returns the name of this plugin, "grpc".
 func (g *grpc) Name() string {
 	return "grpc"
 }
 
-
-
-
+// The names for packages imported in the generated code.
+// They may vary from the final path component of the import path
+// if the name is used by other packages.
 var (
 	contextPkg string
 	grpcPkg    string
 )
 
-
+// Init initializes the plugin.
 func (g *grpc) Init(gen *generator.Generator) {
 	g.gen = gen
-	contextPkg = generator.RegisterUniquePackageName("context", nil)
-	grpcPkg = generator.RegisterUniquePackageName("grpc", nil)
 }
 
-
-
+// Given a type name defined in a .proto, return its object.
+// Also record that we're using it, to guarantee the associated import.
 func (g *grpc) objectNamed(name string) generator.Object {
 	g.gen.RecordTypeUse(name)
 	return g.gen.ObjectNamed(name)
 }
 
-
+// Given a type name defined in a .proto, return its name as we will print it.
 func (g *grpc) typeName(str string) string {
 	return g.gen.TypeName(g.objectNamed(str))
 }
 
-
+// P forwards to g.gen.P.
 func (g *grpc) P(args ...interface{}) { g.gen.P(args...) }
 
-
+// Generate generates code for the services in the given file.
 func (g *grpc) Generate(file *generator.FileDescriptor) {
 	if len(file.FileDescriptorProto.Service) == 0 {
 		return
 	}
 
-	g.P("
+	contextPkg = string(g.gen.AddImport(contextPkgPath))
+	grpcPkg = string(g.gen.AddImport(grpcPkgPath))
+
+	g.P("// Reference imports to suppress errors if they are not otherwise used.")
 	g.P("var _ ", contextPkg, ".Context")
 	g.P("var _ ", grpcPkg, ".ClientConn")
 	g.P()
 
-	
-	g.P("
-	g.P("
+	// Assert version compatibility.
+	g.P("// This is a compile-time assertion to ensure that this generated file")
+	g.P("// is compatible with the grpc package it is being compiled against.")
 	g.P("const _ = ", grpcPkg, ".SupportPackageIsVersion", generatedCodeVersion)
 	g.P()
 
@@ -124,32 +124,24 @@ func (g *grpc) Generate(file *generator.FileDescriptor) {
 	}
 }
 
-
+// GenerateImports generates the import declaration for this file.
 func (g *grpc) GenerateImports(file *generator.FileDescriptor) {
-	if len(file.FileDescriptorProto.Service) == 0 {
-		return
-	}
-	g.P("import (")
-	g.P(contextPkg, " ", generator.GoImportPath(path.Join(string(g.gen.ImportPrefix), contextPkgPath)))
-	g.P(grpcPkg, " ", generator.GoImportPath(path.Join(string(g.gen.ImportPrefix), grpcPkgPath)))
-	g.P(")")
-	g.P()
 }
 
-
+// reservedClientName records whether a client name is reserved on the client side.
 var reservedClientName = map[string]bool{
-	
+	// TODO: do we need any in gRPC?
 }
 
 func unexport(s string) string { return strings.ToLower(s[:1]) + s[1:] }
 
+// deprecationComment is the standard comment added to deprecated
+// messages, fields, enums, and enum values.
+var deprecationComment = "// Deprecated: Do not use."
 
-
-var deprecationComment = "
-
-
+// generateService generates all the code for the named service.
 func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.ServiceDescriptorProto, index int) {
-	path := fmt.Sprintf("6,%d", index) 
+	path := fmt.Sprintf("6,%d", index) // 6 means service.
 
 	origServName := service.GetName()
 	fullServName := origServName
@@ -160,30 +152,30 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 	deprecated := service.GetOptions().GetDeprecated()
 
 	g.P()
-	g.P(fmt.Sprintf(`
+	g.P(fmt.Sprintf(`// %sClient is the client API for %s service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.`, servName, servName))
 
-
-
-	
+	// Client interface.
 	if deprecated {
-		g.P("
+		g.P("//")
 		g.P(deprecationComment)
 	}
 	g.P("type ", servName, "Client interface {")
 	for i, method := range service.Method {
-		g.gen.PrintComments(fmt.Sprintf("%s,2,%d", path, i)) 
+		g.gen.PrintComments(fmt.Sprintf("%s,2,%d", path, i)) // 2 means method in a service.
 		g.P(g.generateClientSignature(servName, method))
 	}
 	g.P("}")
 	g.P()
 
-	
+	// Client structure.
 	g.P("type ", unexport(servName), "Client struct {")
 	g.P("cc *", grpcPkg, ".ClientConn")
 	g.P("}")
 	g.P()
 
-	
+	// NewClient factory.
 	if deprecated {
 		g.P(deprecationComment)
 	}
@@ -194,37 +186,37 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 
 	var methodIndex, streamIndex int
 	serviceDescVar := "_" + servName + "_serviceDesc"
-	
+	// Client method implementations.
 	for _, method := range service.Method {
 		var descExpr string
 		if !method.GetServerStreaming() && !method.GetClientStreaming() {
-			
+			// Unary RPC method
 			descExpr = fmt.Sprintf("&%s.Methods[%d]", serviceDescVar, methodIndex)
 			methodIndex++
 		} else {
-			
+			// Streaming RPC method
 			descExpr = fmt.Sprintf("&%s.Streams[%d]", serviceDescVar, streamIndex)
 			streamIndex++
 		}
 		g.generateClientMethod(servName, fullServName, serviceDescVar, method, descExpr)
 	}
 
-	
+	// Server interface.
 	serverType := servName + "Server"
-	g.P("
+	g.P("// ", serverType, " is the server API for ", servName, " service.")
 	if deprecated {
-		g.P("
+		g.P("//")
 		g.P(deprecationComment)
 	}
 	g.P("type ", serverType, " interface {")
 	for i, method := range service.Method {
-		g.gen.PrintComments(fmt.Sprintf("%s,2,%d", path, i)) 
+		g.gen.PrintComments(fmt.Sprintf("%s,2,%d", path, i)) // 2 means method in a service.
 		g.P(g.generateServerSignature(servName, method))
 	}
 	g.P("}")
 	g.P()
 
-	
+	// Server registration.
 	if deprecated {
 		g.P(deprecationComment)
 	}
@@ -233,14 +225,14 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 	g.P("}")
 	g.P()
 
-	
+	// Server handler implementations.
 	var handlerNames []string
 	for _, method := range service.Method {
 		hname := g.generateServerMethod(servName, fullServName, method)
 		handlerNames = append(handlerNames, hname)
 	}
 
-	
+	// Service descriptor.
 	g.P("var ", serviceDescVar, " = ", grpcPkg, ".ServiceDesc {")
 	g.P("ServiceName: ", strconv.Quote(fullServName), ",")
 	g.P("HandlerType: (*", serverType, ")(nil),")
@@ -277,7 +269,7 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 	g.P()
 }
 
-
+// generateClientSignature returns the client-side signature for a method.
 func (g *grpc) generateClientSignature(servName string, method *pb.MethodDescriptorProto) string {
 	origMethName := method.GetName()
 	methName := generator.CamelCase(origMethName)
@@ -307,7 +299,7 @@ func (g *grpc) generateClientMethod(servName, fullServName, serviceDescVar strin
 	g.P("func (c *", unexport(servName), "Client) ", g.generateClientSignature(servName, method), "{")
 	if !method.GetServerStreaming() && !method.GetClientStreaming() {
 		g.P("out := new(", outType, ")")
-		
+		// TODO: Pass descExpr to Invoke.
 		g.P(`err := c.cc.Invoke(ctx, "`, sname, `", in, out, opts...)`)
 		g.P("if err != nil { return nil, err }")
 		g.P("return out, nil")
@@ -331,7 +323,7 @@ func (g *grpc) generateClientMethod(servName, fullServName, serviceDescVar strin
 	genRecv := method.GetServerStreaming()
 	genCloseAndRecv := !method.GetServerStreaming()
 
-	
+	// Stream auxiliary types and methods.
 	g.P("type ", servName, "_", methName, "Client interface {")
 	if genSend {
 		g.P("Send(*", inType, ") error")
@@ -376,7 +368,7 @@ func (g *grpc) generateClientMethod(servName, fullServName, serviceDescVar strin
 	}
 }
 
-
+// generateServerSignature returns the server-side signature for a method.
 func (g *grpc) generateServerSignature(servName string, method *pb.MethodDescriptorProto) string {
 	origMethName := method.GetName()
 	methName := generator.CamelCase(origMethName)
@@ -439,7 +431,7 @@ func (g *grpc) generateServerMethod(servName, fullServName string, method *pb.Me
 	genSendAndClose := !method.GetServerStreaming()
 	genRecv := method.GetClientStreaming()
 
-	
+	// Stream auxiliary types and methods.
 	g.P("type ", servName, "_", methName, "Server interface {")
 	if genSend {
 		g.P("Send(*", outType, ") error")

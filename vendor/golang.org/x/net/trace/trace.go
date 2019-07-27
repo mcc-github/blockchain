@@ -1,12 +1,70 @@
+// Copyright 2015 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+/*
+Package trace implements tracing of requests and long-lived objects.
+It exports HTTP interfaces on /debug/requests and /debug/events.
 
+A trace.Trace provides tracing for short-lived objects, usually requests.
+A request handler might be implemented like this:
 
+	func fooHandler(w http.ResponseWriter, req *http.Request) {
+		tr := trace.New("mypkg.Foo", req.URL.Path)
+		defer tr.Finish()
+		...
+		tr.LazyPrintf("some event %q happened", str)
+		...
+		if err := somethingImportant(); err != nil {
+			tr.LazyPrintf("somethingImportant failed: %v", err)
+			tr.SetError()
+		}
+	}
 
+The /debug/requests HTTP endpoint organizes the traces by family,
+errors, and duration.  It also provides histogram of request duration
+for each family.
 
-package trace 
+A trace.EventLog provides tracing for long-lived objects, such as RPC
+connections.
+
+	// A Fetcher fetches URL paths for a single domain.
+	type Fetcher struct {
+		domain string
+		events trace.EventLog
+	}
+
+	func NewFetcher(domain string) *Fetcher {
+		return &Fetcher{
+			domain,
+			trace.NewEventLog("mypkg.Fetcher", domain),
+		}
+	}
+
+	func (f *Fetcher) Fetch(path string) (string, error) {
+		resp, err := http.Get("http://" + f.domain + "/" + path)
+		if err != nil {
+			f.events.Errorf("Get(%q) = %v", path, err)
+			return "", err
+		}
+		f.events.Printf("Get(%q) = %s", path, resp.Status)
+		...
+	}
+
+	func (f *Fetcher) Close() error {
+		f.events.Finish()
+		return nil
+	}
+
+The /debug/events HTTP endpoint organizes the event logs by family and
+by time since the last error.  The expanded view displays recent log
+entries and the log's call stack.
+*/
+package trace // import "golang.org/x/net/trace"
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"html/template"
 	"io"
@@ -24,23 +82,29 @@ import (
 	"golang.org/x/net/internal/timeseries"
 )
 
-
-
+// DebugUseAfterFinish controls whether to debug uses of Trace values after finishing.
+// FOR DEBUGGING ONLY. This will slow down the program.
 var DebugUseAfterFinish = false
 
+// HTTP ServeMux paths.
+const (
+	debugRequestsPath = "/debug/requests"
+	debugEventsPath   = "/debug/events"
+)
 
-
-
-
-
-
-
-
-
-
+// AuthRequest determines whether a specific request is permitted to load the
+// /debug/requests or /debug/events pages.
+//
+// It returns two bools; the first indicates whether the page may be viewed at all,
+// and the second indicates whether sensitive events will be shown.
+//
+// AuthRequest may be replaced by a program to customize its authorization requirements.
+//
+// The default AuthRequest function returns (true, true) if and only if the request
+// comes from localhost/127.0.0.1/[::1].
 var AuthRequest = func(req *http.Request) (any, sensitive bool) {
-	
-	
+	// RemoteAddr is commonly in the form "IP" or "IP:port".
+	// If it is in the form "IP:port", split off the port.
 	host, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
 		host = req.RemoteAddr
@@ -54,24 +118,36 @@ var AuthRequest = func(req *http.Request) (any, sensitive bool) {
 }
 
 func init() {
-	_, pat := http.DefaultServeMux.Handler(&http.Request{URL: &url.URL{Path: "/debug/requests"}})
-	if pat != "" {
+	_, pat := http.DefaultServeMux.Handler(&http.Request{URL: &url.URL{Path: debugRequestsPath}})
+	if pat == debugRequestsPath {
 		panic("/debug/requests is already registered. You may have two independent copies of " +
 			"golang.org/x/net/trace in your binary, trying to maintain separate state. This may " +
 			"involve a vendored copy of golang.org/x/net/trace.")
 	}
 
-	
-	
-	http.HandleFunc("/debug/requests", Traces)
-	http.HandleFunc("/debug/events", Events)
+	// TODO(jbd): Serve Traces from /debug/traces in the future?
+	// There is no requirement for a request to be present to have traces.
+	http.HandleFunc(debugRequestsPath, Traces)
+	http.HandleFunc(debugEventsPath, Events)
 }
 
+// NewContext returns a copy of the parent context
+// and associates it with a Trace.
+func NewContext(ctx context.Context, tr Trace) context.Context {
+	return context.WithValue(ctx, contextKey, tr)
+}
 
+// FromContext returns the Trace bound to the context, if any.
+func FromContext(ctx context.Context) (tr Trace, ok bool) {
+	tr, ok = ctx.Value(contextKey).(Trace)
+	return
+}
 
-
-
-
+// Traces responds with traces from the program.
+// The package initialization registers it in http.DefaultServeMux
+// at /debug/requests.
+//
+// It performs authorization by running AuthRequest.
 func Traces(w http.ResponseWriter, req *http.Request) {
 	any, sensitive := AuthRequest(req)
 	if !any {
@@ -82,11 +158,11 @@ func Traces(w http.ResponseWriter, req *http.Request) {
 	Render(w, req, sensitive)
 }
 
-
-
-
-
-
+// Events responds with a page of events collected by EventLogs.
+// The package initialization registers it in http.DefaultServeMux
+// at /debug/events.
+//
+// It performs authorization by running AuthRequest.
 func Events(w http.ResponseWriter, req *http.Request) {
 	any, sensitive := AuthRequest(req)
 	if !any {
@@ -97,30 +173,30 @@ func Events(w http.ResponseWriter, req *http.Request) {
 	RenderEvents(w, req, sensitive)
 }
 
-
-
-
-
+// Render renders the HTML page typically served at /debug/requests.
+// It does not do any auth checking. The request may be nil.
+//
+// Most users will use the Traces handler.
 func Render(w io.Writer, req *http.Request, sensitive bool) {
 	data := &struct {
 		Families         []string
 		ActiveTraceCount map[string]int
 		CompletedTraces  map[string]*family
 
-		
+		// Set when a bucket has been selected.
 		Traces        traceList
 		Family        string
 		Bucket        int
 		Expanded      bool
 		Traced        bool
 		Active        bool
-		ShowSensitive bool 
+		ShowSensitive bool // whether to show sensitive events
 
 		Histogram       template.HTML
-		HistogramWindow string 
+		HistogramWindow string // e.g. "last minute", "last hour", "all time"
 
-		
-		
+		// If non-zero, the set of traces is a partial set,
+		// and this is the total number.
 		Total int
 	}{
 		CompletedTraces: completedTraces,
@@ -128,8 +204,8 @@ func Render(w io.Writer, req *http.Request, sensitive bool) {
 
 	data.ShowSensitive = sensitive
 	if req != nil {
-		
-		
+		// Allow show_sensitive=0 to force hiding of sensitive data for testing.
+		// This only goes one way; you can't use show_sensitive=1 to see things.
 		if req.FormValue("show_sensitive") == "0" {
 			data.ShowSensitive = false
 		}
@@ -150,8 +226,8 @@ func Render(w io.Writer, req *http.Request, sensitive bool) {
 	completedMu.RUnlock()
 	sort.Strings(data.Families)
 
-	
-	
+	// We are careful here to minimize the time spent locking activeMu,
+	// since that lock is required every time an RPC starts and finishes.
 	data.ActiveTraceCount = make(map[string]int, len(data.Families))
 	activeMu.RLock()
 	for fam, s := range activeTraces {
@@ -163,7 +239,7 @@ func Render(w io.Writer, req *http.Request, sensitive bool) {
 	data.Family, data.Bucket, ok = parseArgs(req)
 	switch {
 	case !ok:
-		
+		// No-op
 	case data.Bucket == -1:
 		data.Active = true
 		n := data.ActiveTraceCount[data.Family]
@@ -237,38 +313,38 @@ type contextKeyT string
 
 var contextKey = contextKeyT("golang.org/x/net/trace.Trace")
 
-
+// Trace represents an active request.
 type Trace interface {
-	
-	
-	
+	// LazyLog adds x to the event log. It will be evaluated each time the
+	// /debug/requests page is rendered. Any memory referenced by x will be
+	// pinned until the trace is finished and later discarded.
 	LazyLog(x fmt.Stringer, sensitive bool)
 
-	
-	
-	
+	// LazyPrintf evaluates its arguments with fmt.Sprintf each time the
+	// /debug/requests page is rendered. Any memory referenced by a will be
+	// pinned until the trace is finished and later discarded.
 	LazyPrintf(format string, a ...interface{})
 
-	
+	// SetError declares that this trace resulted in an error.
 	SetError()
 
-	
-	
-	
-	
+	// SetRecycler sets a recycler for the trace.
+	// f will be called for each event passed to LazyLog at a time when
+	// it is no longer required, whether while the trace is still active
+	// and the event is discarded, or when a completed trace is discarded.
 	SetRecycler(f func(interface{}))
 
-	
-	
+	// SetTraceInfo sets the trace info for the trace.
+	// This is currently unused.
 	SetTraceInfo(traceID, spanID uint64)
 
-	
-	
-	
+	// SetMaxEvents sets the maximum number of events that will be stored
+	// in the trace. This has no effect if any events have already been
+	// added to the trace.
 	SetMaxEvents(m int)
 
-	
-	
+	// Finish declares that this trace is complete.
+	// The trace should not be used after calling this method.
 	Finish()
 }
 
@@ -281,7 +357,7 @@ func (l *lazySprintf) String() string {
 	return fmt.Sprintf(l.format, l.a...)
 }
 
-
+// New returns a new Trace with the specified family and title.
 func New(family, title string) Trace {
 	tr := newTrace()
 	tr.ref()
@@ -295,7 +371,7 @@ func New(family, title string) Trace {
 	activeMu.RUnlock()
 	if s == nil {
 		activeMu.Lock()
-		s = activeTraces[tr.Family] 
+		s = activeTraces[tr.Family] // check again
 		if s == nil {
 			s = new(traceSet)
 			activeTraces[tr.Family] = s
@@ -304,11 +380,11 @@ func New(family, title string) Trace {
 	}
 	s.Add(tr)
 
-	
-	
-	
-	
-	
+	// Trigger allocation of the completed trace structure for this family.
+	// This will cause the family to be present in the request page during
+	// the first trace of this family. We don't care about the return value,
+	// nor is there any need for this to run inline, so we execute it in its
+	// own goroutine, but only if the family isn't allocated yet.
 	completedMu.RLock()
 	if _, ok := completedTraces[tr.Family]; !ok {
 		go allocFamily(tr.Family)
@@ -325,7 +401,7 @@ func (tr *trace) Finish() {
 	tr.mu.Unlock()
 
 	if DebugUseAfterFinish {
-		buf := make([]byte, 4<<10) 
+		buf := make([]byte, 4<<10) // 4 KB should be enough
 		n := runtime.Stack(buf, false)
 		tr.finishStack = buf[:n]
 	}
@@ -336,7 +412,7 @@ func (tr *trace) Finish() {
 	m.Remove(tr)
 
 	f := getFamily(tr.Family, true)
-	tr.mu.RLock() 
+	tr.mu.RLock() // protects tr fields in Cond.match calls
 	for _, b := range f.Buckets {
 		if b.Cond.match(tr) {
 			b.Add(tr)
@@ -344,43 +420,43 @@ func (tr *trace) Finish() {
 	}
 	tr.mu.RUnlock()
 
-	
+	// Add a sample of elapsed time as microseconds to the family's timeseries
 	h := new(histogram)
 	h.addMeasurement(elapsed.Nanoseconds() / 1e3)
 	f.LatencyMu.Lock()
 	f.Latency.Add(h)
 	f.LatencyMu.Unlock()
 
-	tr.unref() 
+	tr.unref() // matches ref in New
 }
 
 const (
 	bucketsPerFamily    = 9
 	tracesPerBucket     = 10
-	maxActiveTraces     = 20 
+	maxActiveTraces     = 20 // Maximum number of active traces to show.
 	maxEventsPerTrace   = 10
 	numHistogramBuckets = 38
 )
 
 var (
-	
+	// The active traces.
 	activeMu     sync.RWMutex
-	activeTraces = make(map[string]*traceSet) 
+	activeTraces = make(map[string]*traceSet) // family -> traces
 
-	
+	// Families of completed traces.
 	completedMu     sync.RWMutex
-	completedTraces = make(map[string]*family) 
+	completedTraces = make(map[string]*family) // family -> traces
 )
 
 type traceSet struct {
 	mu sync.RWMutex
 	m  map[*trace]bool
 
-	
-	
-	
-	
-	
+	// We could avoid the entire map scan in FirstN by having a slice of all the traces
+	// ordered by start time, and an index into that from the trace struct, with a periodic
+	// repack of the slice after enough traces finish; we could also use a skip list or similar.
+	// However, that would shift some of the expense from /debug/requests time to RPC time,
+	// which is probably the wrong trade-off.
 }
 
 func (ts *traceSet) Len() int {
@@ -404,7 +480,7 @@ func (ts *traceSet) Remove(tr *trace) {
 	ts.mu.Unlock()
 }
 
-
+// FirstN returns the first n traces ordered by time.
 func (ts *traceSet) FirstN(n int) traceList {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
@@ -414,7 +490,7 @@ func (ts *traceSet) FirstN(n int) traceList {
 	}
 	trl := make(traceList, 0, n)
 
-	
+	// Fast path for when no selectivity is needed.
 	if n == len(ts.m) {
 		for tr := range ts.m {
 			tr.ref()
@@ -424,16 +500,16 @@ func (ts *traceSet) FirstN(n int) traceList {
 		return trl
 	}
 
-	
-	
+	// Pick the oldest n traces.
+	// This is inefficient. See the comment in the traceSet struct.
 	for tr := range ts.m {
-		
-		
+		// Put the first n traces into trl in the order they occur.
+		// When we have n, sort trl, and thereafter maintain its order.
 		if len(trl) < n {
 			tr.ref()
 			trl = append(trl, tr)
 			if len(trl) == n {
-				
+				// This is guaranteed to happen exactly once during this loop.
 				sort.Sort(trl)
 			}
 			continue
@@ -442,7 +518,7 @@ func (ts *traceSet) FirstN(n int) traceList {
 			continue
 		}
 
-		
+		// Find where to insert this one.
 		tr.ref()
 		i := sort.Search(n, func(i int) bool { return trl[i].Start.After(tr.Start) })
 		trl[n-1].unref()
@@ -484,12 +560,12 @@ func allocFamily(fam string) *family {
 	return f
 }
 
-
+// family represents a set of trace buckets and associated latency information.
 type family struct {
-	
+	// traces may occur in multiple buckets.
 	Buckets [bucketsPerFamily]*traceBucket
 
-	
+	// latency time series
 	LatencyMu sync.RWMutex
 	Latency   *timeseries.MinuteHourSeries
 }
@@ -511,16 +587,16 @@ func newFamily() *family {
 	}
 }
 
-
-
+// traceBucket represents a size-capped bucket of historic traces,
+// along with a condition for a trace to belong to the bucket.
 type traceBucket struct {
 	Cond cond
 
-	
+	// Ring buffer implementation of a fixed-size FIFO queue.
 	mu     sync.RWMutex
 	buf    [tracesPerBucket]*trace
-	start  int 
-	length int 
+	start  int // < tracesPerBucket
+	length int // <= tracesPerBucket
 }
 
 func (b *traceBucket) Add(tr *trace) {
@@ -532,7 +608,7 @@ func (b *traceBucket) Add(tr *trace) {
 		i -= tracesPerBucket
 	}
 	if b.length == tracesPerBucket {
-		
+		// "Remove" an element from the bucket.
 		b.buf[i].unref()
 		b.start++
 		if b.start == tracesPerBucket {
@@ -546,11 +622,11 @@ func (b *traceBucket) Add(tr *trace) {
 	tr.ref()
 }
 
-
-
-
-
-
+// Copy returns a copy of the traces in the bucket.
+// If tracedOnly is true, only the traces with trace information will be returned.
+// The logs will be ref'd before returning; the caller should call
+// the Free method when it is done with them.
+// TODO(dsymonds): keep track of traced requests in separate buckets.
 func (b *traceBucket) Copy(tracedOnly bool) traceList {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -576,7 +652,7 @@ func (b *traceBucket) Empty() bool {
 	return b.length == 0
 }
 
-
+// cond represents a condition on a trace.
 type cond interface {
 	match(t *trace) bool
 	String() string
@@ -594,30 +670,30 @@ func (e errorCond) String() string      { return "errors" }
 
 type traceList []*trace
 
-
+// Free calls unref on each element of the list.
 func (trl traceList) Free() {
 	for _, t := range trl {
 		t.unref()
 	}
 }
 
-
+// traceList may be sorted in reverse chronological order.
 func (trl traceList) Len() int           { return len(trl) }
 func (trl traceList) Less(i, j int) bool { return trl[i].Start.After(trl[j].Start) }
 func (trl traceList) Swap(i, j int)      { trl[i], trl[j] = trl[j], trl[i] }
 
-
+// An event is a timestamped log entry in a trace.
 type event struct {
 	When       time.Time
-	Elapsed    time.Duration 
-	NewDay     bool          
-	Recyclable bool          
-	Sensitive  bool          
-	What       interface{}   
+	Elapsed    time.Duration // since previous event in trace
+	NewDay     bool          // whether this event is on a different day to the previous event
+	Recyclable bool          // whether this event was passed via LazyLog
+	Sensitive  bool          // whether this event contains sensitive information
+	What       interface{}   // string or fmt.Stringer
 }
 
-
-
+// WhenString returns a string representation of the elapsed time of the event.
+// It will include the date if midnight was crossed.
 func (e event) WhenString() string {
 	if e.NewDay {
 		return e.When.Format("2006/01/02 15:04:05.000000")
@@ -625,45 +701,45 @@ func (e event) WhenString() string {
 	return e.When.Format("15:04:05.000000")
 }
 
-
-
+// discarded represents a number of discarded events.
+// It is stored as *discarded to make it easier to update in-place.
 type discarded int
 
 func (d *discarded) String() string {
 	return fmt.Sprintf("(%d events discarded)", int(*d))
 }
 
-
-
+// trace represents an active or complete request,
+// either sent or received by this program.
 type trace struct {
-	
+	// Family is the top-level grouping of traces to which this belongs.
 	Family string
 
-	
+	// Title is the title of this trace.
 	Title string
 
-	
+	// Start time of the this trace.
 	Start time.Time
 
 	mu        sync.RWMutex
-	events    []event 
+	events    []event // Append-only sequence of events (modulo discards).
 	maxEvents int
 	recycler  func(interface{})
-	IsError   bool          
-	Elapsed   time.Duration 
-	traceID   uint64        
+	IsError   bool          // Whether this trace resulted in an error.
+	Elapsed   time.Duration // Elapsed time for this trace, zero while active.
+	traceID   uint64        // Trace information if non-zero.
 	spanID    uint64
 
-	refs int32     
-	disc discarded 
+	refs int32     // how many buckets this is in
+	disc discarded // scratch space to avoid allocation
 
-	finishStack []byte 
+	finishStack []byte // where finish was called, if DebugUseAfterFinish is set
 
-	eventsBuf [4]event 
+	eventsBuf [4]event // preallocated buffer in case we only log a few events
 }
 
 func (tr *trace) reset() {
-	
+	// Clear all but the mutex. Mutexes may not be copied, even when unlocked.
 	tr.Family = ""
 	tr.Title = ""
 	tr.Start = time.Time{}
@@ -686,9 +762,9 @@ func (tr *trace) reset() {
 	}
 }
 
-
-
-
+// delta returns the elapsed time since the last event or the trace start,
+// and whether it spans midnight.
+// L >= tr.mu
 func (tr *trace) delta(t time.Time) (time.Duration, bool) {
 	if len(tr.events) == 0 {
 		return t.Sub(tr.Start), false
@@ -699,12 +775,24 @@ func (tr *trace) delta(t time.Time) (time.Duration, bool) {
 
 func (tr *trace) addEvent(x interface{}, recyclable, sensitive bool) {
 	if DebugUseAfterFinish && tr.finishStack != nil {
-		buf := make([]byte, 4<<10) 
+		buf := make([]byte, 4<<10) // 4 KB should be enough
 		n := runtime.Stack(buf, false)
 		log.Printf("net/trace: trace used after finish:\nFinished at:\n%s\nUsed at:\n%s", tr.finishStack, buf[:n])
 	}
 
-	
+	/*
+		NOTE TO DEBUGGERS
+
+		If you are here because your program panicked in this code,
+		it is almost definitely the fault of code using this package,
+		and very unlikely to be the fault of this code.
+
+		The most likely scenario is that some code elsewhere is using
+		a trace.Trace after its Finish method is called.
+		You can temporarily set the DebugUseAfterFinish var
+		to help discover where that is; do not leave that var set,
+		since it makes this package much less efficient.
+	*/
 
 	e := event{When: time.Now(), What: x, Recyclable: recyclable, Sensitive: sensitive}
 	tr.mu.Lock()
@@ -712,21 +800,21 @@ func (tr *trace) addEvent(x interface{}, recyclable, sensitive bool) {
 	if len(tr.events) < tr.maxEvents {
 		tr.events = append(tr.events, e)
 	} else {
-		
+		// Discard the middle events.
 		di := int((tr.maxEvents - 1) / 2)
 		if d, ok := tr.events[di].What.(*discarded); ok {
 			(*d)++
 		} else {
-			
-			
+			// disc starts at two to count for the event it is replacing,
+			// plus the next one that we are about to drop.
 			tr.disc = 2
 			if tr.recycler != nil && tr.events[di].Recyclable {
 				go tr.recycler(tr.events[di].What)
 			}
 			tr.events[di].What = &tr.disc
 		}
-		
-		
+		// The timestamp of the discarded meta-event should be
+		// the time of the last event it is representing.
 		tr.events[di].When = tr.events[di+1].When
 
 		if tr.recycler != nil && tr.events[di+1].Recyclable {
@@ -766,7 +854,7 @@ func (tr *trace) SetTraceInfo(traceID, spanID uint64) {
 
 func (tr *trace) SetMaxEvents(m int) {
 	tr.mu.Lock()
-	
+	// Always keep at least three events: first, discarded count, last.
 	if len(tr.events) == 0 && m > 3 {
 		tr.maxEvents = m
 	}
@@ -781,7 +869,7 @@ func (tr *trace) unref() {
 	if atomic.AddInt32(&tr.refs, -1) == 0 {
 		tr.mu.RLock()
 		if tr.recycler != nil {
-			
+			// freeTrace clears tr, so we hold tr.recycler and tr.events here.
 			go func(f func(interface{}), es []event) {
 				for _, e := range es {
 					if e.Recyclable {
@@ -806,7 +894,7 @@ func (tr *trace) ElapsedTime() string {
 	tr.mu.RUnlock()
 
 	if t == 0 {
-		
+		// Active trace.
 		t = time.Since(tr.Start)
 	}
 	return fmt.Sprintf("%.6f", t.Seconds())
@@ -818,9 +906,9 @@ func (tr *trace) Events() []event {
 	return tr.events
 }
 
-var traceFreeList = make(chan *trace, 1000) 
+var traceFreeList = make(chan *trace, 1000) // TODO(dsymonds): Use sync.Pool?
 
-
+// newTrace returns a trace ready to use.
 func newTrace() *trace {
 	select {
 	case tr := <-traceFreeList:
@@ -830,11 +918,11 @@ func newTrace() *trace {
 	}
 }
 
-
-
+// freeTrace adds tr to traceFreeList if there's room.
+// This is non-blocking.
 func freeTrace(tr *trace) {
 	if DebugUseAfterFinish {
-		return 
+		return // never reuse
 	}
 	tr.reset()
 	select {
@@ -846,8 +934,8 @@ func freeTrace(tr *trace) {
 func elapsed(d time.Duration) string {
 	b := []byte(fmt.Sprintf("%.6f", d.Seconds()))
 
-	
-	
+	// For subsecond durations, blank all zeros before decimal point,
+	// and all zeros between the decimal point and the first non-zero digit.
 	if d < time.Second {
 		dot := bytes.IndexByte(b, '.')
 		for i := 0; i < dot; i++ {
@@ -931,7 +1019,7 @@ const pageHTML = `
 	<body>
 
 <h1>/debug/requests</h1>
-{{end}} {{}}
+{{end}} {{/* end of Prolog */}}
 
 {{define "StatusTable"}}
 <table id="tr-status">
@@ -970,7 +1058,7 @@ const pageHTML = `
 	</tr>
 	{{end}}
 </table>
-{{end}} {{}}
+{{end}} {{/* end of StatusTable */}}
 
 {{define "Epilog"}}
 {{if $.Traces}}
@@ -1016,7 +1104,7 @@ const pageHTML = `
 		<td class="when">{{$tr.When}}</td>
 		<td class="elapsed">{{$tr.ElapsedTime}}</td>
 		<td>{{$tr.Title}}</td>
-		{{}}
+		{{/* TODO: include traceID/spanID */}}
 	</tr>
 	{{if $.Expanded}}
 	{{range $tr.Events}}
@@ -1029,14 +1117,14 @@ const pageHTML = `
 	{{end}}
 	{{end}}
 </table>
-{{end}} {{}}
+{{end}} {{/* if $.Traces */}}
 
 {{if $.Histogram}}
 <h4>Latency (&micro;s) of {{$.Family}} over {{$.HistogramWindow}}</h4>
 {{$.Histogram}}
-{{end}} {{}}
+{{end}} {{/* if $.Histogram */}}
 
 	</body>
 </html>
-{{end}} {{}}
+{{end}} {{/* end of Epilog */}}
 `

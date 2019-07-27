@@ -1,8 +1,8 @@
+// Copyright 2015 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
+// +build ignore
 
 package main
 
@@ -31,7 +31,7 @@ To bootstrap the code generation, run:
 	go run gen.go --versions=4.1.0,5.0.0,6.0.0,6.1.0,6.2.0,6.3.0,7.0.0
 
 and ensure that the latest versions are included by checking:
-	http://www.unicode.org/Public/`
+	https://www.unicode.org/Public/`
 
 func getVersions() []string {
 	if *versionList == "" {
@@ -42,7 +42,7 @@ func getVersions() []string {
 	versions := strings.Split(*versionList, ",")
 	c.SortStrings(versions)
 
-	
+	// Ensure that at least the current version is included.
 	for _, v := range versions {
 		if v == gen.UnicodeVersion() {
 			return versions
@@ -61,7 +61,7 @@ func main() {
 
 	w := &bytes.Buffer{}
 
-	fmt.Fprintf(w, "
+	fmt.Fprintf(w, "//go:generate go run gen.go --versions=%s\n\n", strings.Join(versions, ","))
 	fmt.Fprintf(w, "import \"unicode\"\n\n")
 
 	vstr := func(s string) string { return strings.Replace(s, ".", "_", -1) }
@@ -76,7 +76,7 @@ func main() {
 	for _, v := range versions {
 		assigned := []rune{}
 
-		r := gen.Open("http://www.unicode.org/Public/", "", v+"/ucd/UnicodeData.txt")
+		r := gen.Open("https://www.unicode.org/Public/", "", v+"/ucd/UnicodeData.txt")
 		ucd.Parse(r, func(p *ucd.Parser) {
 			assigned = append(assigned, p.Rune(0))
 		})
@@ -86,14 +86,14 @@ func main() {
 		sz += int(reflect.TypeOf(unicode.Range16{}).Size()) * len(rt.R16)
 		sz += int(reflect.TypeOf(unicode.Range32{}).Size()) * len(rt.R32)
 
-		fmt.Fprintf(w, "
+		fmt.Fprintf(w, "// size %d bytes (%d KiB)\n", sz, sz/1024)
 		fmt.Fprintf(w, "var assigned%s = ", vstr(v))
 		print(w, rt)
 
 		size += sz
 	}
 
-	fmt.Fprintf(w, "
+	fmt.Fprintf(w, "// Total size %d bytes (%d KiB)\n", size, size/1024)
 
 	gen.WriteVersionedGoFile("tables.go", "rangetable", w.Bytes())
 }

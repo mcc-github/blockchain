@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package cldr
 
@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-
+// Elem is implemented by every XML element.
 type Elem interface {
 	setEnclosing(Elem)
 	setName(string)
@@ -33,8 +33,8 @@ type hidden struct {
 	} `xml:"default"`
 }
 
-
-
+// Common holds several of the most common attributes and sub elements
+// of an XML element.
 type Common struct {
 	XMLName         xml.Name
 	name            string
@@ -47,8 +47,8 @@ type Common struct {
 	hidden
 }
 
-
-
+// Default returns the default type to select from the enclosed list
+// or "" if no default value is specified.
 func (e *Common) Default() string {
 	if e.Def == nil {
 		return ""
@@ -56,23 +56,23 @@ func (e *Common) Default() string {
 	if e.Def.Choice != "" {
 		return e.Def.Choice
 	} else if e.Def.Type != "" {
-		
+		// Type is still used by the default element in collation.
 		return e.Def.Type
 	}
 	return ""
 }
 
-
+// Element returns the XML element name.
 func (e *Common) Element() string {
 	return e.name
 }
 
-
+// GetCommon returns e. It is provided such that Common implements Elem.
 func (e *Common) GetCommon() *Common {
 	return e
 }
 
-
+// Data returns the character data accumulated for this element.
 func (e *Common) Data() string {
 	e.CharData = charRe.ReplaceAllStringFunc(e.CharData, replaceUnicode)
 	return e.CharData
@@ -90,11 +90,11 @@ func (e *Common) setEnclosing(en Elem) {
 	e.enclElem = en
 }
 
-
+// Escape characters that can be escaped without further escaping the string.
 var charRe = regexp.MustCompile(`&#x[0-9a-fA-F]*;|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}|\\x[0-9a-fA-F]{2}|\\[0-7]{3}|\\[abtnvfr]`)
 
-
-
+// replaceUnicode converts hexadecimal Unicode codepoint notations to a one-rune string.
+// It assumes the input string is correctly formatted.
 func replaceUnicode(s string) string {
 	if s[1] == '#' {
 		r, _ := strconv.ParseInt(s[3:len(s)-1], 16, 32)

@@ -1,6 +1,6 @@
 package kingpin
 
-
+//go:generate go run ./cmd/genvalues/main.go
 
 import (
 	"fmt"
@@ -15,45 +15,45 @@ import (
 	"github.com/alecthomas/units"
 )
 
+// NOTE: Most of the base type values were lifted from:
+// http://golang.org/src/pkg/flag/flag.go?s=20146:20222
 
-
-
-
-
-
-
-
-
-
+// Value is the interface to the dynamic value stored in a flag.
+// (The default value is represented as a string.)
+//
+// If a Value has an IsBoolFlag() bool method returning true, the command-line
+// parser makes --name equivalent to -name=true rather than using the next
+// command-line argument, and adds a --no-name counterpart for negating the
+// flag.
 type Value interface {
 	String() string
 	Set(string) error
 }
 
-
-
-
-
+// Getter is an interface that allows the contents of a Value to be retrieved.
+// It wraps the Value interface, rather than being part of it, because it
+// appeared after Go 1 and its compatibility rules. All Value types provided
+// by this package satisfy the Getter interface.
 type Getter interface {
 	Value
 	Get() interface{}
 }
 
-
-
+// Optional interface to indicate boolean flags that don't accept a value, and
+// implicitly have a --no-<x> negation counterpart.
 type boolFlag interface {
 	Value
 	IsBoolFlag() bool
 }
 
-
-
+// Optional interface for arguments that cumulatively consume all remaining
+// input.
 type remainderArg interface {
 	Value
 	IsCumulative() bool
 }
 
-
+// Optional interface for flags that can be repeated.
 type repeatableFlag interface {
 	Value
 	IsCumulative() bool
@@ -65,12 +65,12 @@ type accumulator struct {
 	slice   reflect.Value
 }
 
-
-
-
-
-
-
+// Use reflection to accumulate values into a slice.
+//
+// target := []string{}
+// newAccumulator(&target, func (value interface{}) Value {
+//   return newStringValue(value.(*string))
+// })
 func newAccumulator(slice interface{}, element func(value interface{}) Value) *accumulator {
 	typ := reflect.TypeOf(slice)
 	if typ.Kind() != reflect.Ptr || typ.Elem().Kind() != reflect.Slice {
@@ -112,7 +112,7 @@ func (a *accumulator) IsCumulative() bool {
 
 func (b *boolValue) IsBoolFlag() bool { return true }
 
-
+// -- time.Duration Value
 type durationValue time.Duration
 
 func newDurationValue(p *time.Duration) *durationValue {
@@ -129,7 +129,7 @@ func (d *durationValue) Get() interface{} { return time.Duration(*d) }
 
 func (d *durationValue) String() string { return (*time.Duration)(d).String() }
 
-
+// -- map[string]string Value
 type stringMapValue map[string]string
 
 func newStringMapValue(p *map[string]string) *stringMapValue {
@@ -159,7 +159,7 @@ func (s *stringMapValue) IsCumulative() bool {
 	return true
 }
 
-
+// -- net.IP Value
 type ipValue net.IP
 
 func newIPValue(p *net.IP) *ipValue {
@@ -183,7 +183,7 @@ func (i *ipValue) String() string {
 	return (*net.IP)(i).String()
 }
 
-
+// -- *net.TCPAddr Value
 type tcpAddrValue struct {
 	addr **net.TCPAddr
 }
@@ -209,7 +209,7 @@ func (i *tcpAddrValue) String() string {
 	return (*i.addr).String()
 }
 
-
+// -- existingFile Value
 
 type fileStatValue struct {
 	path      *string
@@ -243,7 +243,7 @@ func (e *fileStatValue) String() string {
 	return *e.path
 }
 
-
+// -- os.File value
 
 type fileValue struct {
 	f    **os.File
@@ -275,7 +275,7 @@ func (f *fileValue) String() string {
 	return (*f.f).Name()
 }
 
-
+// -- url.URL Value
 type urlValue struct {
 	u **url.URL
 }
@@ -304,7 +304,7 @@ func (u *urlValue) String() string {
 	return (*u.u).String()
 }
 
-
+// -- []*url.URL Value
 type urlListValue []*url.URL
 
 func newURLListValue(p *[]*url.URL) *urlListValue {
@@ -336,7 +336,7 @@ func (u *urlListValue) IsCumulative() bool {
 	return true
 }
 
-
+// A flag whose value must be in a set of options.
 type enumValue struct {
 	value   *string
 	options []string
@@ -367,7 +367,7 @@ func (e *enumValue) Get() interface{} {
 	return (string)(*e.value)
 }
 
-
+// -- []string Enum Value
 type enumsValue struct {
 	value   *[]string
 	options []string
@@ -402,7 +402,7 @@ func (s *enumsValue) IsCumulative() bool {
 	return true
 }
 
-
+// -- units.Base2Bytes Value
 type bytesValue units.Base2Bytes
 
 func newBytesValue(p *units.Base2Bytes) *bytesValue {

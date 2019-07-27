@@ -1,15 +1,15 @@
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package prometheus
 
@@ -22,17 +22,17 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-
-
-
-
-
-
-
-
-
-
-
+// WrapRegistererWith returns a Registerer wrapping the provided
+// Registerer. Collectors registered with the returned Registerer will be
+// registered with the wrapped Registerer in a modified way. The modified
+// Collector adds the provided Labels to all Metrics it collects (as
+// ConstLabels). The Metrics collected by the unmodified Collector must not
+// duplicate any of those labels.
+//
+// WrapRegistererWith provides a way to add fixed labels to a subset of
+// Collectors. It should not be used to add fixed labels to all metrics exposed.
+//
+// The Collector example demonstrates a use of WrapRegistererWith.
 func WrapRegistererWith(labels Labels, reg Registerer) Registerer {
 	return &wrappingRegisterer{
 		wrappedRegisterer: reg,
@@ -40,20 +40,20 @@ func WrapRegistererWith(labels Labels, reg Registerer) Registerer {
 	}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// WrapRegistererWithPrefix returns a Registerer wrapping the provided
+// Registerer. Collectors registered with the returned Registerer will be
+// registered with the wrapped Registerer in a modified way. The modified
+// Collector adds the provided prefix to the name of all Metrics it collects.
+//
+// WrapRegistererWithPrefix is useful to have one place to prefix all metrics of
+// a sub-system. To make this work, register metrics of the sub-system with the
+// wrapping Registerer returned by WrapRegistererWithPrefix. It is rarely useful
+// to use the same prefix for all metrics exposed. In particular, do not prefix
+// metric names that are standardized across applications, as that would break
+// horizontal monitoring, for example the metrics provided by the Go collector
+// (see NewGoCollector) and the process collector (see NewProcessCollector). (In
+// fact, those metrics are already prefixed with “go_” or “process_”,
+// respectively.)
 func WrapRegistererWithPrefix(prefix string, reg Registerer) Registerer {
 	return &wrappingRegisterer{
 		wrappedRegisterer: reg,
@@ -138,7 +138,7 @@ func (m *wrappingMetric) Write(out *dto.Metric) error {
 		return err
 	}
 	if len(m.labels) == 0 {
-		
+		// No wrapping labels.
 		return nil
 	}
 	for ln, lv := range m.labels {
@@ -168,10 +168,10 @@ func wrapDesc(desc *Desc, prefix string, labels Labels) *Desc {
 		}
 		constLabels[ln] = lv
 	}
-	
+	// NewDesc will do remaining validations.
 	newDesc := NewDesc(prefix+desc.fqName, desc.help, desc.variableLabels, constLabels)
-	
-	
+	// Propagate errors if there was any. This will override any errer
+	// created by NewDesc above, i.e. earlier errors get precedence.
 	if desc.err != nil {
 		newDesc.err = desc.err
 	}

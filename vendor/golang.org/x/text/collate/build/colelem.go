@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2012 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package build
 
@@ -28,12 +28,12 @@ func makeRawCE(w []int, ccc uint8) rawCE {
 	return ce
 }
 
-
-
-
-
-
-
+// A collation element is represented as an uint32.
+// In the typical case, a rune maps to a single collation element. If a rune
+// can be the start of a contraction or expands into multiple collation elements,
+// then the collation element that is associated with a rune will have a special
+// form to represent such m to n mappings.  Such special collation elements
+// have a value >= 0x80000000.
 
 const (
 	maxPrimaryBits   = 21
@@ -46,12 +46,12 @@ func makeCE(ce rawCE) (uint32, error) {
 	return uint32(v), e
 }
 
-
-
-
-
-
-
+// For contractions, collation elements are of the form
+// 110bbbbb bbbbbbbb iiiiiiii iiiinnnn, where
+//   - n* is the size of the first node in the contraction trie.
+//   - i* is the index of the first node in the contraction trie.
+//   - b* is the offset into the contraction collation element table.
+// See contract.go for details on the contraction trie.
 const (
 	contractID            = 0xC0000000
 	maxNBits              = 4
@@ -76,9 +76,9 @@ func makeContractIndex(h ctHandle, offset int) (uint32, error) {
 	return ce, nil
 }
 
-
-
-
+// For expansions, collation elements are of the form
+// 11100000 00000000 bbbbbbbb bbbbbbbb,
+// where b* is the index into the expansion sequence table.
 const (
 	expandID           = 0xE0000000
 	maxExpandIndexBits = 16
@@ -91,21 +91,21 @@ func makeExpandIndex(index int) (uint32, error) {
 	return expandID + uint32(index), nil
 }
 
-
-
+// Each list of collation elements corresponding to an expansion starts with
+// a header indicating the length of the sequence.
 func makeExpansionHeader(n int) (uint32, error) {
 	return uint32(n), nil
 }
 
-
-
-
-
-
-
-
-
-
+// Some runes can be expanded using NFKD decomposition. Instead of storing the full
+// sequence of collation elements, we decompose the rune and lookup the collation
+// elements for each rune in the decomposition and modify the tertiary weights.
+// The collation element, in this case, is of the form
+// 11110000 00000000 wwwwwwww vvvvvvvv, where
+//   - v* is the replacement tertiary weight for the first rune,
+//   - w* is the replacement tertiary weight for the second rune,
+// Tertiary weights of subsequent runes should be replaced with maxTertiary.
+// See https://www.unicode.org/reports/tr10/#Compatibility_Decompositions for more details.
 const (
 	decompID = 0xF0000000
 )
@@ -121,7 +121,7 @@ func makeDecompose(t1, t2 int) (uint32, error) {
 }
 
 const (
-	
+	// These constants were taken from https://www.unicode.org/versions/Unicode6.0.0/ch12.pdf.
 	minUnified       rune = 0x4E00
 	maxUnified            = 0x9FFF
 	minCompatibility      = 0xF900
@@ -131,26 +131,26 @@ const (
 )
 const (
 	commonUnifiedOffset = 0x10000
-	rareUnifiedOffset   = 0x20000 
-	otherOffset         = 0x50000 
+	rareUnifiedOffset   = 0x20000 // largest rune in common is U+FAFF
+	otherOffset         = 0x50000 // largest rune in rare is U+2FA1D
 	illegalOffset       = otherOffset + int(unicode.MaxRune)
 	maxPrimary          = illegalOffset + 1
 )
 
-
-
-
-
-
+// implicitPrimary returns the primary weight for the a rune
+// for which there is no entry for the rune in the collation table.
+// We take a different approach from the one specified in
+// https://unicode.org/reports/tr10/#Implicit_Weights,
+// but preserve the resulting relative ordering of the runes.
 func implicitPrimary(r rune) int {
 	if unicode.Is(unicode.Ideographic, r) {
 		if r >= minUnified && r <= maxUnified {
-			
+			// The most common case for CJK.
 			return int(r) + commonUnifiedOffset
 		}
 		if r >= minCompatibility && r <= maxCompatibility {
-			
-			
+			// This will typically not hit. The DUCET explicitly specifies mappings
+			// for all characters that do not decompose.
 			return int(r) + commonUnifiedOffset
 		}
 		return int(r) + rareUnifiedOffset
@@ -158,14 +158,14 @@ func implicitPrimary(r rune) int {
 	return int(r) + otherOffset
 }
 
-
-
-
-
-
-
-
-
+// convertLargeWeights converts collation elements with large
+// primaries (either double primaries or for illegal runes)
+// to our own representation.
+// A CJK character C is represented in the DUCET as
+//   [.FBxx.0020.0002.C][.BBBB.0000.0000.C]
+// We will rewrite these characters to a single CE.
+// We assume the CJK values start at 0x8000.
+// See https://unicode.org/reports/tr10/#Implicit_Weights
 func convertLargeWeights(elems []rawCE) (res []rawCE, err error) {
 	const (
 		cjkPrimaryStart   = 0xFB40
@@ -214,8 +214,8 @@ func convertLargeWeights(elems []rawCE) (res []rawCE, err error) {
 	return elems, nil
 }
 
-
-
+// nextWeight computes the first possible collation weights following elems
+// for the given level.
 func nextWeight(level colltab.Level, elems []rawCE) []rawCE {
 	if level == colltab.Identity {
 		next := make([]rawCE, len(elems))
@@ -230,7 +230,7 @@ func nextWeight(level colltab.Level, elems []rawCE) []rawCE {
 	if level < colltab.Tertiary {
 		next[0].w[colltab.Tertiary] = defaultTertiary
 	}
-	
+	// Filter entries that cannot influence ordering.
 	for _, ce := range elems[1:] {
 		skip := true
 		for i := colltab.Primary; i < level; i++ {
@@ -252,8 +252,8 @@ func nextVal(elems []rawCE, i int, level colltab.Level) (index, value int) {
 	return i, 0
 }
 
-
-
+// compareWeights returns -1 if a < b, 1 if a > b, or 0 otherwise.
+// It also returns the collation level at which the difference is found.
 func compareWeights(a, b []rawCE) (result int, level colltab.Level) {
 	for level := colltab.Primary; level < colltab.Identity; level++ {
 		var va, vb int

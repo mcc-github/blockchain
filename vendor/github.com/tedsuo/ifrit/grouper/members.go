@@ -6,16 +6,23 @@ import (
 	"github.com/tedsuo/ifrit"
 )
 
-
+/*
+A Member associates a unique name with a Runner.
+*/
 type Member struct {
 	Name string
 	ifrit.Runner
 }
 
-
+/*
+Members are treated as an ordered list. Member names must be unique.
+*/
 type Members []Member
 
-
+/*
+Validate checks that all member names in the list are unique. It returns an
+error of type ErrDuplicateNames if duplicates are detected.
+*/
 func (m Members) Validate() error {
 	foundNames := map[string]struct{}{}
 	foundToken := struct{}{}
@@ -36,7 +43,11 @@ func (m Members) Validate() error {
 	return nil
 }
 
-
+/*
+ErrDuplicateNames is returned to indicate two or more members with the same name
+were detected. Because more than one duplicate name may be detected in a single
+pass, ErrDuplicateNames contains a list of all duplicate names found.
+*/
 type ErrDuplicateNames struct {
 	DuplicateNames []string
 }

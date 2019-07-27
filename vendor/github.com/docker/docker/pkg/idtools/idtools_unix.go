@@ -1,6 +1,6 @@
+// +build !windows
 
-
-package idtools 
+package idtools // import "github.com/docker/docker/pkg/idtools"
 
 import (
 	"bytes"
@@ -22,10 +22,10 @@ var (
 )
 
 func mkdirAs(path string, mode os.FileMode, owner Identity, mkAll, chownExisting bool) error {
-	
-	
-	
-	
+	// make an array containing the original path asked for, plus (for mkAll == true)
+	// all path components leading up to the complete path that don't exist before we MkdirAll
+	// so that we can chown all of them properly at the end.  If chownExisting is false, we won't
+	// chown the full directory path if it exists
 
 	var paths []string
 
@@ -38,7 +38,7 @@ func mkdirAs(path string, mode os.FileMode, owner Identity, mkAll, chownExisting
 			return nil
 		}
 
-		
+		// short-circuit--we were called with an existing directory and chown was requested
 		return lazyChown(path, owner.UID, owner.GID, stat)
 	}
 
@@ -47,8 +47,8 @@ func mkdirAs(path string, mode os.FileMode, owner Identity, mkAll, chownExisting
 	}
 
 	if mkAll {
-		
-		
+		// walk back to "/" looking for directories which do not exist
+		// and add them to the paths array for chown after creation
 		dirPath := path
 		for {
 			dirPath = filepath.Dir(dirPath)
@@ -67,8 +67,8 @@ func mkdirAs(path string, mode os.FileMode, owner Identity, mkAll, chownExisting
 			return err
 		}
 	}
-	
-	
+	// even if it existed, we will chown the requested path + any subpaths that
+	// didn't exist when we called MkdirAll
 	for _, pathComponent := range paths {
 		if err := lazyChown(pathComponent, owner.UID, owner.GID, nil); err != nil {
 			return err
@@ -77,8 +77,8 @@ func mkdirAs(path string, mode os.FileMode, owner Identity, mkAll, chownExisting
 	return nil
 }
 
-
-
+// CanAccess takes a valid (existing) directory and a uid, gid pair and determines
+// if that uid, gid pair has access (execute bit) to the directory
 func CanAccess(path string, pair Identity) bool {
 	statInfo, err := system.Stat(path)
 	if err != nil {
@@ -103,15 +103,15 @@ func accessible(isOwner, isGroup bool, perms os.FileMode) bool {
 	return false
 }
 
-
-
+// LookupUser uses traditional local system files lookup (from libcontainer/user) on a username,
+// followed by a call to `getent` for supporting host configured non-files passwd and group dbs
 func LookupUser(username string) (user.User, error) {
-	
+	// first try a local system files lookup using existing capabilities
 	usr, err := user.LookupUser(username)
 	if err == nil {
 		return usr, nil
 	}
-	
+	// local files lookup failed; attempt to call `getent` to query configured passwd dbs
 	usr, err = getentUser(fmt.Sprintf("%s %s", "passwd", username))
 	if err != nil {
 		return user.User{}, err
@@ -119,15 +119,15 @@ func LookupUser(username string) (user.User, error) {
 	return usr, nil
 }
 
-
-
+// LookupUID uses traditional local system files lookup (from libcontainer/user) on a uid,
+// followed by a call to `getent` for supporting host configured non-files passwd and group dbs
 func LookupUID(uid int) (user.User, error) {
-	
+	// first try a local system files lookup using existing capabilities
 	usr, err := user.LookupUid(uid)
 	if err == nil {
 		return usr, nil
 	}
-	
+	// local files lookup failed; attempt to call `getent` to query configured passwd dbs
 	return getentUser(fmt.Sprintf("%s %d", "passwd", uid))
 }
 
@@ -146,27 +146,27 @@ func getentUser(args string) (user.User, error) {
 	return users[0], nil
 }
 
-
-
+// LookupGroup uses traditional local system files lookup (from libcontainer/user) on a group name,
+// followed by a call to `getent` for supporting host configured non-files passwd and group dbs
 func LookupGroup(groupname string) (user.Group, error) {
-	
+	// first try a local system files lookup using existing capabilities
 	group, err := user.LookupGroup(groupname)
 	if err == nil {
 		return group, nil
 	}
-	
+	// local files lookup failed; attempt to call `getent` to query configured group dbs
 	return getentGroup(fmt.Sprintf("%s %s", "group", groupname))
 }
 
-
-
+// LookupGID uses traditional local system files lookup (from libcontainer/user) on a group ID,
+// followed by a call to `getent` for supporting host configured non-files passwd and group dbs
 func LookupGID(gid int) (user.Group, error) {
-	
+	// first try a local system files lookup using existing capabilities
 	group, err := user.LookupGid(gid)
 	if err == nil {
 		return group, nil
 	}
-	
+	// local files lookup failed; attempt to call `getent` to query configured group dbs
 	return getentGroup(fmt.Sprintf("%s %d", "group", gid))
 }
 
@@ -187,7 +187,7 @@ func getentGroup(args string) (user.Group, error) {
 
 func callGetent(args string) (io.Reader, error) {
 	entOnce.Do(func() { getentCmd, _ = resolveBinary("getent") })
-	
+	// if no `getent` command on host, can't do anything else
 	if getentCmd == "" {
 		return nil, fmt.Errorf("")
 	}
@@ -213,9 +213,9 @@ func callGetent(args string) (io.Reader, error) {
 	return bytes.NewReader(out), nil
 }
 
-
-
-
+// lazyChown performs a chown only if the uid/gid don't match what's requested
+// Normally a Chown is a no-op if uid/gid match, but in some cases this can still cause an error, e.g. if the
+// dir is on an NFS share, so don't call chown unless we absolutely must.
 func lazyChown(p string, uid, gid int, stat *system.StatT) error {
 	if stat == nil {
 		var err error

@@ -16,10 +16,10 @@ func (a *argGroup) have() bool {
 	return len(a.args) > 0
 }
 
-
-
-
-
+// GetArg gets an argument definition.
+//
+// This allows existing arguments to be modified after definition but before parsing. Useful for
+// modular applications.
 func (a *argGroup) GetArg(name string) *ArgClause {
 	for _, arg := range a.args {
 		if arg.name == name {
@@ -85,7 +85,7 @@ func newArg(name, help string) *ArgClause {
 func (a *ArgClause) setDefault() error {
 	if a.HasEnvarValue() {
 		if v, ok := a.value.(remainderArg); !ok || !v.IsCumulative() {
-			
+			// Use the value as-is
 			return a.value.Set(a.GetEnvarValue())
 		}
 		for _, value := range a.GetSplitEnvarValue() {
@@ -120,29 +120,29 @@ func (a *ArgClause) consumesRemainder() bool {
 	return false
 }
 
-
+// Required arguments must be input by the user. They can not have a Default() value provided.
 func (a *ArgClause) Required() *ArgClause {
 	a.required = true
 	return a
 }
 
-
+// Default values for this argument. They *must* be parseable by the value of the argument.
 func (a *ArgClause) Default(values ...string) *ArgClause {
 	a.defaultValues = values
 	return a
 }
 
-
-
-
+// Envar overrides the default value(s) for a flag from an environment variable,
+// if it is set. Several default values can be provided by using new lines to
+// separate them.
 func (a *ArgClause) Envar(name string) *ArgClause {
 	a.envar = name
 	a.noEnvar = false
 	return a
 }
 
-
-
+// NoEnvar forces environment variable defaults to be disabled for this flag.
+// Most useful in conjunction with app.DefaultEnvars().
 func (a *ArgClause) NoEnvar() *ArgClause {
 	a.envar = ""
 	a.noEnvar = true
@@ -159,13 +159,13 @@ func (a *ArgClause) PreAction(action Action) *ArgClause {
 	return a
 }
 
-
+// HintAction registers a HintAction (function) for the arg to provide completions
 func (a *ArgClause) HintAction(action HintAction) *ArgClause {
 	a.addHintAction(action)
 	return a
 }
 
-
+// HintOptions registers any number of options for the flag to provide completions
 func (a *ArgClause) HintOptions(options ...string) *ArgClause {
 	a.addHintAction(func() []string {
 		return options

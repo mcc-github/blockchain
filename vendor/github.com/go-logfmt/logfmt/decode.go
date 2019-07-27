@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-
+// A Decoder reads and decodes logfmt records from an input stream.
 type Decoder struct {
 	pos     int
 	key     []byte
@@ -18,10 +18,10 @@ type Decoder struct {
 	err     error
 }
 
-
-
-
-
+// NewDecoder returns a new decoder that reads from r.
+//
+// The decoder introduces its own buffering and may read data from r beyond
+// the logfmt records requested.
 func NewDecoder(r io.Reader) *Decoder {
 	dec := &Decoder{
 		s: bufio.NewScanner(r),
@@ -29,11 +29,11 @@ func NewDecoder(r io.Reader) *Decoder {
 	return dec
 }
 
-
-
-
-
-
+// ScanRecord advances the Decoder to the next record, which can then be
+// parsed with the ScanKeyval method. It returns false when decoding stops,
+// either by reaching the end of the input or an error. After ScanRecord
+// returns false, the Err method will return any error that occurred during
+// decoding, except that if it was io.EOF, Err will return nil.
 func (dec *Decoder) ScanRecord() bool {
 	if dec.err != nil {
 		return false
@@ -47,10 +47,10 @@ func (dec *Decoder) ScanRecord() bool {
 	return true
 }
 
-
-
-
-
+// ScanKeyval advances the Decoder to the next key/value pair of the current
+// record, which can then be retrieved with the Key and Value methods. It
+// returns false when decoding stops, either by reaching the end of the
+// current record or an error.
 func (dec *Decoder) ScanKeyval() bool {
 	dec.key, dec.value = nil, nil
 	if dec.err != nil {
@@ -59,7 +59,7 @@ func (dec *Decoder) ScanKeyval() bool {
 
 	line := dec.s.Bytes()
 
-	
+	// garbage
 	for p, c := range line[dec.pos:] {
 		if c > ' ' {
 			dec.pos += p
@@ -129,7 +129,7 @@ equal:
 		goto qvalue
 	}
 
-	
+	// value
 	start = dec.pos
 	for p, c := range line[dec.pos:] {
 		switch {
@@ -189,22 +189,22 @@ qvalue:
 	return false
 }
 
-
-
-
+// Key returns the most recent key found by a call to ScanKeyval. The returned
+// slice may point to internal buffers and is only valid until the next call
+// to ScanRecord.  It does no allocation.
 func (dec *Decoder) Key() []byte {
 	return dec.key
 }
 
-
-
-
-
+// Value returns the most recent value found by a call to ScanKeyval. The
+// returned slice may point to internal buffers and is only valid until the
+// next call to ScanRecord.  It does no allocation when the value has no
+// escape sequences.
 func (dec *Decoder) Value() []byte {
 	return dec.value
 }
 
-
+// Err returns the first non-EOF error that was encountered by the Scanner.
 func (dec *Decoder) Err() error {
 	return dec.err
 }
@@ -225,7 +225,7 @@ func (dec *Decoder) unexpectedByte(c byte) {
 	}
 }
 
-
+// A SyntaxError represents a syntax error in the logfmt input stream.
 type SyntaxError struct {
 	Msg  string
 	Line int

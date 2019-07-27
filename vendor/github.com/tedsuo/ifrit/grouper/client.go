@@ -6,21 +6,47 @@ import (
 	"github.com/tedsuo/ifrit"
 )
 
-
+/*
+DynamicClient provides a client with group controls and event notifications.
+A client can use the insert channel to add members to the group. When the group
+becomes full, the insert channel blocks until a running process exits the group.
+Once there are no more members to be added, the client can close the dynamic
+group, preventing new members from being added.
+*/
 type DynamicClient interface {
 
-	
+	/*
+	   EntranceListener provides a new buffered channel of entrance events, which are
+	   emited every time an inserted process is ready. To help prevent race conditions,
+	   every new channel is populated with previously emited events, up to it's buffer
+	   size.
+	*/
 	EntranceListener() <-chan EntranceEvent
 
-	
+	/*
+	   ExitListener provides a new buffered channel of exit events, which are emited
+	   every time an inserted process exits. To help prevent race conditions, every
+	   new channel is populated with previously emited events, up to it's buffer size.
+	*/
 	ExitListener() <-chan ExitEvent
 
-	
+	/*
+	   CloseNotifier provides a new unbuffered channel, which will emit a single event
+	   once the group has been closed.
+	*/
 	CloseNotifier() <-chan struct{}
-	
+	/*
+	   Inserter provides an unbuffered channel for adding members to a group. When the
+	   group becomes full, the insert channel blocks until a running process exits.
+	   Once the group is closed, insert channels block forever.
+	*/
 	Inserter() chan<- Member
 
-	
+	/*
+	   Close causes a dynamic group to become a static group. This means that no new
+	   members may be inserted, and the group will exit once all members have
+	   completed.
+	*/
 	Close()
 
 	Get(name string) (ifrit.Process, bool)
@@ -31,7 +57,9 @@ type memberRequest struct {
 	Response chan ifrit.Process
 }
 
-
+/*
+dynamicClient implements DynamicClient.
+*/
 type dynamicClient struct {
 	insertChannel       chan Member
 	getMemberChannel    chan memberRequest

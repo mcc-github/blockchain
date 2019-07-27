@@ -77,8 +77,8 @@ func (l keyList) Less(i, j int) bool {
 	return len(ar) < len(br)
 }
 
-
-
+// keyFloat returns a float value for v if it is a number/bool
+// and whether it is a number/bool or not.
 func keyFloat(v reflect.Value) (f float64, ok bool) {
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -96,8 +96,8 @@ func keyFloat(v reflect.Value) (f float64, ok bool) {
 	return 0, false
 }
 
-
-
+// numLess returns whether a < b.
+// a and b must necessarily have the same kind.
 func numLess(a, b reflect.Value) bool {
 	switch a.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:

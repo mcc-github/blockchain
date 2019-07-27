@@ -8,7 +8,7 @@ import (
 type ProduceResponseBlock struct {
 	Err    KError
 	Offset int64
-	
+	// only provided if Version >= 2 and the broker is configured with `LogAppendTime`
 	Timestamp time.Time
 }
 
@@ -55,7 +55,7 @@ func (b *ProduceResponseBlock) encode(pe packetEncoder, version int16) (err erro
 type ProduceResponse struct {
 	Blocks       map[string]map[int32]*ProduceResponseBlock
 	Version      int16
-	ThrottleTime time.Duration 
+	ThrottleTime time.Duration // only provided if Version >= 1
 }
 
 func (r *ProduceResponse) decode(pd packetDecoder, version int16) (err error) {
@@ -168,7 +168,7 @@ func (r *ProduceResponse) GetBlock(topic string, partition int32) *ProduceRespon
 	return r.Blocks[topic][partition]
 }
 
-
+// Testing API
 
 func (r *ProduceResponse) AddTopicPartition(topic string, partition int32, err KError) {
 	if r.Blocks == nil {
@@ -179,5 +179,11 @@ func (r *ProduceResponse) AddTopicPartition(topic string, partition int32, err K
 		byTopic = make(map[int32]*ProduceResponseBlock)
 		r.Blocks[topic] = byTopic
 	}
-	byTopic[partition] = &ProduceResponseBlock{Err: err}
+	block := &ProduceResponseBlock{
+		Err: err,
+	}
+	if r.Version >= 2 {
+		block.Timestamp = time.Now()
+	}
+	byTopic[partition] = block
 }

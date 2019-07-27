@@ -33,7 +33,7 @@ type FetchResponseBlock struct {
 	HighWaterMarkOffset int64
 	LastStableOffset    int64
 	AbortedTransactions []*AbortedTransaction
-	Records             *Records 
+	Records             *Records // deprecated: use FetchResponseBlock.RecordsSet
 	RecordsSet          []*Records
 	Partial             bool
 }
@@ -89,7 +89,7 @@ func (b *FetchResponseBlock) decode(pd packetDecoder, version int16) (err error)
 	for recordsDecoder.remaining() > 0 {
 		records := &Records{}
 		if err := records.decode(recordsDecoder); err != nil {
-			
+			// If we have at least one decoded records, this is not an error
 			if err == ErrInsufficientData {
 				if len(b.RecordsSet) == 0 {
 					b.Partial = true
@@ -188,7 +188,7 @@ func (b *FetchResponseBlock) encode(pe packetEncoder, version int16) (err error)
 type FetchResponse struct {
 	Blocks       map[string]map[int32]*FetchResponseBlock
 	ThrottleTime time.Duration
-	Version      int16 
+	Version      int16 // v1 requires 0.9+, v2 requires 0.10+
 }
 
 func (r *FetchResponse) decode(pd packetDecoder, version int16) (err error) {

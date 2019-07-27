@@ -1,7 +1,7 @@
-
-
-
-
+// Copyright © 2014 Steve Francia <spf@spf13.com>.
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
 
 package cast
 
@@ -18,7 +18,7 @@ import (
 
 var errNegativeNotAllowed = errors.New("unable to cast negative value")
 
-
+// ToTimeE casts an interface to a time.Time type.
 func ToTimeE(i interface{}) (tim time.Time, err error) {
 	i = indirect(i)
 
@@ -44,7 +44,7 @@ func ToTimeE(i interface{}) (tim time.Time, err error) {
 	}
 }
 
-
+// ToDurationE casts an interface to a time.Duration type.
 func ToDurationE(i interface{}) (d time.Duration, err error) {
 	i = indirect(i)
 
@@ -70,7 +70,7 @@ func ToDurationE(i interface{}) (d time.Duration, err error) {
 	}
 }
 
-
+// ToBoolE casts an interface to a bool type.
 func ToBoolE(i interface{}) (bool, error) {
 	i = indirect(i)
 
@@ -91,7 +91,7 @@ func ToBoolE(i interface{}) (bool, error) {
 	}
 }
 
-
+// ToFloat64E casts an interface to a float64 type.
 func ToFloat64E(i interface{}) (float64, error) {
 	i = indirect(i)
 
@@ -136,7 +136,7 @@ func ToFloat64E(i interface{}) (float64, error) {
 	}
 }
 
-
+// ToFloat32E casts an interface to a float32 type.
 func ToFloat32E(i interface{}) (float32, error) {
 	i = indirect(i)
 
@@ -181,7 +181,7 @@ func ToFloat32E(i interface{}) (float32, error) {
 	}
 }
 
-
+// ToInt64E casts an interface to an int64 type.
 func ToInt64E(i interface{}) (int64, error) {
 	i = indirect(i)
 
@@ -228,7 +228,7 @@ func ToInt64E(i interface{}) (int64, error) {
 	}
 }
 
-
+// ToInt32E casts an interface to an int32 type.
 func ToInt32E(i interface{}) (int32, error) {
 	i = indirect(i)
 
@@ -275,7 +275,7 @@ func ToInt32E(i interface{}) (int32, error) {
 	}
 }
 
-
+// ToInt16E casts an interface to an int16 type.
 func ToInt16E(i interface{}) (int16, error) {
 	i = indirect(i)
 
@@ -322,7 +322,7 @@ func ToInt16E(i interface{}) (int16, error) {
 	}
 }
 
-
+// ToInt8E casts an interface to an int8 type.
 func ToInt8E(i interface{}) (int8, error) {
 	i = indirect(i)
 
@@ -369,7 +369,7 @@ func ToInt8E(i interface{}) (int8, error) {
 	}
 }
 
-
+// ToIntE casts an interface to an int type.
 func ToIntE(i interface{}) (int, error) {
 	i = indirect(i)
 
@@ -416,7 +416,7 @@ func ToIntE(i interface{}) (int, error) {
 	}
 }
 
-
+// ToUintE casts an interface to a uint type.
 func ToUintE(i interface{}) (uint, error) {
 	i = indirect(i)
 
@@ -484,7 +484,7 @@ func ToUintE(i interface{}) (uint, error) {
 	}
 }
 
-
+// ToUint64E casts an interface to a uint64 type.
 func ToUint64E(i interface{}) (uint64, error) {
 	i = indirect(i)
 
@@ -552,7 +552,7 @@ func ToUint64E(i interface{}) (uint64, error) {
 	}
 }
 
-
+// ToUint32E casts an interface to a uint32 type.
 func ToUint32E(i interface{}) (uint32, error) {
 	i = indirect(i)
 
@@ -620,7 +620,7 @@ func ToUint32E(i interface{}) (uint32, error) {
 	}
 }
 
-
+// ToUint16E casts an interface to a uint16 type.
 func ToUint16E(i interface{}) (uint16, error) {
 	i = indirect(i)
 
@@ -688,7 +688,7 @@ func ToUint16E(i interface{}) (uint16, error) {
 	}
 }
 
-
+// ToUint8E casts an interface to a uint type.
 func ToUint8E(i interface{}) (uint8, error) {
 	i = indirect(i)
 
@@ -756,16 +756,16 @@ func ToUint8E(i interface{}) (uint8, error) {
 	}
 }
 
-
-
-
-
+// From html/template/content.go
+// Copyright 2011 The Go Authors. All rights reserved.
+// indirect returns the value, after dereferencing as many times
+// as necessary to reach the base type (or nil).
 func indirect(a interface{}) interface{} {
 	if a == nil {
 		return nil
 	}
 	if t := reflect.TypeOf(a); t.Kind() != reflect.Ptr {
-		
+		// Avoid creating a reflect.Value if it's not a pointer.
 		return a
 	}
 	v := reflect.ValueOf(a)
@@ -775,11 +775,11 @@ func indirect(a interface{}) interface{} {
 	return v.Interface()
 }
 
-
-
-
-
-
+// From html/template/content.go
+// Copyright 2011 The Go Authors. All rights reserved.
+// indirectToStringerOrError returns the value, after dereferencing as many times
+// as necessary to reach the base type (or nil) or an implementation of fmt.Stringer
+// or error,
 func indirectToStringerOrError(a interface{}) interface{} {
 	if a == nil {
 		return nil
@@ -795,7 +795,7 @@ func indirectToStringerOrError(a interface{}) interface{} {
 	return v.Interface()
 }
 
-
+// ToStringE casts an interface to a string type.
 func ToStringE(i interface{}) (string, error) {
 	i = indirectToStringerOrError(i)
 
@@ -851,7 +851,7 @@ func ToStringE(i interface{}) (string, error) {
 	}
 }
 
-
+// ToStringMapStringE casts an interface to a map[string]string type.
 func ToStringMapStringE(i interface{}) (map[string]string, error) {
 	var m = map[string]string{}
 
@@ -881,7 +881,7 @@ func ToStringMapStringE(i interface{}) (map[string]string, error) {
 	}
 }
 
-
+// ToStringMapStringSliceE casts an interface to a map[string][]string type.
 func ToStringMapStringSliceE(i interface{}) (map[string][]string, error) {
 	var m = map[string][]string{}
 
@@ -945,7 +945,7 @@ func ToStringMapStringSliceE(i interface{}) (map[string][]string, error) {
 	return m, nil
 }
 
-
+// ToStringMapBoolE casts an interface to a map[string]bool type.
 func ToStringMapBoolE(i interface{}) (map[string]bool, error) {
 	var m = map[string]bool{}
 
@@ -970,7 +970,7 @@ func ToStringMapBoolE(i interface{}) (map[string]bool, error) {
 	}
 }
 
-
+// ToStringMapE casts an interface to a map[string]interface{} type.
 func ToStringMapE(i interface{}) (map[string]interface{}, error) {
 	var m = map[string]interface{}{}
 
@@ -990,7 +990,88 @@ func ToStringMapE(i interface{}) (map[string]interface{}, error) {
 	}
 }
 
+// ToStringMapIntE casts an interface to a map[string]int{} type.
+func ToStringMapIntE(i interface{}) (map[string]int, error) {
+	var m = map[string]int{}
+	if i == nil {
+		return m, fmt.Errorf("unable to cast %#v of type %T to map[string]int", i, i)
+	}
 
+	switch v := i.(type) {
+	case map[interface{}]interface{}:
+		for k, val := range v {
+			m[ToString(k)] = ToInt(val)
+		}
+		return m, nil
+	case map[string]interface{}:
+		for k, val := range v {
+			m[k] = ToInt(val)
+		}
+		return m, nil
+	case map[string]int:
+		return v, nil
+	case string:
+		err := jsonStringToObject(v, &m)
+		return m, err
+	}
+
+	if reflect.TypeOf(i).Kind() != reflect.Map {
+		return m, fmt.Errorf("unable to cast %#v of type %T to map[string]int", i, i)
+	}
+
+	mVal := reflect.ValueOf(m)
+	v := reflect.ValueOf(i)
+	for _, keyVal := range v.MapKeys() {
+		val, err := ToIntE(v.MapIndex(keyVal).Interface())
+		if err != nil {
+			return m, fmt.Errorf("unable to cast %#v of type %T to map[string]int", i, i)
+		}
+		mVal.SetMapIndex(keyVal, reflect.ValueOf(val))
+	}
+	return m, nil
+}
+
+// ToStringMapInt64E casts an interface to a map[string]int64{} type.
+func ToStringMapInt64E(i interface{}) (map[string]int64, error) {
+	var m = map[string]int64{}
+	if i == nil {
+		return m, fmt.Errorf("unable to cast %#v of type %T to map[string]int64", i, i)
+	}
+
+	switch v := i.(type) {
+	case map[interface{}]interface{}:
+		for k, val := range v {
+			m[ToString(k)] = ToInt64(val)
+		}
+		return m, nil
+	case map[string]interface{}:
+		for k, val := range v {
+			m[k] = ToInt64(val)
+		}
+		return m, nil
+	case map[string]int64:
+		return v, nil
+	case string:
+		err := jsonStringToObject(v, &m)
+		return m, err
+	}
+
+	if reflect.TypeOf(i).Kind() != reflect.Map {
+		return m, fmt.Errorf("unable to cast %#v of type %T to map[string]int64", i, i)
+	}
+	mVal := reflect.ValueOf(m)
+	v := reflect.ValueOf(i)
+	for _, keyVal := range v.MapKeys() {
+		val, err := ToInt64E(v.MapIndex(keyVal).Interface())
+		if err != nil {
+			return m, fmt.Errorf("unable to cast %#v of type %T to map[string]int64", i, i)
+		}
+		mVal.SetMapIndex(keyVal, reflect.ValueOf(val))
+	}
+	return m, nil
+}
+
+// ToSliceE casts an interface to a []interface{} type.
 func ToSliceE(i interface{}) ([]interface{}, error) {
 	var s []interface{}
 
@@ -1007,7 +1088,7 @@ func ToSliceE(i interface{}) ([]interface{}, error) {
 	}
 }
 
-
+// ToBoolSliceE casts an interface to a []bool type.
 func ToBoolSliceE(i interface{}) ([]bool, error) {
 	if i == nil {
 		return []bool{}, fmt.Errorf("unable to cast %#v of type %T to []bool", i, i)
@@ -1036,7 +1117,7 @@ func ToBoolSliceE(i interface{}) ([]bool, error) {
 	}
 }
 
-
+// ToStringSliceE casts an interface to a []string type.
 func ToStringSliceE(i interface{}) ([]string, error) {
 	var a []string
 
@@ -1061,7 +1142,7 @@ func ToStringSliceE(i interface{}) ([]string, error) {
 	}
 }
 
-
+// ToIntSliceE casts an interface to a []int type.
 func ToIntSliceE(i interface{}) ([]int, error) {
 	if i == nil {
 		return []int{}, fmt.Errorf("unable to cast %#v of type %T to []int", i, i)
@@ -1090,7 +1171,7 @@ func ToIntSliceE(i interface{}) ([]int, error) {
 	}
 }
 
-
+// ToDurationSliceE casts an interface to a []time.Duration type.
 func ToDurationSliceE(i interface{}) ([]time.Duration, error) {
 	if i == nil {
 		return []time.Duration{}, fmt.Errorf("unable to cast %#v of type %T to []time.Duration", i, i)
@@ -1119,13 +1200,13 @@ func ToDurationSliceE(i interface{}) ([]time.Duration, error) {
 	}
 }
 
-
-
-
+// StringToDate attempts to parse a string into a time.Time type using a
+// predefined list of formats.  If no suitable format is found, an error is
+// returned.
 func StringToDate(s string) (time.Time, error) {
 	return parseDateWith(s, []string{
 		time.RFC3339,
-		"2006-01-02T15:04:05", 
+		"2006-01-02T15:04:05", // iso8601 without timezone
 		time.RFC1123Z,
 		time.RFC1123,
 		time.RFC822Z,
@@ -1134,12 +1215,14 @@ func StringToDate(s string) (time.Time, error) {
 		time.ANSIC,
 		time.UnixDate,
 		time.RubyDate,
-		"2006-01-02 15:04:05.999999999 -0700 MST", 
+		"2006-01-02 15:04:05.999999999 -0700 MST", // Time.String()
 		"2006-01-02",
 		"02 Jan 2006",
+		"2006-01-02T15:04:05-0700", // RFC3339 without timezone hh:mm colon
 		"2006-01-02 15:04:05 -07:00",
 		"2006-01-02 15:04:05 -0700",
-		"2006-01-02 15:04:05Z07:00", 
+		"2006-01-02 15:04:05Z07:00", // RFC3339 without T
+		"2006-01-02 15:04:05Z0700",  // RFC3339 without T or timezone hh:mm colon
 		"2006-01-02 15:04:05",
 		time.Kitchen,
 		time.Stamp,
@@ -1158,8 +1241,8 @@ func parseDateWith(s string, dates []string) (d time.Time, e error) {
 	return d, fmt.Errorf("unable to parse date: %s", s)
 }
 
-
-
+// jsonStringToObject attempts to unmarshall a string as JSON into
+// the object passed as pointer.
 func jsonStringToObject(s string, v interface{}) error {
 	data := []byte(s)
 	return json.Unmarshal(data, v)

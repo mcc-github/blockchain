@@ -8,15 +8,15 @@ import (
 	"strings"
 )
 
-
+// Frame represents a program counter inside a stack frame.
 type Frame uintptr
 
-
-
+// pc returns the program counter for this frame;
+// multiple frames may have the same PC value.
 func (f Frame) pc() uintptr { return uintptr(f) - 1 }
 
-
-
+// file returns the full path to the file that contains the
+// function for this Frame's pc.
 func (f Frame) file() string {
 	fn := runtime.FuncForPC(f.pc())
 	if fn == nil {
@@ -26,8 +26,8 @@ func (f Frame) file() string {
 	return file
 }
 
-
-
+// line returns the line number of source code of the
+// function for this Frame's pc.
 func (f Frame) line() int {
 	fn := runtime.FuncForPC(f.pc())
 	if fn == nil {
@@ -37,18 +37,18 @@ func (f Frame) line() int {
 	return line
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
+// Format formats the frame according to the fmt.Formatter interface.
+//
+//    %s    source file
+//    %d    source line
+//    %n    function name
+//    %v    equivalent to %s:%d
+//
+// Format accepts flags that alter the printing of some verbs, as follows:
+//
+//    %+s   function name and path of source file relative to the compile time
+//          GOPATH separated by \n\t (<funcname>\n\t<path>)
+//    %+v   equivalent to %+s:%d
 func (f Frame) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 's':
@@ -77,17 +77,17 @@ func (f Frame) Format(s fmt.State, verb rune) {
 	}
 }
 
-
+// StackTrace is stack of Frames from innermost (newest) to outermost (oldest).
 type StackTrace []Frame
 
-
-
-
-
-
-
-
-
+// Format formats the stack of Frames according to the fmt.Formatter interface.
+//
+//    %s	lists source files for each Frame in the stack
+//    %v	lists the source file and line number for each Frame in the stack
+//
+// Format accepts flags that alter the printing of some verbs, as follows:
+//
+//    %+v   Prints filename, function, and line number for each Frame in the stack.
 func (st StackTrace) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
@@ -106,7 +106,7 @@ func (st StackTrace) Format(s fmt.State, verb rune) {
 	}
 }
 
-
+// stack represents a stack of program counters.
 type stack []uintptr
 
 func (s *stack) Format(st fmt.State, verb rune) {
@@ -138,7 +138,7 @@ func callers() *stack {
 	return &st
 }
 
-
+// funcname removes the path prefix component of a function's name reported by func.Name().
 func funcname(name string) string {
 	i := strings.LastIndex(name, "/")
 	name = name[i+1:]

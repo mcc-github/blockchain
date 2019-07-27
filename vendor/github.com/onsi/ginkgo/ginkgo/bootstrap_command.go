@@ -73,11 +73,11 @@ func Test{{.FormattedName}}(t *testing.T) {
 var agoutiDriver *agouti.WebDriver
 
 var _ = BeforeSuite(func() {
-	
+	// Choose a WebDriver:
 
 	agoutiDriver = agouti.PhantomJS()
-	
-	
+	// agoutiDriver = agouti.Selenium()
+	// agoutiDriver = agouti.ChromeDriver()
 
 	Expect(agoutiDriver.Start()).To(Succeed())
 })

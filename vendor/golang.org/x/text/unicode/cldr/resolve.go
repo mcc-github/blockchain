@@ -1,12 +1,12 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package cldr
 
-
-
-
+// This file implements the various inheritance constructs defined by LDML.
+// See https://www.unicode.org/reports/tr35/#Inheritance_and_Validity
+// for more details.
 
 import (
 	"fmt"
@@ -17,8 +17,8 @@ import (
 	"strings"
 )
 
-
-
+// fieldIter iterates over fields in a struct. It includes
+// fields of embedded structs.
 type fieldIter struct {
 	v        reflect.Value
 	index, n []int
@@ -87,7 +87,7 @@ func (f visitor) visit(x interface{}) error {
 	return f.visitRec(reflect.ValueOf(x))
 }
 
-
+// visit recursively calls f on all nodes in v.
 func (f visitor) visitRec(v reflect.Value) error {
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
@@ -118,7 +118,7 @@ func (f visitor) visitRec(v reflect.Value) error {
 	return nil
 }
 
-
+// getPath is used for error reporting purposes only.
 func getPath(e Elem) string {
 	if e == nil {
 		return "<nil>"
@@ -132,7 +132,7 @@ func getPath(e Elem) string {
 	return fmt.Sprintf("%s.%s[type=%s]", getPath(e.enclosing()), e.GetCommon().name, e.GetCommon().Type)
 }
 
-
+// xmlName returns the xml name of the element or attribute
 func xmlName(f reflect.StructField) (name string, attr bool) {
 	tags := strings.Split(f.Tag.Get("xml"), ",")
 	for _, s := range tags {
@@ -215,7 +215,7 @@ func walkXPath(e Elem, path string) (res Elem, err error) {
 	return e, nil
 }
 
-const absPrefix = "
+const absPrefix = "//ldml/"
 
 func (cldr *CLDR) resolveAlias(e Elem, src, path string) (res Elem, err error) {
 	if src != "locale" {
@@ -239,7 +239,7 @@ func (cldr *CLDR) resolveAndMergeAlias(e Elem) error {
 	if err != nil {
 		return fmt.Errorf("%v: error evaluating path %q: %v", getPath(e), alias.Path, err)
 	}
-	
+	// Ensure alias node was already evaluated. TODO: avoid double evaluation.
 	err = cldr.resolveAndMergeAlias(a)
 	v := reflect.ValueOf(e).Elem()
 	for i := iter(reflect.ValueOf(a).Elem()); !i.done(); i.next() {
@@ -264,8 +264,8 @@ func (cldr *CLDR) aliasResolver() visitor {
 	}
 }
 
-
-
+// elements within blocking elements do not inherit.
+// Taken from CLDR's supplementalMetaData.xml.
 var blocking = map[string]bool{
 	"identity":         true,
 	"supplementalData": true,
@@ -274,10 +274,10 @@ var blocking = map[string]bool{
 	"transform":        true,
 }
 
-
-
-
-
+// Distinguishing attributes affect inheritance; two elements with different
+// distinguishing attributes are treated as different for purposes of inheritance,
+// except when such attributes occur in the indicated elements.
+// Taken from CLDR's supplementalMetaData.xml.
 var distinguishing = map[string][]string{
 	"key":        nil,
 	"request_id": nil,
@@ -308,8 +308,8 @@ func in(set []string, s string) bool {
 	return false
 }
 
-
-
+// attrKey computes a key based on the distinguishable attributes of
+// an element and its values.
 func attrKey(v reflect.Value, exclude ...string) string {
 	parts := []string{}
 	ename := v.Interface().(Elem).GetCommon().name
@@ -331,14 +331,14 @@ func attrKey(v reflect.Value, exclude ...string) string {
 	return strings.Join(parts, ";")
 }
 
-
-
+// Key returns a key for e derived from all distinguishing attributes
+// except those specified by exclude.
 func Key(e Elem, exclude ...string) string {
 	return attrKey(reflect.ValueOf(e), exclude...)
 }
 
-
-
+// linkEnclosing sets the enclosing element as well as the name
+// for all sub-elements of child, recursively.
 func linkEnclosing(parent, child Elem) {
 	child.setEnclosing(parent)
 	v := reflect.ValueOf(child).Elem()
@@ -370,8 +370,8 @@ func setNames(e Elem, name string) {
 	}
 }
 
-
-
+// deepCopy copies elements of v recursively.  All elements of v that may
+// be modified by inheritance are explicitly copied.
 func deepCopy(v reflect.Value) reflect.Value {
 	switch v.Kind() {
 	case reflect.Ptr:
@@ -392,7 +392,7 @@ func deepCopy(v reflect.Value) reflect.Value {
 	panic("deepCopy: must be called with pointer or slice")
 }
 
-
+// deepCopyRec is only called by deepCopy.
 func deepCopyRec(nv, v reflect.Value) {
 	if v.Kind() == reflect.Struct {
 		t := v.Type()
@@ -406,7 +406,7 @@ func deepCopyRec(nv, v reflect.Value) {
 	}
 }
 
-
+// newNode is used to insert a missing node during inheritance.
 func (cldr *CLDR) newNode(v, enc reflect.Value) reflect.Value {
 	n := reflect.New(v.Type())
 	for i := iter(v); !i.done(); i.next() {
@@ -418,7 +418,7 @@ func (cldr *CLDR) newNode(v, enc reflect.Value) reflect.Value {
 	return n
 }
 
-
+// v, parent must be pointers to struct
 func (cldr *CLDR) inheritFields(v, parent reflect.Value) (res reflect.Value, err error) {
 	t := v.Type()
 	nv := reflect.New(t)
@@ -473,8 +473,8 @@ func root(e Elem) *LDML {
 	return e.(*LDML)
 }
 
-
-
+// inheritStructPtr first merges possible aliases in with v and then inherits
+// any underspecified elements from parent.
 func (cldr *CLDR) inheritStructPtr(v, parent reflect.Value) (r reflect.Value, err error) {
 	if !v.IsNil() {
 		e := v.Interface().(Elem).GetCommon()
@@ -499,7 +499,7 @@ func (cldr *CLDR) inheritStructPtr(v, parent reflect.Value) (r reflect.Value, er
 	return v, nil
 }
 
-
+// Must be slice of struct pointers.
 func (cldr *CLDR) inheritSlice(enc, v, parent reflect.Value) (res reflect.Value, err error) {
 	t := v.Type()
 	index := make(map[string]reflect.Value)
@@ -580,9 +580,9 @@ func (cldr *CLDR) resolve(loc string) (res *LDML, err error) {
 	return x, err
 }
 
-
-
-
+// finalize finalizes the initialization of the raw LDML structs.  It also
+// removed unwanted fields, as specified by filter, so that they will not
+// be unnecessarily evaluated.
 func (cldr *CLDR) finalize(filter []string) {
 	for _, x := range cldr.locale {
 		if filter != nil {
@@ -596,7 +596,7 @@ func (cldr *CLDR) finalize(filter []string) {
 				}
 			}
 		}
-		linkEnclosing(nil, x) 
+		linkEnclosing(nil, x) // for resolving aliases and paths
 		setNames(x, "ldml")
 	}
 }

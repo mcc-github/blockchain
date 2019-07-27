@@ -1,4 +1,12 @@
+/*
 
+Aggregator is a reporter used by the Ginkgo CLI to aggregate and present parallel test output
+coherently as tests complete.  You shouldn't need to use this in your code.  To run tests in parallel:
+
+	ginkgo -nodes=N
+
+where N is the number of nodes you desire.
+*/
 package remote
 
 import (
@@ -71,7 +79,7 @@ func (aggregator *Aggregator) AfterSuiteDidRun(setupSummary *types.SetupSummary)
 }
 
 func (aggregator *Aggregator) SpecWillRun(specSummary *types.SpecSummary) {
-	
+	//noop
 }
 
 func (aggregator *Aggregator) SpecDidComplete(specSummary *types.SpecSummary) {

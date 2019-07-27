@@ -1,4 +1,9 @@
+/*
 
+The remote package provides the pieces to allow Ginkgo test suites to report to remote listeners.
+This is used, primarily, to enable streaming parallel test output but has, in principal, broader applications (e.g. streaming test output to a browser).
+
+*/
 
 package remote
 
@@ -16,7 +21,10 @@ import (
 	"github.com/onsi/ginkgo/types"
 )
 
-
+/*
+Server spins up on an automatically selected port and listens for communication from the forwarding reporter.
+It then forwards that communication to attached reporters.
+*/
 type Server struct {
 	listener        net.Listener
 	reporters       []reporters.Reporter
@@ -27,7 +35,7 @@ type Server struct {
 	counter         int
 }
 
-
+//Create a new server, automatically selecting a port
 func NewServer(parallelTotal int) (*Server, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -42,13 +50,13 @@ func NewServer(parallelTotal int) (*Server, error) {
 	}, nil
 }
 
-
+//Start the server.  You don't need to `go s.Start()`, just `s.Start()`
 func (server *Server) Start() {
 	httpServer := &http.Server{}
 	mux := http.NewServeMux()
 	httpServer.Handler = mux
 
-	
+	//streaming endpoints
 	mux.HandleFunc("/SpecSuiteWillBegin", server.specSuiteWillBegin)
 	mux.HandleFunc("/BeforeSuiteDidRun", server.beforeSuiteDidRun)
 	mux.HandleFunc("/AfterSuiteDidRun", server.afterSuiteDidRun)
@@ -56,30 +64,30 @@ func (server *Server) Start() {
 	mux.HandleFunc("/SpecDidComplete", server.specDidComplete)
 	mux.HandleFunc("/SpecSuiteDidEnd", server.specSuiteDidEnd)
 
-	
+	//synchronization endpoints
 	mux.HandleFunc("/BeforeSuiteState", server.handleBeforeSuiteState)
 	mux.HandleFunc("/RemoteAfterSuiteData", server.handleRemoteAfterSuiteData)
 	mux.HandleFunc("/counter", server.handleCounter)
-	mux.HandleFunc("/has-counter", server.handleHasCounter) 
+	mux.HandleFunc("/has-counter", server.handleHasCounter) //for backward compatibility
 
 	go httpServer.Serve(server.listener)
 }
 
-
+//Stop the server
 func (server *Server) Close() {
 	server.listener.Close()
 }
 
-
+//The address the server can be reached it.  Pass this into the `ForwardingReporter`.
 func (server *Server) Address() string {
 	return "http://" + server.listener.Addr().String()
 }
 
+//
+// Streaming Endpoints
+//
 
-
-
-
-
+//The server will forward all received messages to Ginkgo reporters registered with `RegisterReporters`
 func (server *Server) readAll(request *http.Request) []byte {
 	defer request.Body.Close()
 	body, _ := ioutil.ReadAll(request.Body)
@@ -155,9 +163,9 @@ func (server *Server) specSuiteDidEnd(writer http.ResponseWriter, request *http.
 	}
 }
 
-
-
-
+//
+// Synchronization Endpoints
+//
 
 func (server *Server) RegisterAlive(node int, alive func() bool) {
 	server.lock.Lock()

@@ -16,52 +16,54 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-
+// TestingT is an interface wrapper around *testing.T
 type TestingT interface {
 	Logf(format string, args ...interface{})
 	Errorf(format string, args ...interface{})
 	FailNow()
 }
 
+/*
+	Call
+*/
 
-
-
-
+// Call represents a method call and is used for setting expectations,
+// as well as recording activity.
 type Call struct {
 	Parent *Mock
 
-	
+	// The name of the method that was or will be called.
 	Method string
 
-	
+	// Holds the arguments of the method.
 	Arguments Arguments
 
-	
-	
+	// Holds the arguments that should be returned when
+	// this method is called.
 	ReturnArguments Arguments
 
-	
+	// Holds the caller info for the On() call
 	callerInfo []string
 
-	
-	
+	// The number of times to return the return arguments when setting
+	// expectations. 0 means to always return the value.
 	Repeatability int
 
-	
+	// Amount of times this call has been called
 	totalCalls int
 
-	
+	// Call to this method can be optional
 	optional bool
 
-	
-	
+	// Holds a channel that will be used to block the Return until it either
+	// receives a message or is closed. nil means it returns immediately.
 	WaitFor <-chan time.Time
 
 	waitTime time.Duration
 
-	
-	
-	
+	// Holds a handler used to manipulate arguments content that are passed by
+	// reference. It's useful when mocking methods such as unmarshalers or
+	// decoders.
 	RunFn func(Arguments)
 }
 
@@ -86,9 +88,9 @@ func (c *Call) unlock() {
 	c.Parent.mutex.Unlock()
 }
 
-
-
-
+// Return specifies the return arguments for the expectation.
+//
+//    Mock.On("DoSomething").Return(errors.New("failed"))
 func (c *Call) Return(returnArguments ...interface{}) *Call {
 	c.lock()
 	defer c.unlock()
@@ -98,24 +100,24 @@ func (c *Call) Return(returnArguments ...interface{}) *Call {
 	return c
 }
 
-
-
-
+// Once indicates that that the mock should only return the value once.
+//
+//    Mock.On("MyMethod", arg1, arg2).Return(returnArg1, returnArg2).Once()
 func (c *Call) Once() *Call {
 	return c.Times(1)
 }
 
-
-
-
+// Twice indicates that that the mock should only return the value twice.
+//
+//    Mock.On("MyMethod", arg1, arg2).Return(returnArg1, returnArg2).Twice()
 func (c *Call) Twice() *Call {
 	return c.Times(2)
 }
 
-
-
-
-
+// Times indicates that that the mock should only return the indicated number
+// of times.
+//
+//    Mock.On("MyMethod", arg1, arg2).Return(returnArg1, returnArg2).Times(5)
 func (c *Call) Times(i int) *Call {
 	c.lock()
 	defer c.unlock()
@@ -123,10 +125,10 @@ func (c *Call) Times(i int) *Call {
 	return c
 }
 
-
-
-
-
+// WaitUntil sets the channel that will block the mock's return until its closed
+// or a message is received.
+//
+//    Mock.On("MyMethod", arg1, arg2).WaitUntil(time.After(time.Second))
 func (c *Call) WaitUntil(w <-chan time.Time) *Call {
 	c.lock()
 	defer c.unlock()
@@ -134,9 +136,9 @@ func (c *Call) WaitUntil(w <-chan time.Time) *Call {
 	return c
 }
 
-
-
-
+// After sets how long to block until the call returns
+//
+//    Mock.On("MyMethod", arg1, arg2).After(time.Second)
 func (c *Call) After(d time.Duration) *Call {
 	c.lock()
 	defer c.unlock()
@@ -144,14 +146,14 @@ func (c *Call) After(d time.Duration) *Call {
 	return c
 }
 
-
-
-
-
-
-
-
-
+// Run sets a handler to be called before returning. It can be used when
+// mocking a method such as unmarshalers that takes a pointer to a struct and
+// sets properties in such struct
+//
+//    Mock.On("Unmarshal", AnythingOfType("*map[string]interface{}").Return().Run(func(args Arguments) {
+//    	arg := args.Get(0).(*map[string]interface{})
+//    	arg["foo"] = "bar"
+//    })
 func (c *Call) Run(fn func(args Arguments)) *Call {
 	c.lock()
 	defer c.unlock()
@@ -159,8 +161,8 @@ func (c *Call) Run(fn func(args Arguments)) *Call {
 	return c
 }
 
-
-
+// Maybe allows the method call to be optional. Not calling an optional method
+// will not cause an error while asserting expectations
 func (c *Call) Maybe() *Call {
 	c.lock()
 	defer c.unlock()
@@ -168,40 +170,41 @@ func (c *Call) Maybe() *Call {
 	return c
 }
 
-
-
-
-
-
-
+// On chains a new expectation description onto the mocked interface. This
+// allows syntax like.
+//
+//    Mock.
+//       On("MyMethod", 1).Return(nil).
+//       On("MyOtherMethod", 'a', 'b', 'c').Return(errors.New("Some Error"))
+//go:noinline
 func (c *Call) On(methodName string, arguments ...interface{}) *Call {
 	return c.Parent.On(methodName, arguments...)
 }
 
-
-
-
+// Mock is the workhorse used to track activity on another object.
+// For an example of its usage, refer to the "Example Usage" section at the top
+// of this document.
 type Mock struct {
-	
-	
+	// Represents the calls that are expected of
+	// an object.
 	ExpectedCalls []*Call
 
-	
+	// Holds the calls that were made to this mocked object.
 	Calls []Call
 
-	
-	
+	// test is An optional variable that holds the test struct, to be used when an
+	// invalid mock call was made.
 	test TestingT
 
-	
-	
+	// TestData holds any data that might be useful for testing.  Testify ignores
+	// this data completely allowing you to do whatever you like with it.
 	testData objx.Map
 
 	mutex sync.Mutex
 }
 
-
-
+// TestData holds any data that might be useful for testing.  Testify ignores
+// this data completely allowing you to do whatever you like with it.
 func (m *Mock) TestData() objx.Map {
 
 	if m.testData == nil {
@@ -211,18 +214,20 @@ func (m *Mock) TestData() objx.Map {
 	return m.testData
 }
 
+/*
+	Setting expectations
+*/
 
-
-
+// Test sets the test struct variable of the mock object
 func (m *Mock) Test(t TestingT) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.test = t
 }
 
-
-
-
+// fail fails the current test with the given formatted format and args.
+// In case that a test was defined, it uses the test APIs for failing a test,
+// otherwise it uses panic.
 func (m *Mock) fail(format string, args ...interface{}) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -234,10 +239,10 @@ func (m *Mock) fail(format string, args ...interface{}) {
 	m.test.FailNow()
 }
 
-
-
-
-
+// On starts a description of an expectation of the specified method
+// being called.
+//
+//     Mock.On("MyMethod", arg1, arg2)
 func (m *Mock) On(methodName string, arguments ...interface{}) *Call {
 	for _, arg := range arguments {
 		if v := reflect.ValueOf(arg); v.Kind() == reflect.Func {
@@ -252,9 +257,9 @@ func (m *Mock) On(methodName string, arguments ...interface{}) *Call {
 	return c
 }
 
-
-
-
+// /*
+// 	Recording and responding to activity
+// */
 
 func (m *Mock) findExpectedCall(method string, arguments ...interface{}) (int, *Call) {
 	for i, call := range m.ExpectedCalls {
@@ -305,21 +310,21 @@ func callString(method string, arguments Arguments, includeArgumentValues bool) 
 	return fmt.Sprintf("%s(%s)%s", method, arguments.String(), argValsString)
 }
 
-
-
-
-
+// Called tells the mock object that a method has been called, and gets an array
+// of arguments to return.  Panics if the call is unexpected (i.e. not preceded by
+// appropriate .On .Return() calls)
+// If Call.WaitFor is set, blocks until the channel is closed or receives a message.
 func (m *Mock) Called(arguments ...interface{}) Arguments {
-	
+	// get the calling function's name
 	pc, _, _, ok := runtime.Caller(1)
 	if !ok {
 		panic("Couldn't get the caller information")
 	}
 	functionPath := runtime.FuncForPC(pc).Name()
-	
-	
-	
-	
+	//Next four lines are required to use GCCGO function naming conventions.
+	//For Ex:  github_com_docker_libkv_store_mock.WatchTree.pN39_github_com_docker_libkv_store_mock.Mock
+	//uses interface information unlike golang github.com/docker/libkv/store/mock.(*Mock).WatchTree
+	//With GCCGO we need to remove interface information starting from pN<dd>.
 	re := regexp.MustCompile("\\.pN\\d+_")
 	if re.MatchString(functionPath) {
 		functionPath = re.Split(functionPath, -1)[0]
@@ -329,22 +334,22 @@ func (m *Mock) Called(arguments ...interface{}) Arguments {
 	return m.MethodCalled(functionName, arguments...)
 }
 
-
-
-
-
+// MethodCalled tells the mock object that the given method has been called, and gets
+// an array of arguments to return. Panics if the call is unexpected (i.e. not preceded
+// by appropriate .On .Return() calls)
+// If Call.WaitFor is set, blocks until the channel is closed or receives a message.
 func (m *Mock) MethodCalled(methodName string, arguments ...interface{}) Arguments {
 	m.mutex.Lock()
-	
+	//TODO: could combine expected and closes in single loop
 	found, call := m.findExpectedCall(methodName, arguments...)
 
 	if found < 0 {
-		
-		
-		
-		
-		
-		
+		// we have to fail here - because we don't know what to do
+		// as the return arguments.  This is because:
+		//
+		//   a) this is a totally unexpected call to this method,
+		//   b) the arguments are not what was expected, or
+		//   c) the developer has forgotten to add an accompanying On...Return pair.
 
 		closestCall, mismatch := m.findClosestCall(methodName, arguments...)
 		m.mutex.Unlock()
@@ -368,11 +373,11 @@ func (m *Mock) MethodCalled(methodName string, arguments ...interface{}) Argumen
 	}
 	call.totalCalls++
 
-	
+	// add the call
 	m.Calls = append(m.Calls, *newCall(m, methodName, assert.CallerInfo(), arguments...))
 	m.mutex.Unlock()
 
-	
+	// block if specified
 	if call.WaitFor != nil {
 		<-call.WaitFor
 	} else {
@@ -394,16 +399,18 @@ func (m *Mock) MethodCalled(methodName string, arguments ...interface{}) Argumen
 	return returnArgs
 }
 
-
+/*
+	Assertions
+*/
 
 type assertExpectationser interface {
 	AssertExpectations(TestingT) bool
 }
 
-
-
-
-
+// AssertExpectationsForObjects asserts that everything specified with On and Return
+// of the specified objects was in fact called as expected.
+//
+// Calls may have occurred in any order.
 func AssertExpectationsForObjects(t TestingT, testObjects ...interface{}) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
@@ -422,8 +429,8 @@ func AssertExpectationsForObjects(t TestingT, testObjects ...interface{}) bool {
 	return true
 }
 
-
-
+// AssertExpectations asserts that everything specified with On and Return was
+// in fact called as expected.  Calls may have occurred in any order.
 func (m *Mock) AssertExpectations(t TestingT) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
@@ -433,7 +440,7 @@ func (m *Mock) AssertExpectations(t TestingT) bool {
 	var somethingMissing bool
 	var failedExpectations int
 
-	
+	// iterate through each expectation
 	expectedCalls := m.expectedCalls()
 	for _, expectedCall := range expectedCalls {
 		if !expectedCall.optional && !m.methodWasCalled(expectedCall.Method, expectedCall.Arguments) && expectedCall.totalCalls == 0 {
@@ -458,7 +465,7 @@ func (m *Mock) AssertExpectations(t TestingT) bool {
 	return !somethingMissing
 }
 
-
+// AssertNumberOfCalls asserts that the method was called expectedCalls times.
 func (m *Mock) AssertNumberOfCalls(t TestingT, methodName string, expectedCalls int) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
@@ -474,8 +481,8 @@ func (m *Mock) AssertNumberOfCalls(t TestingT, methodName string, expectedCalls 
 	return assert.Equal(t, expectedCalls, actualCalls, fmt.Sprintf("Expected number of calls (%d) does not match the actual number of calls (%d).", expectedCalls, actualCalls))
 }
 
-
-
+// AssertCalled asserts that the method was called.
+// It can produce a false result when an argument is a pointer type and the underlying value changed after calling the mocked method.
 func (m *Mock) AssertCalled(t TestingT, methodName string, arguments ...interface{}) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
@@ -497,8 +504,8 @@ func (m *Mock) AssertCalled(t TestingT, methodName string, arguments ...interfac
 	return true
 }
 
-
-
+// AssertNotCalled asserts that the method was not called.
+// It can produce a false result when an argument is a pointer type and the underlying value changed after calling the mocked method.
 func (m *Mock) AssertNotCalled(t TestingT, methodName string, arguments ...interface{}) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
@@ -519,13 +526,13 @@ func (m *Mock) methodWasCalled(methodName string, expected []interface{}) bool {
 			_, differences := Arguments(expected).Diff(call.Arguments)
 
 			if differences == 0 {
-				
+				// found the expected call
 				return true
 			}
 
 		}
 	}
-	
+	// we didn't find the expected call
 	return false
 }
 
@@ -537,34 +544,36 @@ func (m *Mock) calls() []Call {
 	return append([]Call{}, m.Calls...)
 }
 
+/*
+	Arguments
+*/
 
-
-
+// Arguments holds an array of method arguments or return values.
 type Arguments []interface{}
 
 const (
-	
-	
+	// Anything is used in Diff and Assert when the argument being tested
+	// shouldn't be taken into consideration.
 	Anything = "mock.Anything"
 )
 
-
-
+// AnythingOfTypeArgument is a string that contains the type of an argument
+// for use when type checking.  Used in Diff and Assert.
 type AnythingOfTypeArgument string
 
-
-
-
-
-
+// AnythingOfType returns an AnythingOfTypeArgument object containing the
+// name of the type to check for.  Used in Diff and Assert.
+//
+// For example:
+//	Assert(t, AnythingOfType("string"), AnythingOfType("int"))
 func AnythingOfType(t string) AnythingOfTypeArgument {
 	return AnythingOfTypeArgument(t)
 }
 
-
-
+// argumentMatcher performs custom argument matching, returning whether or
+// not the argument is matched by the expectation fixture function.
 type argumentMatcher struct {
-	
+	// fn is a function which accepts one argument, and returns a bool.
 	fn reflect.Value
 }
 
@@ -598,17 +607,17 @@ func (f argumentMatcher) String() string {
 	return fmt.Sprintf("func(%s) bool", f.fn.Type().In(0).Name())
 }
 
-
-
-
-
-
-
-
-
-
-
-
+// MatchedBy can be used to match a mock call based on only certain properties
+// from a complex struct or some calculation. It takes a function that will be
+// evaluated with the called argument and will return true when there's a match
+// and false otherwise.
+//
+// Example:
+// m.On("Do", MatchedBy(func(req *http.Request) bool { return req.Host == "example.com" }))
+//
+// |fn|, must be a function accepting a single argument (of the expected type)
+// which returns a bool. If |fn| doesn't match the required signature,
+// MatchedBy() panics.
 func MatchedBy(fn interface{}) argumentMatcher {
 	fnType := reflect.TypeOf(fn)
 
@@ -625,7 +634,7 @@ func MatchedBy(fn interface{}) argumentMatcher {
 	return argumentMatcher{fn: reflect.ValueOf(fn)}
 }
 
-
+// Get Returns the argument at the specified index.
 func (args Arguments) Get(index int) interface{} {
 	if index+1 > len(args) {
 		panic(fmt.Sprintf("assert: arguments: Cannot call Get(%d) because there are %d argument(s).", index, len(args)))
@@ -633,7 +642,7 @@ func (args Arguments) Get(index int) interface{} {
 	return args[index]
 }
 
-
+// Is gets whether the objects match the arguments specified.
 func (args Arguments) Is(objects ...interface{}) bool {
 	for i, obj := range args {
 		if obj != objects[i] {
@@ -643,12 +652,12 @@ func (args Arguments) Is(objects ...interface{}) bool {
 	return true
 }
 
-
-
-
-
+// Diff gets a string describing the differences between the arguments
+// and the specified objects.
+//
+// Returns the diff string and number of differences found.
 func (args Arguments) Diff(objects []interface{}) (string, int) {
-	
+	//TODO: could return string as error and nil for No difference
 
 	var output = "\n"
 	var differences int
@@ -683,26 +692,26 @@ func (args Arguments) Diff(objects []interface{}) (string, int) {
 				output = fmt.Sprintf("%s\t%d: PASS:  %s matched by %s\n", output, i, actualFmt, matcher)
 			} else {
 				differences++
-				output = fmt.Sprintf("%s\t%d: PASS:  %s not matched by %s\n", output, i, actualFmt, matcher)
+				output = fmt.Sprintf("%s\t%d: FAIL:  %s not matched by %s\n", output, i, actualFmt, matcher)
 			}
 		} else if reflect.TypeOf(expected) == reflect.TypeOf((*AnythingOfTypeArgument)(nil)).Elem() {
 
-			
+			// type checking
 			if reflect.TypeOf(actual).Name() != string(expected.(AnythingOfTypeArgument)) && reflect.TypeOf(actual).String() != string(expected.(AnythingOfTypeArgument)) {
-				
+				// not match
 				differences++
 				output = fmt.Sprintf("%s\t%d: FAIL:  type %s != type %s - %s\n", output, i, expected, reflect.TypeOf(actual).Name(), actualFmt)
 			}
 
 		} else {
 
-			
+			// normal checking
 
 			if assert.ObjectsAreEqual(expected, Anything) || assert.ObjectsAreEqual(actual, Anything) || assert.ObjectsAreEqual(actual, expected) {
-				
+				// match
 				output = fmt.Sprintf("%s\t%d: PASS:  %s == %s\n", output, i, actualFmt, expectedFmt)
 			} else {
-				
+				// not match
 				differences++
 				output = fmt.Sprintf("%s\t%d: FAIL:  %s != %s\n", output, i, actualFmt, expectedFmt)
 			}
@@ -718,21 +727,21 @@ func (args Arguments) Diff(objects []interface{}) (string, int) {
 
 }
 
-
-
+// Assert compares the arguments with the specified objects and fails if
+// they do not exactly match.
 func (args Arguments) Assert(t TestingT, objects ...interface{}) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
 	}
 
-	
+	// get the differences
 	diff, diffCount := args.Diff(objects)
 
 	if diffCount == 0 {
 		return true
 	}
 
-	
+	// there are differences... report them...
 	t.Logf(diff)
 	t.Errorf("%sArguments do not match.", assert.CallerInfo())
 
@@ -740,22 +749,22 @@ func (args Arguments) Assert(t TestingT, objects ...interface{}) bool {
 
 }
 
-
-
-
-
-
+// String gets the argument at the specified index. Panics if there is no argument, or
+// if the argument is of the wrong type.
+//
+// If no index is provided, String() returns a complete string representation
+// of the arguments.
 func (args Arguments) String(indexOrNil ...int) string {
 
 	if len(indexOrNil) == 0 {
-		
+		// normal String() method - return a string representation of the args
 		var argsStr []string
 		for _, arg := range args {
 			argsStr = append(argsStr, fmt.Sprintf("%s", reflect.TypeOf(arg)))
 		}
 		return strings.Join(argsStr, ",")
 	} else if len(indexOrNil) == 1 {
-		
+		// Index has been specified - get the argument at that index
 		var index = indexOrNil[0]
 		var s string
 		var ok bool
@@ -769,8 +778,8 @@ func (args Arguments) String(indexOrNil ...int) string {
 
 }
 
-
-
+// Int gets the argument at the specified index. Panics if there is no argument, or
+// if the argument is of the wrong type.
 func (args Arguments) Int(index int) int {
 	var s int
 	var ok bool
@@ -780,8 +789,8 @@ func (args Arguments) Int(index int) int {
 	return s
 }
 
-
-
+// Error gets the argument at the specified index. Panics if there is no argument, or
+// if the argument is of the wrong type.
 func (args Arguments) Error(index int) error {
 	obj := args.Get(index)
 	var s error
@@ -795,8 +804,8 @@ func (args Arguments) Error(index int) error {
 	return s
 }
 
-
-
+// Bool gets the argument at the specified index. Panics if there is no argument, or
+// if the argument is of the wrong type.
 func (args Arguments) Bool(index int) bool {
 	var s bool
 	var ok bool
@@ -831,8 +840,8 @@ func diffArguments(expected Arguments, actual Arguments) string {
 	return ""
 }
 
-
-
+// diff returns a diff of both values as long as both are of the same type and
+// are a struct, map, slice or array. Otherwise it returns an empty string.
 func diff(expected interface{}, actual interface{}) string {
 	if expected == nil || actual == nil {
 		return ""

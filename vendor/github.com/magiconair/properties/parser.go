@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2018 Frank Schroeder. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package properties
 
@@ -82,7 +82,7 @@ func (p *parser) unexpected(token item) {
 	p.errorf(token.String())
 }
 
-
+// recover is the handler that turns panics into returns from the top level of Parse.
 func (p *parser) recover(errp *error) {
 	e := recover()
 	if e != nil {

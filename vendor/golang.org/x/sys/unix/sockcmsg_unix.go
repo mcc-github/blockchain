@@ -1,35 +1,51 @@
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// +build aix darwin dragonfly freebsd linux netbsd openbsd solaris
 
-
-
-
-
-
+// Socket control messages
 
 package unix
 
-import "unsafe"
+import (
+	"runtime"
+	"unsafe"
+)
 
-
+// Round the length of a raw sockaddr up to align it properly.
 func cmsgAlignOf(salen int) int {
-	salign := sizeofPtr
-	
-	
-	
-	if darwin64Bit || dragonfly64Bit || solaris64Bit {
-		salign = 4
+	salign := SizeofPtr
+
+	switch runtime.GOOS {
+	case "aix":
+		// There is no alignment on AIX.
+		salign = 1
+	case "darwin", "dragonfly", "solaris", "illumos":
+		// NOTE: It seems like 64-bit Darwin, DragonFly BSD,
+		// illumos, and Solaris kernels still require 32-bit
+		// aligned access to network subsystem.
+		if SizeofPtr == 8 {
+			salign = 4
+		}
+	case "netbsd", "openbsd":
+		// NetBSD and OpenBSD armv7 require 64-bit alignment.
+		if runtime.GOARCH == "arm" {
+			salign = 8
+		}
 	}
+
 	return (salen + salign - 1) & ^(salign - 1)
 }
 
-
-
+// CmsgLen returns the value to store in the Len field of the Cmsghdr
+// structure, taking into account any necessary alignment.
 func CmsgLen(datalen int) int {
 	return cmsgAlignOf(SizeofCmsghdr) + datalen
 }
 
-
-
+// CmsgSpace returns the number of bytes an ancillary element with
+// payload of the passed data length occupies.
 func CmsgSpace(datalen int) int {
 	return cmsgAlignOf(SizeofCmsghdr) + cmsgAlignOf(datalen)
 }
@@ -38,14 +54,14 @@ func cmsgData(h *Cmsghdr) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(unsafe.Pointer(h)) + uintptr(cmsgAlignOf(SizeofCmsghdr)))
 }
 
-
+// SocketControlMessage represents a socket control message.
 type SocketControlMessage struct {
 	Header Cmsghdr
 	Data   []byte
 }
 
-
-
+// ParseSocketControlMessage parses b as an array of socket control
+// messages.
 func ParseSocketControlMessage(b []byte) ([]SocketControlMessage, error) {
 	var msgs []SocketControlMessage
 	i := 0
@@ -69,8 +85,8 @@ func socketControlMessageHeaderAndData(b []byte) (*Cmsghdr, []byte, error) {
 	return h, b[cmsgAlignOf(SizeofCmsghdr):h.Len], nil
 }
 
-
-
+// UnixRights encodes a set of open file descriptors into a socket
+// control message for sending to another process.
 func UnixRights(fds ...int) []byte {
 	datalen := len(fds) * 4
 	b := make([]byte, CmsgSpace(datalen))
@@ -86,8 +102,8 @@ func UnixRights(fds ...int) []byte {
 	return b
 }
 
-
-
+// ParseUnixRights decodes a socket control message that contains an
+// integer array of open file descriptors from another process.
 func ParseUnixRights(m *SocketControlMessage) ([]int, error) {
 	if m.Header.Level != SOL_SOCKET {
 		return nil, EINVAL

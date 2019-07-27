@@ -2,70 +2,70 @@ package sarama
 
 import "errors"
 
-
-
-
-
+// ClusterAdmin is the administrative client for Kafka, which supports managing and inspecting topics,
+// brokers, configurations and ACLs. The minimum broker version required is 0.10.0.0.
+// Methods with stricter requirements will specify the minimum broker version required.
+// You MUST call Close() on a client to avoid leaks
 type ClusterAdmin interface {
-	
-	
-	
-	
+	// Creates a new topic. This operation is supported by brokers with version 0.10.1.0 or higher.
+	// It may take several seconds after CreateTopic returns success for all the brokers
+	// to become aware that the topic has been created. During this time, listTopics
+	// may not return information about the new topic.The validateOnly option is supported from version 0.10.2.0.
 	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
 
-	
-	
-	
-	
-	
-	
+	// Delete a topic. It may take several seconds after the DeleteTopic to returns success
+	// and for all the brokers to become aware that the topics are gone.
+	// During this time, listTopics  may continue to return information about the deleted topic.
+	// If delete.topic.enable is false on the brokers, deleteTopic will mark
+	// the topic for deletion, but not actually delete them.
+	// This operation is supported by brokers with version 0.10.1.0 or higher.
 	DeleteTopic(topic string) error
 
-	
-	
-	
-	
-	
-	
+	// Increase the number of partitions of the topics  according to the corresponding values.
+	// If partitions are increased for a topic that has a key, the partition logic or ordering of
+	// the messages will be affected. It may take several seconds after this method returns
+	// success for all the brokers to become aware that the partitions have been created.
+	// During this time, ClusterAdmin#describeTopics may not return information about the
+	// new partitions. This operation is supported by brokers with version 1.0.0 or higher.
 	CreatePartitions(topic string, count int32, assignment [][]int32, validateOnly bool) error
 
-	
-	
+	// Delete records whose offset is smaller than the given offset of the corresponding partition.
+	// This operation is supported by brokers with version 0.11.0.0 or higher.
 	DeleteRecords(topic string, partitionOffsets map[int32]int64) error
 
-	
-	
-	
-	
-	
-	
-	
+	// Get the configuration for the specified resources.
+	// The returned configuration includes default values and the Default is true
+	// can be used to distinguish them from user supplied values.
+	// Config entries where ReadOnly is true cannot be updated.
+	// The value of config entries where Sensitive is true is always nil so
+	// sensitive information is not disclosed.
+	// This operation is supported by brokers with version 0.11.0.0 or higher.
 	DescribeConfig(resource ConfigResource) ([]ConfigEntry, error)
 
-	
-	
-	
-	
-	
+	// Update the configuration for the specified resources with the default options.
+	// This operation is supported by brokers with version 0.11.0.0 or higher.
+	// The resources with their configs (topic is the only resource type with configs
+	// that can be updated currently Updates are not transactional so they may succeed
+	// for some resources while fail for others. The configs for a particular resource are updated automatically.
 	AlterConfig(resourceType ConfigResourceType, name string, entries map[string]*string, validateOnly bool) error
 
-	
-	
-	
-	
+	// Creates access control lists (ACLs) which are bound to specific resources.
+	// This operation is not transactional so it may succeed for some ACLs while fail for others.
+	// If you attempt to add an ACL that duplicates an existing ACL, no error will be raised, but
+	// no changes will be made. This operation is supported by brokers with version 0.11.0.0 or higher.
 	CreateACL(resource Resource, acl Acl) error
 
-	
-	
-	
+	// Lists access control lists (ACLs) according to the supplied filter.
+	// it may take some time for changes made by createAcls or deleteAcls to be reflected in the output of ListAcls
+	// This operation is supported by brokers with version 0.11.0.0 or higher.
 	ListAcls(filter AclFilter) ([]ResourceAcls, error)
 
-	
-	
-	
+	// Deletes access control lists (ACLs) according to the supplied filters.
+	// This operation is not transactional so it may succeed for some ACLs while fail for others.
+	// This operation is supported by brokers with version 0.11.0.0 or higher.
 	DeleteACL(filter AclFilter, validateOnly bool) ([]MatchingAcl, error)
 
-	
+	// Close shuts down the admin and closes underlying client.
 	Close() error
 }
 
@@ -74,14 +74,14 @@ type clusterAdmin struct {
 	conf   *Config
 }
 
-
+// NewClusterAdmin creates a new ClusterAdmin using the given broker addresses and configuration.
 func NewClusterAdmin(addrs []string, conf *Config) (ClusterAdmin, error) {
 	client, err := NewClient(addrs, conf)
 	if err != nil {
 		return nil, err
 	}
 
-	
+	//make sure we can retrieve the controller
 	_, err = client.Controller()
 	if err != nil {
 		return nil, err
@@ -249,8 +249,8 @@ func (ca *clusterAdmin) DeleteRecords(topic string, partitionOffsets map[int32]i
 		return ErrIncompleteResponse
 	}
 
-	
-	
+	//todo since we are dealing with couple of partitions it would be good if we return slice of errors
+	//for each partition instead of one error
 	return nil
 }
 

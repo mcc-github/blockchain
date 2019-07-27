@@ -7,7 +7,11 @@ import (
 	"github.com/tedsuo/ifrit"
 )
 
-
+/*
+NewQueuedOrdered starts its members in order, each member starting when the previous
+becomes ready.  On shutdown however, unlike the ordered group, it shuts the started
+processes down in forward order.
+*/
 func NewQueueOrdered(terminationSignal os.Signal, members Members) ifrit.Runner {
 	return &queueOrdered{
 		terminationSignal: terminationSignal,
@@ -77,10 +81,10 @@ func (g *queueOrdered) queuedStart(signals <-chan os.Signal) (os.Signal, ErrorTr
 		g.pool[member.Name] = p
 		switch chosen {
 		case len(cases) - 1:
-			
+			// signals
 			return recv.Interface().(os.Signal), nil
 		case len(cases) - 2:
-			
+			// p.Wait
 			var err error
 			if !recv.IsNil() {
 				err = recv.Interface().(error)
@@ -89,9 +93,9 @@ func (g *queueOrdered) queuedStart(signals <-chan os.Signal) (os.Signal, ErrorTr
 				ExitEvent{Member: member, Err: err},
 			}
 		case len(cases) - 3:
-			
+			// p.Ready
 		default:
-			
+			// other member has exited
 			var err error = nil
 			if e := recv.Interface(); e != nil {
 				err = e.(error)

@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 )
 
-
+// RecoveryHandlerLogger is an interface used by the recovering handler to print logs.
 type RecoveryHandlerLogger interface {
 	Println(...interface{})
 }
@@ -17,9 +17,9 @@ type recoveryHandler struct {
 	printStack bool
 }
 
-
-
-
+// RecoveryOption provides a functional approach to define
+// configuration for a handler; such as setting the logging
+// whether or not to print strack traces on panic.
 type RecoveryOption func(http.Handler)
 
 func parseRecoveryOptions(h http.Handler, opts ...RecoveryOption) http.Handler {
@@ -30,18 +30,18 @@ func parseRecoveryOptions(h http.Handler, opts ...RecoveryOption) http.Handler {
 	return h
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
+// RecoveryHandler is HTTP middleware that recovers from a panic,
+// logs the panic, writes http.StatusInternalServerError, and
+// continues to the next handler.
+//
+// Example:
+//
+//  r := mux.NewRouter()
+//  r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+//  	panic("Unexpected error!")
+//  })
+//
+//  http.ListenAndServe(":1123", handlers.RecoveryHandler()(r))
 func RecoveryHandler(opts ...RecoveryOption) func(h http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		r := &recoveryHandler{handler: h}
@@ -49,8 +49,8 @@ func RecoveryHandler(opts ...RecoveryOption) func(h http.Handler) http.Handler {
 	}
 }
 
-
-
+// RecoveryLogger is a functional option to override
+// the default logger
 func RecoveryLogger(logger RecoveryHandlerLogger) RecoveryOption {
 	return func(h http.Handler) {
 		r := h.(*recoveryHandler)
@@ -58,8 +58,8 @@ func RecoveryLogger(logger RecoveryHandlerLogger) RecoveryOption {
 	}
 }
 
-
-
+// PrintRecoveryStack is a functional option to enable
+// or disable printing stack traces on panic.
 func PrintRecoveryStack(print bool) RecoveryOption {
 	return func(h http.Handler) {
 		r := h.(*recoveryHandler)

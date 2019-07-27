@@ -1,6 +1,10 @@
-package mount 
+package mount // import "github.com/docker/docker/pkg/mount"
 
-
+/*
+#include <sys/param.h>
+#include <sys/ucred.h>
+#include <sys/mount.h>
+*/
 import "C"
 
 import (
@@ -9,8 +13,7 @@ import (
 	"unsafe"
 )
 
-
-
+//parseMountTable returns information about mounted filesystems
 func parseMountTable(filter FilterFunc) ([]*Info, error) {
 	var rawEntries *C.struct_statfs
 
@@ -32,8 +35,8 @@ func parseMountTable(filter FilterFunc) ([]*Info, error) {
 		mountinfo.Mountpoint = C.GoString(&entry.f_mntonname[0])
 
 		if filter != nil {
-			
-			skip, stop = filter(p)
+			// filter out entries we're not interested in
+			skip, stop = filter(&mountinfo)
 			if skip {
 				continue
 			}

@@ -7,7 +7,9 @@ import (
 	"unicode"
 )
 
-
+/*
+ * Creates a func init() node
+ */
 func createVarUnderscoreBlock() *ast.ValueSpec {
 	valueSpec := &ast.ValueSpec{}
 	object := &ast.Object{Kind: 4, Name: "_", Decl: valueSpec, Data: 0}
@@ -16,7 +18,9 @@ func createVarUnderscoreBlock() *ast.ValueSpec {
 	return valueSpec
 }
 
-
+/*
+ * Creates a Describe("Testing with ginkgo", func() { }) node
+ */
 func createDescribeBlock() *ast.CallExpr {
 	blockStatement := &ast.BlockStmt{List: []ast.Stmt{}}
 
@@ -28,12 +32,19 @@ func createDescribeBlock() *ast.CallExpr {
 	return &ast.CallExpr{Fun: describeIdent, Args: []ast.Expr{basicLit, funcLit}}
 }
 
-
+/*
+ * Convenience function to return the name of the *testing.T param
+ * for a Test function that will be rewritten. This is useful because
+ * we will want to replace the usage of this named *testing.T inside the
+ * body of the function with a GinktoT.
+ */
 func namedTestingTArg(node *ast.FuncDecl) string {
-	return node.Type.Params.List[0].Names[0].Name 
+	return node.Type.Params.List[0].Names[0].Name // *exhale*
 }
 
-
+/*
+ * Convenience function to return the block statement node for a Describe statement
+ */
 func blockStatementFromDescribe(desc *ast.CallExpr) *ast.BlockStmt {
 	var funcLit *ast.FuncLit
 	var found = false
@@ -54,7 +65,10 @@ func blockStatementFromDescribe(desc *ast.CallExpr) *ast.BlockStmt {
 	return funcLit.Body
 }
 
-
+/* convenience function for creating an It("TestNameHere")
+ * with all the body of the test function inside the anonymous
+ * func passed to It()
+ */
 func createItStatementForTestFunc(testFunc *ast.FuncDecl) *ast.ExprStmt {
 	blockStatement := &ast.BlockStmt{List: testFunc.Body.List}
 	fieldList := &ast.FieldList{}
@@ -68,7 +82,10 @@ func createItStatementForTestFunc(testFunc *ast.FuncDecl) *ast.ExprStmt {
 	return &ast.ExprStmt{X: callExpr}
 }
 
-
+/*
+* rewrite test names to be human readable
+* eg: rewrites "TestSomethingAmazing" as "something amazing"
+ */
 func rewriteTestName(testName string) string {
 	nameComponents := []string{}
 	currentString := ""

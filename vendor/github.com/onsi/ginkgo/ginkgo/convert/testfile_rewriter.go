@@ -11,7 +11,15 @@ import (
 	"os"
 )
 
-
+/*
+ * Given a file path, rewrites any tests in the Ginkgo format.
+ * First, we parse the AST, and update the imports declaration.
+ * Then, we walk the first child elements in the file, returning tests to rewrite.
+ * A top level init func is declared, with a single Describe func inside.
+ * Then the test functions to rewrite are inserted as It statements inside the Describe.
+ * Finally we walk the rest of the file, replacing other usages of *testing.T
+ * Once that is complete, we write the AST back out again to its file.
+ */
 func rewriteTestsInFile(pathToFile string) {
 	fileSet := token.NewFileSet()
 	rootNode, err := parser.ParseFile(fileSet, pathToFile, nil, 0)
@@ -31,8 +39,8 @@ func rewriteTestsInFile(pathToFile string) {
 	}
 
 	underscoreDecl := &ast.GenDecl{
-		Tok:    85, 
-		TokPos: 14, 
+		Tok:    85, // gah, magick numbers are needed to make this work
+		TokPos: 14, // this tricks Go into writing "var _ = Describe"
 		Specs:  []ast.Spec{varUnderscoreBlock},
 	}
 
@@ -56,7 +64,11 @@ func rewriteTestsInFile(pathToFile string) {
 	return
 }
 
-
+/*
+ * Given a test func named TestDoesSomethingNeat, rewrites it as
+ * It("does something neat", func() { __test_body_here__ }) and adds it
+ * to the Describe's list of statements
+ */
 func rewriteTestFuncAsItStatement(testFunc *ast.FuncDecl, rootNode *ast.File, describe *ast.CallExpr) {
 	var funcIndex int = -1
 	for index, child := range rootNode.Decls {
@@ -74,12 +86,15 @@ func rewriteTestFuncAsItStatement(testFunc *ast.FuncDecl, rootNode *ast.File, de
 	block.List = append(block.List, createItStatementForTestFunc(testFunc))
 	replaceTestingTsWithGinkgoT(block, namedTestingTArg(testFunc))
 
-	
+	// remove the old test func from the root node's declarations
 	rootNode.Decls = append(rootNode.Decls[:funcIndex], rootNode.Decls[funcIndex+1:]...)
 	return
 }
 
-
+/*
+ * walks nodes inside of a test func's statements and replaces the usage of
+ * it's named *testing.T param with GinkgoT's
+ */
 func replaceTestingTsWithGinkgoT(statementsBlock *ast.BlockStmt, testingT string) {
 	ast.Inspect(statementsBlock, func(node ast.Node) bool {
 		if node == nil {
@@ -113,7 +128,12 @@ func replaceTestingTsWithGinkgoT(statementsBlock *ast.BlockStmt, testingT string
 	})
 }
 
-
+/*
+ * rewrite t.Fail() or any other *testing.T method by replacing with T().Fail()
+ * This function receives a selector expression (eg: t.Fail()) and
+ * the name of the *testing.T param from the function declaration. Rewrites the
+ * selector expression in place if the target was a *testing.T
+ */
 func replaceTestingTsMethodCalls(selectorExpr *ast.SelectorExpr, testingT string) {
 	ident, ok := selectorExpr.X.(*ast.Ident)
 	if !ok {
@@ -125,7 +145,10 @@ func replaceTestingTsMethodCalls(selectorExpr *ast.SelectorExpr, testingT string
 	}
 }
 
-
+/*
+ * replaces usages of a named *testing.T param inside of a call expression
+ * with a new GinkgoT object
+ */
 func replaceTestingTsInArgsLists(callExpr *ast.CallExpr, testingT string) {
 	for index, arg := range callExpr.Args {
 		ident, ok := arg.(*ast.Ident)

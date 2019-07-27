@@ -7,7 +7,12 @@ import (
 	"github.com/tedsuo/ifrit"
 )
 
-
+/*
+NewOrdered starts it's members in order, each member starting when the previous
+becomes ready.  On shutdown, it will shut the started processes down in reverse order.
+Use an ordered group to describe a list of dependent processes, where each process
+depends upon the previous being available in order to function correctly.
+*/
 func NewOrdered(terminationSignal os.Signal, members Members) ifrit.Runner {
 	return &orderedGroup{
 		terminationSignal: terminationSignal,
@@ -76,10 +81,10 @@ func (g *orderedGroup) orderedStart(signals <-chan os.Signal) (os.Signal, ErrorT
 		g.pool[member.Name] = p
 		switch chosen {
 		case len(cases) - 1:
-			
+			// signals
 			return recv.Interface().(os.Signal), nil
 		case len(cases) - 2:
-			
+			// p.Wait
 			var err error
 			if !recv.IsNil() {
 				err = recv.Interface().(error)
@@ -88,9 +93,9 @@ func (g *orderedGroup) orderedStart(signals <-chan os.Signal) (os.Signal, ErrorT
 				ExitEvent{Member: member, Err: err},
 			}
 		case len(cases) - 3:
-			
+			// p.Ready
 		default:
-			
+			// other member has exited
 			var err error = nil
 			if e := recv.Interface(); e != nil {
 				err = e.(error)

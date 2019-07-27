@@ -12,51 +12,51 @@ import (
 	"github.com/onsi/gomega/types"
 )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//MatchAllFields succeeds if every field of a struct matches the field matcher associated with
+//it, and every element matcher is matched.
+//    actual := struct{
+//      A int
+//      B []bool
+//      C string
+//    }{
+//      A: 5,
+//      B: []bool{true, false},
+//      C: "foo",
+//    }
+//
+//    Expect(actual).To(MatchAllFields(Fields{
+//      "A": Equal(5),
+//      "B": ConsistOf(true, false),
+//      "C": Equal("foo"),
+//    }))
 func MatchAllFields(fields Fields) types.GomegaMatcher {
 	return &FieldsMatcher{
 		Fields: fields,
 	}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//MatchFields succeeds if each element of a struct matches the field matcher associated with
+//it. It can ignore extra fields and/or missing fields.
+//    actual := struct{
+//      A int
+//      B []bool
+//      C string
+//    }{
+//      A: 5,
+//      B: []bool{true, false},
+//      C: "foo",
+//    }
+//
+//    Expect(actual).To(MatchFields(IgnoreExtras, Fields{
+//      "A": Equal(5),
+//      "B": ConsistOf(true, false),
+//    }))
+//    Expect(actual).To(MatchFields(IgnoreMissing, Fields{
+//      "A": Equal(5),
+//      "B": ConsistOf(true, false),
+//      "C": Equal("foo"),
+//      "D": Equal("extra"),
+//    }))
 func MatchFields(options Options, fields Fields) types.GomegaMatcher {
 	return &FieldsMatcher{
 		Fields:        fields,
@@ -66,19 +66,19 @@ func MatchFields(options Options, fields Fields) types.GomegaMatcher {
 }
 
 type FieldsMatcher struct {
-	
+	// Matchers for each field.
 	Fields Fields
 
-	
+	// Whether to ignore extra elements or consider it an error.
 	IgnoreExtras bool
-	
+	// Whether to ignore missing elements or consider it an error.
 	IgnoreMissing bool
 
-	
+	// State.
 	failures []error
 }
 
-
+// Field name to matcher.
 type Fields map[string]types.GomegaMatcher
 
 func (m *FieldsMatcher) Match(actual interface{}) (success bool, err error) {
@@ -102,8 +102,8 @@ func (m *FieldsMatcher) matchFields(actual interface{}) (errs []error) {
 		fields[fieldName] = true
 
 		err := func() (err error) {
-			
-			
+			// This test relies heavily on reflect, which tends to panic.
+			// Recover here to provide more useful error messages in that case.
 			defer func() {
 				if r := recover(); r != nil {
 					err = fmt.Errorf("panic checking %+v: %v\n%s", actual, r, debug.Stack())

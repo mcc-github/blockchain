@@ -1,1 +1,1 @@
-package fakeclock 
+package fakeclock // import "code.cloudfoundry.org/clock/fakeclock"

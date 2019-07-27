@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package simplifiedchinese
 
@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	
+	// GB18030 is the GB18030 encoding.
 	GB18030 encoding.Encoding = &gbk18030
-	
-	
+	// GBK is the GBK encoding. It encodes an extension of the GB2312 character set
+	// and is also known as Code Page 936.
 	GBK encoding.Encoding = &gbk
 )
 
@@ -52,9 +52,9 @@ loop:
 		case c0 < utf8.RuneSelf:
 			r, size = rune(c0), 1
 
-		
-		
-		
+		// Microsoft's Code Page 936 extends GBK 1.0 to encode the euro sign U+20AC
+		// as 0x80. The HTML5 specification at http://encoding.spec.whatwg.org/#gbk
+		// says to treat "gbk" as Code Page 936.
 		case c0 == 0x80:
 			r, size = '€', 1
 
@@ -79,8 +79,8 @@ loop:
 						err = transform.ErrShortSrc
 						break loop
 					}
-					
-					
+					// The second byte here is always ASCII, so we can set size
+					// to 1 in all cases.
 					r, size = utf8.RuneError, 1
 					goto write
 				}
@@ -153,33 +153,33 @@ func (e gbkEncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 	for ; nSrc < len(src); nSrc += size {
 		r = rune(src[nSrc])
 
-		
+		// Decode a 1-byte rune.
 		if r < utf8.RuneSelf {
 			size = 1
 
 		} else {
-			
+			// Decode a multi-byte rune.
 			r, size = utf8.DecodeRune(src[nSrc:])
 			if size == 1 {
-				
-				
-				
+				// All valid runes of size 1 (those below utf8.RuneSelf) were
+				// handled above. We have invalid UTF-8 or we haven't seen the
+				// full character yet.
 				if !atEOF && !utf8.FullRune(src[nSrc:]) {
 					err = transform.ErrShortSrc
 					break
 				}
 			}
 
-			
+			// func init checks that the switch covers all tables.
 			switch {
 			case encode0Low <= r && r < encode0High:
 				if r2 = rune(encode0[r-encode0Low]); r2 != 0 {
 					goto write2
 				}
 			case encode1Low <= r && r < encode1High:
-				
-				
-				
+				// Microsoft's Code Page 936 extends GBK 1.0 to encode the euro sign U+20AC
+				// as 0x80. The HTML5 specification at http://encoding.spec.whatwg.org/#gbk
+				// says to treat "gbk" as Code Page 936.
 				if r == '€' {
 					r = 0x80
 					goto write1
@@ -262,7 +262,7 @@ func (e gbkEncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 }
 
 func init() {
-	
+	// Check that the hard-coded encode switch covers all tables.
 	if numEncodeTables != 5 {
 		panic("bad numEncodeTables")
 	}

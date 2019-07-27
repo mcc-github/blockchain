@@ -74,7 +74,7 @@ func (pm *PartitionMetadata) encode(pe packetEncoder, version int16) (err error)
 type TopicMetadata struct {
 	Err        KError
 	Name       string
-	IsInternal bool 
+	IsInternal bool // Only valid for Version >= 1
 	Partitions []*PartitionMetadata
 }
 
@@ -270,7 +270,7 @@ func (r *MetadataResponse) requiredVersion() KafkaVersion {
 	}
 }
 
-
+// testing API
 
 func (r *MetadataResponse) AddBroker(addr string, id int32) {
 	r.Brokers = append(r.Brokers, &Broker{id: id, addr: addr})

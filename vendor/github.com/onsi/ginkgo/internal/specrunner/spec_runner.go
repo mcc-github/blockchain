@@ -56,7 +56,9 @@ func (runner *SpecRunner) Run() bool {
 	}
 
 	runner.reportSuiteWillBegin()
-	go runner.registerForInterrupts()
+	signalRegistered := make(chan struct{})
+	go runner.registerForInterrupts(signalRegistered)
+	<-signalRegistered
 
 	suitePassed := runner.runBeforeSuite()
 
@@ -188,7 +190,7 @@ func (runner *SpecRunner) runSpecs() bool {
 func (runner *SpecRunner) runSpec(spec *spec.Spec) (passed bool) {
 	maxAttempts := 1
 	if runner.config.FlakeAttempts > 0 {
-		
+		// uninitialized configs count as 1
 		maxAttempts = runner.config.FlakeAttempts
 	}
 
@@ -213,9 +215,10 @@ func (runner *SpecRunner) CurrentSpecSummary() (*types.SpecSummary, bool) {
 	return runner.runningSpec.Summary(runner.suiteID), true
 }
 
-func (runner *SpecRunner) registerForInterrupts() {
+func (runner *SpecRunner) registerForInterrupts(signalRegistered chan struct{}) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	close(signalRegistered)
 
 	<-c
 	signal.Stop(c)

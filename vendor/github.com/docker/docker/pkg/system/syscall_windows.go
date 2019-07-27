@@ -1,4 +1,4 @@
-package system 
+package system // import "github.com/docker/docker/pkg/system"
 
 import (
 	"fmt"
@@ -60,8 +60,8 @@ var (
 	procGetSecurityDescriptorDacl = modadvapi32.NewProc("GetSecurityDescriptorDacl")
 )
 
-
-
+// OSVersion is a wrapper for Windows version information
+// https://msdn.microsoft.com/en-us/library/windows/desktop/ms724439(v=vs.85).aspx
 type OSVersion struct {
 	Version      uint32
 	MajorVersion uint8
@@ -69,7 +69,7 @@ type OSVersion struct {
 	Build        uint16
 }
 
-
+// https://msdn.microsoft.com/en-us/library/windows/desktop/ms724833(v=vs.85).aspx
 type osVersionInfoEx struct {
 	OSVersionInfoSize uint32
 	MajorVersion      uint32
@@ -84,14 +84,14 @@ type osVersionInfoEx struct {
 	Reserve           byte
 }
 
-
-
+// GetOSVersion gets the operating system version on Windows. Note that
+// docker.exe must be manifested to get the correct version information.
 func GetOSVersion() OSVersion {
 	var err error
 	osv := OSVersion{}
 	osv.Version, err = windows.GetVersion()
 	if err != nil {
-		
+		// GetVersion never fails.
 		panic(err)
 	}
 	osv.MajorVersion = uint8(osv.Version & 0xFF)
@@ -104,9 +104,9 @@ func (osv OSVersion) ToString() string {
 	return fmt.Sprintf("%d.%d.%d", osv.MajorVersion, osv.MinorVersion, osv.Build)
 }
 
-
-
-
+// IsWindowsClient returns true if the SKU is client
+// @engine maintainers - this function should not be removed or modified as it
+// is used to enforce licensing restrictions on Windows.
 func IsWindowsClient() bool {
 	osviex := &osVersionInfoEx{OSVersionInfoSize: 284}
 	r1, _, err := procGetVersionExW.Call(uintptr(unsafe.Pointer(osviex)))
@@ -118,10 +118,10 @@ func IsWindowsClient() bool {
 	return osviex.ProductType == verNTWorkstation
 }
 
-
-
-
-
+// IsIoTCore returns true if the currently running image is based off of
+// Windows 10 IoT Core.
+// @engine maintainers - this function should not be removed or modified as it
+// is used to enforce licensing restrictions on Windows.
 func IsIoTCore() bool {
 	var returnedProductType uint32
 	r1, _, err := procGetProductInfo.Call(6, 1, 0, 0, uintptr(unsafe.Pointer(&returnedProductType)))
@@ -134,13 +134,13 @@ func IsIoTCore() bool {
 	return returnedProductType == productIoTUAP || returnedProductType == productIoTUAPCommercial
 }
 
-
-
+// Unmount is a platform-specific helper function to call
+// the unmount syscall. Not supported on Windows
 func Unmount(dest string) error {
 	return nil
 }
 
-
+// CommandLineToArgv wraps the Windows syscall to turn a commandline into an argument array.
 func CommandLineToArgv(commandLine string) ([]string, error) {
 	var argc int32
 
@@ -163,12 +163,12 @@ func CommandLineToArgv(commandLine string) ([]string, error) {
 	return newArgs, nil
 }
 
-
-
+// HasWin32KSupport determines whether containers that depend on win32k can
+// run on this machine. Win32k is the driver used to implement windowing.
 func HasWin32KSupport() bool {
-	
-	
-	
+	// For now, check for ntuser API support on the host. In the future, a host
+	// may support win32k in containers even if the host does not support ntuser
+	// APIs.
 	return ntuserApiset.Load() == nil
 }
 

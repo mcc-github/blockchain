@@ -1,6 +1,6 @@
+// +build linux freebsd
 
-
-package fileutils 
+package fileutils // import "github.com/docker/docker/pkg/fileutils"
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-
-
+// GetTotalUsedFds Returns the number of used File Descriptors by
+// reading it via /proc filesystem.
 func GetTotalUsedFds() int {
 	if fds, err := ioutil.ReadDir(fmt.Sprintf("/proc/%d/fd", os.Getpid())); err != nil {
 		logrus.Errorf("Error opening /proc/%d/fd: %s", os.Getpid(), err)

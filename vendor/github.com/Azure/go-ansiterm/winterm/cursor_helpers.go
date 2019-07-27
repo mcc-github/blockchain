@@ -1,4 +1,4 @@
-
+// +build windows
 
 package winterm
 
@@ -26,7 +26,7 @@ func (h *windowsAnsiEventHandler) getCursorWindow(info *CONSOLE_SCREEN_BUFFER_IN
 	}
 }
 
-
+// setCursorPosition sets the cursor to the specified position, bounded to the screen size
 func (h *windowsAnsiEventHandler) setCursorPosition(position COORD, window SMALL_RECT) error {
 	position.X = ensureInRange(position.X, window.Left, window.Right)
 	position.Y = ensureInRange(position.Y, window.Top, window.Bottom)

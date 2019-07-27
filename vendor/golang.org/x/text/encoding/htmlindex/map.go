@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2015 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package htmlindex
 
@@ -15,7 +15,7 @@ import (
 	"golang.org/x/text/encoding/unicode"
 )
 
-
+// mibMap maps a MIB identifier to an htmlEncoding index.
 var mibMap = map[identifier.MIB]htmlEncoding{
 	identifier.UTF8:              utf8,
 	identifier.UTF16BE:           utf16be,
@@ -59,8 +59,8 @@ var mibMap = map[identifier.MIB]htmlEncoding{
 	identifier.Replacement:       replacement,
 }
 
-
-
+// encodings maps the internal htmlEncoding to an Encoding.
+// TODO: consider using a reusable index in encoding/internal.
 var encodings = [numEncodings]encoding.Encoding{
 	utf8:              unicode.UTF8,
 	ibm866:            charmap.CodePage866,

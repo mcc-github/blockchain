@@ -1,15 +1,15 @@
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright 2015 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package expfmt
 
@@ -26,19 +26,19 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-
+// Decoder types decode an input stream into metric families.
 type Decoder interface {
 	Decode(*dto.MetricFamily) error
 }
 
-
+// DecodeOptions contains options used by the Decoder and in sample extraction.
 type DecodeOptions struct {
-	
+	// Timestamp is added to each value from the stream that has no explicit timestamp set.
 	Timestamp model.Time
 }
 
-
-
+// ResponseFormat extracts the correct format from a HTTP response header.
+// If no matching format can be found FormatUnknown is returned.
 func ResponseFormat(h http.Header) Format {
 	ct := h.Get(hdrContentType)
 
@@ -69,8 +69,8 @@ func ResponseFormat(h http.Header) Format {
 	return FmtUnknown
 }
 
-
-
+// NewDecoder returns a new decoder based on the given input format.
+// If the input format does not imply otherwise, a text format decoder is returned.
 func NewDecoder(r io.Reader, format Format) Decoder {
 	switch format {
 	case FmtProtoDelim:
@@ -79,12 +79,12 @@ func NewDecoder(r io.Reader, format Format) Decoder {
 	return &textDecoder{r: r}
 }
 
-
+// protoDecoder implements the Decoder interface for protocol buffers.
 type protoDecoder struct {
 	r io.Reader
 }
 
-
+// Decode implements the Decoder interface.
 func (d *protoDecoder) Decode(v *dto.MetricFamily) error {
 	_, err := pbutil.ReadDelimited(d.r, v)
 	if err != nil {
@@ -112,18 +112,18 @@ func (d *protoDecoder) Decode(v *dto.MetricFamily) error {
 	return nil
 }
 
-
+// textDecoder implements the Decoder interface for the text protocol.
 type textDecoder struct {
 	r    io.Reader
 	p    TextParser
 	fams []*dto.MetricFamily
 }
 
-
+// Decode implements the Decoder interface.
 func (d *textDecoder) Decode(v *dto.MetricFamily) error {
-	
+	// TODO(fabxc): Wrap this as a line reader to make streaming safer.
 	if len(d.fams) == 0 {
-		
+		// No cached metric families, read everything and parse metrics.
 		fams, err := d.p.TextToMetricFamilies(d.r)
 		if err != nil {
 			return err
@@ -143,8 +143,8 @@ func (d *textDecoder) Decode(v *dto.MetricFamily) error {
 	return nil
 }
 
-
-
+// SampleDecoder wraps a Decoder to extract samples from the metric families
+// decoded by the wrapped Decoder.
 type SampleDecoder struct {
 	Dec  Decoder
 	Opts *DecodeOptions
@@ -152,8 +152,8 @@ type SampleDecoder struct {
 	f dto.MetricFamily
 }
 
-
-
+// Decode calls the Decode method of the wrapped Decoder and then extracts the
+// samples from the decoded MetricFamily into the provided model.Vector.
 func (sd *SampleDecoder) Decode(s *model.Vector) error {
 	err := sd.Dec.Decode(&sd.f)
 	if err != nil {
@@ -163,10 +163,10 @@ func (sd *SampleDecoder) Decode(s *model.Vector) error {
 	return err
 }
 
-
-
-
-
+// ExtractSamples builds a slice of samples from the provided metric
+// families. If an error occurrs during sample extraction, it continues to
+// extract from the remaining metric families. The returned error is the last
+// error that has occurred.
 func ExtractSamples(o *DecodeOptions, fams ...*dto.MetricFamily) (model.Vector, error) {
 	var (
 		all     model.Vector
@@ -310,7 +310,7 @@ func extractSummary(o *DecodeOptions, f *dto.MetricFamily) model.Vector {
 			for _, p := range m.Label {
 				lset[model.LabelName(p.GetName())] = model.LabelValue(p.GetValue())
 			}
-			
+			// BUG(matt): Update other names to "quantile".
 			lset[model.LabelName(model.QuantileLabel)] = model.LabelValue(fmt.Sprint(q.GetQuantile()))
 			lset[model.MetricNameLabel] = model.LabelValue(f.GetName())
 
@@ -409,7 +409,7 @@ func extractHistogram(o *DecodeOptions, f *dto.MetricFamily) model.Vector {
 		samples = append(samples, count)
 
 		if !infSeen {
-			
+			// Append an infinity bucket sample.
 			lset := make(model.LabelSet, len(m.Label)+2)
 			for _, p := range m.Label {
 				lset[model.LabelName(p.GetName())] = model.LabelValue(p.GetValue())

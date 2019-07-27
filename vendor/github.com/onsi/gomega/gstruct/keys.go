@@ -27,15 +27,15 @@ func MatchKeys(options Options, keys Keys) types.GomegaMatcher {
 }
 
 type KeysMatcher struct {
-	
+	// Matchers for each key.
 	Keys Keys
 
-	
+	// Whether to ignore extra keys or consider it an error.
 	IgnoreExtras bool
-	
+	// Whether to ignore missing keys or consider it an error.
 	IgnoreMissing bool
 
-	
+	// State.
 	failures []error
 }
 
@@ -61,8 +61,8 @@ func (m *KeysMatcher) matchKeys(actual interface{}) (errs []error) {
 		keys[key] = true
 
 		err := func() (err error) {
-			
-			
+			// This test relies heavily on reflect, which tends to panic.
+			// Recover here to provide more useful error messages in that case.
 			defer func() {
 				if r := recover(); r != nil {
 					err = fmt.Errorf("panic checking %+v: %v\n%s", actual, r, debug.Stack())

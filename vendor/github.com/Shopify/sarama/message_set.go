@@ -5,8 +5,8 @@ type MessageBlock struct {
 	Msg    *Message
 }
 
-
-
+// Messages convenience helper which returns either all the
+// messages that are wrapped in this block
 func (msb *MessageBlock) Messages() []*MessageBlock {
 	if msb.Msg.Set != nil {
 		return msb.Msg.Set.Messages
@@ -46,8 +46,8 @@ func (msb *MessageBlock) decode(pd packetDecoder) (err error) {
 }
 
 type MessageSet struct {
-	PartialTrailingMessage bool 
-	OverflowMessage        bool 
+	PartialTrailingMessage bool // whether the set on the wire contained an incomplete trailing MessageBlock
+	OverflowMessage        bool // whether the set on the wire contained an overflow message
 	Messages               []*MessageBlock
 }
 
@@ -84,10 +84,10 @@ func (ms *MessageSet) decode(pd packetDecoder) (err error) {
 		case nil:
 			ms.Messages = append(ms.Messages, msb)
 		case ErrInsufficientData:
-			
-			
+			// As an optimization the server is allowed to return a partial message at the
+			// end of the message set. Clients should handle this case. So we just ignore such things.
 			if msb.Offset == -1 {
-				
+				// This is an overflow message caused by chunked down conversion
 				ms.OverflowMessage = true
 			} else {
 				ms.PartialTrailingMessage = true

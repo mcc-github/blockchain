@@ -1,33 +1,33 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Go support for Protocol Buffers - Google's data interchange format
+//
+// Copyright 2016 The Go Authors.  All rights reserved.
+// https://github.com/golang/protobuf
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//     * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package proto
 
@@ -44,49 +44,50 @@ import (
 	"unicode/utf8"
 )
 
-
-
+// a sizer takes a pointer to a field and the size of its tag, computes the size of
+// the encoded data.
 type sizer func(pointer, int) int
 
-
-
+// a marshaler takes a byte slice, a pointer to a field, and its tag (in wire format),
+// marshals the field to the end of the slice, returns the slice and error (if any).
 type marshaler func(b []byte, ptr pointer, wiretag uint64, deterministic bool) ([]byte, error)
 
-
+// marshalInfo is the information used for marshaling a message.
 type marshalInfo struct {
 	typ          reflect.Type
 	fields       []*marshalFieldInfo
-	unrecognized field                      
-	extensions   field                      
-	v1extensions field                      
-	sizecache    field                      
-	initialized  int32                      
-	messageset   bool                       
-	hasmarshaler bool                       
-	sync.RWMutex                            
-	extElems     map[int32]*marshalElemInfo 
+	unrecognized field                      // offset of XXX_unrecognized
+	extensions   field                      // offset of XXX_InternalExtensions
+	v1extensions field                      // offset of XXX_extensions
+	sizecache    field                      // offset of XXX_sizecache
+	initialized  int32                      // 0 -- only typ is set, 1 -- fully initialized
+	messageset   bool                       // uses message set wire format
+	hasmarshaler bool                       // has custom marshaler
+	sync.RWMutex                            // protect extElems map, also for initialization
+	extElems     map[int32]*marshalElemInfo // info of extension elements
 }
 
-
+// marshalFieldInfo is the information used for marshaling a field of a message.
 type marshalFieldInfo struct {
 	field      field
-	wiretag    uint64 
-	tagsize    int    
+	wiretag    uint64 // tag in wire format
+	tagsize    int    // size of tag in wire format
 	sizer      sizer
 	marshaler  marshaler
 	isPointer  bool
-	required   bool                              
-	name       string                            
-	oneofElems map[reflect.Type]*marshalElemInfo 
+	required   bool                              // field is required
+	name       string                            // name of the field, for error reporting
+	oneofElems map[reflect.Type]*marshalElemInfo // info of oneof elements
 }
 
-
+// marshalElemInfo is the information used for marshaling an extension or oneof element.
 type marshalElemInfo struct {
-	wiretag   uint64 
-	tagsize   int    
+	wiretag   uint64 // tag in wire format
+	tagsize   int    // size of tag in wire format
 	sizer     sizer
 	marshaler marshaler
-	isptr     bool 
+	isptr     bool // elem is pointer typed, thus interface of this type is a direct interface (extension only)
+	deref     bool // dereference the pointer before operating on it; implies isptr
 }
 
 var (
@@ -94,9 +95,9 @@ var (
 	marshalInfoLock sync.Mutex
 )
 
-
-
-
+// getMarshalInfo returns the information to marshal a given type of message.
+// The info it returns may not necessarily initialized.
+// t is the type of the message (NOT the pointer to it).
 func getMarshalInfo(t reflect.Type) *marshalInfo {
 	marshalInfoLock.Lock()
 	u, ok := marshalInfoMap[t]
@@ -108,65 +109,65 @@ func getMarshalInfo(t reflect.Type) *marshalInfo {
 	return u
 }
 
-
-
-
-
+// Size is the entry point from generated code,
+// and should be ONLY called by generated code.
+// It computes the size of encoded data of msg.
+// a is a pointer to a place to store cached marshal info.
 func (a *InternalMessageInfo) Size(msg Message) int {
 	u := getMessageMarshalInfo(msg, a)
 	ptr := toPointer(&msg)
 	if ptr.isNil() {
-		
-		
-		
+		// We get here if msg is a typed nil ((*SomeMessage)(nil)),
+		// so it satisfies the interface, and msg == nil wouldn't
+		// catch it. We don't want crash in this case.
 		return 0
 	}
 	return u.size(ptr)
 }
 
-
-
-
-
+// Marshal is the entry point from generated code,
+// and should be ONLY called by generated code.
+// It marshals msg to the end of b.
+// a is a pointer to a place to store cached marshal info.
 func (a *InternalMessageInfo) Marshal(b []byte, msg Message, deterministic bool) ([]byte, error) {
 	u := getMessageMarshalInfo(msg, a)
 	ptr := toPointer(&msg)
 	if ptr.isNil() {
-		
-		
-		
+		// We get here if msg is a typed nil ((*SomeMessage)(nil)),
+		// so it satisfies the interface, and msg == nil wouldn't
+		// catch it. We don't want crash in this case.
 		return b, ErrNil
 	}
 	return u.marshal(b, ptr, deterministic)
 }
 
 func getMessageMarshalInfo(msg interface{}, a *InternalMessageInfo) *marshalInfo {
-	
-	
+	// u := a.marshal, but atomically.
+	// We use an atomic here to ensure memory consistency.
 	u := atomicLoadMarshalInfo(&a.marshal)
 	if u == nil {
-		
+		// Get marshal information from type of message.
 		t := reflect.ValueOf(msg).Type()
 		if t.Kind() != reflect.Ptr {
 			panic(fmt.Sprintf("cannot handle non-pointer message type %v", t))
 		}
 		u = getMarshalInfo(t.Elem())
-		
-		
+		// Store it in the cache for later users.
+		// a.marshal = u, but atomically.
 		atomicStoreMarshalInfo(&a.marshal, u)
 	}
 	return u
 }
 
-
-
+// size is the main function to compute the size of the encoded data of a message.
+// ptr is the pointer to the message.
 func (u *marshalInfo) size(ptr pointer) int {
 	if atomic.LoadInt32(&u.initialized) == 0 {
 		u.computeMarshalInfo()
 	}
 
-	
-	
+	// If the message can marshal itself, let it do it, for compatibility.
+	// NOTE: This is not efficient.
 	if u.hasmarshaler {
 		m := ptr.asPointerTo(u.typ).Interface().(Marshaler)
 		b, _ := m.Marshal()
@@ -176,7 +177,7 @@ func (u *marshalInfo) size(ptr pointer) int {
 	n := 0
 	for _, f := range u.fields {
 		if f.isPointer && ptr.offset(f.field).getPointer().isNil() {
-			
+			// nil pointer always marshals to nothing
 			continue
 		}
 		n += f.sizer(ptr.offset(f.field), f.tagsize)
@@ -197,15 +198,15 @@ func (u *marshalInfo) size(ptr pointer) int {
 		s := *ptr.offset(u.unrecognized).toBytes()
 		n += len(s)
 	}
-	
+	// cache the result for use in marshal
 	if u.sizecache.IsValid() {
 		atomic.StoreInt32(ptr.offset(u.sizecache).toInt32(), int32(n))
 	}
 	return n
 }
 
-
-
+// cachedsize gets the size from cache. If there is no cache (i.e. message is not generated),
+// fall back to compute the size.
 func (u *marshalInfo) cachedsize(ptr pointer) int {
 	if u.sizecache.IsValid() {
 		return int(atomic.LoadInt32(ptr.offset(u.sizecache).toInt32()))
@@ -213,17 +214,17 @@ func (u *marshalInfo) cachedsize(ptr pointer) int {
 	return u.size(ptr)
 }
 
-
-
-
-
+// marshal is the main function to marshal a message. It takes a byte slice and appends
+// the encoded data to the end of the slice, returns the slice and error (if any).
+// ptr is the pointer to the message.
+// If deterministic is true, map is marshaled in deterministic order.
 func (u *marshalInfo) marshal(b []byte, ptr pointer, deterministic bool) ([]byte, error) {
 	if atomic.LoadInt32(&u.initialized) == 0 {
 		u.computeMarshalInfo()
 	}
 
-	
-	
+	// If the message can marshal itself, let it do it, for compatibility.
+	// NOTE: This is not efficient.
 	if u.hasmarshaler {
 		m := ptr.asPointerTo(u.typ).Interface().(Marshaler)
 		b1, err := m.Marshal()
@@ -232,7 +233,7 @@ func (u *marshalInfo) marshal(b []byte, ptr pointer, deterministic bool) ([]byte
 	}
 
 	var err, errLater error
-	
+	// The old marshaler encodes extensions at beginning.
 	if u.extensions.IsValid() {
 		e := ptr.offset(u.extensions).toExtensions()
 		if u.messageset {
@@ -254,8 +255,8 @@ func (u *marshalInfo) marshal(b []byte, ptr pointer, deterministic bool) ([]byte
 	for _, f := range u.fields {
 		if f.required {
 			if ptr.offset(f.field).getPointer().isNil() {
-				
-				
+				// Required field is not set.
+				// We record the error but keep going, to give a complete marshaling.
 				if errLater == nil {
 					errLater = &RequiredNotSetError{f.name}
 				}
@@ -263,14 +264,14 @@ func (u *marshalInfo) marshal(b []byte, ptr pointer, deterministic bool) ([]byte
 			}
 		}
 		if f.isPointer && ptr.offset(f.field).getPointer().isNil() {
-			
+			// nil pointer always marshals to nothing
 			continue
 		}
 		b, err = f.marshaler(b, ptr.offset(f.field), f.wiretag, deterministic)
 		if err != nil {
 			if err1, ok := err.(*RequiredNotSetError); ok {
-				
-				
+				// Required field in submessage is not set.
+				// We record the error but keep going, to give a complete marshaling.
 				if errLater == nil {
 					errLater = &RequiredNotSetError{f.name + "." + err1.field}
 				}
@@ -296,11 +297,11 @@ func (u *marshalInfo) marshal(b []byte, ptr pointer, deterministic bool) ([]byte
 	return b, errLater
 }
 
-
+// computeMarshalInfo initializes the marshal info.
 func (u *marshalInfo) computeMarshalInfo() {
 	u.Lock()
 	defer u.Unlock()
-	if u.initialized != 0 { 
+	if u.initialized != 0 { // non-atomic read is ok as it is protected by the lock
 		return
 	}
 
@@ -310,23 +311,26 @@ func (u *marshalInfo) computeMarshalInfo() {
 	u.v1extensions = invalidField
 	u.sizecache = invalidField
 
-	
-	
+	// If the message can marshal itself, let it do it, for compatibility.
+	// NOTE: This is not efficient.
 	if reflect.PtrTo(t).Implements(marshalerType) {
 		u.hasmarshaler = true
 		atomic.StoreInt32(&u.initialized, 1)
 		return
 	}
 
-	
+	// get oneof implementers
 	var oneofImplementers []interface{}
-	if m, ok := reflect.Zero(reflect.PtrTo(t)).Interface().(oneofMessage); ok {
+	switch m := reflect.Zero(reflect.PtrTo(t)).Interface().(type) {
+	case oneofFuncsIface:
 		_, _, _, oneofImplementers = m.XXX_OneofFuncs()
+	case oneofWrappersIface:
+		oneofImplementers = m.XXX_OneofWrappers()
 	}
 
 	n := t.NumField()
 
-	
+	// deal with XXX fields first
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		if !strings.HasPrefix(f.Name, "XXX_") {
@@ -343,15 +347,15 @@ func (u *marshalInfo) computeMarshalInfo() {
 		case "XXX_extensions":
 			u.v1extensions = toField(&f)
 		case "XXX_NoUnkeyedLiteral":
-			
+			// nothing to do
 		default:
 			panic("unknown XXX field: " + f.Name)
 		}
 		n--
 	}
 
-	
-	fields := make([]marshalFieldInfo, n) 
+	// normal fields
+	fields := make([]marshalFieldInfo, n) // batch allocation
 	u.fields = make([]*marshalFieldInfo, 0, n)
 	for i, j := 0, 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -368,7 +372,7 @@ func (u *marshalInfo) computeMarshalInfo() {
 			continue
 		}
 		if f.Tag.Get("protobuf") == "" {
-			
+			// field has no tag (not in generated message), ignore it
 			u.fields = u.fields[:len(u.fields)-1]
 			j--
 			continue
@@ -376,23 +380,23 @@ func (u *marshalInfo) computeMarshalInfo() {
 		field.computeMarshalFieldInfo(&f)
 	}
 
-	
+	// fields are marshaled in tag order on the wire.
 	sort.Sort(byTag(u.fields))
 
 	atomic.StoreInt32(&u.initialized, 1)
 }
 
-
+// helper for sorting fields by tag
 type byTag []*marshalFieldInfo
 
 func (a byTag) Len() int           { return len(a) }
 func (a byTag) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTag) Less(i, j int) bool { return a[i].wiretag < a[j].wiretag }
 
-
-
+// getExtElemInfo returns the information to marshal an extension element.
+// The info it returns is initialized.
 func (u *marshalInfo) getExtElemInfo(desc *ExtensionDesc) *marshalElemInfo {
-	
+	// get from cache first
 	u.RLock()
 	e, ok := u.extElems[desc.Field]
 	u.RUnlock()
@@ -400,23 +404,32 @@ func (u *marshalInfo) getExtElemInfo(desc *ExtensionDesc) *marshalElemInfo {
 		return e
 	}
 
-	t := reflect.TypeOf(desc.ExtensionType) 
+	t := reflect.TypeOf(desc.ExtensionType) // pointer or slice to basic type or struct
 	tags := strings.Split(desc.Tag, ",")
 	tag, err := strconv.Atoi(tags[1])
 	if err != nil {
 		panic("tag is not an integer")
 	}
 	wt := wiretype(tags[0])
+	if t.Kind() == reflect.Ptr && t.Elem().Kind() != reflect.Struct {
+		t = t.Elem()
+	}
 	sizer, marshaler := typeMarshaler(t, tags, false, false)
+	var deref bool
+	if t.Kind() == reflect.Slice && t.Elem().Kind() != reflect.Uint8 {
+		t = reflect.PtrTo(t)
+		deref = true
+	}
 	e = &marshalElemInfo{
 		wiretag:   uint64(tag)<<3 | wt,
 		tagsize:   SizeVarint(uint64(tag) << 3),
 		sizer:     sizer,
 		marshaler: marshaler,
 		isptr:     t.Kind() == reflect.Ptr,
+		deref:     deref,
 	}
 
-	
+	// update cache
 	u.Lock()
 	if u.extElems == nil {
 		u.extElems = make(map[int32]*marshalElemInfo)
@@ -426,10 +439,10 @@ func (u *marshalInfo) getExtElemInfo(desc *ExtensionDesc) *marshalElemInfo {
 	return e
 }
 
-
+// computeMarshalFieldInfo fills up the information to marshal a field.
 func (fi *marshalFieldInfo) computeMarshalFieldInfo(f *reflect.StructField) {
-	
-	
+	// parse protobuf tag of the field.
+	// tag has format of "bytes,49,opt,name=foo,def=hello!"
 	tags := strings.Split(f.Tag.Get("protobuf"), ",")
 	if tags[0] == "" {
 		return
@@ -448,25 +461,25 @@ func (fi *marshalFieldInfo) computeMarshalFieldInfo(f *reflect.StructField) {
 
 func (fi *marshalFieldInfo) computeOneofFieldInfo(f *reflect.StructField, oneofImplementers []interface{}) {
 	fi.field = toField(f)
-	fi.wiretag = 1<<31 - 1 
+	fi.wiretag = math.MaxInt32 // Use a large tag number, make oneofs sorted at the end. This tag will not appear on the wire.
 	fi.isPointer = true
 	fi.sizer, fi.marshaler = makeOneOfMarshaler(fi, f)
 	fi.oneofElems = make(map[reflect.Type]*marshalElemInfo)
 
-	ityp := f.Type 
+	ityp := f.Type // interface type
 	for _, o := range oneofImplementers {
 		t := reflect.TypeOf(o)
 		if !t.Implements(ityp) {
 			continue
 		}
-		sf := t.Elem().Field(0) 
+		sf := t.Elem().Field(0) // oneof implementer is a struct with a single field
 		tags := strings.Split(sf.Tag.Get("protobuf"), ",")
 		tag, err := strconv.Atoi(tags[1])
 		if err != nil {
 			panic("tag is not an integer")
 		}
 		wt := wiretype(tags[0])
-		sizer, marshaler := typeMarshaler(sf.Type, tags, false, true) 
+		sizer, marshaler := typeMarshaler(sf.Type, tags, false, true) // oneof should not omit any zero value
 		fi.oneofElems[t.Elem()] = &marshalElemInfo{
 			wiretag:   uint64(tag)<<3 | wt,
 			tagsize:   SizeVarint(uint64(tag) << 3),
@@ -476,11 +489,7 @@ func (fi *marshalFieldInfo) computeOneofFieldInfo(f *reflect.StructField, oneofI
 	}
 }
 
-type oneofMessage interface {
-	XXX_OneofFuncs() (func(Message, *Buffer) error, func(Message, int, int, *Buffer) (bool, error), func(Message) int, []interface{})
-}
-
-
+// wiretype returns the wire encoding of the type.
 func wiretype(encoding string) uint64 {
 	switch encoding {
 	case "fixed32":
@@ -497,18 +506,18 @@ func wiretype(encoding string) uint64 {
 	panic("unknown wire type " + encoding)
 }
 
-
+// setTag fills up the tag (in wire format) and its size in the info of a field.
 func (fi *marshalFieldInfo) setTag(f *reflect.StructField, tag int, wt uint64) {
 	fi.field = toField(f)
 	fi.wiretag = uint64(tag)<<3 | wt
 	fi.tagsize = SizeVarint(uint64(tag) << 3)
 }
 
-
+// setMarshaler fills up the sizer and marshaler in the info of a field.
 func (fi *marshalFieldInfo) setMarshaler(f *reflect.StructField, tags []string) {
 	switch f.Type.Kind() {
 	case reflect.Map:
-		
+		// map field
 		fi.isPointer = true
 		fi.sizer, fi.marshaler = makeMapMarshaler(f)
 		return
@@ -518,11 +527,11 @@ func (fi *marshalFieldInfo) setMarshaler(f *reflect.StructField, tags []string) 
 	fi.sizer, fi.marshaler = typeMarshaler(f.Type, tags, true, false)
 }
 
-
-
-
-
-
+// typeMarshaler returns the sizer and marshaler of a given field.
+// t is the type of the field.
+// tags is the generated "protobuf" tag of the field.
+// If nozero is true, zero value is not marshaled to the wire.
+// If oneof is true, it is a oneof field.
 func typeMarshaler(t reflect.Type, tags []string, nozero, oneof bool) (sizer, marshaler) {
 	encoding := tags[0]
 
@@ -773,9 +782,9 @@ func typeMarshaler(t reflect.Type, tags []string, nozero, oneof bool) (sizer, ma
 			return sizeBytesSlice, appendBytesSlice
 		}
 		if oneof {
-			
-			
-			
+			// Oneof bytes field may also have "proto3" tag.
+			// We want to marshal it as a oneof field. Do this
+			// check before the proto3 check.
 			return sizeBytesOneof, appendBytesOneof
 		}
 		if proto3 {
@@ -799,9 +808,9 @@ func typeMarshaler(t reflect.Type, tags []string, nozero, oneof bool) (sizer, ma
 	panic(fmt.Sprintf("unknown or mismatched type: type: %v, wire type: %v", t, encoding))
 }
 
-
-
-
+// Below are functions to size/marshal a specific type of a field.
+// They are stored in the field's info, and called by function pointers.
+// They have type sizer or marshaler.
 
 func sizeFixed32Value(_ pointer, tagsize int) int {
 	return 4 + tagsize
@@ -1277,7 +1286,7 @@ func sizeBytesSlice(ptr pointer, tagsize int) int {
 	return n
 }
 
-
+// appendFixed32 appends an encoded fixed32 to b.
 func appendFixed32(b []byte, v uint32) []byte {
 	b = append(b,
 		byte(v),
@@ -1287,7 +1296,7 @@ func appendFixed32(b []byte, v uint32) []byte {
 	return b
 }
 
-
+// appendFixed64 appends an encoded fixed64 to b.
 func appendFixed64(b []byte, v uint64) []byte {
 	b = append(b,
 		byte(v),
@@ -1301,10 +1310,10 @@ func appendFixed64(b []byte, v uint64) []byte {
 	return b
 }
 
-
+// appendVarint appends an encoded varint to b.
 func appendVarint(b []byte, v uint64) []byte {
-	
-	
+	// TODO: make 1-byte (maybe 2-byte) case inline-able, once we
+	// have non-leaf inliner.
 	switch {
 	case v < 1<<7:
 		b = append(b, byte(v))
@@ -1686,7 +1695,7 @@ func appendVarint32PackedSlice(b []byte, ptr pointer, wiretag uint64, _ bool) ([
 		return b, nil
 	}
 	b = appendVarint(b, wiretag&^7|WireBytes)
-	
+	// compute size
 	n := 0
 	for _, v := range s {
 		n += SizeVarint(uint64(v))
@@ -1735,7 +1744,7 @@ func appendVarintS32PackedSlice(b []byte, ptr pointer, wiretag uint64, _ bool) (
 		return b, nil
 	}
 	b = appendVarint(b, wiretag&^7|WireBytes)
-	
+	// compute size
 	n := 0
 	for _, v := range s {
 		n += SizeVarint(uint64(v))
@@ -1784,7 +1793,7 @@ func appendVarint64PackedSlice(b []byte, ptr pointer, wiretag uint64, _ bool) ([
 		return b, nil
 	}
 	b = appendVarint(b, wiretag&^7|WireBytes)
-	
+	// compute size
 	n := 0
 	for _, v := range s {
 		n += SizeVarint(v)
@@ -1833,7 +1842,7 @@ func appendVarintS64PackedSlice(b []byte, ptr pointer, wiretag uint64, _ bool) (
 		return b, nil
 	}
 	b = appendVarint(b, wiretag&^7|WireBytes)
-	
+	// compute size
 	n := 0
 	for _, v := range s {
 		n += SizeVarint(uint64(v))
@@ -1883,7 +1892,7 @@ func appendZigzag32PackedSlice(b []byte, ptr pointer, wiretag uint64, _ bool) ([
 		return b, nil
 	}
 	b = appendVarint(b, wiretag&^7|WireBytes)
-	
+	// compute size
 	n := 0
 	for _, v := range s {
 		n += SizeVarint(uint64((uint32(v) << 1) ^ uint32((int32(v) >> 31))))
@@ -1933,7 +1942,7 @@ func appendZigzag64PackedSlice(b []byte, ptr pointer, wiretag uint64, _ bool) ([
 		return b, nil
 	}
 	b = appendVarint(b, wiretag&^7|WireBytes)
-	
+	// compute size
 	n := 0
 	for _, v := range s {
 		n += SizeVarint(uint64(v<<1) ^ uint64((int64(v) >> 63)))
@@ -2144,8 +2153,8 @@ func appendBytesSlice(b []byte, ptr pointer, wiretag uint64, _ bool) ([]byte, er
 	return b, nil
 }
 
-
-
+// makeGroupMarshaler returns the sizer and marshaler for a group.
+// u is the marshal info of the underlying message.
 func makeGroupMarshaler(u *marshalInfo) (sizer, marshaler) {
 	return func(ptr pointer, tagsize int) int {
 			p := ptr.getPointer()
@@ -2160,15 +2169,15 @@ func makeGroupMarshaler(u *marshalInfo) (sizer, marshaler) {
 				return b, nil
 			}
 			var err error
-			b = appendVarint(b, wiretag) 
+			b = appendVarint(b, wiretag) // start group
 			b, err = u.marshal(b, p, deterministic)
-			b = appendVarint(b, wiretag+(WireEndGroup-WireStartGroup)) 
+			b = appendVarint(b, wiretag+(WireEndGroup-WireStartGroup)) // end group
 			return b, err
 		}
 }
 
-
-
+// makeGroupSliceMarshaler returns the sizer and marshaler for a group slice.
+// u is the marshal info of the underlying message.
 func makeGroupSliceMarshaler(u *marshalInfo) (sizer, marshaler) {
 	return func(ptr pointer, tagsize int) int {
 			s := ptr.getPointerSlice()
@@ -2189,9 +2198,9 @@ func makeGroupSliceMarshaler(u *marshalInfo) (sizer, marshaler) {
 				if v.isNil() {
 					return b, errRepeatedHasNil
 				}
-				b = appendVarint(b, wiretag) 
+				b = appendVarint(b, wiretag) // start group
 				b, err = u.marshal(b, v, deterministic)
-				b = appendVarint(b, wiretag+(WireEndGroup-WireStartGroup)) 
+				b = appendVarint(b, wiretag+(WireEndGroup-WireStartGroup)) // end group
 				if !nerr.Merge(err) {
 					if err == ErrNil {
 						err = errRepeatedHasNil
@@ -2203,8 +2212,8 @@ func makeGroupSliceMarshaler(u *marshalInfo) (sizer, marshaler) {
 		}
 }
 
-
-
+// makeMessageMarshaler returns the sizer and marshaler for a message field.
+// u is the marshal info of the message.
 func makeMessageMarshaler(u *marshalInfo) (sizer, marshaler) {
 	return func(ptr pointer, tagsize int) int {
 			p := ptr.getPointer()
@@ -2226,8 +2235,8 @@ func makeMessageMarshaler(u *marshalInfo) (sizer, marshaler) {
 		}
 }
 
-
-
+// makeMessageSliceMarshaler returns the sizer and marshaler for a message slice.
+// u is the marshal info of the message.
 func makeMessageSliceMarshaler(u *marshalInfo) (sizer, marshaler) {
 	return func(ptr pointer, tagsize int) int {
 			s := ptr.getPointerSlice()
@@ -2265,37 +2274,37 @@ func makeMessageSliceMarshaler(u *marshalInfo) (sizer, marshaler) {
 		}
 }
 
-
-
+// makeMapMarshaler returns the sizer and marshaler for a map field.
+// f is the pointer to the reflect data structure of the field.
 func makeMapMarshaler(f *reflect.StructField) (sizer, marshaler) {
-	
+	// figure out key and value type
 	t := f.Type
 	keyType := t.Key()
 	valType := t.Elem()
 	keyTags := strings.Split(f.Tag.Get("protobuf_key"), ",")
 	valTags := strings.Split(f.Tag.Get("protobuf_val"), ",")
-	keySizer, keyMarshaler := typeMarshaler(keyType, keyTags, false, false) 
-	valSizer, valMarshaler := typeMarshaler(valType, valTags, false, false) 
+	keySizer, keyMarshaler := typeMarshaler(keyType, keyTags, false, false) // don't omit zero value in map
+	valSizer, valMarshaler := typeMarshaler(valType, valTags, false, false) // don't omit zero value in map
 	keyWireTag := 1<<3 | wiretype(keyTags[0])
 	valWireTag := 2<<3 | wiretype(valTags[0])
 
-	
-	
-	
-	
-	
+	// We create an interface to get the addresses of the map key and value.
+	// If value is pointer-typed, the interface is a direct interface, the
+	// idata itself is the value. Otherwise, the idata is the pointer to the
+	// value.
+	// Key cannot be pointer-typed.
 	valIsPtr := valType.Kind() == reflect.Ptr
 
-	
-	
-	
-	
-	
+	// If value is a message with nested maps, calling
+	// valSizer in marshal may be quadratic. We should use
+	// cached version in marshal (but not in size).
+	// If value is not message type, we don't have size cache,
+	// but it cannot be nested either. Just use valSizer.
 	valCachedSizer := valSizer
 	if valIsPtr && valType.Elem().Kind() == reflect.Struct {
 		u := getMarshalInfo(valType.Elem())
 		valCachedSizer = func(ptr pointer, tagsize int) int {
-			
+			// Same as message sizer, but use cache.
 			p := ptr.getPointer()
 			if p.isNil() {
 				return 0
@@ -2305,20 +2314,20 @@ func makeMapMarshaler(f *reflect.StructField) (sizer, marshaler) {
 		}
 	}
 	return func(ptr pointer, tagsize int) int {
-			m := ptr.asPointerTo(t).Elem() 
+			m := ptr.asPointerTo(t).Elem() // the map
 			n := 0
 			for _, k := range m.MapKeys() {
 				ki := k.Interface()
 				vi := m.MapIndex(k).Interface()
-				kaddr := toAddrPointer(&ki, false)             
-				vaddr := toAddrPointer(&vi, valIsPtr)          
-				siz := keySizer(kaddr, 1) + valSizer(vaddr, 1) 
+				kaddr := toAddrPointer(&ki, false, false)      // pointer to key
+				vaddr := toAddrPointer(&vi, valIsPtr, false)   // pointer to value
+				siz := keySizer(kaddr, 1) + valSizer(vaddr, 1) // tag of key = 1 (size=1), tag of val = 2 (size=1)
 				n += siz + SizeVarint(uint64(siz)) + tagsize
 			}
 			return n
 		},
 		func(b []byte, ptr pointer, tag uint64, deterministic bool) ([]byte, error) {
-			m := ptr.asPointerTo(t).Elem() 
+			m := ptr.asPointerTo(t).Elem() // the map
 			var err error
 			keys := m.MapKeys()
 			if len(keys) > 1 && deterministic {
@@ -2329,17 +2338,17 @@ func makeMapMarshaler(f *reflect.StructField) (sizer, marshaler) {
 			for _, k := range keys {
 				ki := k.Interface()
 				vi := m.MapIndex(k).Interface()
-				kaddr := toAddrPointer(&ki, false)    
-				vaddr := toAddrPointer(&vi, valIsPtr) 
+				kaddr := toAddrPointer(&ki, false, false)    // pointer to key
+				vaddr := toAddrPointer(&vi, valIsPtr, false) // pointer to value
 				b = appendVarint(b, tag)
-				siz := keySizer(kaddr, 1) + valCachedSizer(vaddr, 1) 
+				siz := keySizer(kaddr, 1) + valCachedSizer(vaddr, 1) // tag of key = 1 (size=1), tag of val = 2 (size=1)
 				b = appendVarint(b, uint64(siz))
 				b, err = keyMarshaler(b, kaddr, keyWireTag, deterministic)
 				if !nerr.Merge(err) {
 					return b, err
 				}
 				b, err = valMarshaler(b, vaddr, valWireTag, deterministic)
-				if err != ErrNil && !nerr.Merge(err) { 
+				if err != ErrNil && !nerr.Merge(err) { // allow nil value in map
 					return b, err
 				}
 			}
@@ -2347,18 +2356,18 @@ func makeMapMarshaler(f *reflect.StructField) (sizer, marshaler) {
 		}
 }
 
-
-
-
+// makeOneOfMarshaler returns the sizer and marshaler for a oneof field.
+// fi is the marshal info of the field.
+// f is the pointer to the reflect data structure of the field.
 func makeOneOfMarshaler(fi *marshalFieldInfo, f *reflect.StructField) (sizer, marshaler) {
-	
+	// Oneof field is an interface. We need to get the actual data type on the fly.
 	t := f.Type
 	return func(ptr pointer, _ int) int {
 			p := ptr.getInterfacePointer()
 			if p.isNil() {
 				return 0
 			}
-			v := ptr.asPointerTo(t).Elem().Elem().Elem() 
+			v := ptr.asPointerTo(t).Elem().Elem().Elem() // *interface -> interface -> *struct -> struct
 			telem := v.Type()
 			e := fi.oneofElems[telem]
 			return e.sizer(p, e.tagsize)
@@ -2368,7 +2377,7 @@ func makeOneOfMarshaler(fi *marshalFieldInfo, f *reflect.StructField) (sizer, ma
 			if p.isNil() {
 				return b, nil
 			}
-			v := ptr.asPointerTo(t).Elem().Elem().Elem() 
+			v := ptr.asPointerTo(t).Elem().Elem().Elem() // *interface -> interface -> *struct -> struct
 			telem := v.Type()
 			if telem.Field(0).Type.Kind() == reflect.Ptr && p.getPointer().isNil() {
 				return b, errOneofHasNil
@@ -2378,7 +2387,7 @@ func makeOneOfMarshaler(fi *marshalFieldInfo, f *reflect.StructField) (sizer, ma
 		}
 }
 
-
+// sizeExtensions computes the size of encoded data for a XXX_InternalExtensions field.
 func (u *marshalInfo) sizeExtensions(ext *XXX_InternalExtensions) int {
 	m, mu := ext.extensionsRead()
 	if m == nil {
@@ -2389,24 +2398,24 @@ func (u *marshalInfo) sizeExtensions(ext *XXX_InternalExtensions) int {
 	n := 0
 	for _, e := range m {
 		if e.value == nil || e.desc == nil {
-			
+			// Extension is only in its encoded form.
 			n += len(e.enc)
 			continue
 		}
 
-		
-		
-		
+		// We don't skip extensions that have an encoded form set,
+		// because the extension value may have been mutated after
+		// the last time this function was called.
 		ei := u.getExtElemInfo(e.desc)
 		v := e.value
-		p := toAddrPointer(&v, ei.isptr)
+		p := toAddrPointer(&v, ei.isptr, ei.deref)
 		n += ei.sizer(p, ei.tagsize)
 	}
 	mu.Unlock()
 	return n
 }
 
-
+// appendExtensions marshals a XXX_InternalExtensions field to the end of byte slice b.
 func (u *marshalInfo) appendExtensions(b []byte, ext *XXX_InternalExtensions, deterministic bool) ([]byte, error) {
 	m, mu := ext.extensionsRead()
 	if m == nil {
@@ -2418,23 +2427,23 @@ func (u *marshalInfo) appendExtensions(b []byte, ext *XXX_InternalExtensions, de
 	var err error
 	var nerr nonFatal
 
-	
-	
+	// Fast-path for common cases: zero or one extensions.
+	// Don't bother sorting the keys.
 	if len(m) <= 1 {
 		for _, e := range m {
 			if e.value == nil || e.desc == nil {
-				
+				// Extension is only in its encoded form.
 				b = append(b, e.enc...)
 				continue
 			}
 
-			
-			
-			
+			// We don't skip extensions that have an encoded form set,
+			// because the extension value may have been mutated after
+			// the last time this function was called.
 
 			ei := u.getExtElemInfo(e.desc)
 			v := e.value
-			p := toAddrPointer(&v, ei.isptr)
+			p := toAddrPointer(&v, ei.isptr, ei.deref)
 			b, err = ei.marshaler(b, p, ei.wiretag, deterministic)
 			if !nerr.Merge(err) {
 				return b, err
@@ -2443,8 +2452,8 @@ func (u *marshalInfo) appendExtensions(b []byte, ext *XXX_InternalExtensions, de
 		return b, nerr.E
 	}
 
-	
-	
+	// Sort the keys to provide a deterministic encoding.
+	// Not sure this is required, but the old code does it.
 	keys := make([]int, 0, len(m))
 	for k := range m {
 		keys = append(keys, int(k))
@@ -2454,18 +2463,18 @@ func (u *marshalInfo) appendExtensions(b []byte, ext *XXX_InternalExtensions, de
 	for _, k := range keys {
 		e := m[int32(k)]
 		if e.value == nil || e.desc == nil {
-			
+			// Extension is only in its encoded form.
 			b = append(b, e.enc...)
 			continue
 		}
 
-		
-		
-		
+		// We don't skip extensions that have an encoded form set,
+		// because the extension value may have been mutated after
+		// the last time this function was called.
 
 		ei := u.getExtElemInfo(e.desc)
 		v := e.value
-		p := toAddrPointer(&v, ei.isptr)
+		p := toAddrPointer(&v, ei.isptr, ei.deref)
 		b, err = ei.marshaler(b, p, ei.wiretag, deterministic)
 		if !nerr.Merge(err) {
 			return b, err
@@ -2474,16 +2483,16 @@ func (u *marshalInfo) appendExtensions(b []byte, ext *XXX_InternalExtensions, de
 	return b, nerr.E
 }
 
+// message set format is:
+//   message MessageSet {
+//     repeated group Item = 1 {
+//       required int32 type_id = 2;
+//       required string message = 3;
+//     };
+//   }
 
-
-
-
-
-
-
-
-
-
+// sizeMessageSet computes the size of encoded data for a XXX_InternalExtensions field
+// in message set format (above).
 func (u *marshalInfo) sizeMessageSet(ext *XXX_InternalExtensions) int {
 	m, mu := ext.extensionsRead()
 	if m == nil {
@@ -2493,32 +2502,32 @@ func (u *marshalInfo) sizeMessageSet(ext *XXX_InternalExtensions) int {
 
 	n := 0
 	for id, e := range m {
-		n += 2                          
-		n += SizeVarint(uint64(id)) + 1 
+		n += 2                          // start group, end group. tag = 1 (size=1)
+		n += SizeVarint(uint64(id)) + 1 // type_id, tag = 2 (size=1)
 
 		if e.value == nil || e.desc == nil {
-			
-			msgWithLen := skipVarint(e.enc) 
+			// Extension is only in its encoded form.
+			msgWithLen := skipVarint(e.enc) // skip old tag, but leave the length varint
 			siz := len(msgWithLen)
-			n += siz + 1 
+			n += siz + 1 // message, tag = 3 (size=1)
 			continue
 		}
 
-		
-		
-		
+		// We don't skip extensions that have an encoded form set,
+		// because the extension value may have been mutated after
+		// the last time this function was called.
 
 		ei := u.getExtElemInfo(e.desc)
 		v := e.value
-		p := toAddrPointer(&v, ei.isptr)
-		n += ei.sizer(p, 1) 
+		p := toAddrPointer(&v, ei.isptr, ei.deref)
+		n += ei.sizer(p, 1) // message, tag = 3 (size=1)
 	}
 	mu.Unlock()
 	return n
 }
 
-
-
+// appendMessageSet marshals a XXX_InternalExtensions field in message set format (above)
+// to the end of byte slice b.
 func (u *marshalInfo) appendMessageSet(b []byte, ext *XXX_InternalExtensions, deterministic bool) ([]byte, error) {
 	m, mu := ext.extensionsRead()
 	if m == nil {
@@ -2530,8 +2539,8 @@ func (u *marshalInfo) appendMessageSet(b []byte, ext *XXX_InternalExtensions, de
 	var err error
 	var nerr nonFatal
 
-	
-	
+	// Fast-path for common cases: zero or one extensions.
+	// Don't bother sorting the keys.
 	if len(m) <= 1 {
 		for id, e := range m {
 			b = append(b, 1<<3|WireStartGroup)
@@ -2539,21 +2548,21 @@ func (u *marshalInfo) appendMessageSet(b []byte, ext *XXX_InternalExtensions, de
 			b = appendVarint(b, uint64(id))
 
 			if e.value == nil || e.desc == nil {
-				
-				msgWithLen := skipVarint(e.enc) 
+				// Extension is only in its encoded form.
+				msgWithLen := skipVarint(e.enc) // skip old tag, but leave the length varint
 				b = append(b, 3<<3|WireBytes)
 				b = append(b, msgWithLen...)
 				b = append(b, 1<<3|WireEndGroup)
 				continue
 			}
 
-			
-			
-			
+			// We don't skip extensions that have an encoded form set,
+			// because the extension value may have been mutated after
+			// the last time this function was called.
 
 			ei := u.getExtElemInfo(e.desc)
 			v := e.value
-			p := toAddrPointer(&v, ei.isptr)
+			p := toAddrPointer(&v, ei.isptr, ei.deref)
 			b, err = ei.marshaler(b, p, 3<<3|WireBytes, deterministic)
 			if !nerr.Merge(err) {
 				return b, err
@@ -2563,7 +2572,7 @@ func (u *marshalInfo) appendMessageSet(b []byte, ext *XXX_InternalExtensions, de
 		return b, nerr.E
 	}
 
-	
+	// Sort the keys to provide a deterministic encoding.
 	keys := make([]int, 0, len(m))
 	for k := range m {
 		keys = append(keys, int(k))
@@ -2577,21 +2586,21 @@ func (u *marshalInfo) appendMessageSet(b []byte, ext *XXX_InternalExtensions, de
 		b = appendVarint(b, uint64(id))
 
 		if e.value == nil || e.desc == nil {
-			
-			msgWithLen := skipVarint(e.enc) 
+			// Extension is only in its encoded form.
+			msgWithLen := skipVarint(e.enc) // skip old tag, but leave the length varint
 			b = append(b, 3<<3|WireBytes)
 			b = append(b, msgWithLen...)
 			b = append(b, 1<<3|WireEndGroup)
 			continue
 		}
 
-		
-		
-		
+		// We don't skip extensions that have an encoded form set,
+		// because the extension value may have been mutated after
+		// the last time this function was called.
 
 		ei := u.getExtElemInfo(e.desc)
 		v := e.value
-		p := toAddrPointer(&v, ei.isptr)
+		p := toAddrPointer(&v, ei.isptr, ei.deref)
 		b, err = ei.marshaler(b, p, 3<<3|WireBytes, deterministic)
 		b = append(b, 1<<3|WireEndGroup)
 		if !nerr.Merge(err) {
@@ -2601,7 +2610,7 @@ func (u *marshalInfo) appendMessageSet(b []byte, ext *XXX_InternalExtensions, de
 	return b, nerr.E
 }
 
-
+// sizeV1Extensions computes the size of encoded data for a V1-API extension field.
 func (u *marshalInfo) sizeV1Extensions(m map[int32]Extension) int {
 	if m == nil {
 		return 0
@@ -2610,30 +2619,30 @@ func (u *marshalInfo) sizeV1Extensions(m map[int32]Extension) int {
 	n := 0
 	for _, e := range m {
 		if e.value == nil || e.desc == nil {
-			
+			// Extension is only in its encoded form.
 			n += len(e.enc)
 			continue
 		}
 
-		
-		
-		
+		// We don't skip extensions that have an encoded form set,
+		// because the extension value may have been mutated after
+		// the last time this function was called.
 
 		ei := u.getExtElemInfo(e.desc)
 		v := e.value
-		p := toAddrPointer(&v, ei.isptr)
+		p := toAddrPointer(&v, ei.isptr, ei.deref)
 		n += ei.sizer(p, ei.tagsize)
 	}
 	return n
 }
 
-
+// appendV1Extensions marshals a V1-API extension field to the end of byte slice b.
 func (u *marshalInfo) appendV1Extensions(b []byte, m map[int32]Extension, deterministic bool) ([]byte, error) {
 	if m == nil {
 		return b, nil
 	}
 
-	
+	// Sort the keys to provide a deterministic encoding.
 	keys := make([]int, 0, len(m))
 	for k := range m {
 		keys = append(keys, int(k))
@@ -2645,18 +2654,18 @@ func (u *marshalInfo) appendV1Extensions(b []byte, m map[int32]Extension, determ
 	for _, k := range keys {
 		e := m[int32(k)]
 		if e.value == nil || e.desc == nil {
-			
+			// Extension is only in its encoded form.
 			b = append(b, e.enc...)
 			continue
 		}
 
-		
-		
-		
+		// We don't skip extensions that have an encoded form set,
+		// because the extension value may have been mutated after
+		// the last time this function was called.
 
 		ei := u.getExtElemInfo(e.desc)
 		v := e.value
-		p := toAddrPointer(&v, ei.isptr)
+		p := toAddrPointer(&v, ei.isptr, ei.deref)
 		b, err = ei.marshaler(b, p, ei.wiretag, deterministic)
 		if !nerr.Merge(err) {
 			return b, err
@@ -2665,30 +2674,30 @@ func (u *marshalInfo) appendV1Extensions(b []byte, m map[int32]Extension, determ
 	return b, nerr.E
 }
 
-
-
-
-
-
-
+// newMarshaler is the interface representing objects that can marshal themselves.
+//
+// This exists to support protoc-gen-go generated messages.
+// The proto package will stop type-asserting to this interface in the future.
+//
+// DO NOT DEPEND ON THIS.
 type newMarshaler interface {
 	XXX_Size() int
 	XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
 }
 
-
-
+// Size returns the encoded size of a protocol buffer message.
+// This is the main entry point.
 func Size(pb Message) int {
 	if m, ok := pb.(newMarshaler); ok {
 		return m.XXX_Size()
 	}
 	if m, ok := pb.(Marshaler); ok {
-		
-		
+		// If the message can marshal itself, let it do it, for compatibility.
+		// NOTE: This is not efficient.
 		b, _ := m.Marshal()
 		return len(b)
 	}
-	
+	// in case somehow we didn't generate the wrapper
 	if pb == nil {
 		return 0
 	}
@@ -2696,9 +2705,9 @@ func Size(pb Message) int {
 	return info.Size(pb)
 }
 
-
-
-
+// Marshal takes a protocol buffer message
+// and encodes it into the wire format, returning the data.
+// This is the main entry point.
 func Marshal(pb Message) ([]byte, error) {
 	if m, ok := pb.(newMarshaler); ok {
 		siz := m.XXX_Size()
@@ -2706,11 +2715,11 @@ func Marshal(pb Message) ([]byte, error) {
 		return m.XXX_Marshal(b, false)
 	}
 	if m, ok := pb.(Marshaler); ok {
-		
-		
+		// If the message can marshal itself, let it do it, for compatibility.
+		// NOTE: This is not efficient.
 		return m.Marshal()
 	}
-	
+	// in case somehow we didn't generate the wrapper
 	if pb == nil {
 		return nil, ErrNil
 	}
@@ -2720,40 +2729,40 @@ func Marshal(pb Message) ([]byte, error) {
 	return info.Marshal(b, pb, false)
 }
 
-
-
-
-
-
+// Marshal takes a protocol buffer message
+// and encodes it into the wire format, writing the result to the
+// Buffer.
+// This is an alternative entry point. It is not necessary to use
+// a Buffer for most applications.
 func (p *Buffer) Marshal(pb Message) error {
 	var err error
 	if m, ok := pb.(newMarshaler); ok {
 		siz := m.XXX_Size()
-		p.grow(siz) 
+		p.grow(siz) // make sure buf has enough capacity
 		p.buf, err = m.XXX_Marshal(p.buf, p.deterministic)
 		return err
 	}
 	if m, ok := pb.(Marshaler); ok {
-		
-		
+		// If the message can marshal itself, let it do it, for compatibility.
+		// NOTE: This is not efficient.
 		b, err := m.Marshal()
 		p.buf = append(p.buf, b...)
 		return err
 	}
-	
+	// in case somehow we didn't generate the wrapper
 	if pb == nil {
 		return ErrNil
 	}
 	var info InternalMessageInfo
 	siz := info.Size(pb)
-	p.grow(siz) 
+	p.grow(siz) // make sure buf has enough capacity
 	p.buf, err = info.Marshal(p.buf, pb, p.deterministic)
 	return err
 }
 
-
-
-
+// grow grows the buffer's capacity, if necessary, to guarantee space for
+// another n bytes. After grow(n), at least n bytes can be written to the
+// buffer without another allocation.
 func (p *Buffer) grow(n int) {
 	need := len(p.buf) + n
 	if need <= cap(p.buf) {

@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package comparer
 
@@ -26,10 +26,10 @@ func (bytesComparer) Separator(dst, a, b []byte) []byte {
 	for ; i < n && a[i] == b[i]; i++ {
 	}
 	if i >= n {
-		
+		// Do not shorten if one string is a prefix of the other
 	} else if c := a[i]; c < 0xff && c+1 < b[i] {
 		dst = append(dst, a[:i+1]...)
-		dst[i]++
+		dst[len(dst)-1]++
 		return dst
 	}
 	return nil
@@ -39,13 +39,13 @@ func (bytesComparer) Successor(dst, b []byte) []byte {
 	for i, c := range b {
 		if c != 0xff {
 			dst = append(dst, b[:i+1]...)
-			dst[i]++
+			dst[len(dst)-1]++
 			return dst
 		}
 	}
 	return nil
 }
 
-
-
+// DefaultComparer are default implementation of the Comparer interface.
+// It uses the natural ordering, consistent with bytes.Compare.
 var DefaultComparer = bytesComparer{}

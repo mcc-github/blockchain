@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Gorilla Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package handlers
 
@@ -14,9 +14,9 @@ import (
 	"unicode/utf8"
 )
 
+// Logging
 
-
-
+// FormatterParams is the structure any formatter will be handed when time to log comes
 type LogFormatterParams struct {
 	Request    *http.Request
 	URL        url.URL
@@ -25,11 +25,11 @@ type LogFormatterParams struct {
 	Size       int
 }
 
-
+// LogFormatter gives the signature of the formatter function passed to CustomLoggingHandler
 type LogFormatter func(writer io.Writer, params LogFormatterParams)
 
-
-
+// loggingHandler is the http.Handler implementation for LoggingHandlerTo and its
+// friends
 
 type loggingHandler struct {
 	writer    io.Writer
@@ -94,7 +94,7 @@ func appendQuoted(buf []byte, s string) []byte {
 			buf = append(buf, lowerhex[s[0]&0xF])
 			continue
 		}
-		if r == rune('"') || r == '\\' { 
+		if r == rune('"') || r == '\\' { // always backslashed
 			buf = append(buf, '\\')
 			buf = append(buf, byte(r))
 			continue
@@ -145,9 +145,9 @@ func appendQuoted(buf []byte, s string) []byte {
 
 }
 
-
-
-
+// buildCommonLogLine builds a log entry for req in Apache Common Log Format.
+// ts is the timestamp with which the entry should be logged.
+// status and size are used to provide the response HTTP status and size.
 func buildCommonLogLine(req *http.Request, url url.URL, ts time.Time, status int, size int) []byte {
 	username := "-"
 	if url.User != nil {
@@ -164,9 +164,9 @@ func buildCommonLogLine(req *http.Request, url url.URL, ts time.Time, status int
 
 	uri := req.RequestURI
 
-	
-	
-	
+	// Requests using the CONNECT method over HTTP/2.0 must use
+	// the authority field (aka r.Host) to identify the target.
+	// Refer: https://httpwg.github.io/specs/rfc7540.html#CONNECT
 	if req.ProtoMajor == 2 && req.Method == "CONNECT" {
 		uri = req.Host
 	}
@@ -193,18 +193,18 @@ func buildCommonLogLine(req *http.Request, url url.URL, ts time.Time, status int
 	return buf
 }
 
-
-
-
+// writeLog writes a log entry for req to w in Apache Common Log Format.
+// ts is the timestamp with which the entry should be logged.
+// status and size are used to provide the response HTTP status and size.
 func writeLog(writer io.Writer, params LogFormatterParams) {
 	buf := buildCommonLogLine(params.Request, params.URL, params.TimeStamp, params.StatusCode, params.Size)
 	buf = append(buf, '\n')
 	writer.Write(buf)
 }
 
-
-
-
+// writeCombinedLog writes a log entry for req to w in Apache Combined Log Format.
+// ts is the timestamp with which the entry should be logged.
+// status and size are used to provide the response HTTP status and size.
 func writeCombinedLog(writer io.Writer, params LogFormatterParams) {
 	buf := buildCommonLogLine(params.Request, params.URL, params.TimeStamp, params.StatusCode, params.Size)
 	buf = append(buf, ` "`...)
@@ -215,38 +215,38 @@ func writeCombinedLog(writer io.Writer, params LogFormatterParams) {
 	writer.Write(buf)
 }
 
-
-
-
-
-
-
+// CombinedLoggingHandler return a http.Handler that wraps h and logs requests to out in
+// Apache Combined Log Format.
+//
+// See http://httpd.apache.org/docs/2.2/logs.html#combined for a description of this format.
+//
+// LoggingHandler always sets the ident field of the log to -
 func CombinedLoggingHandler(out io.Writer, h http.Handler) http.Handler {
 	return loggingHandler{out, h, writeCombinedLog}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// LoggingHandler return a http.Handler that wraps h and logs requests to out in
+// Apache Common Log Format (CLF).
+//
+// See http://httpd.apache.org/docs/2.2/logs.html#common for a description of this format.
+//
+// LoggingHandler always sets the ident field of the log to -
+//
+// Example:
+//
+//  r := mux.NewRouter()
+//  r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+//  	w.Write([]byte("This is a catch-all route"))
+//  })
+//  loggedRouter := handlers.LoggingHandler(os.Stdout, r)
+//  http.ListenAndServe(":1123", loggedRouter)
+//
 func LoggingHandler(out io.Writer, h http.Handler) http.Handler {
 	return loggingHandler{out, h, writeLog}
 }
 
-
-
+// CustomLoggingHandler provides a way to supply a custom log formatter
+// while taking advantage of the mechanisms in this package
 func CustomLoggingHandler(out io.Writer, h http.Handler, f LogFormatter) http.Handler {
 	return loggingHandler{out, h, f}
 }

@@ -1,22 +1,22 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright (c) 2016 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 package zap
 
@@ -36,7 +36,7 @@ const schemeFile = "file"
 
 var (
 	_sinkMutex     sync.RWMutex
-	_sinkFactories map[string]func(*url.URL) (Sink, error) 
+	_sinkFactories map[string]func(*url.URL) (Sink, error) // keyed by scheme
 )
 
 func init() {
@@ -52,7 +52,7 @@ func resetSinkRegistry() {
 	}
 }
 
-
+// Sink defines the interface to write to and close logger destinations.
 type Sink interface {
 	zapcore.WriteSyncer
 	io.Closer
@@ -70,13 +70,13 @@ func (e *errSinkNotFound) Error() string {
 	return fmt.Sprintf("no sink found for scheme %q", e.scheme)
 }
 
-
-
-
-
-
-
-
+// RegisterSink registers a user-supplied factory for all sinks with a
+// particular scheme.
+//
+// All schemes must be ASCII, valid under section 3.1 of RFC 3986
+// (https://tools.ietf.org/html/rfc3986#section-3.1), and must not already
+// have a factory registered. Zap automatically registers a factory for the
+// "file" scheme.
 func RegisterSink(scheme string, factory func(*url.URL) (Sink, error)) error {
 	_sinkMutex.Lock()
 	defer _sinkMutex.Unlock()
@@ -123,7 +123,7 @@ func newFileSink(u *url.URL) (Sink, error) {
 	if u.RawQuery != "" {
 		return nil, fmt.Errorf("query parameters not allowed with file URLs: got %v", u)
 	}
-	
+	// Error messages are better if we check hostname and port separately.
 	if u.Port() != "" {
 		return nil, fmt.Errorf("ports not allowed with file URLs: got %v", u)
 	}
@@ -140,12 +140,12 @@ func newFileSink(u *url.URL) (Sink, error) {
 }
 
 func normalizeScheme(s string) (string, error) {
-	
+	// https://tools.ietf.org/html/rfc3986#section-3.1
 	s = strings.ToLower(s)
 	if first := s[0]; 'a' > first || 'z' < first {
 		return "", errors.New("must start with a letter")
 	}
-	for i := 1; i < len(s); i++ { 
+	for i := 1; i < len(s); i++ { // iterate over bytes, not runes
 		c := s[i]
 		switch {
 		case 'a' <= c && c <= 'z':

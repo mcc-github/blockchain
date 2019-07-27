@@ -21,9 +21,9 @@ func (b *fetchRequestBlock) decode(pd packetDecoder) (err error) {
 	return nil
 }
 
-
-
-
+// FetchRequest (API key 1) will fetch Kafka messages. Version 3 introduced the MaxBytes field. See
+// https://issues.apache.org/jira/browse/KAFKA-2063 for a discussion of the issues leading up to that.  The KIP is at
+// https://cwiki.apache.org/confluence/display/KAFKA/KIP-74%3A+Add+Fetch+Response+Size+Limit+in+Bytes
 type FetchRequest struct {
 	MaxWaitTime int32
 	MinBytes    int32
@@ -41,7 +41,7 @@ const (
 )
 
 func (r *FetchRequest) encode(pe packetEncoder) (err error) {
-	pe.putInt32(-1) 
+	pe.putInt32(-1) // replica ID is always -1 for clients
 	pe.putInt32(r.MaxWaitTime)
 	pe.putInt32(r.MinBytes)
 	if r.Version >= 3 {

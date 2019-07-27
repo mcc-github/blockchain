@@ -1,12 +1,12 @@
+// Copyright © 2014 Steve Francia <spf@spf13.com>.
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
-
-
-
+// Viper is a application configuration system.
+// It believes that applications can be configured a variety of ways
+// via flags, ENVIRONMENT variables, configuration files retrieved
+// from the file system, or a remote key/value store.
 
 package viper
 
@@ -28,12 +28,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-
+// Denotes failing to parse configuration file.
 type ConfigParseError struct {
 	err error
 }
 
-
+// Returns the formatted configuration error.
 func (pe ConfigParseError) Error() string {
 	return fmt.Sprintf("While parsing config: %s", pe.err.Error())
 }
@@ -74,7 +74,7 @@ func absPathify(inPath string) string {
 	return ""
 }
 
-
+// Check if File / Directory Exists
 func exists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
@@ -173,7 +173,7 @@ func safeMul(a, b uint) uint {
 	return c
 }
 
-
+// parseSizeInBytes converts strings like 1GB or 12 mb into an unsigned integer number of bytes
 func parseSizeInBytes(sizeStr string) uint {
 	sizeStr = strings.TrimSpace(sizeStr)
 	lastChar := len(sizeStr) - 1

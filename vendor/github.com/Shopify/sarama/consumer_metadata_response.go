@@ -5,12 +5,13 @@ import (
 	"strconv"
 )
 
+//ConsumerMetadataResponse holds the response for a consumer group meta data requests
 type ConsumerMetadataResponse struct {
 	Err             KError
 	Coordinator     *Broker
-	CoordinatorID   int32  
-	CoordinatorHost string 
-	CoordinatorPort int32  
+	CoordinatorID   int32  // deprecated: use Coordinator.ID()
+	CoordinatorHost string // deprecated: use Coordinator.Addr()
+	CoordinatorPort int32  // deprecated: use Coordinator.Addr()
 }
 
 func (r *ConsumerMetadataResponse) decode(pd packetDecoder, version int16) (err error) {
@@ -27,8 +28,8 @@ func (r *ConsumerMetadataResponse) decode(pd packetDecoder, version int16) (err 
 		return nil
 	}
 
-	
-	
+	// this can all go away in 2.0, but we have to fill in deprecated fields to maintain
+	// backwards compatibility
 	host, portstr, err := net.SplitHostPort(r.Coordinator.Addr())
 	if err != nil {
 		return err

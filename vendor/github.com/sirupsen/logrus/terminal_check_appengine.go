@@ -1,4 +1,4 @@
-
+// +build appengine
 
 package logrus
 

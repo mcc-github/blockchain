@@ -1,9 +1,9 @@
-
-
-
-
-
-
+// Package yaml implements YAML support for the Go language.
+//
+// Source code and other details for the project are available at GitHub:
+//
+//   https://github.com/go-yaml/yaml
+//
 package yaml
 
 import (
@@ -15,107 +15,107 @@ import (
 	"sync"
 )
 
-
-
+// MapSlice encodes and decodes as a YAML map.
+// The order of keys is preserved when encoding and decoding.
 type MapSlice []MapItem
 
-
+// MapItem is an item in a MapSlice.
 type MapItem struct {
 	Key, Value interface{}
 }
 
-
-
-
-
-
+// The Unmarshaler interface may be implemented by types to customize their
+// behavior when being unmarshaled from a YAML document. The UnmarshalYAML
+// method receives a function that may be called to unmarshal the original
+// YAML value into a field or variable. It is safe to call the unmarshal
+// function parameter more than once if necessary.
 type Unmarshaler interface {
 	UnmarshalYAML(unmarshal func(interface{}) error) error
 }
 
-
-
-
-
-
-
+// The Marshaler interface may be implemented by types to customize their
+// behavior when being marshaled into a YAML document. The returned value
+// is marshaled in place of the original value implementing Marshaler.
+//
+// If an error is returned by MarshalYAML, the marshaling procedure stops
+// and returns with the provided error.
 type Marshaler interface {
 	MarshalYAML() (interface{}, error)
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Unmarshal decodes the first document found within the in byte slice
+// and assigns decoded values into the out value.
+//
+// Maps and pointers (to a struct, string, int, etc) are accepted as out
+// values. If an internal pointer within a struct is not initialized,
+// the yaml package will initialize it if necessary for unmarshalling
+// the provided data. The out parameter must not be nil.
+//
+// The type of the decoded values should be compatible with the respective
+// values in out. If one or more values cannot be decoded due to a type
+// mismatches, decoding continues partially until the end of the YAML
+// content, and a *yaml.TypeError is returned with details for all
+// missed values.
+//
+// Struct fields are only unmarshalled if they are exported (have an
+// upper case first letter), and are unmarshalled using the field name
+// lowercased as the default key. Custom keys may be defined via the
+// "yaml" name in the field tag: the content preceding the first comma
+// is used as the key, and the following comma-separated options are
+// used to tweak the marshalling process (see Marshal).
+// Conflicting names result in a runtime error.
+//
+// For example:
+//
+//     type T struct {
+//         F int `yaml:"a,omitempty"`
+//         B int
+//     }
+//     var t T
+//     yaml.Unmarshal([]byte("a: 1\nb: 2"), &t)
+//
+// See the documentation of Marshal for the format of tags and a list of
+// supported tag options.
+//
 func Unmarshal(in []byte, out interface{}) (err error) {
 	return unmarshal(in, out, false)
 }
 
-
-
-
-
+// UnmarshalStrict is like Unmarshal except that any fields that are found
+// in the data that do not have corresponding struct members, or mapping
+// keys that are duplicates, will result in
+// an error.
 func UnmarshalStrict(in []byte, out interface{}) (err error) {
 	return unmarshal(in, out, true)
 }
 
-
+// A Decorder reads and decodes YAML values from an input stream.
 type Decoder struct {
 	strict bool
 	parser *parser
 }
 
-
-
-
-
+// NewDecoder returns a new decoder that reads from r.
+//
+// The decoder introduces its own buffering and may read
+// data from r beyond the YAML values requested.
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		parser: newParserFromReader(r),
 	}
 }
 
-
-
+// SetStrict sets whether strict decoding behaviour is enabled when
+// decoding items in the data (see UnmarshalStrict). By default, decoding is not strict.
 func (dec *Decoder) SetStrict(strict bool) {
 	dec.strict = strict
 }
 
-
-
-
-
-
+// Decode reads the next YAML-encoded value from its input
+// and stores it in the value pointed to by v.
+//
+// See the documentation for Unmarshal for details about the
+// conversion of YAML into a Go value.
 func (dec *Decoder) Decode(v interface{}) (err error) {
 	d := newDecoder(dec.strict)
 	defer handleErr(&err)
@@ -153,49 +153,49 @@ func unmarshal(in []byte, out interface{}, strict bool) (err error) {
 	return nil
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Marshal serializes the value provided into a YAML document. The structure
+// of the generated document will reflect the structure of the value itself.
+// Maps and pointers (to struct, string, int, etc) are accepted as the in value.
+//
+// Struct fields are only marshalled if they are exported (have an upper case
+// first letter), and are marshalled using the field name lowercased as the
+// default key. Custom keys may be defined via the "yaml" name in the field
+// tag: the content preceding the first comma is used as the key, and the
+// following comma-separated options are used to tweak the marshalling process.
+// Conflicting names result in a runtime error.
+//
+// The field tag format accepted is:
+//
+//     `(...) yaml:"[<key>][,<flag1>[,<flag2>]]" (...)`
+//
+// The following flags are currently supported:
+//
+//     omitempty    Only include the field if it's not set to the zero
+//                  value for the type or to empty slices or maps.
+//                  Zero valued structs will be omitted if all their public
+//                  fields are zero, unless they implement an IsZero
+//                  method (see the IsZeroer interface type), in which
+//                  case the field will be included if that method returns true.
+//
+//     flow         Marshal using a flow style (useful for structs,
+//                  sequences and maps).
+//
+//     inline       Inline the field, which must be a struct or a map,
+//                  causing all of its fields or keys to be processed as if
+//                  they were part of the outer struct. For maps, keys must
+//                  not conflict with the yaml keys of other struct fields.
+//
+// In addition, if the key is "-", the field is ignored.
+//
+// For example:
+//
+//     type T struct {
+//         F int `yaml:"a,omitempty"`
+//         B int
+//     }
+//     yaml.Marshal(&T{B: 2}) // Returns "b: 2\n"
+//     yaml.Marshal(&T{F: 1}} // Returns "a: 1\nb: 0\n"
+//
 func Marshal(in interface{}) (out []byte, err error) {
 	defer handleErr(&err)
 	e := newEncoder()
@@ -206,35 +206,35 @@ func Marshal(in interface{}) (out []byte, err error) {
 	return
 }
 
-
+// An Encoder writes YAML values to an output stream.
 type Encoder struct {
 	encoder *encoder
 }
 
-
-
-
+// NewEncoder returns a new encoder that writes to w.
+// The Encoder should be closed after use to flush all data
+// to w.
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
 		encoder: newEncoderWithWriter(w),
 	}
 }
 
-
-
-
-
-
-
-
+// Encode writes the YAML encoding of v to the stream.
+// If multiple items are encoded to the stream, the
+// second and subsequent document will be preceded
+// with a "---" document separator, but the first will not.
+//
+// See the documentation for Marshal for details about the conversion of Go
+// values to YAML.
 func (e *Encoder) Encode(v interface{}) (err error) {
 	defer handleErr(&err)
 	e.encoder.marshalDoc("", reflect.ValueOf(v))
 	return nil
 }
 
-
-
+// Close closes the encoder by writing any remaining data.
+// It does not write a stream terminating string "...".
 func (e *Encoder) Close() (err error) {
 	defer handleErr(&err)
 	e.encoder.finish()
@@ -263,10 +263,10 @@ func failf(format string, args ...interface{}) {
 	panic(yamlError{fmt.Errorf("yaml: "+format, args...)})
 }
 
-
-
-
-
+// A TypeError is returned by Unmarshal when one or more fields in
+// the YAML document cannot be properly decoded into the requested
+// types. When this error is returned, the value is still
+// unmarshaled partially.
 type TypeError struct {
 	Errors []string
 }
@@ -275,19 +275,19 @@ func (e *TypeError) Error() string {
 	return fmt.Sprintf("yaml: unmarshal errors:\n  %s", strings.Join(e.Errors, "\n  "))
 }
 
+// --------------------------------------------------------------------------
+// Maintain a mapping of keys to structure field indexes
 
+// The code in this section was copied from mgo/bson.
 
-
-
-
-
-
+// structInfo holds details for the serialization of fields of
+// a given struct.
 type structInfo struct {
 	FieldsMap  map[string]fieldInfo
 	FieldsList []fieldInfo
 
-	
-	
+	// InlineMap is the number of the field in the struct that
+	// contains an ,inline map, or -1 if there's none.
 	InlineMap int
 }
 
@@ -296,11 +296,11 @@ type fieldInfo struct {
 	Num       int
 	OmitEmpty bool
 	Flow      bool
-	
-	
+	// Id holds the unique field identifier, so we can cheaply
+	// check for field duplicates without maintaining an extra map.
 	Id int
 
-	
+	// Inline holds the field index if the field is part of an inlined struct.
 	Inline []int
 }
 
@@ -322,7 +322,7 @@ func getStructInfo(st reflect.Type) (*structInfo, error) {
 	for i := 0; i != n; i++ {
 		field := st.Field(i)
 		if field.PkgPath != "" && !field.Anonymous {
-			continue 
+			continue // Private field
 		}
 
 		info := fieldInfo{Num: i}
@@ -383,7 +383,7 @@ func getStructInfo(st reflect.Type) (*structInfo, error) {
 					fieldsList = append(fieldsList, finfo)
 				}
 			default:
-				
+				//return nil, errors.New("Option ,inline needs a struct value or map field")
 				return nil, errors.New("Option ,inline needs a struct value field")
 			}
 			continue
@@ -417,10 +417,10 @@ func getStructInfo(st reflect.Type) (*structInfo, error) {
 	return sinfo, nil
 }
 
-
-
-
-
+// IsZeroer is used to check whether an object is zero to
+// determine whether it should be omitted when marshaling
+// with the omitempty flag. One notable implementation
+// is time.Time.
 type IsZeroer interface {
 	IsZero() bool
 }
@@ -454,7 +454,7 @@ func isZero(v reflect.Value) bool {
 		vt := v.Type()
 		for i := v.NumField() - 1; i >= 0; i-- {
 			if vt.Field(i).PkgPath != "" {
-				continue 
+				continue // Private field
 			}
 			if !isZero(v.Field(i)) {
 				return false

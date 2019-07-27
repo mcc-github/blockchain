@@ -1,4 +1,4 @@
-
+// +build windows
 
 package winterm
 
@@ -12,36 +12,36 @@ import (
 	"github.com/Azure/go-ansiterm"
 )
 
-
-
+// Windows keyboard constants
+// See https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731(v=vs.85).aspx.
 const (
-	VK_PRIOR    = 0x21 
-	VK_NEXT     = 0x22 
-	VK_END      = 0x23 
-	VK_HOME     = 0x24 
-	VK_LEFT     = 0x25 
-	VK_UP       = 0x26 
-	VK_RIGHT    = 0x27 
-	VK_DOWN     = 0x28 
-	VK_SELECT   = 0x29 
-	VK_PRINT    = 0x2A 
-	VK_EXECUTE  = 0x2B 
-	VK_SNAPSHOT = 0x2C 
-	VK_INSERT   = 0x2D 
-	VK_DELETE   = 0x2E 
-	VK_HELP     = 0x2F 
-	VK_F1       = 0x70 
-	VK_F2       = 0x71 
-	VK_F3       = 0x72 
-	VK_F4       = 0x73 
-	VK_F5       = 0x74 
-	VK_F6       = 0x75 
-	VK_F7       = 0x76 
-	VK_F8       = 0x77 
-	VK_F9       = 0x78 
-	VK_F10      = 0x79 
-	VK_F11      = 0x7A 
-	VK_F12      = 0x7B 
+	VK_PRIOR    = 0x21 // PAGE UP key
+	VK_NEXT     = 0x22 // PAGE DOWN key
+	VK_END      = 0x23 // END key
+	VK_HOME     = 0x24 // HOME key
+	VK_LEFT     = 0x25 // LEFT ARROW key
+	VK_UP       = 0x26 // UP ARROW key
+	VK_RIGHT    = 0x27 // RIGHT ARROW key
+	VK_DOWN     = 0x28 // DOWN ARROW key
+	VK_SELECT   = 0x29 // SELECT key
+	VK_PRINT    = 0x2A // PRINT key
+	VK_EXECUTE  = 0x2B // EXECUTE key
+	VK_SNAPSHOT = 0x2C // PRINT SCREEN key
+	VK_INSERT   = 0x2D // INS key
+	VK_DELETE   = 0x2E // DEL key
+	VK_HELP     = 0x2F // HELP key
+	VK_F1       = 0x70 // F1 key
+	VK_F2       = 0x71 // F2 key
+	VK_F3       = 0x72 // F3 key
+	VK_F4       = 0x73 // F4 key
+	VK_F5       = 0x74 // F5 key
+	VK_F6       = 0x75 // F6 key
+	VK_F7       = 0x76 // F7 key
+	VK_F8       = 0x77 // F8 key
+	VK_F9       = 0x78 // F9 key
+	VK_F10      = 0x79 // F10 key
+	VK_F11      = 0x7A // F11 key
+	VK_F12      = 0x7B // F12 key
 
 	RIGHT_ALT_PRESSED  = 0x0001
 	LEFT_ALT_PRESSED   = 0x0002
@@ -64,7 +64,7 @@ type ansiCommand struct {
 func newAnsiCommand(command []byte) *ansiCommand {
 
 	if isCharacterSelectionCmdChar(command[1]) {
-		
+		// Is Character Set Selection commands
 		return &ansiCommand{
 			CommandBytes: command,
 			Command:      string(command),
@@ -72,7 +72,7 @@ func newAnsiCommand(command []byte) *ansiCommand {
 		}
 	}
 
-	
+	// last char is command character
 	lastCharIndex := len(command) - 1
 
 	ac := &ansiCommand{
@@ -81,14 +81,14 @@ func newAnsiCommand(command []byte) *ansiCommand {
 		IsSpecial:    false,
 	}
 
-	
+	// more than a single escape
 	if lastCharIndex != 0 {
 		start := 1
-		
+		// skip if double char escape sequence
 		if command[0] == ansiterm.ANSI_ESCAPE_PRIMARY && command[1] == ansiterm.ANSI_ESCAPE_SECONDARY {
 			start++
 		}
-		
+		// convert this to GetNextParam method
 		ac.Parameters = strings.Split(string(command[start:lastCharIndex]), ansiterm.ANSI_PARAMETER_SEP)
 	}
 
@@ -115,17 +115,17 @@ func (ac *ansiCommand) String() string {
 		strings.Join(ac.Parameters, "\",\""))
 }
 
-
-
+// isAnsiCommandChar returns true if the passed byte falls within the range of ANSI commands.
+// See http://manpages.ubuntu.com/manpages/intrepid/man4/console_codes.4.html.
 func isAnsiCommandChar(b byte) bool {
 	switch {
 	case ansiterm.ANSI_COMMAND_FIRST <= b && b <= ansiterm.ANSI_COMMAND_LAST && b != ansiterm.ANSI_ESCAPE_SECONDARY:
 		return true
 	case b == ansiterm.ANSI_CMD_G1 || b == ansiterm.ANSI_CMD_OSC || b == ansiterm.ANSI_CMD_DECPAM || b == ansiterm.ANSI_CMD_DECPNM:
-		
+		// non-CSI escape sequence terminator
 		return true
 	case b == ansiterm.ANSI_CMD_STR_TERM || b == ansiterm.ANSI_BEL:
-		
+		// String escape sequence terminator
 		return true
 	}
 	return false
@@ -139,7 +139,7 @@ func isCharacterSelectionCmdChar(b byte) bool {
 	return (b == ansiterm.ANSI_CMD_G0 || b == ansiterm.ANSI_CMD_G1 || b == ansiterm.ANSI_CMD_G2 || b == ansiterm.ANSI_CMD_G3)
 }
 
-
+// bytesToHex converts a slice of bytes to a human-readable string.
 func bytesToHex(b []byte) string {
 	hex := make([]string, len(b))
 	for i, ch := range b {
@@ -148,8 +148,8 @@ func bytesToHex(b []byte) string {
 	return strings.Join(hex, "")
 }
 
-
-
+// ensureInRange adjusts the passed value, if necessary, to ensure it is within
+// the passed min / max range.
 func ensureInRange(n int16, min int16, max int16) int16 {
 	if n < min {
 		return min

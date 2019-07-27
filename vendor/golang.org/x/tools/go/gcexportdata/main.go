@@ -1,11 +1,11 @@
+// Copyright 2017 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// +build ignore
 
-
-
-
-
-
-
+// The gcexportdata command is a diagnostic tool that displays the
+// contents of gc export data files.
 package main
 
 import (
@@ -45,7 +45,7 @@ func main() {
 		log.Fatalf("%s: %s", filename, err)
 	}
 
-	
+	// Decode the package.
 	const primary = "<primary>"
 	imports := make(map[string]*types.Package)
 	fset := token.NewFileSet()
@@ -54,7 +54,7 @@ func main() {
 		log.Fatalf("%s: %s", filename, err)
 	}
 
-	
+	// Optionally select an indirectly mentioned package.
 	if *packageFlag != "" {
 		pkg = imports[*packageFlag]
 		if pkg == nil {
@@ -69,7 +69,7 @@ func main() {
 		}
 	}
 
-	
+	// Print all package-level declarations, including non-exported ones.
 	fmt.Printf("package %s\n", pkg.Name())
 	for _, imp := range pkg.Imports() {
 		fmt.Printf("import %q\n", imp.Path())
@@ -87,7 +87,7 @@ func main() {
 			fset.Position(obj.Pos()),
 			types.ObjectString(obj, qual))
 
-		
+		// For types, print each method.
 		if _, ok := obj.(*types.TypeName); ok {
 			for _, method := range typeutil.IntuitiveMethodSet(obj.Type(), nil) {
 				fmt.Printf("%s: %s\n",

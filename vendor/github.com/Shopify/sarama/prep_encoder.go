@@ -13,7 +13,7 @@ type prepEncoder struct {
 	length int
 }
 
-
+// primitives
 
 func (pe *prepEncoder) putInt8(in int8) {
 	pe.length++
@@ -48,7 +48,7 @@ func (pe *prepEncoder) putBool(in bool) {
 	pe.length++
 }
 
-
+// arrays
 
 func (pe *prepEncoder) putBytes(in []byte) error {
 	pe.length += 4
@@ -129,7 +129,7 @@ func (pe *prepEncoder) offset() int {
 	return pe.length
 }
 
-
+// stackable
 
 func (pe *prepEncoder) push(in pushEncoder) {
 	in.saveOffset(pe.length)
@@ -147,7 +147,7 @@ func (pe *prepEncoder) pop() error {
 	return nil
 }
 
-
+// we do not record metrics during the prep encoder pass
 func (pe *prepEncoder) metricRegistry() metrics.Registry {
 	return nil
 }

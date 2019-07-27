@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2014, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package util
 
@@ -18,7 +18,7 @@ type buffer struct {
 	miss int
 }
 
-
+// BufferPool is a 'buffer pool'.
 type BufferPool struct {
 	pool      [6]chan []byte
 	size      [5]uint32
@@ -52,7 +52,7 @@ func (p *BufferPool) poolNum(n int) int {
 	return len(p.baseline) + 1
 }
 
-
+// Get returns buffer with length of n.
 func (p *BufferPool) Get(n int) []byte {
 	if p == nil {
 		return make([]byte, n)
@@ -70,7 +70,7 @@ func (p *BufferPool) Get(n int) []byte {
 	poolNum := p.poolNum(n)
 	pool := p.pool[poolNum]
 	if poolNum == 0 {
-		
+		// Fast path.
 		select {
 		case b := <-pool:
 			switch {
@@ -154,7 +154,7 @@ func (p *BufferPool) Get(n int) []byte {
 	}
 }
 
-
+// Put adds given buffer to the pool.
 func (p *BufferPool) Put(b []byte) {
 	if p == nil {
 		return
@@ -221,7 +221,7 @@ func (p *BufferPool) drain() {
 	}
 }
 
-
+// NewBufferPool creates a new initialized 'buffer pool'.
 func NewBufferPool(baseline int) *BufferPool {
 	if baseline <= 0 {
 		panic("baseline can't be <= 0")

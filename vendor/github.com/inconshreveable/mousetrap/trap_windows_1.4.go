@@ -1,5 +1,5 @@
-
-
+// +build windows
+// +build go1.4
 
 package mousetrap
 
@@ -31,12 +31,12 @@ func getProcessEntry(pid int) (*syscall.ProcessEntry32, error) {
 	}
 }
 
-
-
-
-
-
-
+// StartedByExplorer returns true if the program was invoked by the user double-clicking
+// on the executable from explorer.exe
+//
+// It is conservative and returns false if any of the internal calls fail.
+// It does not guarantee that the program was run from a terminal. It only can tell you
+// whether it was launched from explorer.exe
 func StartedByExplorer() bool {
 	pe, err := getProcessEntry(os.Getppid())
 	if err != nil {

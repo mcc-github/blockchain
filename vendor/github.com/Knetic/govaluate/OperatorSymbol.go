@@ -1,6 +1,9 @@
 package govaluate
 
+/*
+	Represents the valid symbols for operators.
 
+*/
 type OperatorSymbol int
 
 const (
@@ -135,7 +138,11 @@ func findOperatorPrecedenceForSymbol(symbol OperatorSymbol) operatorPrecedence {
 	return valuePrecedence
 }
 
-
+/*
+	Map of all valid comparators, and their string equivalents.
+	Used during parsing of expressions to determine if a symbol is, in fact, a comparator.
+	Also used during evaluation to determine exactly which comparator is being used.
+*/
 var comparatorSymbols = map[string]OperatorSymbol{
 	"==": EQ,
 	"!=": NEQ,
@@ -191,7 +198,7 @@ var ternarySymbols = map[string]OperatorSymbol{
 	"??": COALESCE,
 }
 
-
+// this is defined separately from additiveSymbols et al because it's needed for parsing, not stage planning.
 var modifierSymbols = map[string]OperatorSymbol{
 	"+":  PLUS,
 	"-":  MINUS,
@@ -210,7 +217,10 @@ var separatorSymbols = map[string]OperatorSymbol{
 	",": SEPARATE,
 }
 
-
+/*
+	Returns true if this operator is contained by the given array of candidate symbols.
+	False otherwise.
+*/
 func (this OperatorSymbol) IsModifierType(candidate []OperatorSymbol) bool {
 
 	for _, symbolType := range candidate {
@@ -222,7 +232,12 @@ func (this OperatorSymbol) IsModifierType(candidate []OperatorSymbol) bool {
 	return false
 }
 
-
+/*
+	Generally used when formatting type check errors.
+	We could store the stringified symbol somewhere else and not require a duplicated codeblock to translate
+	OperatorSymbol to string, but that would require more memory, and another field somewhere.
+	Adding operators is rare enough that we just stringify it here instead.
+*/
 func (this OperatorSymbol) String() string {
 
 	switch this {

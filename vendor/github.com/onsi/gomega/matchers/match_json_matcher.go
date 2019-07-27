@@ -22,7 +22,7 @@ func (matcher *MatchJSONMatcher) Match(actual interface{}) (success bool, err er
 	var aval interface{}
 	var eval interface{}
 
-	
+	// this is guarded by prettyPrint
 	json.Unmarshal([]byte(actualString), &aval)
 	json.Unmarshal([]byte(expectedString), &eval)
 	var equal bool

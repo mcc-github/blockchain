@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package korean
 
@@ -13,10 +13,10 @@ import (
 	"golang.org/x/text/transform"
 )
 
-
+// All is a list of all defined encodings in this package.
 var All = []encoding.Encoding{EUCKR}
 
-
+// EUCKR is the EUC-KR encoding, also known as Code Page 949.
 var EUCKR encoding.Encoding = &eucKR
 
 var eucKR = internal.Encoding{
@@ -96,7 +96,7 @@ func (eucKREncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 	for ; nSrc < len(src); nSrc += size {
 		r = rune(src[nSrc])
 
-		
+		// Decode a 1-byte rune.
 		if r < utf8.RuneSelf {
 			size = 1
 
@@ -109,19 +109,19 @@ func (eucKREncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 			continue
 
 		} else {
-			
+			// Decode a multi-byte rune.
 			r, size = utf8.DecodeRune(src[nSrc:])
 			if size == 1 {
-				
-				
-				
+				// All valid runes of size 1 (those below utf8.RuneSelf) were
+				// handled above. We have invalid UTF-8 or we haven't seen the
+				// full character yet.
 				if !atEOF && !utf8.FullRune(src[nSrc:]) {
 					err = transform.ErrShortSrc
 					break
 				}
 			}
 
-			
+			// func init checks that the switch covers all tables.
 			switch {
 			case encode0Low <= r && r < encode0High:
 				if r = rune(encode0[r-encode0Low]); r != 0 {
@@ -170,7 +170,7 @@ func (eucKREncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 }
 
 func init() {
-	
+	// Check that the hard-coded encode switch covers all tables.
 	if numEncodeTables != 7 {
 		panic("bad numEncodeTables")
 	}

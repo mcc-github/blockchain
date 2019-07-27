@@ -23,7 +23,7 @@ type node struct {
 	kind         int
 	line, column int
 	tag          string
-	
+	// For an alias node, alias holds the resolved alias.
 	alias    *node
 	value    string
 	implicit bool
@@ -31,8 +31,8 @@ type node struct {
 	anchors  map[string]*node
 }
 
-
-
+// ----------------------------------------------------------------------------
+// Parser, produces a node tree out of a libyaml event stream.
 
 type parser struct {
 	parser   yaml_parser_t
@@ -77,8 +77,8 @@ func (p *parser) destroy() {
 	yaml_parser_delete(&p.parser)
 }
 
-
-
+// expect consumes an event from the event stream and
+// checks that it's of the expected type.
 func (p *parser) expect(e yaml_event_type_t) {
 	if p.event.typ == yaml_NO_EVENT {
 		if !yaml_parser_parse(&p.parser, &p.event) {
@@ -96,8 +96,8 @@ func (p *parser) expect(e yaml_event_type_t) {
 	p.event.typ = yaml_NO_EVENT
 }
 
-
-
+// peek peeks at the next event in the event stream,
+// puts the results into p.event and returns the event type.
 func (p *parser) peek() yaml_event_type_t {
 	if p.event.typ != yaml_NO_EVENT {
 		return p.event.typ
@@ -113,7 +113,7 @@ func (p *parser) fail() {
 	var line int
 	if p.parser.problem_mark.line != 0 {
 		line = p.parser.problem_mark.line
-		
+		// Scanner errors don't iterate line before returning error
 		if p.parser.error == yaml_SCANNER_ERROR {
 			line++
 		}
@@ -152,7 +152,7 @@ func (p *parser) parse() *node {
 	case yaml_DOCUMENT_START_EVENT:
 		return p.document()
 	case yaml_STREAM_END_EVENT:
-		
+		// Happens when attempting to decode an empty buffer.
 		return nil
 	default:
 		panic("attempted to parse unknown event: " + p.event.typ.String())
@@ -220,8 +220,8 @@ func (p *parser) mapping() *node {
 	return n
 }
 
-
-
+// ----------------------------------------------------------------------------
+// Decoder, unmarshals a node into a provided value.
 
 type decoder struct {
 	doc     *node
@@ -283,13 +283,13 @@ func (d *decoder) callUnmarshaler(n *node, u Unmarshaler) (good bool) {
 	return true
 }
 
-
-
-
-
-
-
-
+// d.prepare initializes and dereferences pointers and calls UnmarshalYAML
+// if a value is found to implement it.
+// It returns the initialized and dereferenced out value, whether
+// unmarshalling was already done by UnmarshalYAML, and if so whether
+// its types unmarshalled appropriately.
+//
+// If n holds a null value, prepare returns before doing anything.
 func (d *decoder) prepare(n *node, out reflect.Value) (newout reflect.Value, unmarshaled, good bool) {
 	if n.tag == yaml_NULL_TAG || n.kind == scalarNode && n.tag == "" && (n.value == "null" || n.value == "~" || n.value == "" && n.implicit) {
 		return out, false, false
@@ -349,7 +349,7 @@ func (d *decoder) document(n *node, out reflect.Value) (good bool) {
 
 func (d *decoder) alias(n *node, out reflect.Value) (good bool) {
 	if d.aliases[n] {
-		
+		// TODO this could actually be allowed in some circumstances.
 		failf("anchor '%s' value contains itself", n.value)
 	}
 	d.aliases[n] = true
@@ -391,12 +391,12 @@ func (d *decoder) scalar(n *node, out reflect.Value) bool {
 		return true
 	}
 	if resolvedv := reflect.ValueOf(resolved); out.Type() == resolvedv.Type() {
-		
+		// We've resolved to exactly the type we want, so use that.
 		out.Set(resolvedv)
 		return true
 	}
-	
-	
+	// Perhaps we can use the value as a TextUnmarshaler to
+	// set its value.
 	if out.CanAddr() {
 		u, ok := out.Addr().Interface().(encoding.TextUnmarshaler)
 		if ok {
@@ -404,9 +404,9 @@ func (d *decoder) scalar(n *node, out reflect.Value) bool {
 			if tag == yaml_BINARY_TAG {
 				text = []byte(resolved.(string))
 			} else {
-				
-				
-				
+				// We let any value be unmarshaled into TextUnmarshaler.
+				// That might be more lax than we'd like, but the
+				// TextUnmarshaler itself should bowl out any dubious values.
 				text = []byte(n.value)
 			}
 			err := u.UnmarshalText(text)
@@ -430,11 +430,11 @@ func (d *decoder) scalar(n *node, out reflect.Value) bool {
 		if resolved == nil {
 			out.Set(reflect.Zero(out.Type()))
 		} else if tag == yaml_TIMESTAMP_TAG {
-			
-			
-			
-			
-			
+			// It looks like a timestamp but for backward compatibility
+			// reasons we set it as a string, so that code that unmarshals
+			// timestamp-like values into interface{} will continue to
+			// see a string and not a time.Time.
+			// TODO(v3) Drop this.
 			out.Set(reflect.ValueOf(n.value))
 		} else {
 			out.Set(reflect.ValueOf(resolved))
@@ -522,7 +522,7 @@ func (d *decoder) scalar(n *node, out reflect.Value) bool {
 		}
 	case reflect.Ptr:
 		if out.Type().Elem() == reflect.TypeOf(resolved) {
-			
+			// TODO DOes this make sense? When is out a Ptr except when decoding a nil value?
 			elem := reflect.New(out.Type().Elem())
 			elem.Elem().Set(reflect.ValueOf(resolved))
 			out.Set(elem)
@@ -552,7 +552,7 @@ func (d *decoder) sequence(n *node, out reflect.Value) (good bool) {
 			failf("invalid array: want %d elements but got %d", out.Len(), l)
 		}
 	case reflect.Interface:
-		
+		// No type hints. Will have to use a generic sequence.
 		iface = out
 		out = settableValueOf(make([]interface{}, l))
 	default:
@@ -585,7 +585,7 @@ func (d *decoder) mapping(n *node, out reflect.Value) (good bool) {
 	case reflect.Slice:
 		return d.mappingSlice(n, out)
 	case reflect.Map:
-		
+		// okay
 	case reflect.Interface:
 		if d.mapType.Kind() == reflect.Map {
 			iface := out
@@ -752,7 +752,7 @@ func (d *decoder) merge(n *node, out reflect.Value) {
 		}
 		d.unmarshal(n, out)
 	case sequenceNode:
-		
+		// Step backwards as earlier nodes take precedence.
 		for i := len(n.children) - 1; i >= 0; i-- {
 			ni := n.children[i]
 			if ni.kind == aliasNode {

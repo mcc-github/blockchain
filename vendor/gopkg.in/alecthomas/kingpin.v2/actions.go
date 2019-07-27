@@ -1,8 +1,8 @@
 package kingpin
 
-
-
-
+// Action callback executed at various stages after all values are populated.
+// The application, commands, arguments and flags all have corresponding
+// actions.
 type Action func(*ParseContext) error
 
 type actionMixin struct {

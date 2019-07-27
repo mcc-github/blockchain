@@ -1,4 +1,18 @@
-
+/*
+ * Copyright (c) 2013-2016 Dave Collins <dave@davec.name>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
 
 package spew
 
@@ -10,13 +24,13 @@ import (
 	"strings"
 )
 
-
+// supportedFlags is a list of all the character flags supported by fmt package.
 const supportedFlags = "0-+# "
 
-
-
-
-
+// formatState implements the fmt.Formatter interface and contains information
+// about the state of a formatting operation.  The NewFormatter function can
+// be used to get a new Formatter which can be used directly as arguments
+// in standard fmt package printing calls.
 type formatState struct {
 	value          interface{}
 	fs             fmt.State
@@ -26,10 +40,10 @@ type formatState struct {
 	cs             *ConfigState
 }
 
-
-
-
-
+// buildDefaultFormat recreates the original format string without precision
+// and width information to pass in to fmt.Sprintf in the case of an
+// unrecognized type.  Unless new types are added to the language, this
+// function won't ever be called.
 func (f *formatState) buildDefaultFormat() (format string) {
 	buf := bytes.NewBuffer(percentBytes)
 
@@ -45,9 +59,9 @@ func (f *formatState) buildDefaultFormat() (format string) {
 	return format
 }
 
-
-
-
+// constructOrigFormat recreates the original format string including precision
+// and width information to pass along to the standard fmt package.  This allows
+// automatic deferral of all format strings this package doesn't support.
 func (f *formatState) constructOrigFormat(verb rune) (format string) {
 	buf := bytes.NewBuffer(percentBytes)
 
@@ -72,11 +86,11 @@ func (f *formatState) constructOrigFormat(verb rune) (format string) {
 	return format
 }
 
-
-
-
-
-
+// unpackValue returns values inside of non-nil interfaces when possible and
+// ensures that types for values which have been unpacked from an interface
+// are displayed when the show types flag is also set.
+// This is useful for data types like structs, arrays, slices, and maps which
+// can contain varying types packed inside an interface.
 func (f *formatState) unpackValue(v reflect.Value) reflect.Value {
 	if v.Kind() == reflect.Interface {
 		f.ignoreNextType = false
@@ -87,29 +101,29 @@ func (f *formatState) unpackValue(v reflect.Value) reflect.Value {
 	return v
 }
 
-
+// formatPtr handles formatting of pointers by indirecting them as necessary.
 func (f *formatState) formatPtr(v reflect.Value) {
-	
+	// Display nil if top level pointer is nil.
 	showTypes := f.fs.Flag('#')
 	if v.IsNil() && (!showTypes || f.ignoreNextType) {
 		f.fs.Write(nilAngleBytes)
 		return
 	}
 
-	
-	
+	// Remove pointers at or below the current depth from map used to detect
+	// circular refs.
 	for k, depth := range f.pointers {
 		if depth >= f.depth {
 			delete(f.pointers, k)
 		}
 	}
 
-	
+	// Keep list of all dereferenced pointers to possibly show later.
 	pointerChain := make([]uintptr, 0)
 
-	
-	
-	
+	// Figure out how many levels of indirection there are by derferencing
+	// pointers and unpacking interfaces down the chain while detecting circular
+	// references.
 	nilFound := false
 	cycleFound := false
 	indirects := 0
@@ -139,7 +153,7 @@ func (f *formatState) formatPtr(v reflect.Value) {
 		}
 	}
 
-	
+	// Display type or indirection level depending on flags.
 	if showTypes && !f.ignoreNextType {
 		f.fs.Write(openParenBytes)
 		f.fs.Write(bytes.Repeat(asteriskBytes, indirects))
@@ -154,7 +168,7 @@ func (f *formatState) formatPtr(v reflect.Value) {
 		f.fs.Write(closeAngleBytes)
 	}
 
-	
+	// Display pointer information depending on flags.
 	if f.fs.Flag('+') && (len(pointerChain) > 0) {
 		f.fs.Write(openParenBytes)
 		for i, addr := range pointerChain {
@@ -166,7 +180,7 @@ func (f *formatState) formatPtr(v reflect.Value) {
 		f.fs.Write(closeParenBytes)
 	}
 
-	
+	// Display dereferenced value.
 	switch {
 	case nilFound:
 		f.fs.Write(nilAngleBytes)
@@ -180,25 +194,25 @@ func (f *formatState) formatPtr(v reflect.Value) {
 	}
 }
 
-
-
-
-
+// format is the main workhorse for providing the Formatter interface.  It
+// uses the passed reflect value to figure out what kind of object we are
+// dealing with and formats it appropriately.  It is a recursive function,
+// however circular data structures are detected and handled properly.
 func (f *formatState) format(v reflect.Value) {
-	
+	// Handle invalid reflect values immediately.
 	kind := v.Kind()
 	if kind == reflect.Invalid {
 		f.fs.Write(invalidAngleBytes)
 		return
 	}
 
-	
+	// Handle pointers specially.
 	if kind == reflect.Ptr {
 		f.formatPtr(v)
 		return
 	}
 
-	
+	// Print type information unless already handled elsewhere.
 	if !f.ignoreNextType && f.fs.Flag('#') {
 		f.fs.Write(openParenBytes)
 		f.fs.Write([]byte(v.Type().String()))
@@ -206,8 +220,8 @@ func (f *formatState) format(v reflect.Value) {
 	}
 	f.ignoreNextType = false
 
-	
-	
+	// Call Stringer/error interfaces if they exist and the handle methods
+	// flag is enabled.
 	if !f.cs.DisableMethods {
 		if (kind != reflect.Invalid) && (kind != reflect.Interface) {
 			if handled := handleMethods(f.cs, f.fs, v); handled {
@@ -218,8 +232,8 @@ func (f *formatState) format(v reflect.Value) {
 
 	switch kind {
 	case reflect.Invalid:
-		
-		
+		// Do nothing.  We should never get here since invalid has already
+		// been handled above.
 
 	case reflect.Bool:
 		printBool(f.fs, v.Bool())
@@ -271,18 +285,18 @@ func (f *formatState) format(v reflect.Value) {
 		f.fs.Write([]byte(v.String()))
 
 	case reflect.Interface:
-		
-		
+		// The only time we should get here is for nil interfaces due to
+		// unpackValue calls.
 		if v.IsNil() {
 			f.fs.Write(nilAngleBytes)
 		}
 
 	case reflect.Ptr:
-		
-		
+		// Do nothing.  We should never get here since pointers have already
+		// been handled above.
 
 	case reflect.Map:
-		
+		// nil maps should be indicated as different than empty maps
 		if v.IsNil() {
 			f.fs.Write(nilAngleBytes)
 			break
@@ -340,8 +354,8 @@ func (f *formatState) format(v reflect.Value) {
 	case reflect.UnsafePointer, reflect.Chan, reflect.Func:
 		printHexPtr(f.fs, v.Pointer())
 
-	
-	
+	// There were not any other types at the time this code was written, but
+	// fall back to letting the default fmt package handle it if any get added.
 	default:
 		format := f.buildDefaultFormat()
 		if v.CanInterface() {
@@ -352,12 +366,12 @@ func (f *formatState) format(v reflect.Value) {
 	}
 }
 
-
-
+// Format satisfies the fmt.Formatter interface. See NewFormatter for usage
+// details.
 func (f *formatState) Format(fs fmt.State, verb rune) {
 	f.fs = fs
 
-	
+	// Use standard formatting for verbs that are not v.
 	if verb != 'v' {
 		format := f.constructOrigFormat(verb)
 		fmt.Fprintf(fs, format, f.value)
@@ -375,15 +389,31 @@ func (f *formatState) Format(fs fmt.State, verb rune) {
 	f.format(reflect.ValueOf(f.value))
 }
 
-
-
+// newFormatter is a helper function to consolidate the logic from the various
+// public methods which take varying config states.
 func newFormatter(cs *ConfigState, v interface{}) fmt.Formatter {
 	fs := &formatState{value: v, cs: cs}
 	fs.pointers = make(map[uintptr]int)
 	return fs
 }
 
+/*
+NewFormatter returns a custom formatter that satisfies the fmt.Formatter
+interface.  As a result, it integrates cleanly with standard fmt package
+printing functions.  The formatter is useful for inline printing of smaller data
+types similar to the standard %v format specifier.
 
+The custom formatter only responds to the %v (most compact), %+v (adds pointer
+addresses), %#v (adds types), or %#+v (adds types and pointer addresses) verb
+combinations.  Any other verbs such as %x and %q will be sent to the the
+standard fmt package for formatting.  In addition, the custom formatter ignores
+the width and precision arguments (however they will still work on the format
+specifiers not handled by the custom formatter).
+
+Typically this function shouldn't be called directly.  It is much easier to make
+use of the custom formatter by calling one of the convenience functions such as
+Printf, Println, or Fprintf.
+*/
 func NewFormatter(v interface{}) fmt.Formatter {
 	return newFormatter(&Config, v)
 }

@@ -1,10 +1,10 @@
+// Copyright (c) 2013 The Go Authors. All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd.
 
-
-
-
-
-
-
+// golint lints the Go source files named on its command line.
 package main
 
 import (
@@ -42,9 +42,9 @@ func main() {
 	if flag.NArg() == 0 {
 		lintDir(".")
 	} else {
-		
-		
-		
+		// dirsRun, filesRun, and pkgsRun indicate whether golint is applied to
+		// directory, file or package targets. The distinction affects which
+		// checks are run. It is no valid to mix target types.
 		var dirsRun, filesRun, pkgsRun int
 		var args []string
 		for _, arg := range flag.Args() {
@@ -137,7 +137,7 @@ func lintPackage(pkgname string) {
 func lintImportedPackage(pkg *build.Package, err error) {
 	if err != nil {
 		if _, nogo := err.(*build.NoGoError); nogo {
-			
+			// Don't complain if the failure is due to no Go source files.
 			return
 		}
 		fmt.Fprintln(os.Stderr, err)
@@ -153,7 +153,7 @@ func lintImportedPackage(pkg *build.Package, err error) {
 			files[i] = filepath.Join(pkg.Dir, f)
 		}
 	}
-	
+	// TODO(dsymonds): Do foo_test too (pkg.XTestGoFiles)
 
 	lintFiles(files...)
 }

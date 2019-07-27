@@ -15,7 +15,7 @@ const (
 
 var castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
 
-
+// crc32Field implements the pushEncoder and pushDecoder interfaces for calculating CRC32s.
 type crc32Field struct {
 	startOffset int
 	polynomial  crcPolynomial

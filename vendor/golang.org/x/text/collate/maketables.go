@@ -1,11 +1,11 @@
+// Copyright 2012 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// +build ignore
 
-
-
-
-
-
-
+// Collation table generator.
+// Data read from the web.
 
 package main
 
@@ -48,18 +48,18 @@ var (
 		"comma-separated list of languages to exclude.")
 	include = flagStringSet("include", "", "",
 		"comma-separated list of languages to include. Include trumps exclude.")
-	
-	
+	// TODO: Not included: unihan gb2312han zhuyin big5han (for size reasons)
+	// TODO: Not included: traditional (buggy for Bengali)
 	types = flagStringSetAllowAll("types", "standard,phonebook,phonetic,reformed,pinyin,stroke", "",
 		"comma-separated list of types that should be included.")
 )
 
-
-
+// stringSet implements an ordered set based on a list.  It implements flag.Value
+// to allow a set to be specified as a comma-separated list.
 type stringSet struct {
 	s        []string
 	allowed  *stringSet
-	dirty    bool 
+	dirty    bool // needs compaction if true
 	all      bool
 	allowAll bool
 }
@@ -162,16 +162,16 @@ func skipLang(l string) bool {
 	return exclude.contains(l)
 }
 
-
-
-
+// altInclude returns a list of alternatives (for the LDML alt attribute)
+// in order of preference.  An empty string in this list indicates the
+// default entry.
 func altInclude() []string {
 	l := []string{}
 	if *short {
 		l = append(l, "short")
 	}
 	l = append(l, "")
-	
+	// TODO: handle draft using cldr.SetDraftLevel
 	if *draft {
 		l = append(l, "proposed")
 	}
@@ -194,9 +194,9 @@ func openArchive() *zip.Reader {
 	return archive
 }
 
-
-
-
+// parseUCA parses a Default Unicode Collation Element Table of the format
+// specified in https://www.unicode.org/reports/tr10/#File_Format.
+// It returns the variable top.
 func parseUCA(builder *build.Builder) {
 	var r io.ReadCloser
 	var err error
@@ -218,7 +218,7 @@ func parseUCA(builder *build.Builder) {
 			continue
 		}
 		if line[0] == '@' {
-			
+			// parse properties
 			switch {
 			case strings.HasPrefix(line[1:], "version "):
 				a := strings.Split(line[1:], " ")
@@ -231,7 +231,7 @@ func parseUCA(builder *build.Builder) {
 				log.Printf("%d: unknown option %s", i, line[1:])
 			}
 		} else {
-			
+			// parse entries
 			part := strings.Split(line, " ; ")
 			if len(part) != 2 {
 				log.Fatalf("%d: production rule without ';': %v", i, line)
@@ -286,7 +286,7 @@ var tagRe = regexp.MustCompile(`<([a-z_]*)  */>`)
 
 var mainLocales = []string{}
 
-
+// charsets holds a list of exemplar characters per category.
 type charSets map[string][]string
 
 func (p charSets) fprint(w io.Writer) {
@@ -331,7 +331,7 @@ func decodeCLDR(d *cldr.Decoder) *cldr.CLDR {
 	return data
 }
 
-
+// parseMain parses XML files in the main directory of the CLDR core.zip file.
 func parseMain() {
 	d := &cldr.Decoder{}
 	d.SetDirFilter("main")
@@ -374,7 +374,7 @@ func parseCharacters(chars string) []string {
 	list := []string{}
 	var r, last, end rune
 	for len(chars) > 0 {
-		if chars[0] == '{' { 
+		if chars[0] == '{' { // character sequence
 			buf := []rune{}
 			for chars = chars[1:]; len(chars) > 0; {
 				r, chars, _ = parseSingle(chars)
@@ -388,7 +388,7 @@ func parseCharacters(chars string) []string {
 			}
 			list = append(list, string(buf))
 			last = 0
-		} else { 
+		} else { // single character
 			escaped := false
 			r, chars, escaped = parseSingle(chars)
 			if r != ' ' {
@@ -413,13 +413,13 @@ func parseCharacters(chars string) []string {
 
 var fileRe = regexp.MustCompile(`.*/collation/(.*)\.xml`)
 
-
+// typeMap translates legacy type keys to their BCP47 equivalent.
 var typeMap = map[string]string{
 	"phonebook":   "phonebk",
 	"traditional": "trad",
 }
 
-
+// parseCollation parses XML files in the collation directory of the CLDR core.zip file.
 func parseCollation(b *build.Builder) {
 	d := &cldr.Decoder{}
 	d.SetDirFilter("collation")
@@ -445,15 +445,15 @@ func parseCollation(b *build.Builder) {
 				fmt.Fprintf(os.Stderr, "invalid locale: %q", err)
 				continue
 			}
-			
+			// Support both old- and new-style defaults.
 			d := c.Type
 			if x.Collations.DefaultCollation == nil {
 				d = x.Collations.Default()
 			} else {
 				d = x.Collations.DefaultCollation.Data()
 			}
-			
-			
+			// We assume tables are being built either for search or collation,
+			// but not both. For search the default is always "search".
 			if d != c.Type && c.Type != "search" {
 				typ := c.Type
 				if len(c.Type) > 8 {
@@ -487,7 +487,7 @@ func (p processor) Insert(level int, str, context, extend string) error {
 	if *test {
 		testInput.add(str)
 	}
-	
+	// TODO: mimic bug in old maketables: remove.
 	err := p.t.Insert(colltab.Level(level-1), str, context+extend)
 	failOnError(err)
 	return nil
@@ -499,11 +499,11 @@ func (p processor) Index(id string) {
 func testCollator(c *collate.Collator) {
 	c0 := collate.New(language.Und)
 
-	
-	
+	// iterator over all characters for all locales and check
+	// whether Key is equal.
 	buf := collate.Buffer{}
 
-	
+	// Add all common and not too uncommon runes to the test set.
 	for i := rune(0); i < 0x30000; i++ {
 		testInput.add(string(i))
 	}

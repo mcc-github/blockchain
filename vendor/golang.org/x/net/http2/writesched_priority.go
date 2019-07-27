@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2016 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package http2
 
@@ -10,55 +10,55 @@ import (
 	"sort"
 )
 
+// RFC 7540, Section 5.3.5: the default weight is 16.
+const priorityDefaultWeight = 15 // 16 = 15 + 1
 
-const priorityDefaultWeight = 15 
-
-
+// PriorityWriteSchedulerConfig configures a priorityWriteScheduler.
 type PriorityWriteSchedulerConfig struct {
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+	// MaxClosedNodesInTree controls the maximum number of closed streams to
+	// retain in the priority tree. Setting this to zero saves a small amount
+	// of memory at the cost of performance.
+	//
+	// See RFC 7540, Section 5.3.4:
+	//   "It is possible for a stream to become closed while prioritization
+	//   information ... is in transit. ... This potentially creates suboptimal
+	//   prioritization, since the stream could be given a priority that is
+	//   different from what is intended. To avoid these problems, an endpoint
+	//   SHOULD retain stream prioritization state for a period after streams
+	//   become closed. The longer state is retained, the lower the chance that
+	//   streams are assigned incorrect or default priority values."
 	MaxClosedNodesInTree int
 
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+	// MaxIdleNodesInTree controls the maximum number of idle streams to
+	// retain in the priority tree. Setting this to zero saves a small amount
+	// of memory at the cost of performance.
+	//
+	// See RFC 7540, Section 5.3.4:
+	//   Similarly, streams that are in the "idle" state can be assigned
+	//   priority or become a parent of other streams. This allows for the
+	//   creation of a grouping node in the dependency tree, which enables
+	//   more flexible expressions of priority. Idle streams begin with a
+	//   default priority (Section 5.3.5).
 	MaxIdleNodesInTree int
 
-	
-	
-	
-	
-	
-	
-	
-	
+	// ThrottleOutOfOrderWrites enables write throttling to help ensure that
+	// data is delivered in priority order. This works around a race where
+	// stream B depends on stream A and both streams are about to call Write
+	// to queue DATA frames. If B wins the race, a naive scheduler would eagerly
+	// write as much data from B as possible, but this is suboptimal because A
+	// is a higher-priority stream. With throttling enabled, we write a small
+	// amount of data from B to minimize the amount of bandwidth that B can
+	// steal from A.
 	ThrottleOutOfOrderWrites bool
 }
 
-
-
-
+// NewPriorityWriteScheduler constructs a WriteScheduler that schedules
+// frames by following HTTP/2 priorities as described in RFC 7540 Section 5.3.
+// If cfg is nil, default options are used.
 func NewPriorityWriteScheduler(cfg *PriorityWriteSchedulerConfig) WriteScheduler {
 	if cfg == nil {
-		
-		
+		// For justification of these defaults, see:
+		// https://docs.google.com/document/d/1oLhNg1skaWD4_DtaoCxdSRN5erEXrH-KnLrMwEpOtFY
 		cfg = &PriorityWriteSchedulerConfig{
 			MaxClosedNodesInTree:     10,
 			MaxIdleNodesInTree:       10,
@@ -89,21 +89,21 @@ const (
 	priorityNodeIdle
 )
 
-
-
-
+// priorityNode is a node in an HTTP/2 priority tree.
+// Each node is associated with a single stream ID.
+// See RFC 7540, Section 5.3.
 type priorityNode struct {
-	q            writeQueue        
-	id           uint32            
-	weight       uint8             
-	state        priorityNodeState 
-	bytes        int64             
-	subtreeBytes int64             
+	q            writeQueue        // queue of pending frames to write
+	id           uint32            // id of the stream, or 0 for the root of the tree
+	weight       uint8             // the actual weight is weight+1, so the value is in [1,256]
+	state        priorityNodeState // open | closed | idle
+	bytes        int64             // number of bytes written by this node, or 0 if closed
+	subtreeBytes int64             // sum(node.bytes) of all nodes in this subtree
 
-	
+	// These links form the priority tree.
 	parent     *priorityNode
-	kids       *priorityNode 
-	prev, next *priorityNode 
+	kids       *priorityNode // start of the kids list
+	prev, next *priorityNode // doubly-linked list of siblings
 }
 
 func (n *priorityNode) setParent(parent *priorityNode) {
@@ -113,7 +113,7 @@ func (n *priorityNode) setParent(parent *priorityNode) {
 	if n.parent == parent {
 		return
 	}
-	
+	// Unlink from current parent.
 	if parent := n.parent; parent != nil {
 		if n.prev == nil {
 			parent.kids = n.next
@@ -124,9 +124,9 @@ func (n *priorityNode) setParent(parent *priorityNode) {
 			n.next.prev = n.prev
 		}
 	}
-	
-	
-	
+	// Link to new parent.
+	// If parent=nil, remove n from the tree.
+	// Always insert at the head of parent.kids (this is assumed by walkReadyInOrder).
 	n.parent = parent
 	if parent == nil {
 		n.next = nil
@@ -148,12 +148,12 @@ func (n *priorityNode) addBytes(b int64) {
 	}
 }
 
-
-
-
-
-
-
+// walkReadyInOrder iterates over the tree in priority order, calling f for each node
+// with a non-empty write queue. When f returns true, this funcion returns true and the
+// walk halts. tmp is used as scratch space for sorting.
+//
+// f(n, openParent) takes two arguments: the node to visit, n, and a bool that is true
+// if any ancestor p of n is still open (ignoring the root node).
 func (n *priorityNode) walkReadyInOrder(openParent bool, tmp *[]*priorityNode, f func(*priorityNode, bool) bool) bool {
 	if !n.q.empty() && f(n, openParent) {
 		return true
@@ -162,15 +162,15 @@ func (n *priorityNode) walkReadyInOrder(openParent bool, tmp *[]*priorityNode, f
 		return false
 	}
 
-	
-	
+	// Don't consider the root "open" when updating openParent since
+	// we can't send data frames on the root stream (only control frames).
 	if n.id != 0 {
 		openParent = openParent || (n.state == priorityNodeOpen)
 	}
 
-	
-	
-	
+	// Common case: only one kid or all kids have the same weight.
+	// Some clients don't use weights; other clients (like web browsers)
+	// use mostly-linear priority trees.
 	w := n.kids.weight
 	needSort := false
 	for k := n.kids.next; k != nil; k = k.next {
@@ -188,8 +188,8 @@ func (n *priorityNode) walkReadyInOrder(openParent bool, tmp *[]*priorityNode, f
 		return false
 	}
 
-	
-	
+	// Uncommon case: sort the child nodes. We remove the kids from the parent,
+	// then re-insert after sorting so we can reuse tmp for future sort calls.
 	*tmp = (*tmp)[:0]
 	for n.kids != nil {
 		*tmp = append(*tmp, n.kids)
@@ -197,7 +197,7 @@ func (n *priorityNode) walkReadyInOrder(openParent bool, tmp *[]*priorityNode, f
 	}
 	sort.Sort(sortPriorityNodeSiblings(*tmp))
 	for i := len(*tmp) - 1; i >= 0; i-- {
-		(*tmp)[i].setParent(n) 
+		(*tmp)[i].setParent(n) // setParent inserts at the head of n.kids
 	}
 	for k := n.kids; k != nil; k = k.next {
 		if k.walkReadyInOrder(openParent, tmp, f) {
@@ -212,8 +212,8 @@ type sortPriorityNodeSiblings []*priorityNode
 func (z sortPriorityNodeSiblings) Len() int      { return len(z) }
 func (z sortPriorityNodeSiblings) Swap(i, k int) { z[i], z[k] = z[k], z[i] }
 func (z sortPriorityNodeSiblings) Less(i, k int) bool {
-	
-	
+	// Prefer the subtree that has sent fewer bytes relative to its weight.
+	// See sections 5.3.2 and 5.3.4.
 	wi, bi := float64(z[i].weight+1), float64(z[i].subtreeBytes)
 	wk, bk := float64(z[k].weight+1), float64(z[k].subtreeBytes)
 	if bi == 0 && bk == 0 {
@@ -226,36 +226,36 @@ func (z sortPriorityNodeSiblings) Less(i, k int) bool {
 }
 
 type priorityWriteScheduler struct {
-	
-	
+	// root is the root of the priority tree, where root.id = 0.
+	// The root queues control frames that are not associated with any stream.
 	root priorityNode
 
-	
+	// nodes maps stream ids to priority tree nodes.
 	nodes map[uint32]*priorityNode
 
-	
+	// maxID is the maximum stream id in nodes.
 	maxID uint32
 
-	
-	
-	
+	// lists of nodes that have been closed or are idle, but are kept in
+	// the tree for improved prioritization. When the lengths exceed either
+	// maxClosedNodesInTree or maxIdleNodesInTree, old nodes are discarded.
 	closedNodes, idleNodes []*priorityNode
 
-	
+	// From the config.
 	maxClosedNodesInTree int
 	maxIdleNodesInTree   int
 	writeThrottleLimit   int32
 	enableWriteThrottle  bool
 
-	
+	// tmp is scratch space for priorityNode.walkReadyInOrder to reduce allocations.
 	tmp []*priorityNode
 
-	
+	// pool of empty queues for reuse.
 	queuePool writeQueuePool
 }
 
 func (ws *priorityWriteScheduler) OpenStream(streamID uint32, options OpenStreamOptions) {
-	
+	// The stream may be currently idle but cannot be opened or closed.
 	if curr := ws.nodes[streamID]; curr != nil {
 		if curr.state != priorityNodeIdle {
 			panic(fmt.Sprintf("stream %d already opened", streamID))
@@ -264,10 +264,10 @@ func (ws *priorityWriteScheduler) OpenStream(streamID uint32, options OpenStream
 		return
 	}
 
-	
-	
-	
-	
+	// RFC 7540, Section 5.3.5:
+	//  "All streams are initially assigned a non-exclusive dependency on stream 0x0.
+	//  Pushed streams initially depend on their associated stream. In both cases,
+	//  streams are assigned a default weight of 16."
 	parent := ws.nodes[options.PusherID]
 	if parent == nil {
 		parent = &ws.root
@@ -315,9 +315,9 @@ func (ws *priorityWriteScheduler) AdjustStream(streamID uint32, priority Priorit
 		panic("adjustPriority on root")
 	}
 
-	
-	
-	
+	// If streamID does not exist, there are two cases:
+	// - A closed stream that has been removed (this will have ID <= maxID)
+	// - An idle stream that is being used for "grouping" (this will have ID > maxID)
 	n := ws.nodes[streamID]
 	if n == nil {
 		if streamID <= ws.maxID || ws.maxIdleNodesInTree == 0 {
@@ -335,8 +335,8 @@ func (ws *priorityWriteScheduler) AdjustStream(streamID uint32, priority Priorit
 		ws.addClosedOrIdleNode(&ws.idleNodes, ws.maxIdleNodesInTree, n)
 	}
 
-	
-	
+	// Section 5.3.1: A dependency on a stream that is not currently in the tree
+	// results in that stream being given a default priority (Section 5.3.5).
 	parent := ws.nodes[priority.StreamDep]
 	if parent == nil {
 		n.setParent(&ws.root)
@@ -344,18 +344,18 @@ func (ws *priorityWriteScheduler) AdjustStream(streamID uint32, priority Priorit
 		return
 	}
 
-	
+	// Ignore if the client tries to make a node its own parent.
 	if n == parent {
 		return
 	}
 
-	
-	
-	
-	
-	
-	
-	
+	// Section 5.3.3:
+	//   "If a stream is made dependent on one of its own dependencies, the
+	//   formerly dependent stream is first moved to be dependent on the
+	//   reprioritized stream's previous parent. The moved dependency retains
+	//   its weight."
+	//
+	// That is: if parent depends on n, move parent to depend on n.parent.
 	for x := parent.parent; x != nil; x = x.parent {
 		if x == n {
 			parent.setParent(n.parent)
@@ -363,9 +363,9 @@ func (ws *priorityWriteScheduler) AdjustStream(streamID uint32, priority Priorit
 		}
 	}
 
-	
-	
-	
+	// Section 5.3.3: The exclusive flag causes the stream to become the sole
+	// dependency of its parent stream, causing other dependencies to become
+	// dependent on the exclusive stream.
 	if priority.Exclusive {
 		k := parent.kids
 		for k != nil {
@@ -388,11 +388,11 @@ func (ws *priorityWriteScheduler) Push(wr FrameWriteRequest) {
 	} else {
 		n = ws.nodes[id]
 		if n == nil {
-			
-			
-			
-			
-			
+			// id is an idle or closed stream. wr should not be a HEADERS or
+			// DATA frame. However, wr can be a RST_STREAM. In this case, we
+			// push wr onto the root, rather than creating a new priorityNode,
+			// since RST_STREAM is tiny and the stream's priority is unknown
+			// anyway. See issue #17919.
 			if wr.DataSize() > 0 {
 				panic("add DATA on non-open stream")
 			}
@@ -413,9 +413,9 @@ func (ws *priorityWriteScheduler) Pop() (wr FrameWriteRequest, ok bool) {
 			return false
 		}
 		n.addBytes(int64(wr.DataSize()))
-		
-		
-		
+		// If B depends on A and B continuously has data available but A
+		// does not, gradually increase the throttling limit to allow B to
+		// steal more and more bandwidth from A.
 		if openParent {
 			ws.writeThrottleLimit += 1024
 			if ws.writeThrottleLimit < 0 {
@@ -434,7 +434,7 @@ func (ws *priorityWriteScheduler) addClosedOrIdleNode(list *[]*priorityNode, max
 		return
 	}
 	if len(*list) == maxSize {
-		
+		// Remove the oldest node, then shift left.
 		ws.removeNode((*list)[0])
 		x := (*list)[1:]
 		copy(*list, x)

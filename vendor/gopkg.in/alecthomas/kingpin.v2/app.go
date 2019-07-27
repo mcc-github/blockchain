@@ -18,8 +18,8 @@ var (
 
 type ApplicationValidator func(*Application) error
 
-
-
+// An Application contains the definitions of flags, arguments and commands
+// for an application.
 type Application struct {
 	cmdMixin
 	initialized bool
@@ -29,29 +29,29 @@ type Application struct {
 
 	author         string
 	version        string
-	errorWriter    io.Writer 
-	usageWriter    io.Writer 
+	errorWriter    io.Writer // Destination for errors.
+	usageWriter    io.Writer // Destination for usage
 	usageTemplate  string
 	validator      ApplicationValidator
-	terminate      func(status int) 
-	noInterspersed bool             
+	terminate      func(status int) // See Terminate()
+	noInterspersed bool             // can flags be interspersed with args (or must they come first)
 	defaultEnvars  bool
 	completion     bool
 
-	
+	// Help flag. Exposed for user customisation.
 	HelpFlag *FlagClause
-	
+	// Help command. Exposed for user customisation. May be nil.
 	HelpCommand *CmdClause
-	
+	// Version flag. Exposed for user customisation. May be nil.
 	VersionFlag *FlagClause
 }
 
-
+// New creates a new Kingpin application instance.
 func New(name, help string) *Application {
 	a := &Application{
 		Name:          name,
 		Help:          help,
-		errorWriter:   os.Stderr, 
+		errorWriter:   os.Stderr, // Left for backwards compatibility purposes.
 		usageWriter:   os.Stderr,
 		usageTemplate: DefaultUsageTemplate,
 		terminate:     os.Exit,
@@ -106,18 +106,18 @@ func (a *Application) generateZSHCompletionScript(c *ParseContext) error {
 	return nil
 }
 
-
-
-
-
-
+// DefaultEnvars configures all flags (that do not already have an associated
+// envar) to use a default environment variable in the form "<app>_<flag>".
+//
+// For example, if the application is named "foo" and a flag is named "bar-
+// waz" the environment variable: "FOO_BAR_WAZ".
 func (a *Application) DefaultEnvars() *Application {
 	a.defaultEnvars = true
 	return a
 }
 
-
-
+// Terminate specifies the termination handler. Defaults to os.Exit(status).
+// If nil is passed, a no-op function will be used.
 func (a *Application) Terminate(terminate func(int)) *Application {
 	if terminate == nil {
 		terminate = func(int) {}
@@ -126,41 +126,41 @@ func (a *Application) Terminate(terminate func(int)) *Application {
 	return a
 }
 
-
-
+// Writer specifies the writer to use for usage and errors. Defaults to os.Stderr.
+// DEPRECATED: See ErrorWriter and UsageWriter.
 func (a *Application) Writer(w io.Writer) *Application {
 	a.errorWriter = w
 	a.usageWriter = w
 	return a
 }
 
-
+// ErrorWriter sets the io.Writer to use for errors.
 func (a *Application) ErrorWriter(w io.Writer) *Application {
 	a.errorWriter = w
 	return a
 }
 
-
+// UsageWriter sets the io.Writer to use for errors.
 func (a *Application) UsageWriter(w io.Writer) *Application {
 	a.usageWriter = w
 	return a
 }
 
-
-
+// UsageTemplate specifies the text template to use when displaying usage
+// information. The default is UsageTemplate.
 func (a *Application) UsageTemplate(template string) *Application {
 	a.usageTemplate = template
 	return a
 }
 
-
+// Validate sets a validation function to run when parsing.
 func (a *Application) Validate(validator ApplicationValidator) *Application {
 	a.validator = validator
 	return a
 }
 
-
-
+// ParseContext parses the given command line and returns the fully populated
+// ParseContext.
 func (a *Application) ParseContext(args []string) (*ParseContext, error) {
 	return a.parseContext(false, args)
 }
@@ -174,12 +174,12 @@ func (a *Application) parseContext(ignoreDefault bool, args []string) (*ParseCon
 	return context, err
 }
 
-
-
-
-
-
-
+// Parse parses command-line arguments. It returns the selected command and an
+// error. The selected command will be a space separated subcommand, if
+// subcommands have been configured.
+//
+// This will populate all flag and argument values, call all callbacks, and so
+// on.
 func (a *Application) Parse(args []string) (command string, err error) {
 
 	context, parseErr := a.ParseContext(args)
@@ -187,8 +187,8 @@ func (a *Application) Parse(args []string) (command string, err error) {
 	var setValuesErr error
 
 	if context == nil {
-		
-		
+		// Since we do not throw error immediately, there could be a case
+		// where a context returns nil. Protect against that.
 		return "", parseErr
 	}
 
@@ -244,14 +244,14 @@ func (a *Application) writeUsage(context *ParseContext, err error) {
 func (a *Application) maybeHelp(context *ParseContext) {
 	for _, element := range context.Elements {
 		if flag, ok := element.Clause.(*FlagClause); ok && flag == a.HelpFlag {
-			
+			// Re-parse the command-line ignoring defaults, so that help works correctly.
 			context, _ = a.parseContext(true, context.rawArgs)
 			a.writeUsage(context, nil)
 		}
 	}
 }
 
-
+// Version adds a --version flag for displaying the application version.
 func (a *Application) Version(version string) *Application {
 	a.version = version
 	a.VersionFlag = a.Flag("version", "Show application version.").PreAction(func(*ParseContext) error {
@@ -263,36 +263,36 @@ func (a *Application) Version(version string) *Application {
 	return a
 }
 
-
+// Author sets the author output by some help templates.
 func (a *Application) Author(author string) *Application {
 	a.author = author
 	return a
 }
 
-
-
-
-
-
+// Action callback to call when all values are populated and parsing is
+// complete, but before any command, flag or argument actions.
+//
+// All Action() callbacks are called in the order they are encountered on the
+// command line.
 func (a *Application) Action(action Action) *Application {
 	a.addAction(action)
 	return a
 }
 
-
+// Action called after parsing completes but before validation and execution.
 func (a *Application) PreAction(action Action) *Application {
 	a.addPreAction(action)
 	return a
 }
 
-
+// Command adds a new top-level command.
 func (a *Application) Command(name, help string) *CmdClause {
 	return a.addCommand(name, help)
 }
 
-
-
-
+// Interspersed control if flags can be interspersed with positional arguments
+//
+// true (the default) means that they can, false means that all the flags must appear before the first positional arguments.
 func (a *Application) Interspersed(interspersed bool) *Application {
 	a.noInterspersed = !interspersed
 	return a
@@ -313,7 +313,7 @@ func (a *Application) init() error {
 		return fmt.Errorf("can't mix top-level Arg()s with Command()s")
 	}
 
-	
+	// If we have subcommands, add a help command at the top-level.
 	if a.cmdGroup.have() {
 		var command []string
 		a.HelpCommand = a.Command("help", "Show help.").PreAction(func(context *ParseContext) error {
@@ -322,7 +322,7 @@ func (a *Application) init() error {
 			return nil
 		})
 		a.HelpCommand.Arg("command", "Show help on command.").StringsVar(&command)
-		
+		// Make help first command.
 		l := len(a.commandOrder)
 		a.commandOrder = append(a.commandOrder[l-1:l], a.commandOrder[:l-1]...)
 	}
@@ -351,9 +351,9 @@ func (a *Application) init() error {
 	return nil
 }
 
-
+// Recursively check commands for duplicate flags.
 func checkDuplicateFlags(current *CmdClause, flagGroups []*flagGroup) error {
-	
+	// Check for duplicates.
 	for _, flags := range flagGroups {
 		for _, flag := range current.flagOrder {
 			if flag.shorthand != 0 {
@@ -367,7 +367,7 @@ func checkDuplicateFlags(current *CmdClause, flagGroups []*flagGroup) error {
 		}
 	}
 	flagGroups = append(flagGroups, current.flagGroup)
-	
+	// Check subcommands.
 	for _, subcmd := range current.commandOrder {
 		if err := checkDuplicateFlags(subcmd, flagGroups); err != nil {
 			return err
@@ -416,7 +416,7 @@ func (a *Application) setDefaults(context *ParseContext) error {
 		}
 	}
 
-	
+	// Check required flags and set defaults.
 	for _, flag := range context.flags.long {
 		if flagElements[flag.name] == nil {
 			if err := flag.setDefault(); err != nil {
@@ -451,10 +451,10 @@ func (a *Application) validateRequired(context *ParseContext) error {
 		}
 	}
 
-	
+	// Check required flags and set defaults.
 	for _, flag := range context.flags.long {
 		if flagElements[flag.name] == nil {
-			
+			// Check required flags were provided.
 			if flag.needsValue() {
 				return fmt.Errorf("required flag --%s not provided", flag.name)
 			}
@@ -472,7 +472,7 @@ func (a *Application) validateRequired(context *ParseContext) error {
 }
 
 func (a *Application) setValues(context *ParseContext) (selected []string, err error) {
-	
+	// Set all arg and flag values.
 	var (
 		lastCmd *CmdClause
 		flagSet = map[string]struct{}{}
@@ -514,7 +514,7 @@ func (a *Application) setValues(context *ParseContext) (selected []string, err e
 }
 
 func (a *Application) applyValidators(context *ParseContext) (err error) {
-	
+	// Call command validation functions.
 	for _, element := range context.Elements {
 		if cmd, ok := element.Clause.(*CmdClause); ok && cmd.validator != nil {
 			if err = cmd.validator(cmd); err != nil {
@@ -533,7 +533,7 @@ func (a *Application) applyPreActions(context *ParseContext, dispatch bool) erro
 	if err := a.actionMixin.applyPreActions(context); err != nil {
 		return err
 	}
-	
+	// Dispatch to actions.
 	if dispatch {
 		for _, element := range context.Elements {
 			if applier, ok := element.Clause.(actionApplier); ok {
@@ -551,7 +551,7 @@ func (a *Application) applyActions(context *ParseContext) error {
 	if err := a.actionMixin.applyActions(context); err != nil {
 		return err
 	}
-	
+	// Dispatch to actions.
 	for _, element := range context.Elements {
 		if applier, ok := element.Clause.(actionApplier); ok {
 			if err := applier.applyActions(context); err != nil {
@@ -562,29 +562,29 @@ func (a *Application) applyActions(context *ParseContext) error {
 	return nil
 }
 
-
+// Errorf prints an error message to w in the format "<appname>: error: <message>".
 func (a *Application) Errorf(format string, args ...interface{}) {
 	fmt.Fprintf(a.errorWriter, a.Name+": error: "+format+"\n", args...)
 }
 
-
+// Fatalf writes a formatted error to w then terminates with exit status 1.
 func (a *Application) Fatalf(format string, args ...interface{}) {
 	a.Errorf(format, args...)
 	a.terminate(1)
 }
 
-
-
+// FatalUsage prints an error message followed by usage information, then
+// exits with a non-zero status.
 func (a *Application) FatalUsage(format string, args ...interface{}) {
 	a.Errorf(format, args...)
-	
+	// Force usage to go to error output.
 	a.usageWriter = a.errorWriter
 	a.Usage([]string{})
 	a.terminate(1)
 }
 
-
-
+// FatalUsageContext writes a printf formatted error message to w, then usage
+// information for the given ParseContext, before exiting.
 func (a *Application) FatalUsageContext(context *ParseContext, format string, args ...interface{}) {
 	a.Errorf(format, args...)
 	if err := a.UsageForContext(context); err != nil {
@@ -593,8 +593,8 @@ func (a *Application) FatalUsageContext(context *ParseContext, format string, ar
 	a.terminate(1)
 }
 
-
-
+// FatalIfError prints an error and exits if err is not nil. The error is printed
+// with the given formatted string, if any.
 func (a *Application) FatalIfError(err error, format string, args ...interface{}) {
 	if err != nil {
 		prefix := ""
@@ -626,55 +626,55 @@ func (a *Application) completionOptions(context *ParseContext) []string {
 
 	target = a.cmdMixin
 	if context.SelectedCommand != nil {
-		
+		// A subcommand was in use. We will use it as the target
 		target = context.SelectedCommand.cmdMixin
 	}
 
 	if (currArg != "" && strings.HasPrefix(currArg, "--")) || strings.HasPrefix(prevArg, "--") {
-		
+		// Perform completion for A flag. The last/current argument started with "-"
 		var (
-			flagName  string 
-			flagValue string 
+			flagName  string // The name of a flag if given (could be half complete)
+			flagValue string // The value assigned to a flag (if given) (could be half complete)
 		)
 
 		if strings.HasPrefix(prevArg, "--") && !strings.HasPrefix(currArg, "--") {
-			
-			
-			flagName = prevArg[2:] 
+			// Matches: 	./myApp --flag value
+			// Wont Match: 	./myApp --flag --
+			flagName = prevArg[2:] // Strip the "--"
 			flagValue = currArg
 		} else if strings.HasPrefix(currArg, "--") {
-			
-			
-			
-			flagName = currArg[2:] 
+			// Matches: 	./myApp --flag --
+			// Matches:		./myApp --flag somevalue --
+			// Matches: 	./myApp --
+			flagName = currArg[2:] // Strip the "--"
 		}
 
 		options, flagMatched, valueMatched := target.FlagCompletion(flagName, flagValue)
 		if valueMatched {
-			
+			// Value Matched. Show cmdCompletions
 			return target.CmdCompletion(context)
 		}
 
-		
+		// Add top level flags if we're not at the top level and no match was found.
 		if context.SelectedCommand != nil && !flagMatched {
 			topOptions, topFlagMatched, topValueMatched := a.FlagCompletion(flagName, flagValue)
 			if topValueMatched {
-				
+				// Value Matched. Back to cmdCompletions
 				return target.CmdCompletion(context)
 			}
 
 			if topFlagMatched {
-				
+				// Top level had a flag which matched the input. Return it's options.
 				options = topOptions
 			} else {
-				
+				// Add top level flags
 				options = append(options, topOptions...)
 			}
 		}
 		return options
 	}
 
-	
+	// Perform completion for sub commands and arguments.
 	return target.CmdCompletion(context)
 }
 

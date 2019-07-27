@@ -1,9 +1,9 @@
+// Copyright 2018 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
+// This file is largely based on the Go 1.10-era cmd/go/internal/test/test.go
+// testmain generation code.
 
 package packages
 
@@ -22,10 +22,10 @@ import (
 	"unicode/utf8"
 )
 
+// TODO(matloob): Delete this file once Go 1.12 is released.
 
-
-
-
+// This file complements golist_fallback.go by providing
+// support for generating testmains.
 
 func generateTestmain(out string, testPkg, xtestPkg *Package) (extraimports, extradeps []string, err error) {
 	testFuncs, err := loadTestFuncs(testPkg, xtestPkg)
@@ -36,9 +36,9 @@ func generateTestmain(out string, testPkg, xtestPkg *Package) (extraimports, ext
 	if testFuncs.TestMain == nil {
 		extraimports = append(extraimports, "os")
 	}
-	
-	
-	
+	// Transitive dependencies of ("testing", "testing/internal/testdeps").
+	// os is part of the transitive closure so it and its transitive dependencies are
+	// included regardless of whether it's imported in the template below.
 	extradeps = []string{
 		"errors",
 		"internal/cpu",
@@ -89,10 +89,10 @@ func generateTestmain(out string, testPkg, xtestPkg *Package) (extraimports, ext
 	return extraimports, extradeps, writeTestmain(out, testFuncs)
 }
 
+// The following is adapted from the cmd/go testmain generation code.
 
-
-
-
+// isTestFunc tells whether fn has the type of a testing function. arg
+// specifies the parameter type we look for: B, M or T.
 func isTestFunc(fn *ast.FuncDecl, arg string) bool {
 	if fn.Type.Results != nil && len(fn.Type.Results.List) > 0 ||
 		fn.Type.Params.List == nil ||
@@ -104,10 +104,10 @@ func isTestFunc(fn *ast.FuncDecl, arg string) bool {
 	if !ok {
 		return false
 	}
-	
-	
-	
-	
+	// We can't easily check that the type is *testing.M
+	// because we don't know how testing has been imported,
+	// but at least check that it's *M or *something.M.
+	// Same applies for B and T.
 	if name, ok := ptr.X.(*ast.Ident); ok && name.Name == arg {
 		return true
 	}
@@ -117,21 +117,21 @@ func isTestFunc(fn *ast.FuncDecl, arg string) bool {
 	return false
 }
 
-
-
-
+// isTest tells whether name looks like a test (or benchmark, according to prefix).
+// It is a Test (say) if there is a character after Test that is not a lower-case letter.
+// We don't want TesticularCancer.
 func isTest(name, prefix string) bool {
 	if !strings.HasPrefix(name, prefix) {
 		return false
 	}
-	if len(name) == len(prefix) { 
+	if len(name) == len(prefix) { // "Test" is ok
 		return true
 	}
 	rune, _ := utf8.DecodeRuneInString(name[len(prefix):])
 	return !unicode.IsLower(rune)
 }
 
-
+// loadTestFuncs returns the testFuncs describing the tests that will be run.
 func loadTestFuncs(ptest, pxtest *Package) (*testFuncs, error) {
 	t := &testFuncs{
 		TestPackage:  ptest,
@@ -155,7 +155,7 @@ func loadTestFuncs(ptest, pxtest *Package) (*testFuncs, error) {
 	return t, nil
 }
 
-
+// writeTestmain writes the _testmain.go file for t to the file named out.
 func writeTestmain(out string, t *testFuncs) error {
 	f, err := os.Create(out)
 	if err != nil {
@@ -183,16 +183,16 @@ type testFuncs struct {
 	NeedXtest    bool
 }
 
-
+// Tested returns the name of the package being tested.
 func (t *testFuncs) Tested() string {
 	return t.TestPackage.Name
 }
 
 type testFunc struct {
-	Package   string 
-	Name      string 
-	Output    string 
-	Unordered bool   
+	Package   string // imported package name (_test or _xtest)
+	Name      string // function name
+	Output    string // output, for examples
+	Unordered bool   // output is allowed to be unordered.
 }
 
 func (t *testFuncs) load(filename, pkg string, doImport, seen *bool) error {
@@ -246,9 +246,9 @@ func (t *testFuncs) load(filename, pkg string, doImport, seen *bool) error {
 	ex := doc.Examples(f)
 	sort.Slice(ex, func(i, j int) bool { return ex[i].Order < ex[j].Order })
 	for _, e := range ex {
-		*doImport = true 
+		*doImport = true // import test file whether executed or not
 		if e.Output == "" && !e.EmptyOutput {
-			
+			// Don't run examples with no output.
 			continue
 		}
 		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output, e.Unordered})

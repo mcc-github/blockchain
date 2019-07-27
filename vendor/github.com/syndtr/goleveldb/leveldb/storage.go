@@ -29,7 +29,7 @@ func (c *iStorage) writes() uint64 {
 	return atomic.LoadUint64(&c.write)
 }
 
-
+// newIStorage returns the given storage wrapped by iStorage.
 func newIStorage(s storage.Storage) *iStorage {
 	return &iStorage{s, 0, 0}
 }

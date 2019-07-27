@@ -1,7 +1,7 @@
 package govaluate
 
-
-
+// sanitizedParameters is a wrapper for Parameters that does sanitization as
+// parameters are accessed.
 type sanitizedParameters struct {
 	orig Parameters
 }
@@ -12,7 +12,7 @@ func (p sanitizedParameters) Get(key string) (interface{}, error) {
 		return nil, err
 	}
 
-	
+	// should be converted to fixed point?
 	if isFixedPoint(value) {
 		return castFixedPoint(value), nil
 	}

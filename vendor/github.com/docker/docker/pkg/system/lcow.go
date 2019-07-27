@@ -1,4 +1,4 @@
-package system 
+package system // import "github.com/docker/docker/pkg/system"
 
 import (
 	"runtime"
@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-
+// IsOSSupported determines if an operating system is supported by the host
 func IsOSSupported(os string) bool {
 	if strings.EqualFold(runtime.GOOS, os) {
 		return true
@@ -19,9 +19,9 @@ func IsOSSupported(os string) bool {
 	return false
 }
 
-
-
-
+// ValidatePlatform determines if a platform structure is valid.
+// TODO This is a temporary windows-only function, should be replaced by
+// comparison of worker capabilities
 func ValidatePlatform(platform specs.Platform) error {
 	if runtime.GOOS == "windows" {
 		if !(platform.OS == runtime.GOOS || (LCOWSupported() && platform.OS == "linux")) {

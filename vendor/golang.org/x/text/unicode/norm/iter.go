@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package norm
 
@@ -9,26 +9,26 @@ import (
 	"unicode/utf8"
 )
 
-
-
+// MaxSegmentSize is the maximum size of a byte buffer needed to consider any
+// sequence of starter and non-starter runes for the purpose of normalization.
 const MaxSegmentSize = maxByteBufferSize
 
-
-
+// An Iter iterates over a string or byte slice, while normalizing it
+// to a given Form.
 type Iter struct {
 	rb     reorderBuffer
 	buf    [maxByteBufferSize]byte
-	info   Properties 
-	next   iterFunc   
+	info   Properties // first character saved from previous iteration
+	next   iterFunc   // implementation of next depends on form
 	asciiF iterFunc
 
-	p        int    
-	multiSeg []byte 
+	p        int    // current position in input source
+	multiSeg []byte // remainder of multi-segment decomposition
 }
 
 type iterFunc func(*Iter) []byte
 
-
+// Init initializes i to iterate over src after normalizing it to Form f.
 func (i *Iter) Init(f Form, src []byte) {
 	i.p = 0
 	if len(src) == 0 {
@@ -44,7 +44,7 @@ func (i *Iter) Init(f Form, src []byte) {
 	i.rb.ss.first(i.info)
 }
 
-
+// InitString initializes i to iterate over src after normalizing it to Form f.
 func (i *Iter) InitString(f Form, src string) {
 	i.p = 0
 	if len(src) == 0 {
@@ -60,9 +60,9 @@ func (i *Iter) InitString(f Form, src string) {
 	i.rb.ss.first(i.info)
 }
 
-
-
-
+// Seek sets the segment to be returned by the next call to Next to start
+// at position p.  It is the responsibility of the caller to set p to the
+// start of a segment.
 func (i *Iter) Seek(offset int64, whence int) (int64, error) {
 	var abs int64
 	switch whence {
@@ -90,10 +90,10 @@ func (i *Iter) Seek(offset int64, whence int) (int64, error) {
 	return abs, nil
 }
 
-
-
-
-
+// returnSlice returns a slice of the underlying input type as a byte slice.
+// If the underlying is of type []byte, it will simply return a slice.
+// If the underlying is of type string, it will copy the slice to the buffer
+// and return that.
 func (i *Iter) returnSlice(a, b int) []byte {
 	if i.rb.src.bytes == nil {
 		return i.buf[:copy(i.buf[:], i.rb.src.str[a:b])]
@@ -101,7 +101,7 @@ func (i *Iter) returnSlice(a, b int) []byte {
 	return i.rb.src.bytes[a:b]
 }
 
-
+// Pos returns the byte position at which the next call to Next will commence processing.
 func (i *Iter) Pos() int {
 	return i.p
 }
@@ -111,16 +111,16 @@ func (i *Iter) setDone() {
 	i.p = i.rb.nsrc
 }
 
-
+// Done returns true if there is no more input to process.
 func (i *Iter) Done() bool {
 	return i.p >= i.rb.nsrc
 }
 
-
-
-
-
-
+// Next returns f(i.input[i.Pos():n]), where n is a boundary of i.input.
+// For any input a and b for which f(a) == f(b), subsequent calls
+// to Next will return the same segments.
+// Modifying runes are grouped together with the preceding starter, if such a starter exists.
+// Although not guaranteed, n will typically be the smallest possible n.
 func (i *Iter) Next() []byte {
 	return i.next(i)
 }
@@ -128,8 +128,9 @@ func (i *Iter) Next() []byte {
 func nextASCIIBytes(i *Iter) []byte {
 	p := i.p + 1
 	if p >= i.rb.nsrc {
+		p0 := i.p
 		i.setDone()
-		return i.rb.src.bytes[i.p:p]
+		return i.rb.src.bytes[p0:p]
 	}
 	if i.rb.src.bytes[p] < utf8.RuneSelf {
 		p0 := i.p
@@ -177,12 +178,12 @@ func nextDone(i *Iter) []byte {
 	return nil
 }
 
-
-
+// nextMulti is used for iterating over multi-segment decompositions
+// for decomposing normal forms.
 func nextMulti(i *Iter) []byte {
 	j := 0
 	d := i.multiSeg
-	
+	// skip first rune
 	for j = 1; j < len(d) && !utf8.RuneStart(d[j]); j++ {
 	}
 	for j < len(d) {
@@ -193,13 +194,13 @@ func nextMulti(i *Iter) []byte {
 		}
 		j += int(info.size)
 	}
-	
+	// treat last segment as normal decomposition
 	i.next = i.rb.f.nextMain
 	return i.next(i)
 }
 
-
-
+// nextMultiNorm is used for iterating over multi-segment decompositions
+// for composing normal forms.
 func nextMultiNorm(i *Iter) []byte {
 	j := 0
 	d := i.multiSeg
@@ -220,7 +221,7 @@ func nextMultiNorm(i *Iter) []byte {
 	return doNormComposed(i)
 }
 
-
+// nextDecomposed is the implementation of Next for forms NFD and NFKD.
 func nextDecomposed(i *Iter) (next []byte) {
 	outp := 0
 	inCopyStart, outCopyStart := i.p, 0
@@ -228,7 +229,7 @@ func nextDecomposed(i *Iter) (next []byte) {
 		if sz := int(i.info.size); sz <= 1 {
 			i.rb.ss = 0
 			p := i.p
-			i.p++ 
+			i.p++ // ASCII or illegal byte.  Either way, advance by 1.
 			if i.p >= i.rb.nsrc {
 				i.setDone()
 				return i.returnSlice(p, i.p)
@@ -238,27 +239,27 @@ func nextDecomposed(i *Iter) (next []byte) {
 			}
 			outp++
 		} else if d := i.info.Decomposition(); d != nil {
-			
-			
-			
-			
+			// Note: If leading CCC != 0, then len(d) == 2 and last is also non-zero.
+			// Case 1: there is a leftover to copy.  In this case the decomposition
+			// must begin with a modifier and should always be appended.
+			// Case 2: no leftover. Simply return d if followed by a ccc == 0 value.
 			p := outp + len(d)
 			if outp > 0 {
 				i.rb.src.copySlice(i.buf[outCopyStart:], inCopyStart, i.p)
-				
-				
+				// TODO: this condition should not be possible, but we leave it
+				// in for defensive purposes.
 				if p > len(i.buf) {
 					return i.buf[:outp]
 				}
 			} else if i.info.multiSegment() {
-				
-				
+				// outp must be 0 as multi-segment decompositions always
+				// start a new segment.
 				if i.multiSeg == nil {
 					i.multiSeg = d
 					i.next = nextMulti
 					return nextMulti(i)
 				}
-				
+				// We are in the last segment.  Treat as normal decomposition.
 				d = i.multiSeg
 				i.multiSeg = nil
 				p = len(d)
@@ -266,7 +267,7 @@ func nextDecomposed(i *Iter) (next []byte) {
 			prevCC := i.info.tccc
 			if i.p += sz; i.p >= i.rb.nsrc {
 				i.setDone()
-				i.info = Properties{} 
+				i.info = Properties{} // Force BoundaryBefore to succeed.
 			} else {
 				i.info = i.rb.f.info(i.rb.src, i.p)
 			}
@@ -330,8 +331,8 @@ func nextDecomposed(i *Iter) (next []byte) {
 	}
 	return i.buf[:outp]
 doNorm:
-	
-	
+	// Insert what we have decomposed so far in the reorderBuffer.
+	// As we will only reorder, there will always be enough room.
 	i.rb.src.copySlice(i.buf[outCopyStart:], inCopyStart, i.p)
 	i.rb.insertDecomposed(i.buf[0:outp])
 	return doNormDecomposed(i)
@@ -353,7 +354,7 @@ func doNormDecomposed(i *Iter) []byte {
 			break
 		}
 	}
-	
+	// new segment or too many combining characters: exit normalization
 	return i.buf[:i.rb.flushCopy(i.buf[:])]
 }
 
@@ -366,7 +367,7 @@ func nextCGJDecompose(i *Iter) []byte {
 	return buf
 }
 
-
+// nextComposed is the implementation of Next for forms NFC and NFKC.
 func nextComposed(i *Iter) []byte {
 	outp, startp := 0, i.p
 	var prevCC uint8
@@ -377,7 +378,7 @@ func nextComposed(i *Iter) []byte {
 		prevCC = i.info.tccc
 		sz := int(i.info.size)
 		if sz == 0 {
-			sz = 1 
+			sz = 1 // illegal rune: copy byte-by-byte
 		}
 		p := outp + sz
 		if p > len(i.buf) {
@@ -406,7 +407,7 @@ func nextComposed(i *Iter) []byte {
 	}
 	return i.returnSlice(startp, i.p)
 doNorm:
-	
+	// reset to start position
 	i.p = startp
 	i.info = i.rb.f.info(i.rb.src, i.p)
 	i.rb.ss.first(i.info)
@@ -424,7 +425,7 @@ doNorm:
 }
 
 func doNormComposed(i *Iter) []byte {
-	
+	// First rune should already be inserted.
 	for {
 		if i.p += int(i.info.size); i.p >= i.rb.nsrc {
 			i.setDone()
@@ -445,12 +446,12 @@ func doNormComposed(i *Iter) []byte {
 }
 
 func nextCGJCompose(i *Iter) []byte {
-	i.rb.ss = 0 
+	i.rb.ss = 0 // instead of first
 	i.rb.insertCGJ()
 	i.next = nextComposed
-	
-	
-	
+	// Note that we treat any rune with nLeadingNonStarters > 0 as a non-starter,
+	// even if they are not. This is particularly dubious for U+FF9E and UFF9A.
+	// If we ever change that, insert a check here.
 	i.rb.ss.first(i.info)
 	i.rb.insertUnsafe(i.rb.src, i.p, i.info)
 	return doNormComposed(i)

@@ -31,7 +31,7 @@ type JoinGroupRequest struct {
 	RebalanceTimeout      int32
 	MemberId              string
 	ProtocolType          string
-	GroupProtocols        map[string][]byte 
+	GroupProtocols        map[string][]byte // deprecated; use OrderedGroupProtocols
 	OrderedGroupProtocols []*GroupProtocol
 }
 

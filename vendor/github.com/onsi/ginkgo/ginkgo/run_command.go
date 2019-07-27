@@ -110,14 +110,14 @@ func (r *SpecRunner) RunSpecs(args []string, additionalArgs []string) {
 
 	if r.isInCoverageMode() {
 		if r.getOutputDir() != "" {
-			
+			// If coverprofile is set, combine coverages
 			if r.getCoverprofile() != "" {
 				if err := r.combineCoverprofiles(runners); err != nil {
 					fmt.Println(err.Error())
 					os.Exit(1)
 				}
 			} else {
-				
+				// Just move them
 				r.moveCoverprofiles(runners)
 			}
 		}
@@ -140,7 +140,7 @@ func (r *SpecRunner) RunSpecs(args []string, additionalArgs []string) {
 	}
 }
 
-
+// Moves all generated profiles to specified directory
 func (r *SpecRunner) moveCoverprofiles(runners []*testrunner.TestRunner) {
 	for _, runner := range runners {
 		_, filename := filepath.Split(runner.CoverageFile)
@@ -153,7 +153,7 @@ func (r *SpecRunner) moveCoverprofiles(runners []*testrunner.TestRunner) {
 	}
 }
 
-
+// Combines all generated profiles in the specified directory
 func (r *SpecRunner) combineCoverprofiles(runners []*testrunner.TestRunner) error {
 
 	path, _ := filepath.Abs(r.getOutputDir())
@@ -168,7 +168,7 @@ func (r *SpecRunner) combineCoverprofiles(runners []*testrunner.TestRunner) erro
 
 	if err != nil {
 		fmt.Printf("Unable to create combined profile, %v\n", err)
-		return nil 
+		return nil // non-fatal error
 	}
 
 	for _, runner := range runners {
@@ -176,14 +176,14 @@ func (r *SpecRunner) combineCoverprofiles(runners []*testrunner.TestRunner) erro
 
 		if err != nil {
 			fmt.Printf("Unable to read coverage file %s to combine, %v\n", runner.CoverageFile, err)
-			return nil 
+			return nil // non-fatal error
 		}
 
 		_, err = combined.Write(contents)
 
 		if err != nil {
 			fmt.Printf("Unable to append to coverprofile, %v\n", err)
-			return nil 
+			return nil // non-fatal error
 		}
 	}
 

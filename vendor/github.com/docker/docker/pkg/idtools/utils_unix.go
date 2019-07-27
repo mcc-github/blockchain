@@ -1,6 +1,6 @@
+// +build !windows
 
-
-package idtools 
+package idtools // import "github.com/docker/docker/pkg/idtools"
 
 import (
 	"fmt"
@@ -18,8 +18,8 @@ func resolveBinary(binname string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
-	
+	//only return no error if the final resolved binary basename
+	//matches what was searched for
 	if filepath.Base(resolvedPath) == binname {
 		return resolvedPath, nil
 	}

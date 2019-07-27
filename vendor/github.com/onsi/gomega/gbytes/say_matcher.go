@@ -7,12 +7,34 @@ import (
 	"github.com/onsi/gomega/format"
 )
 
-
+//Objects satisfying the BufferProvider can be used with the Say matcher.
 type BufferProvider interface {
 	Buffer() *Buffer
 }
 
+/*
+Say is a Gomega matcher that operates on gbytes.Buffers:
 
+	Expect(buffer).Should(Say("something"))
+
+will succeed if the unread portion of the buffer matches the regular expression "something".
+
+When Say succeeds, it fast forwards the gbytes.Buffer's read cursor to just after the succesful match.
+Thus, subsequent calls to Say will only match against the unread portion of the buffer
+
+Say pairs very well with Eventually.  To assert that a buffer eventually receives data matching "[123]-star" within 3 seconds you can:
+
+	Eventually(buffer, 3).Should(Say("[123]-star"))
+
+Ditto with consistently.  To assert that a buffer does not receive data matching "never-see-this" for 1 second you can:
+
+	Consistently(buffer, 1).ShouldNot(Say("never-see-this"))
+
+In addition to bytes.Buffers, Say can operate on objects that implement the gbytes.BufferProvider interface.
+In such cases, Say simply operates on the *gbytes.Buffer returned by Buffer()
+
+If the buffer is closed, the Say matcher will tell Eventually to abort.
+*/
 func Say(expected string, args ...interface{}) *sayMatcher {
 	if len(args) > 0 {
 		expected = fmt.Sprintf(expected, args...)

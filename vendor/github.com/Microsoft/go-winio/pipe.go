@@ -1,4 +1,4 @@
-
+// +build windows
 
 package winio
 
@@ -12,12 +12,12 @@ import (
 	"unsafe"
 )
 
-
-
-
-
-
-
+//sys connectNamedPipe(pipe syscall.Handle, o *syscall.Overlapped) (err error) = ConnectNamedPipe
+//sys createNamedPipe(name string, flags uint32, pipeMode uint32, maxInstances uint32, outSize uint32, inSize uint32, defaultTimeout uint32, sa *syscall.SecurityAttributes) (handle syscall.Handle, err error)  [failretval==syscall.InvalidHandle] = CreateNamedPipeW
+//sys createFile(name string, access uint32, mode uint32, sa *syscall.SecurityAttributes, createmode uint32, attrs uint32, templatefile syscall.Handle) (handle syscall.Handle, err error) [failretval==syscall.InvalidHandle] = CreateFileW
+//sys getNamedPipeInfo(pipe syscall.Handle, flags *uint32, outSize *uint32, inSize *uint32, maxInstances *uint32) (err error) = GetNamedPipeInfo
+//sys getNamedPipeHandleState(pipe syscall.Handle, state *uint32, curInstances *uint32, maxCollectionCount *uint32, collectDataTimeout *uint32, userName *uint16, maxUserNameSize uint32) (err error) = GetNamedPipeHandleStateW
+//sys localAlloc(uFlags uint32, length uint32) (ptr uintptr) = LocalAlloc
 
 const (
 	cERROR_PIPE_BUSY      = syscall.Errno(231)
@@ -43,8 +43,8 @@ const (
 )
 
 var (
-	
-	
+	// ErrPipeListenerClosed is returned for pipe operations on listeners that have been closed.
+	// This error should match net.errClosing since docker takes a dependency on its text.
 	ErrPipeListenerClosed = errors.New("use of closed network connection")
 
 	errPipeWriteClosed = errors.New("pipe has been closed for write")
@@ -77,7 +77,7 @@ func (f *win32Pipe) SetDeadline(t time.Time) error {
 	return nil
 }
 
-
+// CloseWrite closes the write side of a message pipe in byte mode.
 func (f *win32MessageBytePipe) CloseWrite() error {
 	if f.writeClosed {
 		return errPipeWriteClosed
@@ -94,8 +94,8 @@ func (f *win32MessageBytePipe) CloseWrite() error {
 	return nil
 }
 
-
-
+// Write writes bytes to a message pipe in byte mode. Zero-byte writes are ignored, since
+// they are used to implement CloseWrite().
 func (f *win32MessageBytePipe) Write(b []byte) (int, error) {
 	if f.writeClosed {
 		return 0, errPipeWriteClosed
@@ -106,24 +106,24 @@ func (f *win32MessageBytePipe) Write(b []byte) (int, error) {
 	return f.win32File.Write(b)
 }
 
-
-
+// Read reads bytes from a message pipe in byte mode. A read of a zero-byte message on a message
+// mode pipe will return io.EOF, as will all subsequent reads.
 func (f *win32MessageBytePipe) Read(b []byte) (int, error) {
 	if f.readEOF {
 		return 0, io.EOF
 	}
 	n, err := f.win32File.Read(b)
 	if err == io.EOF {
-		
-		
-		
-		
-		
+		// If this was the result of a zero-byte read, then
+		// it is possible that the read was due to a zero-size
+		// message. Since we are simulating CloseWrite with a
+		// zero-byte message, ensure that all future Read() calls
+		// also return EOF.
 		f.readEOF = true
 	} else if err == syscall.ERROR_MORE_DATA {
-		
-		
-		
+		// ERROR_MORE_DATA indicates that the pipe's read mode is message mode
+		// and the message still has more bytes. Treat this as a success, since
+		// this package presents all named pipes as byte streams.
 		err = nil
 	}
 	return n, err
@@ -137,9 +137,9 @@ func (s pipeAddress) String() string {
 	return string(s)
 }
 
-
-
-
+// DialPipe connects to a named pipe by path, timing out if the connection
+// takes longer than the specified duration. If timeout is nil, then we use
+// a default timeout of 5 seconds.  (We do not use WaitNamedPipe.)
 func DialPipe(path string, timeout *time.Duration) (net.Conn, error) {
 	var absTimeout time.Time
 	if timeout != nil {
@@ -158,8 +158,8 @@ func DialPipe(path string, timeout *time.Duration) (net.Conn, error) {
 			return nil, ErrTimeout
 		}
 
-		
-		
+		// Wait 10 msec and try again. This is a rather simplistic
+		// view, as we always try each 10 milliseconds.
 		time.Sleep(time.Millisecond * 10)
 	}
 	if err != nil {
@@ -178,8 +178,8 @@ func DialPipe(path string, timeout *time.Duration) (net.Conn, error) {
 		return nil, err
 	}
 
-	
-	
+	// If the pipe is in message mode, return a message byte pipe, which
+	// supports CloseWrite().
 	if flags&cPIPE_TYPE_MESSAGE != 0 {
 		return &win32MessageBytePipe{
 			win32Pipe: win32Pipe{win32File: f, path: path},
@@ -248,7 +248,7 @@ func (l *win32PipeListener) makeConnectedServerPipe() (*win32File, error) {
 		return nil, err
 	}
 
-	
+	// Wait for the client to connect.
 	ch := make(chan error)
 	go func(p *win32File) {
 		ch <- connectPipe(p)
@@ -261,7 +261,7 @@ func (l *win32PipeListener) makeConnectedServerPipe() (*win32File, error) {
 			p = nil
 		}
 	case <-l.closeCh:
-		
+		// Abort the connect request by closing the handle.
 		p.Close()
 		p = nil
 		err = <-ch
@@ -285,8 +285,8 @@ func (l *win32PipeListener) listenerRoutine() {
 			)
 			for {
 				p, err = l.makeConnectedServerPipe()
-				
-				
+				// If the connection was immediately closed by the client, try
+				// again.
 				if err != cERROR_NO_DATA {
 					break
 				}
@@ -297,32 +297,32 @@ func (l *win32PipeListener) listenerRoutine() {
 	}
 	syscall.Close(l.firstHandle)
 	l.firstHandle = 0
-	
+	// Notify Close() and Accept() callers that the handle has been closed.
 	close(l.doneCh)
 }
 
-
+// PipeConfig contain configuration for the pipe listener.
 type PipeConfig struct {
-	
+	// SecurityDescriptor contains a Windows security descriptor in SDDL format.
 	SecurityDescriptor string
 
-	
-	
-	
-	
-	
-	
+	// MessageMode determines whether the pipe is in byte or message mode. In either
+	// case the pipe is read in byte mode by default. The only practical difference in
+	// this implementation is that CloseWrite() is only supported for message mode pipes;
+	// CloseWrite() is implemented as a zero-byte write, but zero-byte writes are only
+	// transferred to the reader (and returned as io.EOF in this implementation)
+	// when the pipe is in message mode.
 	MessageMode bool
 
-	
+	// InputBufferSize specifies the size the input buffer, in bytes.
 	InputBufferSize int32
 
-	
+	// OutputBufferSize specifies the size the input buffer, in bytes.
 	OutputBufferSize int32
 }
 
-
-
+// ListenPipe creates a listener on a Windows named pipe path, e.g. \\.\pipe\mypipe.
+// The pipe must not already exist.
 func ListenPipe(path string, c *PipeConfig) (net.Listener, error) {
 	var (
 		sd  []byte
@@ -341,23 +341,23 @@ func ListenPipe(path string, c *PipeConfig) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	
-	
-	
-	
-	
-	
-	
-	
+	// Create a client handle and connect it.  This results in the pipe
+	// instance always existing, so that clients see ERROR_PIPE_BUSY
+	// rather than ERROR_FILE_NOT_FOUND.  This ties the first instance
+	// up so that no other instances can be used.  This would have been
+	// cleaner if the Win32 API matched CreateFile with ConnectNamedPipe
+	// instead of CreateNamedPipe.  (Apparently created named pipes are
+	// considered to be in listening state regardless of whether any
+	// active calls to ConnectNamedPipe are outstanding.)
 	h2, err := createFile(path, 0, 0, nil, syscall.OPEN_EXISTING, cSECURITY_SQOS_PRESENT|cSECURITY_ANONYMOUS, 0)
 	if err != nil {
 		syscall.Close(h)
 		return nil, err
 	}
-	
-	
-	
-	
+	// Close the client handle. The server side of the instance will
+	// still be busy, leading to ERROR_PIPE_BUSY instead of
+	// ERROR_NOT_FOUND, as long as we don't close the server handle,
+	// or disconnect the client with DisconnectNamedPipe.
 	syscall.Close(h2)
 	l := &win32PipeListener{
 		firstHandle:        h,

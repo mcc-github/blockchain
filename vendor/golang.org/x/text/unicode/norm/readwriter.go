@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package norm
 
@@ -12,15 +12,15 @@ type normWriter struct {
 	buf []byte
 }
 
-
-
-
+// Write implements the standard write interface.  If the last characters are
+// not at a normalization boundary, the bytes will be buffered for the next
+// write. The remaining bytes will be written on close.
 func (w *normWriter) Write(data []byte) (n int, err error) {
-	
+	// Process data in pieces to keep w.buf size bounded.
 	const chunk = 4000
 
 	for len(data) > 0 {
-		
+		// Normalize into w.buf.
 		m := len(data)
 		if m > chunk {
 			m = chunk
@@ -31,8 +31,8 @@ func (w *normWriter) Write(data []byte) (n int, err error) {
 		data = data[m:]
 		n += m
 
-		
-		
+		// Write out complete prefix, save remainder.
+		// Note that lastBoundary looks back at most 31 runes.
 		i := lastBoundary(&w.rb.f, w.buf)
 		if i == -1 {
 			i = 0
@@ -48,7 +48,7 @@ func (w *normWriter) Write(data []byte) (n int, err error) {
 	return n, err
 }
 
-
+// Close forces data that remains in the buffer to be written.
 func (w *normWriter) Close() error {
 	if len(w.buf) > 0 {
 		_, err := w.w.Write(w.buf)
@@ -59,10 +59,10 @@ func (w *normWriter) Close() error {
 	return nil
 }
 
-
-
-
-
+// Writer returns a new writer that implements Write(b)
+// by writing f(b) to w. The returned writer may use an
+// internal buffer to maintain state across Write calls.
+// Calling its Close method writes any buffered data to w.
 func (f Form) Writer(w io.Writer) io.WriteCloser {
 	wr := &normWriter{rb: reorderBuffer{}, w: w}
 	wr.rb.init(f, nil)
@@ -79,7 +79,7 @@ type normReader struct {
 	err          error
 }
 
-
+// Read implements the standard read interface.
 func (r *normReader) Read(p []byte) (int, error) {
 	for {
 		if r.lastBoundary-r.bufStart > 0 {
@@ -114,8 +114,8 @@ func (r *normReader) Read(p []byte) (int, error) {
 	}
 }
 
-
-
+// Reader returns a new reader that implements Read
+// by reading data from r and returning f(data).
 func (f Form) Reader(r io.Reader) io.Reader {
 	const chunk = 4000
 	buf := make([]byte, chunk)

@@ -15,7 +15,7 @@ var (
 )
 
 func formatTwoColumns(w io.Writer, indent, padding, width int, rows [][2]string) {
-	
+	// Find size of first column.
 	s := 0
 	for _, row := range rows {
 		if c := len(row[0]); c > s && c < 30 {
@@ -41,8 +41,8 @@ func formatTwoColumns(w io.Writer, indent, padding, width int, rows [][2]string)
 	}
 }
 
-
-
+// Usage writes application usage to w. It parses args to determine
+// appropriate help context, such as which command to show help for.
 func (a *Application) Usage(args []string) {
 	context, err := a.parseContext(true, args)
 	a.FatalIfError(err, "")
@@ -105,13 +105,13 @@ type templateContext struct {
 	Context *templateParseContext
 }
 
-
-
+// UsageForContext displays usage information from a ParseContext (obtained from
+// Application.ParseContext() or Action(f) callbacks).
 func (a *Application) UsageForContext(context *ParseContext) error {
 	return a.UsageForContextWithTemplate(context, 2, a.usageTemplate)
 }
 
-
+// UsageForContextWithTemplate is the base usage function. You generally don't need to use this.
 func (a *Application) UsageForContextWithTemplate(context *ParseContext, indent int, tmpl string) error {
 	width := guessWidth(a.usageWriter)
 	funcs := template.FuncMap{

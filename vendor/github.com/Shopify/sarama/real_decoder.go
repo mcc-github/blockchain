@@ -19,7 +19,7 @@ type realDecoder struct {
 	stack []pushDecoder
 }
 
-
+// primitives
 
 func (rd *realDecoder) getInt8() (int8, error) {
 	if rd.remaining() < 1 {
@@ -102,7 +102,7 @@ func (rd *realDecoder) getBool() (bool, error) {
 	return true, nil
 }
 
-
+// collections
 
 func (rd *realDecoder) getBytes() ([]byte, error) {
 	tmp, err := rd.getInt32()
@@ -255,7 +255,7 @@ func (rd *realDecoder) getStringArray() ([]string, error) {
 	return ret, nil
 }
 
-
+// subsets
 
 func (rd *realDecoder) remaining() int {
 	return len(rd.raw) - rd.off
@@ -290,7 +290,7 @@ func (rd *realDecoder) peek(offset, length int) (packetDecoder, error) {
 	return &realDecoder{raw: rd.raw[off : off+length]}, nil
 }
 
-
+// stacks
 
 func (rd *realDecoder) push(in pushDecoder) error {
 	in.saveOffset(rd.off)
@@ -316,7 +316,7 @@ func (rd *realDecoder) push(in pushDecoder) error {
 }
 
 func (rd *realDecoder) pop() error {
-	
+	// this is go's ugly pop pattern (the inverse of append)
 	in := rd.stack[len(rd.stack)-1]
 	rd.stack = rd.stack[:len(rd.stack)-1]
 

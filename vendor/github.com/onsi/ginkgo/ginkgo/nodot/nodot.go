@@ -37,7 +37,7 @@ func (s nodotSection) createOrUpdateIn(data []byte) []byte {
 
 	lines := strings.Split(contents, "\n")
 
-	comment := "
+	comment := "// Declarations for " + s.name
 
 	newLines := []string{}
 	for _, line := range lines {

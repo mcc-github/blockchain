@@ -2,14 +2,14 @@ package sarama
 
 import "errors"
 
-
-
-
+// ReceiveTime is a special value for the timestamp field of Offset Commit Requests which
+// tells the broker to set the timestamp to the time at which the request was received.
+// The timestamp is only used if message version 1 is used, which requires kafka 0.8.2.
 const ReceiveTime int64 = -1
 
-
-
-
+// GroupGenerationUndefined is a special value for the group generation field of
+// Offset Commit Requests that should be used when a consumer group does not rely
+// on Kafka for partition management.
 const GroupGenerationUndefined = -1
 
 type offsetCommitRequestBlock struct {
@@ -44,20 +44,22 @@ func (b *offsetCommitRequestBlock) decode(pd packetDecoder, version int16) (err 
 
 type OffsetCommitRequest struct {
 	ConsumerGroup           string
-	ConsumerGroupGeneration int32  
-	ConsumerID              string 
-	RetentionTime           int64  
+	ConsumerGroupGeneration int32  // v1 or later
+	ConsumerID              string // v1 or later
+	RetentionTime           int64  // v2 or later
 
-	
-	
-	
-	
+	// Version can be:
+	// - 0 (kafka 0.8.1 and later)
+	// - 1 (kafka 0.8.2 and later)
+	// - 2 (kafka 0.9.0 and later)
+	// - 3 (kafka 0.11.0 and later)
+	// - 4 (kafka 2.0.0 and later)
 	Version int16
 	blocks  map[string]map[int32]*offsetCommitRequestBlock
 }
 
 func (r *OffsetCommitRequest) encode(pe packetEncoder) error {
-	if r.Version < 0 || r.Version > 2 {
+	if r.Version < 0 || r.Version > 4 {
 		return PacketEncodingError{"invalid or unsupported OffsetCommitRequest version field"}
 	}
 
@@ -174,6 +176,10 @@ func (r *OffsetCommitRequest) requiredVersion() KafkaVersion {
 		return V0_8_2_0
 	case 2:
 		return V0_9_0_0
+	case 3:
+		return V0_11_0_0
+	case 4:
+		return V2_0_0_0
 	default:
 		return MinVersion
 	}

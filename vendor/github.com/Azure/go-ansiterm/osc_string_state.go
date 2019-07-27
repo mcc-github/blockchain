@@ -19,8 +19,8 @@ func (oscState oscStringState) Handle(b byte) (s state, e error) {
 	return oscState, nil
 }
 
-
-
+// See below for OSC string terminators for linux
+// http://man7.org/linux/man-pages/man4/console_codes.4.html
 func isOscStringTerminator(b byte) bool {
 
 	if b == ANSI_BEL || b == 0x5C {

@@ -1,4 +1,20 @@
-
+/*
+ *
+ * Copyright 2017 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 package grpc
 
@@ -12,19 +28,19 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-
-
+// ccResolverWrapper is a wrapper on top of cc for resolvers.
+// It implements resolver.ClientConnection interface.
 type ccResolverWrapper struct {
 	cc       *ClientConn
 	resolver resolver.Resolver
 	addrCh   chan []resolver.Address
 	scCh     chan string
-	done     uint32 
+	done     uint32 // accessed atomically; set to 1 when closed.
 	curState resolver.State
 }
 
-
-
+// split2 returns the values from strings.SplitN(s, sep, 2).
+// If sep is not found, it returns ("", "", false) instead.
 func split2(s, sep string) (string, string, bool) {
 	spl := strings.SplitN(s, sep, 2)
 	if len(spl) < 2 {
@@ -33,11 +49,11 @@ func split2(s, sep string) (string, string, bool) {
 	return spl[0], spl[1], true
 }
 
-
-
-
-
-
+// parseTarget splits target into a struct containing scheme, authority and
+// endpoint.
+//
+// If target is not a valid scheme://authority/endpoint, it returns {Endpoint:
+// target}.
 func parseTarget(target string) (ret resolver.Target) {
 	var ok bool
 	ret.Scheme, ret.Endpoint, ok = split2(target, "://")
@@ -51,12 +67,12 @@ func parseTarget(target string) (ret resolver.Target) {
 	return ret
 }
 
-
-
-
-
-
-
+// newCCResolverWrapper parses cc.target for scheme and gets the resolver
+// builder for this scheme and builds the resolver. The monitoring goroutine
+// for it is not started yet and can be created by calling start().
+//
+// If withResolverBuilder dial option is set, the specified resolver will be
+// used instead.
 func newCCResolverWrapper(cc *ClientConn) (*ccResolverWrapper, error) {
 	rb := cc.dopts.resolverBuilder
 	if rb == nil {
@@ -102,7 +118,7 @@ func (ccr *ccResolverWrapper) UpdateState(s resolver.State) {
 	ccr.curState = s
 }
 
-
+// NewAddress is called by the resolver implementation to send addresses to gRPC.
 func (ccr *ccResolverWrapper) NewAddress(addrs []resolver.Address) {
 	if ccr.isDone() {
 		return
@@ -115,8 +131,8 @@ func (ccr *ccResolverWrapper) NewAddress(addrs []resolver.Address) {
 	ccr.cc.updateResolverState(ccr.curState)
 }
 
-
-
+// NewServiceConfig is called by the resolver implementation to send service
+// configs to gRPC.
 func (ccr *ccResolverWrapper) NewServiceConfig(sc string) {
 	if ccr.isDone() {
 		return

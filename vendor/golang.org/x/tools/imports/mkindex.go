@@ -1,13 +1,13 @@
+// +build ignore
 
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
-
-
-
+// Command mkindex creates the file "pkgindex.go" containing an index of the Go
+// standard library. The file is intended to be built as part of the imports
+// package, so that the package may be used in environments where a GOROOT is
+// not available (such as App Engine).
 package main
 
 import (
@@ -32,11 +32,11 @@ var (
 )
 
 func main() {
-	
+	// Don't use GOPATH.
 	ctx := build.Default
 	ctx.GOPATH = ""
 
-	
+	// Populate pkgIndex global from GOROOT.
 	for _, path := range ctx.SrcDirs() {
 		f, err := os.Open(path)
 		if err != nil {
@@ -55,7 +55,7 @@ func main() {
 			}
 		}
 	}
-	
+	// Populate exports global.
 	for _, ps := range pkgIndex {
 		for _, p := range ps {
 			e := loadExports(p.dir)
@@ -65,18 +65,18 @@ func main() {
 		}
 	}
 
-	
+	// Construct source file.
 	var buf bytes.Buffer
 	fmt.Fprint(&buf, pkgIndexHead)
 	fmt.Fprintf(&buf, "var pkgIndexMaster = %#v\n", pkgIndex)
 	fmt.Fprintf(&buf, "var exportsMaster = %#v\n", exports)
 	src := buf.Bytes()
 
-	
+	// Replace main.pkg type name with pkg.
 	src = bytes.Replace(src, []byte("main.pkg"), []byte("pkg"), -1)
-	
+	// Replace actual GOROOT with "/go".
 	src = bytes.Replace(src, []byte(ctx.GOROOT), []byte("/go"), -1)
-	
+	// Add some line wrapping.
 	src = bytes.Replace(src, []byte("}, "), []byte("},\n"), -1)
 	src = bytes.Replace(src, []byte("true, "), []byte("true,\n"), -1)
 
@@ -86,7 +86,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	
+	// Write out source file.
 	err = ioutil.WriteFile("pkgindex.go", src, 0644)
 	if err != nil {
 		log.Fatal(err)
@@ -106,8 +106,8 @@ func init() {
 `
 
 type pkg struct {
-	importpath string 
-	dir        string 
+	importpath string // full pkg import path, e.g. "net/http"
+	dir        string // absolute file path to pkg directory e.g. "/usr/lib/go/src/fmt"
 }
 
 var fset = token.NewFileSet()

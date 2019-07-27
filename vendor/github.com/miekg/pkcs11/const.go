@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 Miek Gieben. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package pkcs11
 
@@ -39,10 +39,10 @@ const (
 	CKZ_DATA_SPECIFIED uint = 0x00000001
 )
 
+// Generated with: awk '/#define CK[AFKMRC]/{ print $2 " = " $3 }' pkcs11t.h | sed -e 's/UL$//g' -e 's/UL)$/)/g'
 
-
-
-
+// All the flag (CKF_), attribute (CKA_), error code (CKR_), key type (CKK_), certificate type (CKC_) and
+// mechanism (CKM_) constants as defined in PKCS#11.
 const (
 	CKF_TOKEN_PRESENT                    = 0x00000001
 	CKF_REMOVABLE_DEVICE                 = 0x00000002
@@ -190,8 +190,8 @@ const (
 	CKA_AUTH_PIN_FLAGS                   = 0x00000201
 	CKA_ALWAYS_AUTHENTICATE              = 0x00000202
 	CKA_WRAP_WITH_TRUSTED                = 0x00000210
-	CKA_WRAP_TEMPLATE                    = (CKF_ARRAY_ATTRIBUTE | 0x00000211)
-	CKA_UNWRAP_TEMPLATE                  = (CKF_ARRAY_ATTRIBUTE | 0x00000212)
+	CKA_WRAP_TEMPLATE                    = CKF_ARRAY_ATTRIBUTE | 0x00000211
+	CKA_UNWRAP_TEMPLATE                  = CKF_ARRAY_ATTRIBUTE | 0x00000212
 	CKA_OTP_FORMAT                       = 0x00000220
 	CKA_OTP_LENGTH                       = 0x00000221
 	CKA_OTP_TIME_INTERVAL                = 0x00000222
@@ -226,7 +226,7 @@ const (
 	CKA_REQUIRED_CMS_ATTRIBUTES          = 0x00000501
 	CKA_DEFAULT_CMS_ATTRIBUTES           = 0x00000502
 	CKA_SUPPORTED_CMS_ATTRIBUTES         = 0x00000503
-	CKA_ALLOWED_MECHANISMS               = (CKF_ARRAY_ATTRIBUTE | 0x00000600)
+	CKA_ALLOWED_MECHANISMS               = CKF_ARRAY_ATTRIBUTE | 0x00000600
 	CKA_VENDOR_DEFINED                   = 0x80000000
 	CKM_RSA_PKCS_KEY_PAIR_GEN            = 0x00000000
 	CKM_RSA_PKCS                         = 0x00000001
@@ -720,4 +720,6 @@ const (
 	CKF_EXCLUDE_CHALLENGE                = 0x00000008
 	CKF_EXCLUDE_PIN                      = 0x00000010
 	CKF_USER_FRIENDLY_OTP                = 0x00000020
+	CKD_NULL                             = 0x00000001
+	CKD_SHA1_KDF                         = 0x00000002
 )

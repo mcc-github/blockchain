@@ -7,115 +7,118 @@ import (
 	"time"
 )
 
-
-
-
-
-
+// Client is a generic Kafka client. It manages connections to one or more Kafka brokers.
+// You MUST call Close() on a client to avoid leaks, it will not be garbage-collected
+// automatically when it passes out of scope. It is safe to share a client amongst many
+// users, however Kafka will process requests from a single client strictly in serial,
+// so it is generally more efficient to use the default one client per producer/consumer.
 type Client interface {
-	
-	
+	// Config returns the Config struct of the client. This struct should not be
+	// altered after it has been created.
 	Config() *Config
 
-	
+	// Controller returns the cluster controller broker. Requires Kafka 0.10 or higher.
 	Controller() (*Broker, error)
 
-	
+	// Brokers returns the current set of active brokers as retrieved from cluster metadata.
 	Brokers() []*Broker
 
-	
+	// Topics returns the set of available topics as retrieved from cluster metadata.
 	Topics() ([]string, error)
 
-	
+	// Partitions returns the sorted list of all partition IDs for the given topic.
 	Partitions(topic string) ([]int32, error)
 
-	
-	
-	
+	// WritablePartitions returns the sorted list of all writable partition IDs for
+	// the given topic, where "writable" means "having a valid leader accepting
+	// writes".
 	WritablePartitions(topic string) ([]int32, error)
 
-	
-	
+	// Leader returns the broker object that is the leader of the current
+	// topic/partition, as determined by querying the cluster metadata.
 	Leader(topic string, partitionID int32) (*Broker, error)
 
-	
+	// Replicas returns the set of all replica IDs for the given partition.
 	Replicas(topic string, partitionID int32) ([]int32, error)
 
-	
-	
-	
+	// InSyncReplicas returns the set of all in-sync replica IDs for the given
+	// partition. In-sync replicas are replicas which are fully caught up with
+	// the partition leader.
 	InSyncReplicas(topic string, partitionID int32) ([]int32, error)
 
-	
-	
-	
+	// RefreshMetadata takes a list of topics and queries the cluster to refresh the
+	// available metadata for those topics. If no topics are provided, it will refresh
+	// metadata for all topics.
 	RefreshMetadata(topics ...string) error
 
-	
-	
-	
-	
+	// GetOffset queries the cluster to get the most recent available offset at the
+	// given time (in milliseconds) on the topic/partition combination.
+	// Time should be OffsetOldest for the earliest available offset,
+	// OffsetNewest for the offset of the message that will be produced next, or a time.
 	GetOffset(topic string, partitionID int32, time int64) (int64, error)
 
-	
-	
-	
-	
+	// Coordinator returns the coordinating broker for a consumer group. It will
+	// return a locally cached value if it's available. You can call
+	// RefreshCoordinator to update the cached value. This function only works on
+	// Kafka 0.8.2 and higher.
 	Coordinator(consumerGroup string) (*Broker, error)
 
-	
-	
+	// RefreshCoordinator retrieves the coordinator for a consumer group and stores it
+	// in local cache. This function only works on Kafka 0.8.2 and higher.
 	RefreshCoordinator(consumerGroup string) error
 
-	
-	
-	
-	
+	// InitProducerID retrieves information required for Idempotent Producer
+	InitProducerID() (*InitProducerIDResponse, error)
+
+	// Close shuts down all broker connections managed by this client. It is required
+	// to call this function before a client object passes out of scope, as it will
+	// otherwise leak memory. You must close any Producers or Consumers using a client
+	// before you close the client.
 	Close() error
 
-	
+	// Closed returns true if the client has already had Close called on it
 	Closed() bool
 }
 
 const (
-	
-	
-	
-	
+	// OffsetNewest stands for the log head offset, i.e. the offset that will be
+	// assigned to the next message that will be produced to the partition. You
+	// can send this to a client's GetOffset method to get this offset, or when
+	// calling ConsumePartition to start consuming new messages.
 	OffsetNewest int64 = -1
-	
-	
-	
-	
+	// OffsetOldest stands for the oldest offset available on the broker for a
+	// partition. You can send this to a client's GetOffset method to get this
+	// offset, or when calling ConsumePartition to start consuming from the
+	// oldest offset that is still available on the broker.
 	OffsetOldest int64 = -2
 )
 
 type client struct {
 	conf           *Config
-	closer, closed chan none 
+	closer, closed chan none // for shutting down background metadata updater
 
-	
-	
-	
+	// the broker addresses given to us through the constructor are not guaranteed to be returned in
+	// the cluster metadata (I *think* it only returns brokers who are currently leading partitions?)
+	// so we store them separately
 	seedBrokers []*Broker
 	deadSeeds   []*Broker
 
-	controllerID   int32                                   
-	brokers        map[int32]*Broker                       
-	metadata       map[string]map[int32]*PartitionMetadata 
-	metadataTopics map[string]none                         
-	coordinators   map[string]int32                        
+	controllerID   int32                                   // cluster controller broker id
+	brokers        map[int32]*Broker                       // maps broker ids to brokers
+	metadata       map[string]map[int32]*PartitionMetadata // maps topics to partition ids to metadata
+	metadataTopics map[string]none                         // topics that need to collect metadata
+	coordinators   map[string]int32                        // Maps consumer group names to coordinating broker IDs
 
-	
-	
+	// If the number of partitions is large, we can get some churn calling cachedPartitions,
+	// so the result is cached.  It is important to update this value whenever metadata is changed
 	cachedPartitionsResults map[string][maxPartitionIndex][]int32
 
-	lock sync.RWMutex 
+	lock sync.RWMutex // protects access to the maps that hold cluster state.
 }
 
-
-
-
+// NewClient creates a new Client. It connects to one of the given broker addresses
+// and uses that broker to automatically fetch metadata on the rest of the kafka cluster. If metadata cannot
+// be retrieved from any of the given broker addresses, the client is not created.
 func NewClient(addrs []string, conf *Config) (Client, error) {
 	Logger.Println("Initializing new client")
 
@@ -148,16 +151,16 @@ func NewClient(addrs []string, conf *Config) (Client, error) {
 	}
 
 	if conf.Metadata.Full {
-		
+		// do an initial fetch of all cluster metadata by specifying an empty list of topics
 		err := client.RefreshMetadata()
 		switch err {
 		case nil:
 			break
 		case ErrLeaderNotAvailable, ErrReplicaNotAvailable, ErrTopicAuthorizationFailed, ErrClusterAuthorizationFailed:
-			
+			// indicates that maybe part of the cluster is down, but is not fatal to creating the client
 			Logger.Println(err)
 		default:
-			close(client.closed) 
+			close(client.closed) // we haven't started the background updater yet, so we have to do this manually
 			_ = client.Close()
 			return nil, err
 		}
@@ -176,22 +179,42 @@ func (client *client) Config() *Config {
 func (client *client) Brokers() []*Broker {
 	client.lock.RLock()
 	defer client.lock.RUnlock()
-	brokers := make([]*Broker, 0)
+	brokers := make([]*Broker, 0, len(client.brokers))
 	for _, broker := range client.brokers {
 		brokers = append(brokers, broker)
 	}
 	return brokers
 }
 
+func (client *client) InitProducerID() (*InitProducerIDResponse, error) {
+	var err error
+	for broker := client.any(); broker != nil; broker = client.any() {
+
+		req := &InitProducerIDRequest{}
+
+		response, err := broker.InitProducerID(req)
+		switch err.(type) {
+		case nil:
+			return response, nil
+		default:
+			// some error, remove that broker and try again
+			Logger.Printf("Client got error from broker %d when issuing InitProducerID : %v\n", broker.ID(), err)
+			_ = broker.Close()
+			client.deregisterBroker(broker)
+		}
+	}
+	return nil, err
+}
+
 func (client *client) Close() error {
 	if client.Closed() {
-		
-		
+		// Chances are this is being called from a defer() and the error will go unobserved
+		// so we go ahead and log the event in this case.
 		Logger.Printf("Close() called on already closed client")
 		return ErrClosedClient
 	}
 
-	
+	// shutdown and wait for the background thread before we take the lock, to avoid races
 	close(client.closer)
 	<-client.closed
 
@@ -279,12 +302,12 @@ func (client *client) WritablePartitions(topic string) ([]int32, error) {
 
 	partitions := client.cachedPartitions(topic, writablePartitions)
 
-	
-	
-	
-	
-	
-	
+	// len==0 catches when it's nil (no such topic) and the odd case when every single
+	// partition is undergoing leader election simultaneously. Callers have to be able to handle
+	// this function returning an empty slice (which is a valid return value) but catching it
+	// here the first time (note we *don't* catch it below where we return ErrUnknownTopicOrPartition) triggers
+	// a metadata refresh as a nicety so callers can just try again and don't have to manually
+	// trigger a refresh (otherwise they'd just keep getting a stale cached copy).
 	if len(partitions) == 0 {
 		err := client.RefreshMetadata(topic)
 		if err != nil {
@@ -373,12 +396,12 @@ func (client *client) RefreshMetadata(topics ...string) error {
 		return ErrClosedClient
 	}
 
-	
-	
-	
+	// Prior to 0.8.2, Kafka will throw exceptions on an empty topic and not return a proper
+	// error. This handles the case by returning an error instead of sending it
+	// off to Kafka. See: https://github.com/Shopify/sarama/pull/38#issuecomment-26362310
 	for _, topic := range topics {
 		if len(topic) == 0 {
-			return ErrInvalidTopic 
+			return ErrInvalidTopic // this is the error that 0.8.2 and later correctly return
 		}
 	}
 
@@ -466,11 +489,11 @@ func (client *client) RefreshCoordinator(consumerGroup string) error {
 	return nil
 }
 
+// private broker management helpers
 
-
-
-
-
+// registerBroker makes sure a broker received by a Metadata or Coordinator request is registered
+// in the brokers map. It returns the broker that is registered, which may be the provided broker,
+// or a previously registered Broker instance. You must hold the write lock before calling this function.
 func (client *client) registerBroker(broker *Broker) {
 	if client.brokers[broker.ID()] == nil {
 		client.brokers[broker.ID()] = broker
@@ -482,8 +505,8 @@ func (client *client) registerBroker(broker *Broker) {
 	}
 }
 
-
-
+// deregisterBroker removes a broker from the seedsBroker list, and if it's
+// not the seedbroker, removes it from brokers map completely.
 func (client *client) deregisterBroker(broker *Broker) {
 	client.lock.Lock()
 	defer client.lock.Unlock()
@@ -492,10 +515,10 @@ func (client *client) deregisterBroker(broker *Broker) {
 		client.deadSeeds = append(client.deadSeeds, broker)
 		client.seedBrokers = client.seedBrokers[1:]
 	} else {
-		
-		
-		
-		
+		// we do this so that our loop in `tryRefreshMetadata` doesn't go on forever,
+		// but we really shouldn't have to; once that loop is made better this case can be
+		// removed, and the function generally can be renamed from `deregisterBroker` to
+		// `nextSeedBroker` or something
 		Logger.Printf("client/brokers deregistered broker #%d at %s", broker.ID(), broker.Addr())
 		delete(client.brokers, broker.ID())
 	}
@@ -519,7 +542,7 @@ func (client *client) any() *Broker {
 		return client.seedBrokers[0]
 	}
 
-	
+	// not guaranteed to be random *or* deterministic
 	for _, broker := range client.brokers {
 		_ = broker.Open(client.conf)
 		return broker
@@ -528,16 +551,16 @@ func (client *client) any() *Broker {
 	return nil
 }
 
-
+// private caching/lazy metadata helpers
 
 type partitionType int
 
 const (
 	allPartitions partitionType = iota
 	writablePartitions
-	
+	// If you add any more types, update the partition cache in update()
 
-	
+	// Ensure this is the last partition type value
 	maxPartitionIndex
 )
 
@@ -640,7 +663,7 @@ func (client *client) getOffset(topic string, partitionID int32, time int64) (in
 	return block.Offsets[0], nil
 }
 
-
+// core metadata update logic
 
 func (client *client) backgroundMetadataUpdater() {
 	defer close(client.closed)
@@ -710,20 +733,20 @@ func (client *client) tryRefreshMetadata(topics []string, attemptsRemaining int)
 		switch err.(type) {
 		case nil:
 			allKnownMetaData := len(topics) == 0
-			
+			// valid response, use it
 			shouldRetry, err := client.updateMetadata(response, allKnownMetaData)
 			if shouldRetry {
 				Logger.Println("client/metadata found some partitions to be leaderless")
-				return retry(err) 
+				return retry(err) // note: err can be nil
 			}
 			return err
 
 		case PacketEncodingError:
-			
+			// didn't even send, return the error
 			return err
 		default:
-			
-			Logger.Println("client/metadata got error from broker while fetching metadata:", err)
+			// some other error, remove that broker and try again
+			Logger.Printf("client/metadata got error from broker %d while fetching metadata: %v\n", broker.ID(), err)
 			_ = broker.Close()
 			client.deregisterBroker(broker)
 		}
@@ -734,15 +757,15 @@ func (client *client) tryRefreshMetadata(topics []string, attemptsRemaining int)
 	return retry(ErrOutOfBrokers)
 }
 
-
+// if no fatal error, returns a list of topics that need retrying due to ErrLeaderNotAvailable
 func (client *client) updateMetadata(data *MetadataResponse, allKnownMetaData bool) (retry bool, err error) {
 	client.lock.Lock()
 	defer client.lock.Unlock()
 
-	
-	
-	
-	
+	// For all the brokers we received:
+	// - if it is a new ID, save it
+	// - if it is an existing ID, but the address we have is stale, discard the old one and save it
+	// - otherwise ignore it, replacing our existing one would just bounce the connection
 	for _, broker := range data.Brokers {
 		client.registerBroker(broker)
 	}
@@ -755,9 +778,9 @@ func (client *client) updateMetadata(data *MetadataResponse, allKnownMetaData bo
 		client.cachedPartitionsResults = make(map[string][maxPartitionIndex][]int32)
 	}
 	for _, topic := range data.Topics {
-		
-		
-		
+		// topics must be added firstly to `metadataTopics` to guarantee that all
+		// requested topics must be recorded to keep them trackable for periodically
+		// metadata refresh.
 		if _, exists := client.metadataTopics[topic.Name]; !exists {
 			client.metadataTopics[topic.Name] = none{}
 		}
@@ -767,17 +790,17 @@ func (client *client) updateMetadata(data *MetadataResponse, allKnownMetaData bo
 		switch topic.Err {
 		case ErrNoError:
 			break
-		case ErrInvalidTopic, ErrTopicAuthorizationFailed: 
+		case ErrInvalidTopic, ErrTopicAuthorizationFailed: // don't retry, don't store partial results
 			err = topic.Err
 			continue
-		case ErrUnknownTopicOrPartition: 
+		case ErrUnknownTopicOrPartition: // retry, do not store partial partition results
 			err = topic.Err
 			retry = true
 			continue
-		case ErrLeaderNotAvailable: 
+		case ErrLeaderNotAvailable: // retry, but store partial partition results
 			retry = true
 			break
-		default: 
+		default: // don't retry, don't store partial results
 			Logger.Printf("Unexpected topic-level metadata error: %s", topic.Err)
 			err = topic.Err
 			continue
@@ -856,9 +879,9 @@ func (client *client) getConsumerMetadata(consumerGroup string, attemptsRemainin
 		case ErrConsumerCoordinatorNotAvailable:
 			Logger.Printf("client/coordinator coordinator for consumer group %s is not available\n", consumerGroup)
 
-			
-			
-			
+			// This is very ugly, but this scenario will only happen once per cluster.
+			// The __consumer_offsets topic only has to be created one time.
+			// The number of partitions not configurable, but partition 0 should always exist.
 			if _, err := client.Leader("__consumer_offsets", 0); err != nil {
 				Logger.Printf("client/coordinator the __consumer_offsets topic is not initialized completely yet. Waiting 2 seconds...\n")
 				time.Sleep(2 * time.Second)

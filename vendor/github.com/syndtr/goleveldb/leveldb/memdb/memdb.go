@@ -1,10 +1,10 @@
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-
-
-
-
-
-
+// Package memdb provides in-memory key/value database implementation.
 package memdb
 
 import (
@@ -17,7 +17,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-
+// Common errors.
 var (
 	ErrNotFound     = errors.ErrNotFound
 	ErrIterReleased = errors.New("leveldb/memdb: iterator released")
@@ -178,19 +178,19 @@ const (
 	nNext
 )
 
-
+// DB is an in-memory key/value database.
 type DB struct {
 	cmp comparer.BasicComparer
 	rnd *rand.Rand
 
 	mu     sync.RWMutex
 	kvData []byte
-	
-	
-	
-	
-	
-	
+	// Node data:
+	// [0]         : KV offset
+	// [1]         : Key length
+	// [2]         : Value length
+	// [3]         : Height
+	// [3..height] : Next nodes
 	nodeData  []int
 	prevNode  [tMaxHeight]int
 	maxHeight int
@@ -207,7 +207,7 @@ func (p *DB) randHeight() (h int) {
 	return
 }
 
-
+// Must hold RW-lock if prev == true, as it use shared prevNode slice.
 func (p *DB) findGE(key []byte, prev bool) (int, bool) {
 	node := 0
 	h := p.maxHeight - 1
@@ -219,7 +219,7 @@ func (p *DB) findGE(key []byte, prev bool) (int, bool) {
 			cmp = p.cmp.Compare(p.kvData[o:o+p.nodeData[next+nKey]], key)
 		}
 		if cmp < 0 {
-			
+			// Keep searching in this list
 			node = next
 		} else {
 			if prev {
@@ -270,10 +270,10 @@ func (p *DB) findLast() int {
 	return node
 }
 
-
-
-
-
+// Put sets the value for the given key. It overwrites any previous value
+// for that key; a DB is not a multi-map.
+//
+// It is safe to modify the contents of the arguments after Put returns.
 func (p *DB) Put(key []byte, value []byte) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -300,7 +300,7 @@ func (p *DB) Put(key []byte, value []byte) error {
 	kvOffset := len(p.kvData)
 	p.kvData = append(p.kvData, key...)
 	p.kvData = append(p.kvData, value...)
-	
+	// Node
 	node := len(p.nodeData)
 	p.nodeData = append(p.nodeData, kvOffset, len(key), len(value), h)
 	for i, n := range p.prevNode[:h] {
@@ -314,10 +314,10 @@ func (p *DB) Put(key []byte, value []byte) error {
 	return nil
 }
 
-
-
-
-
+// Delete deletes the value for the given key. It returns ErrNotFound if
+// the DB does not contain the key.
+//
+// It is safe to modify the contents of the arguments after Delete returns.
 func (p *DB) Delete(key []byte) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -338,9 +338,9 @@ func (p *DB) Delete(key []byte) error {
 	return nil
 }
 
-
-
-
+// Contains returns true if the given key are in the DB.
+//
+// It is safe to modify the contents of the arguments after Contains returns.
 func (p *DB) Contains(key []byte) bool {
 	p.mu.RLock()
 	_, exact := p.findGE(key, false)
@@ -348,11 +348,11 @@ func (p *DB) Contains(key []byte) bool {
 	return exact
 }
 
-
-
-
-
-
+// Get gets the value for the given key. It returns error.ErrNotFound if the
+// DB does not contain the key.
+//
+// The caller should not modify the contents of the returned slice, but
+// it is safe to modify the contents of the argument after Get returns.
 func (p *DB) Get(key []byte) (value []byte, err error) {
 	p.mu.RLock()
 	if node, exact := p.findGE(key, false); exact {
@@ -365,12 +365,12 @@ func (p *DB) Get(key []byte) (value []byte, err error) {
 	return
 }
 
-
-
-
-
-
-
+// Find finds key/value pair whose key is greater than or equal to the
+// given key. It returns ErrNotFound if the table doesn't contain
+// such pair.
+//
+// The caller should not modify the contents of the returned slice, but
+// it is safe to modify the contents of the argument after Find returns.
 func (p *DB) Find(key []byte) (rkey, value []byte, err error) {
 	p.mu.RLock()
 	if node, _ := p.findGE(key, false); node != 0 {
@@ -385,56 +385,60 @@ func (p *DB) Find(key []byte) (rkey, value []byte, err error) {
 	return
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// NewIterator returns an iterator of the DB.
+// The returned iterator is not safe for concurrent use, but it is safe to use
+// multiple iterators concurrently, with each in a dedicated goroutine.
+// It is also safe to use an iterator concurrently with modifying its
+// underlying DB. However, the resultant key/value pairs are not guaranteed
+// to be a consistent snapshot of the DB at a particular point in time.
+//
+// Slice allows slicing the iterator to only contains keys in the given
+// range. A nil Range.Start is treated as a key before all keys in the
+// DB. And a nil Range.Limit is treated as a key after all keys in
+// the DB.
+//
+// WARNING: Any slice returned by interator (e.g. slice returned by calling
+// Iterator.Key() or Iterator.Key() methods), its content should not be modified
+// unless noted otherwise.
+//
+// The iterator must be released after use, by calling Release method.
+//
+// Also read Iterator documentation of the leveldb/iterator package.
 func (p *DB) NewIterator(slice *util.Range) iterator.Iterator {
 	return &dbIter{p: p, slice: slice}
 }
 
-
+// Capacity returns keys/values buffer capacity.
 func (p *DB) Capacity() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return cap(p.kvData)
 }
 
-
-
-
+// Size returns sum of keys and values length. Note that deleted
+// key/value will not be accounted for, but it will still consume
+// the buffer, since the buffer is append only.
 func (p *DB) Size() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.kvSize
 }
 
-
+// Free returns keys/values free buffer before need to grow.
 func (p *DB) Free() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return cap(p.kvData) - len(p.kvData)
 }
 
-
+// Len returns the number of entries in the DB.
 func (p *DB) Len() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.n
 }
 
-
+// Reset resets the DB to initial empty state. Allows reuse the buffer.
 func (p *DB) Reset() {
 	p.mu.Lock()
 	p.rnd = rand.New(rand.NewSource(0xdeadbeef))
@@ -454,14 +458,14 @@ func (p *DB) Reset() {
 	p.mu.Unlock()
 }
 
-
-
-
-
-
-
-
-
+// New creates a new initialized in-memory key/value DB. The capacity
+// is the initial key/value buffer capacity. The capacity is advisory,
+// not enforced.
+//
+// This DB is append-only, deleting an entry would remove entry node but not
+// reclaim KV buffer.
+//
+// The returned DB instance is safe for concurrent use.
 func New(cmp comparer.BasicComparer, capacity int) *DB {
 	p := &DB{
 		cmp:       cmp,

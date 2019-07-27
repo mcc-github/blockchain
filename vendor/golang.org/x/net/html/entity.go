@@ -1,18 +1,18 @@
-
-
-
+// Copyright 2010 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package html
 
-
+// All entities that do not end with ';' are 6 or fewer bytes long.
 const longestEntityWithoutSemicolon = 6
 
-
-
-
-
-
-
+// entity is a map from HTML entity names to their values. The semicolon matters:
+// https://html.spec.whatwg.org/multipage/syntax.html#named-character-references
+// lists both "amp" and "amp;" as two separate entries.
+//
+// Note that the HTML5 list is larger than the HTML4 list at
+// http://www.w3.org/TR/html4/sgml/entities.html
 var entity = map[string]rune{
 	"AElig;":                           '\U000000C6',
 	"AMP;":                             '\U00000026',
@@ -2154,11 +2154,11 @@ var entity = map[string]rune{
 	"yuml":                             '\U000000FF',
 }
 
-
+// HTML entities that are two unicode codepoints.
 var entity2 = map[string][2]rune{
-	
-	
-	
+	// TODO(nigeltao): Handle replacements that are wider than their names.
+	// "nLt;":                     {'\u226A', '\u20D2'},
+	// "nGt;":                     {'\u226B', '\u20D2'},
 	"NotEqualTilde;":           {'\u2242', '\u0338'},
 	"NotGreaterFullEqual;":     {'\u2267', '\u0338'},
 	"NotGreaterGreater;":       {'\u226B', '\u0338'},

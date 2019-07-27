@@ -1,4 +1,4 @@
-
+// +build windows
 
 package winterm
 
@@ -78,13 +78,13 @@ type scrollRegion struct {
 	bottom int16
 }
 
-
-
-
-
-
-
-
+// simulateLF simulates a LF or CR+LF by scrolling if necessary to handle the
+// current cursor position and scroll region settings, in which case it returns
+// true. If no special handling is necessary, then it does nothing and returns
+// false.
+//
+// In the false case, the caller should ensure that a carriage return
+// and line feed are inserted or that the text is otherwise wrapped.
 func (h *windowsAnsiEventHandler) simulateLF(includeCR bool) (bool, error) {
 	if h.wrapNext {
 		if err := h.Flush(); err != nil {
@@ -98,8 +98,8 @@ func (h *windowsAnsiEventHandler) simulateLF(includeCR bool) (bool, error) {
 	}
 	sr := h.effectiveSr(info.Window)
 	if pos.Y == sr.bottom {
-		
-		
+		// Scrolling is necessary. Let Windows automatically scroll if the scrolling region
+		// is the full window.
 		if sr.top == info.Window.Top && sr.bottom == info.Window.Bottom {
 			if includeCR {
 				pos.X = 0
@@ -108,8 +108,8 @@ func (h *windowsAnsiEventHandler) simulateLF(includeCR bool) (bool, error) {
 			return false, nil
 		}
 
-		
-		
+		// A custom scroll region is active. Scroll the window manually to simulate
+		// the LF.
 		if err := h.Flush(); err != nil {
 			return false, err
 		}
@@ -126,7 +126,7 @@ func (h *windowsAnsiEventHandler) simulateLF(includeCR bool) (bool, error) {
 		return true, nil
 
 	} else if pos.Y < info.Window.Bottom {
-		
+		// Let Windows handle the LF.
 		pos.Y++
 		if includeCR {
 			pos.X = 0
@@ -134,8 +134,8 @@ func (h *windowsAnsiEventHandler) simulateLF(includeCR bool) (bool, error) {
 		h.updatePos(pos)
 		return false, nil
 	} else {
-		
-		
+		// The cursor is at the bottom of the screen but outside the scroll
+		// region. Skip the LF.
 		h.logf("Simulating LF outside scroll region")
 		if includeCR {
 			if err := h.Flush(); err != nil {
@@ -150,15 +150,15 @@ func (h *windowsAnsiEventHandler) simulateLF(includeCR bool) (bool, error) {
 	}
 }
 
-
+// executeLF executes a LF without a CR.
 func (h *windowsAnsiEventHandler) executeLF() error {
 	handled, err := h.simulateLF(false)
 	if err != nil {
 		return err
 	}
 	if !handled {
-		
-		
+		// Windows LF will reset the cursor column position. Write the LF
+		// and restore the cursor position.
 		pos, _, err := h.getCurrentInfo()
 		if err != nil {
 			return err
@@ -204,7 +204,7 @@ func (h *windowsAnsiEventHandler) Execute(b byte) error {
 	switch b {
 	case ansiterm.ANSI_TAB:
 		h.logf("Execute(TAB)")
-		
+		// Move to the next tab stop, but preserve auto-wrap if already set.
 		if !h.wrapNext {
 			pos, info, err := h.getCurrentInfo()
 			if err != nil {
@@ -246,13 +246,13 @@ func (h *windowsAnsiEventHandler) Execute(b byte) error {
 		return nil
 
 	case ansiterm.ANSI_VERTICAL_TAB, ansiterm.ANSI_FORM_FEED:
-		
+		// Treat as true LF.
 		return h.executeLF()
 
 	case ansiterm.ANSI_LINE_FEED:
-		
-		
-		
+		// Simulate a CR and LF for now since there is no way in go-ansiterm
+		// to tell if the LF should include CR (and more things break when it's
+		// missing than when it's incorrectly added).
 		handled, err := h.simulateLF(true)
 		if handled || err != nil {
 			return err
@@ -451,11 +451,11 @@ func (h *windowsAnsiEventHandler) ED(param int) error {
 	h.logf("ED: [%v]", []string{strconv.Itoa(param)})
 	h.clearWrap()
 
-	
-	
-	
-	
-	
+	// [J  -- Erases from the cursor to the end of the screen, including the cursor position.
+	// [1J -- Erases from the beginning of the screen to the cursor, including the cursor position.
+	// [2J -- Erases the complete display. The cursor does not move.
+	// Notes:
+	// -- Clearing the entire buffer, versus just the Window, works best for Windows Consoles
 
 	info, err := GetConsoleScreenBufferInfo(h.fd)
 	if err != nil {
@@ -484,8 +484,8 @@ func (h *windowsAnsiEventHandler) ED(param int) error {
 		return err
 	}
 
-	
-	
+	// If the whole buffer was cleared, move the window to the top while preserving
+	// the window-relative cursor position.
 	if param == 2 {
 		pos := info.CursorPosition
 		window := info.Window
@@ -510,9 +510,9 @@ func (h *windowsAnsiEventHandler) EL(param int) error {
 	h.logf("EL: [%v]", strconv.Itoa(param))
 	h.clearWrap()
 
-	
-	
-	
+	// [K  -- Erases from the cursor to the end of the line, including the cursor position.
+	// [1K -- Erases from the beginning of the line to the cursor, including the cursor position.
+	// [2K -- Erases the complete line.
 
 	info, err := GetConsoleScreenBufferInfo(h.fd)
 	if err != nil {
@@ -639,8 +639,8 @@ func (h *windowsAnsiEventHandler) SD(param int) error {
 
 func (h *windowsAnsiEventHandler) DA(params []string) error {
 	h.logf("DA: [%v]", params)
-	
-	
+	// DA cannot be implemented because it must send data on the VT100 input stream,
+	// which is not available to go-ansiterm.
 	return nil
 }
 
@@ -650,11 +650,11 @@ func (h *windowsAnsiEventHandler) DECSTBM(top int, bottom int) error {
 	}
 	h.logf("DECSTBM: [%d, %d]", top, bottom)
 
-	
+	// Windows is 0 indexed, Linux is 1 indexed
 	h.sr.top = int16(top - 1)
 	h.sr.bottom = int16(bottom - 1)
 
-	
+	// This command also moves the cursor to the origin.
 	h.clearWrap()
 	return h.CUP(1, 1)
 }
@@ -713,8 +713,8 @@ func (h *windowsAnsiEventHandler) Flush() error {
 	return nil
 }
 
-
-
+// cacheConsoleInfo ensures that the current console screen information has been queried
+// since the last call to Flush(). It must be called before accessing h.curInfo or h.curPos.
 func (h *windowsAnsiEventHandler) getCurrentInfo() (COORD, *CONSOLE_SCREEN_BUFFER_INFO, error) {
 	if h.curInfo == nil {
 		info, err := GetConsoleScreenBufferInfo(h.fd)
@@ -734,9 +734,9 @@ func (h *windowsAnsiEventHandler) updatePos(pos COORD) {
 	h.curPos = pos
 }
 
-
-
-
+// clearWrap clears the state where the cursor is in the margin
+// waiting for the next character before wrapping the line. This must
+// be done before most operations that act on the cursor.
 func (h *windowsAnsiEventHandler) clearWrap() {
 	h.wrapNext = false
 	h.drewMarginByte = false

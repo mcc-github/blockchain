@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package template
 
@@ -16,11 +16,11 @@ import (
 	"unicode/utf8"
 )
 
-
-
-
-
-
+// FuncMap is the type of the map defining the mapping from names to functions.
+// Each function must have either a single return value, or two return values of
+// which the second has type error. In that case, if the second (error)
+// return value evaluates to non-nil during execution, execution terminates and
+// Execute returns that error.
 type FuncMap map[string]interface{}
 
 var builtins = FuncMap{
@@ -37,25 +37,25 @@ var builtins = FuncMap{
 	"println":  fmt.Sprintln,
 	"urlquery": URLQueryEscaper,
 
-	
-	"eq": eq, 
-	"ge": ge, 
-	"gt": gt, 
-	"le": le, 
-	"lt": lt, 
-	"ne": ne, 
+	// Comparisons
+	"eq": eq, // ==
+	"ge": ge, // >=
+	"gt": gt, // >
+	"le": le, // <=
+	"lt": lt, // <
+	"ne": ne, // !=
 }
 
 var builtinFuncs = createValueFuncs(builtins)
 
-
+// createValueFuncs turns a FuncMap into a map[string]reflect.Value
 func createValueFuncs(funcMap FuncMap) map[string]reflect.Value {
 	m := make(map[string]reflect.Value)
 	addValueFuncs(m, funcMap)
 	return m
 }
 
-
+// addValueFuncs adds to values the functions in funcs, converting them to reflect.Values.
 func addValueFuncs(out map[string]reflect.Value, in FuncMap) {
 	for name, fn := range in {
 		v := reflect.ValueOf(fn)
@@ -69,17 +69,17 @@ func addValueFuncs(out map[string]reflect.Value, in FuncMap) {
 	}
 }
 
-
-
+// addFuncs adds to values the functions in funcs. It does no checking of the input -
+// call addValueFuncs first.
 func addFuncs(out, in FuncMap) {
 	for name, fn := range in {
 		out[name] = fn
 	}
 }
 
-
+// goodFunc checks that the function or method has the right result signature.
 func goodFunc(typ reflect.Type) bool {
-	
+	// We allow functions with 1 result or 2 results where the second is an error.
 	switch {
 	case typ.NumOut() == 1:
 		return true
@@ -89,7 +89,7 @@ func goodFunc(typ reflect.Type) bool {
 	return false
 }
 
-
+// findFunction looks for a function in the template, and global map.
 func findFunction(name string, tmpl *Template) (reflect.Value, bool) {
 	if tmpl != nil && tmpl.common != nil {
 		if fn := tmpl.execFuncs[name]; fn.IsValid() {
@@ -102,11 +102,11 @@ func findFunction(name string, tmpl *Template) (reflect.Value, bool) {
 	return reflect.Value{}, false
 }
 
+// Indexing.
 
-
-
-
-
+// index returns the result of indexing its first argument by the following
+// arguments.  Thus "index x 1 2 3" is, in Go syntax, x[1][2][3]. Each
+// indexed item must be a map, slice, or array.
 func index(item interface{}, indices ...interface{}) (interface{}, error) {
 	v := reflect.ValueOf(item)
 	for _, i := range indices {
@@ -149,9 +149,9 @@ func index(item interface{}, indices ...interface{}) (interface{}, error) {
 	return v.Interface(), nil
 }
 
+// Length
 
-
-
+// length returns the length of the item, with an error if it has no defined length.
 func length(item interface{}) (int, error) {
 	v, isNil := indirect(reflect.ValueOf(item))
 	if isNil {
@@ -164,10 +164,10 @@ func length(item interface{}) (int, error) {
 	return 0, fmt.Errorf("len of type %s", v.Type())
 }
 
+// Function invocation
 
-
-
-
+// call returns the result of evaluating the first argument as a function.
+// The function must return 1 result, or 2 results, the second of which is an error.
 func call(fn interface{}, args ...interface{}) (interface{}, error) {
 	v := reflect.ValueOf(fn)
 	typ := v.Type()
@@ -192,7 +192,7 @@ func call(fn interface{}, args ...interface{}) (interface{}, error) {
 	argv := make([]reflect.Value, len(args))
 	for i, arg := range args {
 		value := reflect.ValueOf(arg)
-		
+		// Compute the expected type. Clumsy because of variadics.
 		var argType reflect.Type
 		if !typ.IsVariadic() || i < numIn-1 {
 			argType = typ.In(i)
@@ -214,15 +214,15 @@ func call(fn interface{}, args ...interface{}) (interface{}, error) {
 	return result[0].Interface(), nil
 }
 
-
+// Boolean logic.
 
 func truth(a interface{}) bool {
 	t, _ := isTrue(reflect.ValueOf(a))
 	return t
 }
 
-
-
+// and computes the Boolean AND of its arguments, returning
+// the first false argument it encounters, or the last argument.
 func and(arg0 interface{}, args ...interface{}) interface{} {
 	if !truth(arg0) {
 		return arg0
@@ -236,8 +236,8 @@ func and(arg0 interface{}, args ...interface{}) interface{} {
 	return arg0
 }
 
-
-
+// or computes the Boolean OR of its arguments, returning
+// the first true argument it encounters, or the last argument.
 func or(arg0 interface{}, args ...interface{}) interface{} {
 	if truth(arg0) {
 		return arg0
@@ -251,15 +251,15 @@ func or(arg0 interface{}, args ...interface{}) interface{} {
 	return arg0
 }
 
-
+// not returns the Boolean negation of its argument.
 func not(arg interface{}) (truth bool) {
 	truth, _ = isTrue(reflect.ValueOf(arg))
 	return !truth
 }
 
+// Comparison.
 
-
-
+// TODO: Perhaps allow comparison between signed and unsigned integers.
 
 var (
 	errBadComparisonType = errors.New("invalid type for comparison")
@@ -298,7 +298,7 @@ func basicKind(v reflect.Value) (kind, error) {
 	return invalidKind, errBadComparisonType
 }
 
-
+// eq evaluates the comparison a == b || a == c || ...
 func eq(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 	v1 := reflect.ValueOf(arg1)
 	k1, err := basicKind(v1)
@@ -316,7 +316,7 @@ func eq(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 		}
 		truth := false
 		if k1 != k2 {
-			
+			// Special case: Can compare integer values regardless of type's sign.
 			switch {
 			case k1 == intKind && k2 == uintKind:
 				truth = v1.Int() >= 0 && uint64(v1.Int()) == v2.Uint()
@@ -350,14 +350,14 @@ func eq(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 	return false, nil
 }
 
-
+// ne evaluates the comparison a != b.
 func ne(arg1, arg2 interface{}) (bool, error) {
-	
+	// != is the inverse of ==.
 	equal, err := eq(arg1, arg2)
 	return !equal, err
 }
 
-
+// lt evaluates the comparison a < b.
 func lt(arg1, arg2 interface{}) (bool, error) {
 	v1 := reflect.ValueOf(arg1)
 	k1, err := basicKind(v1)
@@ -371,7 +371,7 @@ func lt(arg1, arg2 interface{}) (bool, error) {
 	}
 	truth := false
 	if k1 != k2 {
-		
+		// Special case: Can compare integer values regardless of type's sign.
 		switch {
 		case k1 == intKind && k2 == uintKind:
 			truth = v1.Int() < 0 || uint64(v1.Int()) < v2.Uint()
@@ -399,9 +399,9 @@ func lt(arg1, arg2 interface{}) (bool, error) {
 	return truth, nil
 }
 
-
+// le evaluates the comparison <= b.
 func le(arg1, arg2 interface{}) (bool, error) {
-	
+	// <= is < or ==.
 	lessThan, err := lt(arg1, arg2)
 	if lessThan || err != nil {
 		return lessThan, err
@@ -409,9 +409,9 @@ func le(arg1, arg2 interface{}) (bool, error) {
 	return eq(arg1, arg2)
 }
 
-
+// gt evaluates the comparison a > b.
 func gt(arg1, arg2 interface{}) (bool, error) {
-	
+	// > is the inverse of <=.
 	lessOrEqual, err := le(arg1, arg2)
 	if err != nil {
 		return false, err
@@ -419,9 +419,9 @@ func gt(arg1, arg2 interface{}) (bool, error) {
 	return !lessOrEqual, nil
 }
 
-
+// ge evaluates the comparison a >= b.
 func ge(arg1, arg2 interface{}) (bool, error) {
-	
+	// >= is the inverse of <.
 	lessThan, err := lt(arg1, arg2)
 	if err != nil {
 		return false, err
@@ -429,17 +429,17 @@ func ge(arg1, arg2 interface{}) (bool, error) {
 	return !lessThan, nil
 }
 
-
+// HTML escaping.
 
 var (
-	htmlQuot = []byte("&#34;") 
-	htmlApos = []byte("&#39;") 
+	htmlQuot = []byte("&#34;") // shorter than "&quot;"
+	htmlApos = []byte("&#39;") // shorter than "&apos;" and apos was not in HTML until HTML5
 	htmlAmp  = []byte("&amp;")
 	htmlLt   = []byte("&lt;")
 	htmlGt   = []byte("&gt;")
 )
 
-
+// HTMLEscape writes to w the escaped HTML equivalent of the plain text data b.
 func HTMLEscape(w io.Writer, b []byte) {
 	last := 0
 	for i, c := range b {
@@ -465,9 +465,9 @@ func HTMLEscape(w io.Writer, b []byte) {
 	w.Write(b[last:])
 }
 
-
+// HTMLEscapeString returns the escaped HTML equivalent of the plain text data s.
 func HTMLEscapeString(s string) string {
-	
+	// Avoid allocation if we can.
 	if strings.IndexAny(s, `'"&<>`) < 0 {
 		return s
 	}
@@ -476,13 +476,13 @@ func HTMLEscapeString(s string) string {
 	return b.String()
 }
 
-
-
+// HTMLEscaper returns the escaped HTML equivalent of the textual
+// representation of its arguments.
 func HTMLEscaper(args ...interface{}) string {
 	return HTMLEscapeString(evalArgs(args))
 }
 
-
+// JavaScript escaping.
 
 var (
 	jsLowUni = []byte(`\u00`)
@@ -495,21 +495,21 @@ var (
 	jsGt        = []byte(`\x3E`)
 )
 
-
+// JSEscape writes to w the escaped JavaScript equivalent of the plain text data b.
 func JSEscape(w io.Writer, b []byte) {
 	last := 0
 	for i := 0; i < len(b); i++ {
 		c := b[i]
 
 		if !jsIsSpecial(rune(c)) {
-			
+			// fast path: nothing to do
 			continue
 		}
 		w.Write(b[last:i])
 
 		if c < utf8.RuneSelf {
-			
-			
+			// Quotes, slashes and angle brackets get quoted.
+			// Control characters get written as \u00XX.
 			switch c {
 			case '\\':
 				w.Write(jsBackslash)
@@ -528,7 +528,7 @@ func JSEscape(w io.Writer, b []byte) {
 				w.Write(hex[b : b+1])
 			}
 		} else {
-			
+			// Unicode rune.
 			r, size := utf8.DecodeRune(b[i:])
 			if unicode.IsPrint(r) {
 				w.Write(b[i : i+size])
@@ -542,9 +542,9 @@ func JSEscape(w io.Writer, b []byte) {
 	w.Write(b[last:])
 }
 
-
+// JSEscapeString returns the escaped JavaScript equivalent of the plain text data s.
 func JSEscapeString(s string) string {
-	
+	// Avoid allocation if we can.
 	if strings.IndexFunc(s, jsIsSpecial) < 0 {
 		return s
 	}
@@ -561,27 +561,27 @@ func jsIsSpecial(r rune) bool {
 	return r < ' ' || utf8.RuneSelf <= r
 }
 
-
-
+// JSEscaper returns the escaped JavaScript equivalent of the textual
+// representation of its arguments.
 func JSEscaper(args ...interface{}) string {
 	return JSEscapeString(evalArgs(args))
 }
 
-
-
+// URLQueryEscaper returns the escaped value of the textual representation of
+// its arguments in a form suitable for embedding in a URL query.
 func URLQueryEscaper(args ...interface{}) string {
 	return url.QueryEscape(evalArgs(args))
 }
 
-
-
-
-
-
+// evalArgs formats the list of arguments into a string. It is therefore equivalent to
+//	fmt.Sprint(args...)
+// except that each argument is indirected (if a pointer), as required,
+// using the same rules as the default string evaluation during template
+// execution.
 func evalArgs(args []interface{}) string {
 	ok := false
 	var s string
-	
+	// Fast path for simple common case.
 	if len(args) == 1 {
 		s, ok = args[0].(string)
 	}
@@ -590,7 +590,7 @@ func evalArgs(args []interface{}) string {
 			a, ok := printableValue(reflect.ValueOf(arg))
 			if ok {
 				args[i] = a
-			} 
+			} // else left fmt do its thing
 		}
 		s = fmt.Sprint(args...)
 	}

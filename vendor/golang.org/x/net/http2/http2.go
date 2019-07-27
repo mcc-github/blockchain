@@ -1,20 +1,20 @@
+// Copyright 2014 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-package http2 
+// Package http2 implements the HTTP/2 protocol.
+//
+// This package is low-level and intended to be used directly by very
+// few people. Most users will use it indirectly through the automatic
+// use by the net/http package (from Go 1.6 and later).
+// For use in earlier Go versions see ConfigureServer. (Transport support
+// requires Go 1.6 or later)
+//
+// See https://http2.github.io/ for more information on HTTP/2.
+//
+// See https://http2.golang.org/ for a test server running this code.
+//
+package http2 // import "golang.org/x/net/http2"
 
 import (
 	"bufio"
@@ -52,22 +52,22 @@ func init() {
 }
 
 const (
-	
-	
+	// ClientPreface is the string that must be sent by new
+	// connections from clients.
 	ClientPreface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
-	
-	
+	// SETTINGS_MAX_FRAME_SIZE default
+	// http://http2.github.io/http2-spec/#rfc.section.6.5.2
 	initialMaxFrameSize = 16384
 
-	
-	
+	// NextProtoTLS is the NPN/ALPN protocol negotiated during
+	// HTTP/2's TLS setup.
 	NextProtoTLS = "h2"
 
-	
+	// http://http2.github.io/http2-spec/#SettingValues
 	initialHeaderTableSize = 4096
 
-	initialWindowSize = 65535 
+	initialWindowSize = 65535 // 6.9.2 Initial Flow Control Window Size
 
 	defaultMaxReadFrameSize = 1 << 20
 )
@@ -78,18 +78,18 @@ var (
 
 type streamState int
 
-
-
-
-
-
-
-
-
-
-
-
-
+// HTTP/2 stream states.
+//
+// See http://tools.ietf.org/html/rfc7540#section-5.1.
+//
+// For simplicity, the server code merges "reserved (local)" into
+// "half-closed (remote)". This is one less state transition to track.
+// The only downside is that we send PUSH_PROMISEs slightly less
+// liberally than allowable. More discussion here:
+// https://lists.w3.org/Archives/Public/ietf-http-wg/2016JulSep/0599.html
+//
+// "reserved (remote)" is omitted since the client code does not
+// support server push.
 const (
 	stateIdle streamState = iota
 	stateOpen
@@ -110,13 +110,13 @@ func (st streamState) String() string {
 	return stateName[st]
 }
 
-
+// Setting is a setting parameter: which setting it is, and its value.
 type Setting struct {
-	
-	
+	// ID is which setting is being set.
+	// See http://http2.github.io/http2-spec/#SettingValues
 	ID SettingID
 
-	
+	// Val is the value.
 	Val uint32
 }
 
@@ -124,9 +124,9 @@ func (s Setting) String() string {
 	return fmt.Sprintf("[%v = %d]", s.ID, s.Val)
 }
 
-
+// Valid reports whether the setting is valid.
 func (s Setting) Valid() error {
-	
+	// Limits and error codes from 6.5.2 Defined SETTINGS Parameters
 	switch s.ID {
 	case SettingEnablePush:
 		if s.Val != 1 && s.Val != 0 {
@@ -144,8 +144,8 @@ func (s Setting) Valid() error {
 	return nil
 }
 
-
-
+// A SettingID is an HTTP/2 setting as defined in
+// http://http2.github.io/http2-spec/#iana-settings
 type SettingID uint16
 
 const (
@@ -178,14 +178,14 @@ var (
 	errInvalidHeaderFieldValue = errors.New("http2: invalid header field value")
 )
 
-
-
-
-
-
-
-
-
+// validWireHeaderFieldName reports whether v is a valid header field
+// name (key). See httpguts.ValidHeaderName for the base rules.
+//
+// Further, http2 says:
+//   "Just as in HTTP/1.x, header field names are strings of ASCII
+//   characters that are compared in a case-insensitive
+//   fashion. However, header field names MUST be converted to
+//   lowercase prior to their encoding in HTTP/2. "
 func validWireHeaderFieldName(v string) bool {
 	if len(v) == 0 {
 		return false
@@ -211,56 +211,56 @@ func httpCodeString(code int) string {
 	return strconv.Itoa(code)
 }
 
-
+// from pkg io
 type stringWriter interface {
 	WriteString(s string) (n int, err error)
 }
 
-
+// A gate lets two goroutines coordinate their activities.
 type gate chan struct{}
 
 func (g gate) Done() { g <- struct{}{} }
 func (g gate) Wait() { <-g }
 
-
+// A closeWaiter is like a sync.WaitGroup but only goes 1 to 0 (open to closed).
 type closeWaiter chan struct{}
 
-
-
-
-
+// Init makes a closeWaiter usable.
+// It exists because so a closeWaiter value can be placed inside a
+// larger struct and have the Mutex and Cond's memory in the same
+// allocation.
 func (cw *closeWaiter) Init() {
 	*cw = make(chan struct{})
 }
 
-
+// Close marks the closeWaiter as closed and unblocks any waiters.
 func (cw closeWaiter) Close() {
 	close(cw)
 }
 
-
+// Wait waits for the closeWaiter to become closed.
 func (cw closeWaiter) Wait() {
 	<-cw
 }
 
-
-
-
+// bufferedWriter is a buffered writer that writes to w.
+// Its buffered writer is lazily allocated as needed, to minimize
+// idle memory usage with many connections.
 type bufferedWriter struct {
-	w  io.Writer     
-	bw *bufio.Writer 
+	w  io.Writer     // immutable
+	bw *bufio.Writer // non-nil when data is buffered
 }
 
 func newBufferedWriter(w io.Writer) *bufferedWriter {
 	return &bufferedWriter{w: w}
 }
 
-
-
-
-
-
-
+// bufWriterPoolBufferSize is the size of bufio.Writer's
+// buffers created using bufWriterPool.
+//
+// TODO: pick a less arbitrary value? this is a bit under
+// (3 x typical 1500 byte MTU) at least. Other than that,
+// not much thought went into it.
 const bufWriterPoolBufferSize = 4 << 10
 
 var bufWriterPool = sync.Pool{
@@ -304,8 +304,8 @@ func mustUint31(v int32) uint32 {
 	return uint32(v)
 }
 
-
-
+// bodyAllowedForStatus reports whether a given response status code
+// permits a body. See RFC 7230, section 3.3.
 func bodyAllowedForStatus(status int) bool {
 	switch {
 	case status >= 100 && status <= 199:
@@ -336,17 +336,17 @@ type connectionStater interface {
 var sorterPool = sync.Pool{New: func() interface{} { return new(sorter) }}
 
 type sorter struct {
-	v []string 
+	v []string // owned by sorter
 }
 
 func (s *sorter) Len() int           { return len(s.v) }
 func (s *sorter) Swap(i, j int)      { s.v[i], s.v[j] = s.v[j], s.v[i] }
 func (s *sorter) Less(i, j int) bool { return s.v[i] < s.v[j] }
 
-
-
-
-
+// Keys returns the sorted keys of h.
+//
+// The returned slice is only valid until s used again or returned to
+// its pool.
 func (s *sorter) Keys(h http.Header) []string {
 	keys := s.v[:0]
 	for k := range h {
@@ -358,27 +358,27 @@ func (s *sorter) Keys(h http.Header) []string {
 }
 
 func (s *sorter) SortStrings(ss []string) {
-	
-	
+	// Our sorter works on s.v, which sorter owns, so
+	// stash it away while we sort the user's buffer.
 	save := s.v
 	s.v = ss
 	sort.Sort(s)
 	s.v = save
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+// validPseudoPath reports whether v is a valid :path pseudo-header
+// value. It must be either:
+//
+//     *) a non-empty string starting with '/'
+//     *) the string '*', for OPTIONS requests.
+//
+// For now this is only used a quick check for deciding when to clean
+// up Opaque URLs before sending requests from the Transport.
+// See golang.org/issue/16847
+//
+// We used to enforce that the path also didn't start with "//", but
+// Google's GFE accepts such paths and Chrome sends them, so ignore
+// that part of the spec. See golang.org/issue/19103.
 func validPseudoPath(v string) bool {
 	return (len(v) > 0 && v[0] == '/') || v == "*"
 }

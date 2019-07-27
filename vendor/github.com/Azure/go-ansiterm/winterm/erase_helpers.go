@@ -1,11 +1,11 @@
-
+// +build windows
 
 package winterm
 
 import "github.com/Azure/go-ansiterm"
 
 func (h *windowsAnsiEventHandler) clearRange(attributes uint16, fromCoord COORD, toCoord COORD) error {
-	
+	// Ignore an invalid (negative area) request
 	if toCoord.Y < fromCoord.Y {
 		return nil
 	}
@@ -18,7 +18,7 @@ func (h *windowsAnsiEventHandler) clearRange(attributes uint16, fromCoord COORD,
 	xCurrent, yCurrent := fromCoord.X, fromCoord.Y
 	xEnd, yEnd := toCoord.X, toCoord.Y
 
-	
+	// Clear any partial initial line
 	if xCurrent > 0 {
 		coordStart.X, coordStart.Y = xCurrent, yCurrent
 		coordEnd.X, coordEnd.Y = xEnd, yCurrent
@@ -32,7 +32,7 @@ func (h *windowsAnsiEventHandler) clearRange(attributes uint16, fromCoord COORD,
 		yCurrent += 1
 	}
 
-	
+	// Clear intervening rectangular section
 	if yCurrent < yEnd {
 		coordStart.X, coordStart.Y = xCurrent, yCurrent
 		coordEnd.X, coordEnd.Y = xEnd, yEnd-1
@@ -46,7 +46,7 @@ func (h *windowsAnsiEventHandler) clearRange(attributes uint16, fromCoord COORD,
 		yCurrent = yEnd
 	}
 
-	
+	// Clear remaining partial ending line
 	coordStart.X, coordStart.Y = xCurrent, yCurrent
 	coordEnd.X, coordEnd.Y = xEnd, yEnd
 

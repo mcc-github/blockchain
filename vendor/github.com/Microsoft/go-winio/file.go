@@ -1,4 +1,4 @@
-
+// +build windows
 
 package winio
 
@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-
-
-
-
+//sys cancelIoEx(file syscall.Handle, o *syscall.Overlapped) (err error) = CancelIoEx
+//sys createIoCompletionPort(file syscall.Handle, port syscall.Handle, key uintptr, threadCount uint32) (newport syscall.Handle, err error) = CreateIoCompletionPort
+//sys getQueuedCompletionStatus(port syscall.Handle, bytes *uint32, key *uintptr, o **ioOperation, timeout uint32) (err error) = GetQueuedCompletionStatus
+//sys setFileCompletionNotificationModes(h syscall.Handle, flags uint8) (err error) = SetFileCompletionNotificationModes
 
 type atomicBool int32
 
@@ -51,13 +51,13 @@ type timeoutChan chan struct{}
 var ioInitOnce sync.Once
 var ioCompletionPort syscall.Handle
 
-
+// ioResult contains the result of an asynchronous IO operation
 type ioResult struct {
 	bytes uint32
 	err   error
 }
 
-
+// ioOperation represents an outstanding asynchronous Win32 IO
 type ioOperation struct {
 	o  syscall.Overlapped
 	ch chan ioResult
@@ -72,8 +72,8 @@ func initIo() {
 	go ioCompletionProcessor(h)
 }
 
-
-
+// win32File implements Reader, Writer, and Closer on a Win32 handle without blocking in a syscall.
+// It takes ownership of this handle and will close it if it is garbage collected.
 type win32File struct {
 	handle        syscall.Handle
 	wg            sync.WaitGroup
@@ -91,7 +91,7 @@ type deadlineHandler struct {
 	timedout    atomicBool
 }
 
-
+// makeWin32File makes a new win32File from an existing file handle
 func makeWin32File(h syscall.Handle) (*win32File, error) {
 	f := &win32File{handle: h}
 	ioInitOnce.Do(initIo)
@@ -112,16 +112,16 @@ func MakeOpenFile(h syscall.Handle) (io.ReadWriteCloser, error) {
 	return makeWin32File(h)
 }
 
-
+// closeHandle closes the resources associated with a Win32 handle
 func (f *win32File) closeHandle() {
 	f.wgLock.Lock()
-	
+	// Atomically set that we are closing, releasing the resources only once.
 	if !f.closing.swap(true) {
 		f.wgLock.Unlock()
-		
+		// cancel all IO and wait for it to complete
 		cancelIoEx(f.handle, nil)
 		f.wg.Wait()
-		
+		// at this point, no new IO can start
 		syscall.Close(f.handle)
 		f.handle = 0
 	} else {
@@ -129,14 +129,14 @@ func (f *win32File) closeHandle() {
 	}
 }
 
-
+// Close closes a win32File.
 func (f *win32File) Close() error {
 	f.closeHandle()
 	return nil
 }
 
-
-
+// prepareIo prepares for a new IO operation.
+// The caller must call f.wg.Done() when the IO is finished, prior to Close() returning.
 func (f *win32File) prepareIo() (*ioOperation, error) {
 	f.wgLock.RLock()
 	if f.closing.isSet() {
@@ -150,7 +150,7 @@ func (f *win32File) prepareIo() (*ioOperation, error) {
 	return c, nil
 }
 
-
+// ioCompletionProcessor processes completed async IOs forever
 func ioCompletionProcessor(h syscall.Handle) {
 	for {
 		var bytes uint32
@@ -164,8 +164,8 @@ func ioCompletionProcessor(h syscall.Handle) {
 	}
 }
 
-
-
+// asyncIo processes the return value from ReadFile or WriteFile, blocking until
+// the operation has actually completed.
 func (f *win32File) asyncIo(c *ioOperation, d *deadlineHandler, bytes uint32, err error) (int, error) {
 	if err != syscall.ERROR_IO_PENDING {
 		return int(bytes), err
@@ -200,14 +200,14 @@ func (f *win32File) asyncIo(c *ioOperation, d *deadlineHandler, bytes uint32, er
 		}
 	}
 
-	
-	
-	
+	// runtime.KeepAlive is needed, as c is passed via native
+	// code to ioCompletionProcessor, c must remain alive
+	// until the channel read is complete.
 	runtime.KeepAlive(c)
 	return int(r.bytes), err
 }
 
-
+// Read reads from a file handle.
 func (f *win32File) Read(b []byte) (int, error) {
 	c, err := f.prepareIo()
 	if err != nil {
@@ -224,7 +224,7 @@ func (f *win32File) Read(b []byte) (int, error) {
 	n, err := f.asyncIo(c, &f.readDeadline, bytes, err)
 	runtime.KeepAlive(b)
 
-	
+	// Handle EOF conditions.
 	if err == nil && n == 0 && len(b) != 0 {
 		return 0, io.EOF
 	} else if err == syscall.ERROR_BROKEN_PIPE {
@@ -234,7 +234,7 @@ func (f *win32File) Read(b []byte) (int, error) {
 	}
 }
 
-
+// Write writes to a file handle.
 func (f *win32File) Write(b []byte) (int, error) {
 	c, err := f.prepareIo()
 	if err != nil {
@@ -297,10 +297,10 @@ func (d *deadlineHandler) set(deadline time.Time) error {
 	now := time.Now()
 	duration := deadline.Sub(now)
 	if deadline.After(now) {
-		
+		// Deadline is in the future, set a timer to wait
 		d.timer = time.AfterFunc(duration, timeoutIO)
 	} else {
-		
+		// Deadline is in the past. Cancel all pending IO now.
 		timeoutIO()
 	}
 	return nil

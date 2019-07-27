@@ -1,11 +1,11 @@
-
-
-
+// Copyright 2018 Frank Schroeder. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package properties
 
-
-
+// BUG(frank): Set() does not check for invalid unicode literals since this is currently handled by the lexer.
+// BUG(frank): Write() does not allow to configure the newline character. Therefore, on Windows LF is used.
 
 import (
 	"fmt"
@@ -21,58 +21,58 @@ import (
 
 const maxExpansionDepth = 64
 
-
-
-
+// ErrorHandlerFunc defines the type of function which handles failures
+// of the MustXXX() functions. An error handler function must exit
+// the application after handling the error.
 type ErrorHandlerFunc func(error)
 
-
-
+// ErrorHandler is the function which handles failures of the MustXXX()
+// functions. The default is LogFatalHandler.
 var ErrorHandler ErrorHandlerFunc = LogFatalHandler
 
-
+// LogHandlerFunc defines the function prototype for logging errors.
 type LogHandlerFunc func(fmt string, args ...interface{})
 
-
+// LogPrintf defines a log handler which uses log.Printf.
 var LogPrintf LogHandlerFunc = log.Printf
 
-
+// LogFatalHandler handles the error by logging a fatal error and exiting.
 func LogFatalHandler(err error) {
 	log.Fatal(err)
 }
 
-
+// PanicHandler handles the error by panicking.
 func PanicHandler(err error) {
 	panic(err)
 }
 
+// -----------------------------------------------------------------------------
 
-
-
-
+// A Properties contains the key/value pairs from the properties input.
+// All values are stored in unexpanded form and are expanded at runtime
 type Properties struct {
-	
+	// Pre-/Postfix for property expansion.
 	Prefix  string
 	Postfix string
 
-	
-	
-	
-	
+	// DisableExpansion controls the expansion of properties on Get()
+	// and the check for circular references on Set(). When set to
+	// true Properties behaves like a simple key/value store and does
+	// not check for circular references on Get() or on Set().
 	DisableExpansion bool
 
-	
+	// Stores the key/value pairs
 	m map[string]string
 
-	
+	// Stores the comments per key.
 	c map[string][]string
 
-	
+	// Stores the keys in order of appearance.
 	k []string
 }
 
-
-
+// NewProperties creates a new Properties struct with the default
+// configuration for "${key}" expressions.
 func NewProperties() *Properties {
 	return &Properties{
 		Prefix:  "${",
@@ -83,7 +83,7 @@ func NewProperties() *Properties {
 	}
 }
 
-
+// Load reads a buffer into the given Properties struct.
 func (p *Properties) Load(buf []byte, enc Encoding) error {
 	l := &Loader{Encoding: enc, DisableExpansion: p.DisableExpansion}
 	newProperties, err := l.LoadBytes(buf)
@@ -94,8 +94,8 @@ func (p *Properties) Load(buf []byte, enc Encoding) error {
 	return nil
 }
 
-
-
+// Get returns the expanded value for the given key if exists.
+// Otherwise, ok is false.
 func (p *Properties) Get(key string) (value string, ok bool) {
 	v, ok := p.m[key]
 	if p.DisableExpansion {
@@ -107,9 +107,9 @@ func (p *Properties) Get(key string) (value string, ok bool) {
 
 	expanded, err := p.expand(key, v)
 
-	
-	
-	
+	// we guarantee that the expanded value is free of
+	// circular references and malformed expressions
+	// so we panic if we still get an error here.
 	if err != nil {
 		ErrorHandler(fmt.Errorf("%s in %q", err, key+" = "+v))
 	}
@@ -117,8 +117,8 @@ func (p *Properties) Get(key string) (value string, ok bool) {
 	return expanded, true
 }
 
-
-
+// MustGet returns the expanded value for the given key if exists.
+// Otherwise, it panics.
 func (p *Properties) MustGet(key string) string {
 	if v, ok := p.Get(key); ok {
 		return v
@@ -127,16 +127,16 @@ func (p *Properties) MustGet(key string) string {
 	panic("ErrorHandler should exit")
 }
 
+// ----------------------------------------------------------------------------
 
-
-
+// ClearComments removes the comments for all keys.
 func (p *Properties) ClearComments() {
 	p.c = map[string][]string{}
 }
 
+// ----------------------------------------------------------------------------
 
-
-
+// GetComment returns the last comment before the given key or an empty string.
 func (p *Properties) GetComment(key string) string {
 	comments, ok := p.c[key]
 	if !ok || len(comments) == 0 {
@@ -145,9 +145,9 @@ func (p *Properties) GetComment(key string) string {
 	return comments[len(comments)-1]
 }
 
+// ----------------------------------------------------------------------------
 
-
-
+// GetComments returns all comments that appeared before the given key or nil.
 func (p *Properties) GetComments(key string) []string {
 	if comments, ok := p.c[key]; ok {
 		return comments
@@ -155,17 +155,17 @@ func (p *Properties) GetComments(key string) []string {
 	return nil
 }
 
+// ----------------------------------------------------------------------------
 
-
-
+// SetComment sets the comment for the key.
 func (p *Properties) SetComment(key, comment string) {
 	p.c[key] = []string{comment}
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
+// SetComments sets the comments for the key. If the comments are nil then
+// all comments for this key are deleted.
 func (p *Properties) SetComments(key string, comments []string) {
 	if comments == nil {
 		delete(p.c, key)
@@ -174,11 +174,11 @@ func (p *Properties) SetComments(key string, comments []string) {
 	p.c[key] = comments
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
-
+// GetBool checks if the expanded value is one of '1', 'yes',
+// 'true' or 'on' if the key exists. The comparison is case-insensitive.
+// If the key does not exist the default value is returned.
 func (p *Properties) GetBool(key string, def bool) bool {
 	v, err := p.getBool(key)
 	if err != nil {
@@ -187,9 +187,9 @@ func (p *Properties) GetBool(key string, def bool) bool {
 	return v
 }
 
-
-
-
+// MustGetBool checks if the expanded value is one of '1', 'yes',
+// 'true' or 'on' if the key exists. The comparison is case-insensitive.
+// If the key does not exist the function panics.
 func (p *Properties) MustGetBool(key string) bool {
 	v, err := p.getBool(key)
 	if err != nil {
@@ -210,11 +210,11 @@ func boolVal(v string) bool {
 	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
-
+// GetDuration parses the expanded value as an time.Duration (in ns) if the
+// key exists. If key does not exist or the value cannot be parsed the default
+// value is returned. In almost all cases you want to use GetParsedDuration().
 func (p *Properties) GetDuration(key string, def time.Duration) time.Duration {
 	v, err := p.getInt64(key)
 	if err != nil {
@@ -223,9 +223,9 @@ func (p *Properties) GetDuration(key string, def time.Duration) time.Duration {
 	return time.Duration(v)
 }
 
-
-
-
+// MustGetDuration parses the expanded value as an time.Duration (in ns) if
+// the key exists. If key does not exist or the value cannot be parsed the
+// function panics. In almost all cases you want to use MustGetParsedDuration().
 func (p *Properties) MustGetDuration(key string) time.Duration {
 	v, err := p.getInt64(key)
 	if err != nil {
@@ -234,11 +234,11 @@ func (p *Properties) MustGetDuration(key string) time.Duration {
 	return time.Duration(v)
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
-
+// GetParsedDuration parses the expanded value with time.ParseDuration() if the key exists.
+// If key does not exist or the value cannot be parsed the default
+// value is returned.
 func (p *Properties) GetParsedDuration(key string, def time.Duration) time.Duration {
 	s, ok := p.Get(key)
 	if !ok {
@@ -251,8 +251,8 @@ func (p *Properties) GetParsedDuration(key string, def time.Duration) time.Durat
 	return v
 }
 
-
-
+// MustGetParsedDuration parses the expanded value with time.ParseDuration() if the key exists.
+// If key does not exist or the value cannot be parsed the function panics.
 func (p *Properties) MustGetParsedDuration(key string) time.Duration {
 	s, ok := p.Get(key)
 	if !ok {
@@ -265,11 +265,11 @@ func (p *Properties) MustGetParsedDuration(key string) time.Duration {
 	return v
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
-
+// GetFloat64 parses the expanded value as a float64 if the key exists.
+// If key does not exist or the value cannot be parsed the default
+// value is returned.
 func (p *Properties) GetFloat64(key string, def float64) float64 {
 	v, err := p.getFloat64(key)
 	if err != nil {
@@ -278,8 +278,8 @@ func (p *Properties) GetFloat64(key string, def float64) float64 {
 	return v
 }
 
-
-
+// MustGetFloat64 parses the expanded value as a float64 if the key exists.
+// If key does not exist or the value cannot be parsed the function panics.
 func (p *Properties) MustGetFloat64(key string) float64 {
 	v, err := p.getFloat64(key)
 	if err != nil {
@@ -299,12 +299,12 @@ func (p *Properties) getFloat64(key string) (value float64, err error) {
 	return 0, invalidKeyError(key)
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
-
-
+// GetInt parses the expanded value as an int if the key exists.
+// If key does not exist or the value cannot be parsed the default
+// value is returned. If the value does not fit into an int the
+// function panics with an out of range error.
 func (p *Properties) GetInt(key string, def int) int {
 	v, err := p.getInt64(key)
 	if err != nil {
@@ -313,10 +313,10 @@ func (p *Properties) GetInt(key string, def int) int {
 	return intRangeCheck(key, v)
 }
 
-
-
-
-
+// MustGetInt parses the expanded value as an int if the key exists.
+// If key does not exist or the value cannot be parsed the function panics.
+// If the value does not fit into an int the function panics with
+// an out of range error.
 func (p *Properties) MustGetInt(key string) int {
 	v, err := p.getInt64(key)
 	if err != nil {
@@ -325,11 +325,11 @@ func (p *Properties) MustGetInt(key string) int {
 	return intRangeCheck(key, v)
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
-
+// GetInt64 parses the expanded value as an int64 if the key exists.
+// If key does not exist or the value cannot be parsed the default
+// value is returned.
 func (p *Properties) GetInt64(key string, def int64) int64 {
 	v, err := p.getInt64(key)
 	if err != nil {
@@ -338,8 +338,8 @@ func (p *Properties) GetInt64(key string, def int64) int64 {
 	return v
 }
 
-
-
+// MustGetInt64 parses the expanded value as an int if the key exists.
+// If key does not exist or the value cannot be parsed the function panics.
 func (p *Properties) MustGetInt64(key string) int64 {
 	v, err := p.getInt64(key)
 	if err != nil {
@@ -359,12 +359,12 @@ func (p *Properties) getInt64(key string) (value int64, err error) {
 	return 0, invalidKeyError(key)
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
-
-
+// GetUint parses the expanded value as an uint if the key exists.
+// If key does not exist or the value cannot be parsed the default
+// value is returned. If the value does not fit into an int the
+// function panics with an out of range error.
 func (p *Properties) GetUint(key string, def uint) uint {
 	v, err := p.getUint64(key)
 	if err != nil {
@@ -373,10 +373,10 @@ func (p *Properties) GetUint(key string, def uint) uint {
 	return uintRangeCheck(key, v)
 }
 
-
-
-
-
+// MustGetUint parses the expanded value as an int if the key exists.
+// If key does not exist or the value cannot be parsed the function panics.
+// If the value does not fit into an int the function panics with
+// an out of range error.
 func (p *Properties) MustGetUint(key string) uint {
 	v, err := p.getUint64(key)
 	if err != nil {
@@ -385,11 +385,11 @@ func (p *Properties) MustGetUint(key string) uint {
 	return uintRangeCheck(key, v)
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
-
+// GetUint64 parses the expanded value as an uint64 if the key exists.
+// If key does not exist or the value cannot be parsed the default
+// value is returned.
 func (p *Properties) GetUint64(key string, def uint64) uint64 {
 	v, err := p.getUint64(key)
 	if err != nil {
@@ -398,8 +398,8 @@ func (p *Properties) GetUint64(key string, def uint64) uint64 {
 	return v
 }
 
-
-
+// MustGetUint64 parses the expanded value as an int if the key exists.
+// If key does not exist or the value cannot be parsed the function panics.
 func (p *Properties) MustGetUint64(key string) uint64 {
 	v, err := p.getUint64(key)
 	if err != nil {
@@ -419,10 +419,10 @@ func (p *Properties) getUint64(key string) (value uint64, err error) {
 	return 0, invalidKeyError(key)
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
+// GetString returns the expanded value for the given key if exists or
+// the default value otherwise.
 func (p *Properties) GetString(key, def string) string {
 	if v, ok := p.Get(key); ok {
 		return v
@@ -430,8 +430,8 @@ func (p *Properties) GetString(key, def string) string {
 	return def
 }
 
-
-
+// MustGetString returns the expanded value for the given key if exists or
+// panics otherwise.
 func (p *Properties) MustGetString(key string) string {
 	if v, ok := p.Get(key); ok {
 		return v
@@ -440,10 +440,10 @@ func (p *Properties) MustGetString(key string) string {
 	panic("ErrorHandler should exit")
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
+// Filter returns a new properties object which contains all properties
+// for which the key matches the pattern.
 func (p *Properties) Filter(pattern string) (*Properties, error) {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -453,74 +453,74 @@ func (p *Properties) Filter(pattern string) (*Properties, error) {
 	return p.FilterRegexp(re), nil
 }
 
-
-
+// FilterRegexp returns a new properties object which contains all properties
+// for which the key matches the regular expression.
 func (p *Properties) FilterRegexp(re *regexp.Regexp) *Properties {
 	pp := NewProperties()
 	for _, k := range p.k {
 		if re.MatchString(k) {
-			
-			
+			// TODO(fs): we are ignoring the error which flags a circular reference.
+			// TODO(fs): since we are just copying a subset of keys this cannot happen (fingers crossed)
 			pp.Set(k, p.m[k])
 		}
 	}
 	return pp
 }
 
-
-
+// FilterPrefix returns a new properties object with a subset of all keys
+// with the given prefix.
 func (p *Properties) FilterPrefix(prefix string) *Properties {
 	pp := NewProperties()
 	for _, k := range p.k {
 		if strings.HasPrefix(k, prefix) {
-			
-			
+			// TODO(fs): we are ignoring the error which flags a circular reference.
+			// TODO(fs): since we are just copying a subset of keys this cannot happen (fingers crossed)
 			pp.Set(k, p.m[k])
 		}
 	}
 	return pp
 }
 
-
-
+// FilterStripPrefix returns a new properties object with a subset of all keys
+// with the given prefix and the prefix removed from the keys.
 func (p *Properties) FilterStripPrefix(prefix string) *Properties {
 	pp := NewProperties()
 	n := len(prefix)
 	for _, k := range p.k {
 		if len(k) > len(prefix) && strings.HasPrefix(k, prefix) {
-			
-			
-			
+			// TODO(fs): we are ignoring the error which flags a circular reference.
+			// TODO(fs): since we are modifying keys I am not entirely sure whether we can create a circular reference
+			// TODO(fs): this function should probably return an error but the signature is fixed
 			pp.Set(k[n:], p.m[k])
 		}
 	}
 	return pp
 }
 
-
+// Len returns the number of keys.
 func (p *Properties) Len() int {
 	return len(p.m)
 }
 
-
+// Keys returns all keys in the same order as in the input.
 func (p *Properties) Keys() []string {
 	keys := make([]string, len(p.k))
 	copy(keys, p.k)
 	return keys
 }
 
-
-
-
-
-
-
+// Set sets the property key to the corresponding value.
+// If a value for key existed before then ok is true and prev
+// contains the previous value. If the value contains a
+// circular reference or a malformed expression then
+// an error is returned.
+// An empty key is silently ignored.
 func (p *Properties) Set(key, value string) (prev string, ok bool, err error) {
 	if key == "" {
 		return "", false, nil
 	}
 
-	
+	// if expansion is disabled we allow circular references
 	if p.DisableExpansion {
 		prev, ok = p.Get(key)
 		p.m[key] = value
@@ -530,18 +530,18 @@ func (p *Properties) Set(key, value string) (prev string, ok bool, err error) {
 		return prev, ok, nil
 	}
 
-	
-	
-	
-	
+	// to check for a circular reference we temporarily need
+	// to set the new value. If there is an error then revert
+	// to the previous state. Only if all tests are successful
+	// then we add the key to the p.k list.
 	prev, ok = p.Get(key)
 	p.m[key] = value
 
-	
+	// now check for a circular reference
 	_, err = p.expand(key, value)
 	if err != nil {
 
-		
+		// revert to the previous state
 		if ok {
 			p.m[key] = prev
 		} else {
@@ -558,16 +558,16 @@ func (p *Properties) Set(key, value string) (prev string, ok bool, err error) {
 	return prev, ok, nil
 }
 
-
-
+// SetValue sets property key to the default string value
+// as defined by fmt.Sprintf("%v").
 func (p *Properties) SetValue(key string, value interface{}) error {
 	_, _, err := p.Set(key, fmt.Sprintf("%v", value))
 	return err
 }
 
-
-
-
+// MustSet sets the property key to the corresponding value.
+// If a value for key existed before then ok is true and prev
+// contains the previous value. An empty key is silently ignored.
 func (p *Properties) MustSet(key, value string) (prev string, ok bool) {
 	prev, ok, err := p.Set(key, value)
 	if err != nil {
@@ -576,7 +576,7 @@ func (p *Properties) MustSet(key, value string) (prev string, ok bool) {
 	return prev, ok
 }
 
-
+// String returns a string of all expanded 'key = value' pairs.
 func (p *Properties) String() string {
 	var s string
 	for _, key := range p.k {
@@ -586,18 +586,18 @@ func (p *Properties) String() string {
 	return s
 }
 
-
-
+// Write writes all unexpanded 'key = value' pairs to the given writer.
+// Write returns the number of bytes written and any write error encountered.
 func (p *Properties) Write(w io.Writer, enc Encoding) (n int, err error) {
 	return p.WriteComment(w, "", enc)
 }
 
-
-
-
-
-
-
+// WriteComment writes all unexpanced 'key = value' pairs to the given writer.
+// If prefix is not empty then comments are written with a blank line and the
+// given prefix. The prefix should be either "# " or "! " to be compatible with
+// the properties file format. Otherwise, the properties parser will not be
+// able to read the file back in. It returns the number of bytes written and
+// any write error encountered.
 func (p *Properties) WriteComment(w io.Writer, prefix string, enc Encoding) (n int, err error) {
 	var x int
 
@@ -606,7 +606,7 @@ func (p *Properties) WriteComment(w io.Writer, prefix string, enc Encoding) (n i
 
 		if prefix != "" {
 			if comments, ok := p.c[key]; ok {
-				
+				// don't print comments if they are all empty
 				allEmpty := true
 				for _, c := range comments {
 					if c != "" {
@@ -616,7 +616,7 @@ func (p *Properties) WriteComment(w io.Writer, prefix string, enc Encoding) (n i
 				}
 
 				if !allEmpty {
-					
+					// add a blank line between entries but not at the top
 					if len(comments) > 0 && n > 0 {
 						x, err = fmt.Fprintln(w)
 						if err != nil {
@@ -645,7 +645,7 @@ func (p *Properties) WriteComment(w io.Writer, prefix string, enc Encoding) (n i
 	return
 }
 
-
+// Map returns a copy of the properties as a map.
 func (p *Properties) Map() map[string]string {
 	m := make(map[string]string)
 	for k, v := range p.m {
@@ -654,7 +654,7 @@ func (p *Properties) Map() map[string]string {
 	return m
 }
 
-
+// FilterFunc returns a copy of the properties which includes the values which passed all filters.
 func (p *Properties) FilterFunc(filters ...func(k, v string) bool) *Properties {
 	pp := NewProperties()
 outer:
@@ -669,9 +669,9 @@ outer:
 	return pp
 }
 
+// ----------------------------------------------------------------------------
 
-
-
+// Delete removes the key and its comments.
 func (p *Properties) Delete(key string) {
 	delete(p.m, key)
 	delete(p.c, key)
@@ -684,7 +684,7 @@ func (p *Properties) Delete(key string) {
 	p.k = newKeys
 }
 
-
+// Merge merges properties, comments and keys from other *Properties into p
 func (p *Properties) Merge(other *Properties) {
 	for k, v := range other.m {
 		p.m[k] = v
@@ -704,10 +704,10 @@ outer:
 	}
 }
 
+// ----------------------------------------------------------------------------
 
-
-
-
+// check expands all values and returns an error if a circular reference or
+// a malformed expression was found.
 func (p *Properties) check() error {
 	for key, value := range p.m {
 		if _, err := p.expand(key, value); err != nil {
@@ -718,7 +718,7 @@ func (p *Properties) check() error {
 }
 
 func (p *Properties) expand(key, input string) (string, error) {
-	
+	// no pre/postfix -> nothing to expand
 	if p.Prefix == "" && p.Postfix == "" {
 		return input, nil
 	}
@@ -726,9 +726,9 @@ func (p *Properties) expand(key, input string) (string, error) {
 	return expand(input, []string{key}, p.Prefix, p.Postfix, p.m)
 }
 
-
-
-
+// expand recursively expands expressions of '(prefix)key(postfix)' to their corresponding values.
+// The function keeps track of the keys that were already expanded and stops if it
+// detects a circular reference or a malformed expression of the form '(prefix)key'.
 func expand(s string, keys []string, prefix, postfix string, values map[string]string) (string, error) {
 	if len(keys) > maxExpansionDepth {
 		return "", fmt.Errorf("expansion too deep")
@@ -749,7 +749,7 @@ func expand(s string, keys []string, prefix, postfix string, values map[string]s
 		end := keyStart + keyLen + len(postfix) - 1
 		key := s[keyStart : keyStart+keyLen]
 
-		
+		// fmt.Printf("s:%q pp:%q start:%d end:%d keyStart:%d keyLen:%d key:%q\n", s, prefix + "..." + postfix, start, end, keyStart, keyLen, key)
 
 		for _, k := range keys {
 			if key == k {
@@ -770,7 +770,7 @@ func expand(s string, keys []string, prefix, postfix string, values map[string]s
 	return s, nil
 }
 
-
+// encode encodes a UTF-8 string to ISO-8859-1 and escapes some characters.
 func encode(s string, special string, enc Encoding) string {
 	switch enc {
 	case UTF8:
@@ -798,11 +798,11 @@ func encodeIso(s string, special string) string {
 	var v string
 	for pos := 0; pos < len(s); {
 		switch r, w = utf8.DecodeRuneInString(s[pos:]); {
-		case r < 1<<8: 
+		case r < 1<<8: // single byte rune -> escape special chars only
 			v += escape(r, special)
-		case r < 1<<16: 
+		case r < 1<<16: // two byte rune -> unicode literal
 			v += fmt.Sprintf("\\u%04x", r)
-		default: 
+		default: // more than two bytes per rune -> can't encode
 			v += "?"
 		}
 		pos += w

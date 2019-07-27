@@ -1,11 +1,11 @@
+// Copyright 2018 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// Indexed package import.
+// See cmd/compile/internal/gc/iexport.go for the export data format.
 
-
-
-
-
-
-
+// This file is a copy of $GOROOT/src/go/internal/gcimporter/iimport.go.
 
 package gcimporter
 
@@ -46,7 +46,7 @@ const predeclReserved = 32
 type itag uint64
 
 const (
-	
+	// Types
 	definedType itag = iota
 	pointerType
 	sliceType
@@ -58,10 +58,10 @@ const (
 	interfaceType
 )
 
-
-
-
-
+// IImportData imports a package from the serialized package data
+// and returns the number of bytes consumed and a reference to the package.
+// If the export data version is not recognized or the format is otherwise
+// compromised, an error is returned.
 func IImportData(fset *token.FileSet, imports map[string]*types.Package, data []byte, path string) (_ int, pkg *types.Package, err error) {
 	const currentVersion = 0
 	version := -1
@@ -109,7 +109,7 @@ func IImportData(fset *token.FileSet, imports map[string]*types.Package, data []
 		},
 	}
 
-	for i, pt := range predeclared {
+	for i, pt := range predeclared() {
 		p.typCache[uint64(i)] = pt
 	}
 
@@ -118,7 +118,7 @@ func IImportData(fset *token.FileSet, imports map[string]*types.Package, data []
 		pkgPathOff := r.uint64()
 		pkgPath := p.stringAt(pkgPathOff)
 		pkgName := p.stringAt(r.uint64())
-		_ = r.uint64() 
+		_ = r.uint64() // package height; unused by go/types
 
 		if pkgPath == "" {
 			pkgPath = path
@@ -142,8 +142,12 @@ func IImportData(fset *token.FileSet, imports map[string]*types.Package, data []
 		p.pkgIndex[pkg] = nameIndex
 		pkgList[i] = pkg
 	}
-
-	localpkg := pkgList[0]
+	var localpkg *types.Package
+	for _, pkg := range pkgList {
+		if pkg.Path() == path {
+			localpkg = pkg
+		}
+	}
 
 	names := make([]string, 0, len(p.pkgIndex[localpkg]))
 	for name := range p.pkgIndex[localpkg] {
@@ -158,12 +162,12 @@ func IImportData(fset *token.FileSet, imports map[string]*types.Package, data []
 		typ.Complete()
 	}
 
-	
+	// record all referenced packages as imports
 	list := append(([]*types.Package)(nil), pkgList[1:]...)
 	sort.Sort(byPath(list))
 	localpkg.SetImports(list)
 
-	
+	// package was imported completely and without errors
 	localpkg.MarkComplete()
 
 	consumed, _ := r.Seek(0, io.SeekCurrent)
@@ -186,7 +190,7 @@ type iimporter struct {
 }
 
 func (p *iimporter) doDecl(pkg *types.Package, name string) {
-	
+	// See if we've already imported this declaration.
 	if obj := pkg.Scope().Lookup(name); obj != nil {
 		return
 	}
@@ -274,8 +278,8 @@ func (r *importReader) obj(name string) {
 		r.declare(types.NewFunc(pos, r.currPkg, name, sig))
 
 	case 'T':
-		
-		
+		// Types can be recursive. We need to setup a stub
+		// declaration before recursing.
 		obj := types.NewTypeName(pos, r.currPkg, name, nil)
 		named := types.NewNamed(obj, nil, nil)
 		r.declare(obj)
@@ -330,7 +334,11 @@ func (r *importReader) value() (typ types.Type, val constant.Value) {
 		val = constant.BinaryOp(re, token.ADD, constant.MakeImag(im))
 
 	default:
-		errorf("unexpected type %v", typ) 
+		if b.Kind() == types.Invalid {
+			val = constant.MakeUnknown()
+			return
+		}
+		errorf("unexpected type %v", typ) // panics
 		panic("unreachable")
 	}
 
@@ -398,9 +406,9 @@ func (r *importReader) mpint(b *types.Basic) constant.Value {
 	buf := make([]byte, v)
 	io.ReadFull(&r.declReader, buf)
 
-	
-	
-	
+	// convert to little endian
+	// TODO(gri) go/constant should have a more direct conversion function
+	//           (e.g., once it supports a big.Float based implementation)
 	for i, j := 0, len(buf)-1; i < j; i, j = i+1, j-1 {
 		buf[i], buf[j] = buf[j], buf[i]
 	}
@@ -526,8 +534,8 @@ func (r *importReader) doType(base *types.Named) types.Type {
 			mpos := r.pos()
 			mname := r.ident()
 
-			
-			
+			// TODO(mdempsky): Matches bimport.go, but I
+			// don't agree with this.
 			var recv *types.Var
 			if base != nil {
 				recv = types.NewVar(token.NoPos, r.currPkg, "", base)

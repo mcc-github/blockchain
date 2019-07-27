@@ -17,6 +17,7 @@ import (
 	"github.com/onsi/ginkgo/ginkgo/testsuite"
 	"github.com/onsi/ginkgo/internal/remote"
 	"github.com/onsi/ginkgo/reporters/stenographer"
+	colorable "github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable"
 	"github.com/onsi/ginkgo/types"
 )
 
@@ -63,7 +64,9 @@ func (t *TestRunner) Compile() error {
 }
 
 func (t *TestRunner) BuildArgs(path string) []string {
-	args := []string{"test", "-c", "-i", "-o", path, t.Suite.Path}
+	args := make([]string, len(buildArgs), len(buildArgs)+3)
+	copy(args, buildArgs)
+	args = append(args, "-o", path, t.Suite.Path)
 
 	if t.getCoverMode() != "" {
 		args = append(args, "-cover", fmt.Sprintf("-covermode=%s", t.getCoverMode()))
@@ -116,6 +119,8 @@ func (t *TestRunner) BuildArgs(path string) []string {
 		"coverpkg",
 		"tags",
 		"gcflags",
+		"vet",
+		"mod",
 	}
 
 	for _, opt := range stringOpts {
@@ -154,12 +159,12 @@ func (t *TestRunner) CompileTo(path string) error {
 	if fileExists(path) == false {
 		compiledFile := t.Suite.PackageName + ".test"
 		if fileExists(compiledFile) {
-			
-			
+			// seems like we are on an old go version that does not support the -o flag on go test
+			// move the compiled test file to the desired location by hand
 			err = os.Rename(compiledFile, path)
 			if err != nil {
-				
-				
+				// We cannot move the file, perhaps because the source and destination
+				// are on different partitions. We can copy the file, however.
 				err = copyFile(compiledFile, path)
 				if err != nil {
 					return fmt.Errorf("Failed to copy compiled file: %s", err)
@@ -180,10 +185,10 @@ func fileExists(path string) bool {
 	return err == nil || os.IsNotExist(err) == false
 }
 
-
-
-
-
+// copyFile copies the contents of the file named src to the file named
+// by dst. The file will be created if it does not already exist. If the
+// destination file exists, all it's contents will be replaced by the contents
+// of the source file.
 func copyFile(src, dst string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
@@ -313,7 +318,7 @@ func (t *TestRunner) runParallelGinkgoSuite() RunResult {
 	writers := make([]*logWriter, t.numCPU)
 	reports := make([]*bytes.Buffer, t.numCPU)
 
-	stenographer := stenographer.New(!config.DefaultReporterConfig.NoColor, config.GinkgoConfig.FlakeAttempts > 1)
+	stenographer := stenographer.New(!config.DefaultReporterConfig.NoColor, config.GinkgoConfig.FlakeAttempts > 1, colorable.NewColorableStdout())
 	aggregator := remote.NewAggregator(t.numCPU, result, config.DefaultReporterConfig, stenographer)
 
 	server, err := remote.NewServer(t.numCPU)
@@ -353,22 +358,21 @@ func (t *TestRunner) runParallelGinkgoSuite() RunResult {
 		res = res.Merge(<-completions)
 	}
 
-	
-	
+	//all test processes are done, at this point
+	//we should be able to wait for the aggregator to tell us that it's done
 
 	select {
 	case <-result:
 		fmt.Println("")
 	case <-time.After(time.Second):
-		
+		//the aggregator never got back to us!  something must have gone wrong
 		fmt.Println(`
 	 -------------------------------------------------------------------
 	|                                                                   |
 	|  Ginkgo timed out waiting for all parallel nodes to report back!  |
 	|                                                                   |
-	 -------------------------------------------------------------------
-`)
-		fmt.Println(t.Suite.PackageName, "timed out. path:", t.Suite.Path)
+	 -------------------------------------------------------------------`)
+		fmt.Println("\n", t.Suite.PackageName, "timed out. path:", t.Suite.Path)
 		os.Stdout.Sync()
 
 		for _, writer := range writers {
@@ -401,7 +405,7 @@ func (t *TestRunner) cmd(ginkgoArgs []string, stream io.Writer, node int) *exec.
 		testCoverProfile := "--test.coverprofile="
 
 		coverageFile := ""
-		
+		// Set default name for coverage results
 		if coverProfile == "" {
 			coverageFile = t.Suite.PackageName + CoverProfileSuffix
 		} else {

@@ -13,22 +13,22 @@ func (p *sbuf) Printf(format string, a ...interface{}) {
 	*p = append(*p, s)
 }
 
-
-
+// Diff returns a slice where each element describes
+// a difference between a and b.
 func Diff(a, b interface{}) (desc []string) {
 	Pdiff((*sbuf)(&desc), a, b)
 	return desc
 }
 
-
-
+// wprintfer calls Fprintf on w for each Printf call
+// with a trailing newline.
 type wprintfer struct{ w io.Writer }
 
 func (p *wprintfer) Printf(format string, a ...interface{}) {
 	fmt.Fprintf(p.w, format+"\n", a...)
 }
 
-
+// Fdiff writes to w a description of the differences between a and b.
 func Fdiff(w io.Writer, a, b interface{}) {
 	Pdiff(&wprintfer{w}, a, b)
 }
@@ -37,9 +37,9 @@ type Printfer interface {
 	Printf(format string, a ...interface{})
 }
 
-
-
-
+// Pdiff prints to p a description of the differences between a and b.
+// It calls Printf once for each difference, with no trailing newline.
+// The standard library log.Logger is a Printfer.
 func Pdiff(p Printfer, a, b interface{}) {
 	diffPrinter{w: p}.diff(reflect.ValueOf(a), reflect.ValueOf(b))
 }
@@ -48,24 +48,24 @@ type Logfer interface {
 	Logf(format string, a ...interface{})
 }
 
-
-
+// logprintfer calls Fprintf on w for each Printf call
+// with a trailing newline.
 type logprintfer struct{ l Logfer }
 
 func (p *logprintfer) Printf(format string, a ...interface{}) {
 	p.l.Logf(format, a...)
 }
 
-
-
-
+// Ldiff prints to l a description of the differences between a and b.
+// It calls Logf once for each difference, with no trailing newline.
+// The standard library testing.T and testing.B are Logfers.
 func Ldiff(l Logfer, a, b interface{}) {
 	Pdiff(&logprintfer{l}, a, b)
 }
 
 type diffPrinter struct {
 	w Printfer
-	l string 
+	l string // label
 }
 
 func (w diffPrinter) printf(f string, a ...interface{}) {
@@ -183,8 +183,8 @@ func (d diffPrinter) relabel(name string) (d1 diffPrinter) {
 	return d1
 }
 
-
-
+// keyEqual compares a and b for equality.
+// Both a and b must be valid map keys.
 func keyEqual(av, bv reflect.Value) bool {
 	if !av.IsValid() && !bv.IsValid() {
 		return true

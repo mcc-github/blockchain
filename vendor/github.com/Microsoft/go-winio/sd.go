@@ -1,4 +1,4 @@
-
+// +build windows
 
 package winio
 
@@ -7,12 +7,12 @@ import (
 	"unsafe"
 )
 
-
-
-
-
-
-
+//sys lookupAccountName(systemName *uint16, accountName string, sid *byte, sidSize *uint32, refDomain *uint16, refDomainSize *uint32, sidNameUse *uint32) (err error) = advapi32.LookupAccountNameW
+//sys convertSidToStringSid(sid *byte, str **uint16) (err error) = advapi32.ConvertSidToStringSidW
+//sys convertStringSecurityDescriptorToSecurityDescriptor(str string, revision uint32, sd *uintptr, size *uint32) (err error) = advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW
+//sys convertSecurityDescriptorToStringSecurityDescriptor(sd *byte, revision uint32, secInfo uint32, sddl **uint16, sddlSize *uint32) (err error) = advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW
+//sys localFree(mem uintptr) = LocalFree
+//sys getSecurityDescriptorLength(sd uintptr) (len uint32) = advapi32.GetSecurityDescriptorLength
 
 const (
 	cERROR_NONE_MAPPED = syscall.Errno(1332)
@@ -46,7 +46,7 @@ func (e *SddlConversionError) Error() string {
 	return "convert " + e.Sddl + ": " + e.Err.Error()
 }
 
-
+// LookupSidByName looks up the SID of an account by name
 func LookupSidByName(name string) (sid string, err error) {
 	if name == "" {
 		return "", &AccountLookupError{name, cERROR_NONE_MAPPED}
@@ -87,8 +87,8 @@ func SddlToSecurityDescriptor(sddl string) ([]byte, error) {
 
 func SecurityDescriptorToSddl(sd []byte) (string, error) {
 	var sddl *uint16
-	
-	
+	// The returned string length seems to including an aribtrary number of terminating NULs.
+	// Don't use it.
 	err := convertSecurityDescriptorToStringSecurityDescriptor(&sd[0], 1, 0xff, &sddl, nil)
 	if err != nil {
 		return "", err

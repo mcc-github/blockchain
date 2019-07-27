@@ -1,15 +1,15 @@
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright 2014 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package expfmt
 
@@ -27,8 +27,8 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-
-
+// enhancedWriter has all the enhanced write functions needed here. bytes.Buffer
+// implements it.
 type enhancedWriter interface {
 	io.Writer
 	WriteRune(r rune) (n int, err error)
@@ -55,17 +55,17 @@ var (
 	}
 )
 
-
-
-
-
-
-
-
-
-
+// MetricFamilyToText converts a MetricFamily proto message into text format and
+// writes the resulting lines to 'out'. It returns the number of bytes written
+// and any error encountered. The output will have the same order as the input,
+// no further sorting is performed. Furthermore, this function assumes the input
+// is already sanitized and does not perform any sanity checks. If the input
+// contains duplicate metrics or invalid metric or label names, the conversion
+// will result in invalid text format output.
+//
+// This method fulfills the type 'prometheus.encoder'.
 func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err error) {
-	
+	// Fail-fast checks.
 	if len(in.Metric) == 0 {
 		return 0, fmt.Errorf("MetricFamily has no metrics: %s", in)
 	}
@@ -74,9 +74,9 @@ func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err e
 		return 0, fmt.Errorf("MetricFamily has no name: %s", in)
 	}
 
-	
-	
-	
+	// Try the interface upgrade. If it doesn't work, we'll use a
+	// bytes.Buffer from the sync.Pool and write out its content to out in a
+	// single go in the end.
 	w, ok := out.(enhancedWriter)
 	if !ok {
 		b := bufPool.Get().(*bytes.Buffer)
@@ -94,7 +94,7 @@ func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err e
 
 	var n int
 
-	
+	// Comments, first HELP, then TYPE.
 	if in.Help != nil {
 		n, err = w.WriteString("# HELP ")
 		written += n
@@ -152,7 +152,7 @@ func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err e
 		return
 	}
 
-	
+	// Finally the samples, one line for each.
 	for _, metric := range in.Metric {
 		switch metricType {
 		case dto.MetricType_COUNTER:
@@ -271,11 +271,11 @@ func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err e
 	return
 }
 
-
-
-
-
-
+// writeSample writes a single sample in text format to w, given the metric
+// name, the metric proto message itself, optionally an additional label name
+// with a float64 value (use empty string as label name if not required), and
+// the value. The function returns the number of bytes written and any error
+// encountered.
 func writeSample(
 	w enhancedWriter,
 	name, suffix string,
@@ -333,13 +333,13 @@ func writeSample(
 	return written, nil
 }
 
-
-
-
-
-
-
-
+// writeLabelPairs converts a slice of LabelPair proto messages plus the
+// explicitly given additional label pair into text formatted as required by the
+// text format and writes it to 'w'. An empty slice in combination with an empty
+// string 'additionalLabelName' results in nothing being written. Otherwise, the
+// label pairs are written, escaped as required by the text format, and enclosed
+// in '{...}'. The function returns the number of bytes written and any error
+// encountered.
 func writeLabelPairs(
 	w enhancedWriter,
 	in []*dto.LabelPair,
@@ -415,8 +415,8 @@ func writeLabelPairs(
 	return written, nil
 }
 
-
-
+// writeEscapedString replaces '\' by '\\', new line character by '\n', and - if
+// includeDoubleQuote is true - '"' by '\"'.
 var (
 	escaper       = strings.NewReplacer("\\", `\\`, "\n", `\n`)
 	quotedEscaper = strings.NewReplacer("\\", `\\`, "\n", `\n`, "\"", `\"`)
@@ -430,9 +430,9 @@ func writeEscapedString(w enhancedWriter, v string, includeDoubleQuote bool) (in
 	}
 }
 
-
-
-
+// writeFloat is equivalent to fmt.Fprint with a float64 argument but hardcodes
+// a few common cases for increased efficiency. For non-hardcoded cases, it uses
+// strconv.AppendFloat to avoid allocations, similar to writeInt.
 func writeFloat(w enhancedWriter, f float64) (int, error) {
 	switch {
 	case f == 1:
@@ -456,9 +456,9 @@ func writeFloat(w enhancedWriter, f float64) (int, error) {
 	}
 }
 
-
-
-
+// writeInt is equivalent to fmt.Fprint with an int64 argument but uses
+// strconv.AppendInt with a byte slice taken from a sync.Pool to avoid
+// allocations.
 func writeInt(w enhancedWriter, i int64) (int, error) {
 	bp := numBufPool.Get().(*[]byte)
 	*bp = strconv.AppendInt((*bp)[:0], i, 10)

@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-
+// Finds the control character sequences (like colors)
 var ctrlFinder = regexp.MustCompile("\x1b\x5b[0-9]+\x6d")
 
 func escapeAwareRuneCountInString(s string) int {

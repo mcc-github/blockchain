@@ -10,7 +10,11 @@ import (
 	"regexp"
 )
 
-
+/*
+ * RewritePackage takes a name (eg: my-package/tools), finds its test files using
+ * Go's build package, and then rewrites them. A ginkgo test suite file will
+ * also be added for this package, and all of its child packages.
+ */
 func RewritePackage(packageName string) {
 	pkg, err := packageWithName(packageName)
 	if err != nil {
@@ -23,7 +27,11 @@ func RewritePackage(packageName string) {
 	return
 }
 
-
+/*
+ * Given a package, findTestsInPackage reads the test files in the directory,
+ * and then recurses on each child package, returning a slice of all test files
+ * found in this process.
+ */
 func findTestsInPackage(pkg *build.Package) (testfiles []string) {
 	for _, file := range append(pkg.TestGoFiles, pkg.XTestGoFiles...) {
 		testfiles = append(testfiles, filepath.Join(pkg.Dir, file))
@@ -59,7 +67,9 @@ func findTestsInPackage(pkg *build.Package) (testfiles []string) {
 	return
 }
 
-
+/*
+ * Shells out to `ginkgo bootstrap` to create a test suite file
+ */
 func addGinkgoSuiteForPackage(pkg *build.Package) {
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -70,7 +80,7 @@ func addGinkgoSuiteForPackage(pkg *build.Package) {
 
 	_, err = os.Stat(suite_test_file)
 	if err == nil {
-		return 
+		return // test file already exists, this should be a no-op
 	}
 
 	err = os.Chdir(pkg.Dir)
@@ -90,7 +100,9 @@ func addGinkgoSuiteForPackage(pkg *build.Package) {
 	}
 }
 
-
+/*
+ * Shells out to `go fmt` to format the package
+ */
 func goFmtPackage(pkg *build.Package) {
 	output, err := exec.Command("go", "fmt", pkg.ImportPath).Output()
 
@@ -99,7 +111,11 @@ func goFmtPackage(pkg *build.Package) {
 	}
 }
 
-
+/*
+ * Attempts to return a package with its test files already read.
+ * The ImportMode arg to build.Import lets you specify if you want go to read the
+ * buildable go files inside the package, but it fails if the package has no go files
+ */
 func packageWithName(name string) (pkg *build.Package, err error) {
 	pkg, err = build.Default.Import(name, ".", build.ImportMode(0))
 	if err == nil {

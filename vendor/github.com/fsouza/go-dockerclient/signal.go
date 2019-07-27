@@ -1,15 +1,15 @@
-
-
-
+// Copyright 2014 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
-
-
+// Signal represents a signal that can be send to the container on
+// KillContainer call.
 type Signal int
 
-
-
+// These values represent all signals available on Linux, where containers will
+// be running.
 const (
 	SIGABRT   = Signal(0x6)
 	SIGALRM   = Signal(0xe)

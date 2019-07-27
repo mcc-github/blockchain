@@ -18,13 +18,13 @@ func (m *NotMatcher) Match(actual interface{}) (bool, error) {
 }
 
 func (m *NotMatcher) FailureMessage(actual interface{}) (message string) {
-	return m.Matcher.NegatedFailureMessage(actual) 
+	return m.Matcher.NegatedFailureMessage(actual) // works beautifully
 }
 
 func (m *NotMatcher) NegatedFailureMessage(actual interface{}) (message string) {
-	return m.Matcher.FailureMessage(actual) 
+	return m.Matcher.FailureMessage(actual) // works beautifully
 }
 
 func (m *NotMatcher) MatchMayChangeInTheFuture(actual interface{}) bool {
-	return oraclematcher.MatchMayChangeInTheFuture(m.Matcher, actual) 
+	return oraclematcher.MatchMayChangeInTheFuture(m.Matcher, actual) // just return m.Matcher's value
 }

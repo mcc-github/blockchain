@@ -128,19 +128,19 @@ func (ap *AnsiParser) handle(b byte) error {
 func (ap *AnsiParser) changeState(newState state) error {
 	ap.logf("ChangeState %s --> %s", ap.currState.Name(), newState.Name())
 
-	
+	// Exit old state
 	if err := ap.currState.Exit(); err != nil {
 		ap.logf("Exit state '%s' failed with : '%v'", ap.currState.Name(), err)
 		return err
 	}
 
-	
+	// Perform transition action
 	if err := ap.currState.Transition(newState); err != nil {
 		ap.logf("Transition from '%s' to '%s' failed with: '%v'", ap.currState.Name(), newState.Name, err)
 		return err
 	}
 
-	
+	// Enter new state
 	if err := newState.Enter(); err != nil {
 		ap.logf("Enter state '%s' failed with: '%v'", newState.Name(), err)
 		return err

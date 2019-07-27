@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2013, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package storage
 
@@ -14,8 +14,8 @@ import (
 
 const typeShift = 4
 
-
-
+// Verify at compile-time that typeShift is large enough to cover all FileType
+// values by confirming that 0 == 0.
 var _ [0]struct{} = [TypeAll >> typeShift]struct{}{}
 
 type memStorageLock struct {
@@ -32,7 +32,7 @@ func (lock *memStorageLock) Unlock() {
 	return
 }
 
-
+// memStorage is a memory-backed storage.
 type memStorage struct {
 	mu    sync.Mutex
 	slock *memStorageLock
@@ -40,7 +40,7 @@ type memStorage struct {
 	meta  FileDesc
 }
 
-
+// NewMemStorage returns a new memory-backed storage implementation.
 func NewMemStorage() Storage {
 	return &memStorage{
 		files: make(map[uint64]*memFile),

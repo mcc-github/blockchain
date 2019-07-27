@@ -1,10 +1,10 @@
-
-
-
+// Copyright 2013 Miek Gieben. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package pkcs11
 
-
+// awk '/#define CKR_/{ print $3":\""$2"\"," }' pkcs11t.h
 
 var strerror = map[uint]string{
 	0x00000000: "CKR_OK",

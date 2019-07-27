@@ -1,30 +1,130 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// +build ignore
 
+/*
+Input to cgo -godefs.  See README.md
+*/
 
-
-
-
-
-
-
-
+// +godefs map struct_in_addr [4]byte /* in_addr */
+// +godefs map struct_in6_addr [16]byte /* in6_addr */
 
 package unix
 
+/*
+#define	_WANT_FREEBSD11_STAT	1
+#define	_WANT_FREEBSD11_STATFS	1
+#define	_WANT_FREEBSD11_DIRENT	1
+#define	_WANT_FREEBSD11_KEVENT  1
 
+#include <dirent.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <termios.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/capsicum.h>
+#include <sys/event.h>
+#include <sys/mman.h>
+#include <sys/mount.h>
+#include <sys/param.h>
+#include <sys/ptrace.h>
+#include <sys/resource.h>
+#include <sys/select.h>
+#include <sys/signal.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <sys/utsname.h>
+#include <sys/wait.h>
+#include <net/bpf.h>
+#include <net/if.h>
+#include <net/if_dl.h>
+#include <net/route.h>
+#include <netinet/in.h>
+#include <netinet/icmp6.h>
+#include <netinet/tcp.h>
+
+enum {
+	sizeofPtr = sizeof(void*),
+};
+
+union sockaddr_all {
+	struct sockaddr s1;	// this one gets used for fields
+	struct sockaddr_in s2;	// these pad it out
+	struct sockaddr_in6 s3;
+	struct sockaddr_un s4;
+	struct sockaddr_dl s5;
+};
+
+struct sockaddr_any {
+	struct sockaddr addr;
+	char pad[sizeof(union sockaddr_all) - sizeof(struct sockaddr)];
+};
+
+// This structure is a duplicate of if_data on FreeBSD 8-STABLE.
+// See /usr/include/net/if.h.
+struct if_data8 {
+	u_char  ifi_type;
+	u_char  ifi_physical;
+	u_char  ifi_addrlen;
+	u_char  ifi_hdrlen;
+	u_char  ifi_link_state;
+	u_char  ifi_spare_char1;
+	u_char  ifi_spare_char2;
+	u_char  ifi_datalen;
+	u_long  ifi_mtu;
+	u_long  ifi_metric;
+	u_long  ifi_baudrate;
+	u_long  ifi_ipackets;
+	u_long  ifi_ierrors;
+	u_long  ifi_opackets;
+	u_long  ifi_oerrors;
+	u_long  ifi_collisions;
+	u_long  ifi_ibytes;
+	u_long  ifi_obytes;
+	u_long  ifi_imcasts;
+	u_long  ifi_omcasts;
+	u_long  ifi_iqdrops;
+	u_long  ifi_noproto;
+	u_long  ifi_hwassist;
+// FIXME: these are now unions, so maybe need to change definitions?
+#undef ifi_epoch
+	time_t  ifi_epoch;
+#undef ifi_lastchange
+	struct  timeval ifi_lastchange;
+};
+
+// This structure is a duplicate of if_msghdr on FreeBSD 8-STABLE.
+// See /usr/include/net/if.h.
+struct if_msghdr8 {
+	u_short ifm_msglen;
+	u_char  ifm_version;
+	u_char  ifm_type;
+	int     ifm_addrs;
+	int     ifm_flags;
+	u_short ifm_index;
+	struct  if_data8 ifm_data;
+};
+*/
 import "C"
 
-
+// Machine characteristics
 
 const (
-	sizeofPtr      = C.sizeofPtr
-	sizeofShort    = C.sizeof_short
-	sizeofInt      = C.sizeof_int
-	sizeofLong     = C.sizeof_long
-	sizeofLongLong = C.sizeof_longlong
+	SizeofPtr      = C.sizeofPtr
+	SizeofShort    = C.sizeof_short
+	SizeofInt      = C.sizeof_int
+	SizeofLong     = C.sizeof_long
+	SizeofLongLong = C.sizeof_longlong
 )
 
-
+// Basic types
 
 type (
 	_C_short     C.short
@@ -33,13 +133,13 @@ type (
 	_C_long_long C.longlong
 )
 
-
+// Time
 
 type Timespec C.struct_timespec
 
 type Timeval C.struct_timeval
 
-
+// Processes
 
 type Rusage C.struct_rusage
 
@@ -47,25 +147,36 @@ type Rlimit C.struct_rlimit
 
 type _Gid_t C.gid_t
 
+// Files
 
+const (
+	_statfsVersion = C.STATFS_VERSION
+	_dirblksiz     = C.DIRBLKSIZ
+)
 
-type Stat_t C.struct_stat8
+type Stat_t C.struct_stat
+
+type stat_freebsd11_t C.struct_freebsd11_stat
 
 type Statfs_t C.struct_statfs
+
+type statfs_freebsd11_t C.struct_freebsd11_statfs
 
 type Flock_t C.struct_flock
 
 type Dirent C.struct_dirent
 
+type dirent_freebsd11 C.struct_freebsd11_dirent
+
 type Fsid C.struct_fsid
 
-
+// File system limits
 
 const (
 	PathMax = C.PATH_MAX
 )
 
-
+// Advice to Fadvise
 
 const (
 	FADV_NORMAL     = C.POSIX_FADV_NORMAL
@@ -76,7 +187,7 @@ const (
 	FADV_NOREUSE    = C.POSIX_FADV_NOREUSE
 )
 
-
+// Sockets
 
 type RawSockaddrInet4 C.struct_sockaddr_in
 
@@ -129,23 +240,67 @@ const (
 	SizeofICMPv6Filter     = C.sizeof_struct_icmp6_filter
 )
 
-
+// Ptrace requests
 
 const (
-	PTRACE_TRACEME = C.PT_TRACE_ME
-	PTRACE_CONT    = C.PT_CONTINUE
-	PTRACE_KILL    = C.PT_KILL
+	PTRACE_ATTACH     = C.PT_ATTACH
+	PTRACE_CONT       = C.PT_CONTINUE
+	PTRACE_DETACH     = C.PT_DETACH
+	PTRACE_GETFPREGS  = C.PT_GETFPREGS
+	PTRACE_GETFSBASE  = C.PT_GETFSBASE
+	PTRACE_GETLWPLIST = C.PT_GETLWPLIST
+	PTRACE_GETNUMLWPS = C.PT_GETNUMLWPS
+	PTRACE_GETREGS    = C.PT_GETREGS
+	PTRACE_GETXSTATE  = C.PT_GETXSTATE
+	PTRACE_IO         = C.PT_IO
+	PTRACE_KILL       = C.PT_KILL
+	PTRACE_LWPEVENTS  = C.PT_LWP_EVENTS
+	PTRACE_LWPINFO    = C.PT_LWPINFO
+	PTRACE_SETFPREGS  = C.PT_SETFPREGS
+	PTRACE_SETREGS    = C.PT_SETREGS
+	PTRACE_SINGLESTEP = C.PT_STEP
+	PTRACE_TRACEME    = C.PT_TRACE_ME
 )
 
+const (
+	PIOD_READ_D  = C.PIOD_READ_D
+	PIOD_WRITE_D = C.PIOD_WRITE_D
+	PIOD_READ_I  = C.PIOD_READ_I
+	PIOD_WRITE_I = C.PIOD_WRITE_I
+)
 
+const (
+	PL_FLAG_BORN   = C.PL_FLAG_BORN
+	PL_FLAG_EXITED = C.PL_FLAG_EXITED
+	PL_FLAG_SI     = C.PL_FLAG_SI
+)
 
-type Kevent_t C.struct_kevent
+const (
+	TRAP_BRKPT = C.TRAP_BRKPT
+	TRAP_TRACE = C.TRAP_TRACE
+)
 
+type PtraceLwpInfoStruct C.struct_ptrace_lwpinfo
 
+type __Siginfo C.struct___siginfo
+
+type Sigset_t C.sigset_t
+
+type Reg C.struct_reg
+
+type FpReg C.struct_fpreg
+
+type PtraceIoDesc C.struct_ptrace_io_desc
+
+// Events (kqueue, kevent)
+
+type Kevent_t C.struct_kevent_freebsd11
+
+// Select
 
 type FdSet C.fd_set
 
-
+// Routing and interface messages
 
 const (
 	sizeofIfMsghdr         = C.sizeof_struct_if_msghdr
@@ -177,7 +332,7 @@ type RtMsghdr C.struct_rt_msghdr
 
 type RtMetrics C.struct_rt_metrics
 
-
+// Berkeley packet filter
 
 const (
 	SizeofBpfVersion    = C.sizeof_struct_bpf_version
@@ -203,13 +358,13 @@ type BpfHdr C.struct_bpf_hdr
 
 type BpfZbufHeader C.struct_bpf_zbuf_header
 
-
+// Terminal handling
 
 type Termios C.struct_termios
 
 type Winsize C.struct_winsize
 
-
+// fchmodat-like syscalls.
 
 const (
 	AT_FDCWD            = C.AT_FDCWD
@@ -218,7 +373,7 @@ const (
 	AT_SYMLINK_NOFOLLOW = C.AT_SYMLINK_NOFOLLOW
 )
 
-
+// poll
 
 type PollFd C.struct_pollfd
 
@@ -236,10 +391,10 @@ const (
 	POLLWRNORM   = C.POLLWRNORM
 )
 
-
+// Capabilities
 
 type CapRights C.struct_cap_rights
 
-
+// Uname
 
 type Utsname C.struct_utsname

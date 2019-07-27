@@ -27,7 +27,7 @@ var (
 		"toml: TOML array element cannot contain a table")
 	errNoKey = errors.New(
 		"toml: top-level values must be Go maps or structs")
-	errAnything = errors.New("") 
+	errAnything = errors.New("") // used in testing
 )
 
 var quotedReplacer = strings.NewReplacer(
@@ -38,21 +38,21 @@ var quotedReplacer = strings.NewReplacer(
 	"\\", "\\\\",
 )
 
-
-
-
-
+// Encoder controls the encoding of Go values to a TOML document to some
+// io.Writer.
+//
+// The indentation level can be controlled with the Indent field.
 type Encoder struct {
-	
+	// A single indentation level. By default it is two spaces.
 	Indent string
 
-	
+	// hasWritten is whether we have written any output to w yet.
 	hasWritten bool
 	w          *bufio.Writer
 }
 
-
-
+// NewEncoder returns a TOML encoder that encodes Go values to the io.Writer
+// given. By default, a single indentation level is 2 spaces.
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
 		w:      bufio.NewWriter(w),
@@ -60,29 +60,29 @@ func NewEncoder(w io.Writer) *Encoder {
 	}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Encode writes a TOML representation of the Go value to the underlying
+// io.Writer. If the value given cannot be encoded to a valid TOML document,
+// then an error is returned.
+//
+// The mapping between Go values and TOML values should be precisely the same
+// as for the Decode* functions. Similarly, the TextMarshaler interface is
+// supported by encoding the resulting bytes as strings. (If you want to write
+// arbitrary binary data then you will need to use something like base64 since
+// TOML does not have any binary types.)
+//
+// When encoding TOML hashes (i.e., Go maps or structs), keys without any
+// sub-hashes are encoded first.
+//
+// If a Go map is encoded, then its keys are sorted alphabetically for
+// deterministic output. More control over this behavior may be provided if
+// there is demand for it.
+//
+// Encoding Go values without a corresponding TOML representation---like map
+// types with non-string keys---will cause an error to be returned. Similarly
+// for mixed arrays/slices, arrays/slices with nil elements, embedded
+// non-struct types and nested slices containing maps or structs.
+// (e.g., [][]map[string]string is not allowed but []map[string]string is OK
+// and so is []map[string][]string.)
 func (enc *Encoder) Encode(v interface{}) error {
 	rv := eindirect(reflect.ValueOf(v))
 	if err := enc.safeEncode(Key([]string{}), rv); err != nil {
@@ -106,10 +106,10 @@ func (enc *Encoder) safeEncode(key Key, rv reflect.Value) (err error) {
 }
 
 func (enc *Encoder) encode(key Key, rv reflect.Value) {
-	
-	
-	
-	
+	// Special case. Time needs to be in ISO8601 format.
+	// Special case. If we can marshal the type to text, then we used that.
+	// Basically, this prevents the encoder for handling these types as
+	// generic structs (or whatever the underlying type of a TextMarshaler is).
 	switch rv.Interface().(type) {
 	case time.Time, TextMarshaler:
 		enc.keyEqElement(key, rv)
@@ -152,18 +152,18 @@ func (enc *Encoder) encode(key Key, rv reflect.Value) {
 	}
 }
 
-
-
+// eElement encodes any value that can be an array element (primitives and
+// arrays).
 func (enc *Encoder) eElement(rv reflect.Value) {
 	switch v := rv.Interface().(type) {
 	case time.Time:
-		
-		
-		
+		// Special case time.Time as a primitive. Has to come before
+		// TextMarshaler below because time.Time implements
+		// encoding.TextMarshaler, but we need to always use UTC.
 		enc.wf(v.UTC().Format("2006-01-02T15:04:05Z"))
 		return
 	case TextMarshaler:
-		
+		// Special case. Use text marshaler if it's available for this value.
 		if s, err := v.MarshalText(); err != nil {
 			encPanic(err)
 		} else {
@@ -195,8 +195,8 @@ func (enc *Encoder) eElement(rv reflect.Value) {
 	}
 }
 
-
-
+// By the TOML spec, all floats must have a decimal with at least one
+// number on either side.
 func floatAddDecimal(fstr string) string {
 	if !strings.Contains(fstr, ".") {
 		return fstr + ".0"
@@ -241,8 +241,8 @@ func (enc *Encoder) eArrayOfTables(key Key, rv reflect.Value) {
 func (enc *Encoder) eTable(key Key, rv reflect.Value) {
 	panicIfInvalidKey(key)
 	if len(key) == 1 {
-		
-		
+		// Output an extra newline between top-level tables.
+		// (The newline isn't written if nothing else has been written though.)
 		enc.newline()
 	}
 	if len(key) > 0 {
@@ -269,8 +269,8 @@ func (enc *Encoder) eMap(key Key, rv reflect.Value) {
 		encPanic(errNonString)
 	}
 
-	
-	
+	// Sort keys so that we have deterministic output. And write keys directly
+	// underneath this key first, before writing sub-structs or sub-maps.
 	var mapKeysDirect, mapKeysSub []string
 	for _, mapKey := range rv.MapKeys() {
 		k := mapKey.String()
@@ -286,7 +286,7 @@ func (enc *Encoder) eMap(key Key, rv reflect.Value) {
 		for _, mapKey := range mapKeys {
 			mrv := rv.MapIndex(reflect.ValueOf(mapKey))
 			if isNil(mrv) {
-				
+				// Don't write anything for nil fields.
 				continue
 			}
 			enc.encode(key.add(mapKey), mrv)
@@ -297,16 +297,16 @@ func (enc *Encoder) eMap(key Key, rv reflect.Value) {
 }
 
 func (enc *Encoder) eStruct(key Key, rv reflect.Value) {
-	
-	
-	
+	// Write keys for fields directly under this key first, because if we write
+	// a field that creates a new table, then all keys under it will be in that
+	// table (not the one we're writing here).
 	rt := rv.Type()
 	var fieldsDirect, fieldsSub [][]int
 	var addFields func(rt reflect.Type, rv reflect.Value, start []int)
 	addFields = func(rt reflect.Type, rv reflect.Value, start []int) {
 		for i := 0; i < rt.NumField(); i++ {
 			f := rt.Field(i)
-			
+			// skip unexported fields
 			if f.PkgPath != "" && !f.Anonymous {
 				continue
 			}
@@ -315,9 +315,9 @@ func (enc *Encoder) eStruct(key Key, rv reflect.Value) {
 				t := f.Type
 				switch t.Kind() {
 				case reflect.Struct:
-					
-					
-					
+					// Treat anonymous struct fields with
+					// tag names as though they are not
+					// anonymous, like encoding/json does.
 					if getOptions(f.Tag).name == "" {
 						addFields(t, frv, f.Index)
 						continue
@@ -330,8 +330,8 @@ func (enc *Encoder) eStruct(key Key, rv reflect.Value) {
 						}
 						continue
 					}
-					
-					
+					// Fall through to the normal field encoding logic below
+					// for non-struct anonymous fields.
 				}
 			}
 
@@ -349,7 +349,7 @@ func (enc *Encoder) eStruct(key Key, rv reflect.Value) {
 			sft := rt.FieldByIndex(fieldIndex)
 			sf := rv.FieldByIndex(fieldIndex)
 			if isNil(sf) {
-				
+				// Don't write anything for nil fields.
 				continue
 			}
 
@@ -375,13 +375,13 @@ func (enc *Encoder) eStruct(key Key, rv reflect.Value) {
 	writeFields(fieldsSub)
 }
 
+// tomlTypeName returns the TOML type name of the Go value's type. It is
+// used to determine whether the types of array elements are mixed (which is
+// forbidden). If the Go value is nil, then it is illegal for it to be an array
+// element, and valueIsNil is returned as true.
 
-
-
-
-
-
-
+// Returns the TOML type of a Go value. The type may be `nil`, which means
+// no concrete TOML type could be found.
 func tomlTypeOfGo(rv reflect.Value) tomlType {
 	if isNil(rv) || !rv.IsValid() {
 		return nil
@@ -421,11 +421,11 @@ func tomlTypeOfGo(rv reflect.Value) tomlType {
 	}
 }
 
-
-
-
-
-
+// tomlArrayType returns the element type of a TOML array. The type returned
+// may be nil if it cannot be determined (e.g., a nil slice or a zero length
+// slize). This function may also panic if it finds a type that cannot be
+// expressed in TOML (such as nil elements, heterogeneous arrays or directly
+// nested arrays of tables).
 func tomlArrayType(rv reflect.Value) tomlType {
 	if isNil(rv) || !rv.IsValid() || rv.Len() == 0 {
 		return nil
@@ -445,9 +445,9 @@ func tomlArrayType(rv reflect.Value) tomlType {
 			encPanic(errArrayMixedElementTypes)
 		}
 	}
-	
-	
-	
+	// If we have a nested array, then we must make sure that the nested
+	// array contains ONLY primitives.
+	// This checks arbitrarily nested arrays.
 	if typeEqual(firstType, tomlArray) || typeEqual(firstType, tomlArrayHash) {
 		nest := tomlArrayType(eindirect(rv.Index(0)))
 		if typeEqual(nest, tomlHash) || typeEqual(nest, tomlArrayHash) {
@@ -458,7 +458,7 @@ func tomlArrayType(rv reflect.Value) tomlType {
 }
 
 type tagOptions struct {
-	skip      bool 
+	skip      bool // "-"
 	name      string
 	omitempty bool
 	omitzero  bool

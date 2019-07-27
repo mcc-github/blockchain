@@ -1,12 +1,12 @@
+// Copyright 2018 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
-
-
-
+// Package httpguts provides functions implementing various details
+// of the HTTP specification.
+//
+// This package is shared by the standard library (which vendors it)
+// and x/net/http2. It comes with no API stability promise.
 package httpguts
 
 import (
@@ -14,9 +14,9 @@ import (
 	"strings"
 )
 
-
-
-
+// ValidTrailerHeader reports whether name is a valid header field name to appear
+// in trailers.
+// See RFC 7230, Section 4.1.2
 func ValidTrailerHeader(name string) bool {
 	name = textproto.CanonicalMIMEHeaderKey(name)
 	if strings.HasPrefix(name, "If-") || badTrailer[name] {

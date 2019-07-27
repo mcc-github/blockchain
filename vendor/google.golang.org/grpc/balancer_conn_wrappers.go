@@ -1,4 +1,20 @@
-
+/*
+ *
+ * Copyright 2017 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 package grpc
 
@@ -12,14 +28,14 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-
+// scStateUpdate contains the subConn and the new state it changed to.
 type scStateUpdate struct {
 	sc    balancer.SubConn
 	state connectivity.State
 }
 
-
-
+// scStateUpdateBuffer is an unbounded channel for scStateChangeTuple.
+// TODO make a general purpose buffer that uses interface{}.
 type scStateUpdateBuffer struct {
 	c       chan *scStateUpdate
 	mu      sync.Mutex
@@ -58,16 +74,16 @@ func (b *scStateUpdateBuffer) load() {
 	}
 }
 
-
-
-
-
+// get returns the channel that the scStateUpdate will be sent to.
+//
+// Upon receiving, the caller should call load to send another
+// scStateChangeTuple onto the channel if there is any.
 func (b *scStateUpdateBuffer) get() <-chan *scStateUpdate {
 	return b.c
 }
 
-
-
+// ccBalancerWrapper is a wrapper on top of cc for balancers.
+// It implements balancer.ClientConn interface.
 type ccBalancerWrapper struct {
 	cc               *ClientConn
 	balancer         balancer.Balancer
@@ -92,8 +108,8 @@ func newCCBalancerWrapper(cc *ClientConn, b balancer.Builder, bopts balancer.Bui
 	return ccb
 }
 
-
-
+// watcher balancer functions sequentially, so the balancer can be implemented
+// lock-free.
 func (ccb *ccBalancerWrapper) watcher() {
 	for {
 		select {
@@ -146,13 +162,13 @@ func (ccb *ccBalancerWrapper) close() {
 }
 
 func (ccb *ccBalancerWrapper) handleSubConnStateChange(sc balancer.SubConn, s connectivity.State) {
-	
-	
-	
-	
-	
-	
-	
+	// When updating addresses for a SubConn, if the address in use is not in
+	// the new addresses, the old ac will be tearDown() and a new ac will be
+	// created. tearDown() generates a state change with Shutdown state, we
+	// don't want the balancer to receive this state change. So before
+	// tearDown() on the old ac, ac.acbw (acWrapper) will be set to nil, and
+	// this function will be called with (nil, Shutdown). We don't need to call
+	// balancer method in this case.
 	if sc == nil {
 		return
 	}
@@ -164,7 +180,7 @@ func (ccb *ccBalancerWrapper) handleSubConnStateChange(sc balancer.SubConn, s co
 
 func (ccb *ccBalancerWrapper) updateResolverState(s resolver.State) {
 	if ccb.cc.curBalancerName != grpclbName {
-		
+		// Filter any grpclb addresses since we don't have the grpclb balancer.
 		for i := 0; i < len(s.Addresses); {
 			if s.Addresses[i].Type == resolver.GRPCLB {
 				copy(s.Addresses[i:], s.Addresses[i+1:])
@@ -222,11 +238,11 @@ func (ccb *ccBalancerWrapper) UpdateBalancerState(s connectivity.State, p balanc
 	if ccb.subConns == nil {
 		return
 	}
-	
-	
-	
-	
-	
+	// Update picker before updating state.  Even though the ordering here does
+	// not matter, it can lead to multiple calls of Pick in the common start-up
+	// case where we wait for ready and then perform an RPC.  If the picker is
+	// updated later, we could call the "connecting" picker when the state is
+	// updated, and then call the "ready" picker after the picker gets updated.
 	ccb.cc.blockingpicker.updatePicker(p)
 	ccb.cc.csMgr.updateState(s)
 }
@@ -239,8 +255,8 @@ func (ccb *ccBalancerWrapper) Target() string {
 	return ccb.cc.target
 }
 
-
-
+// acBalancerWrapper is a wrapper on top of ac for balancers.
+// It implements balancer.SubConn interface.
 type acBalancerWrapper struct {
 	mu sync.Mutex
 	ac *addrConn
@@ -257,11 +273,11 @@ func (acbw *acBalancerWrapper) UpdateAddresses(addrs []resolver.Address) {
 		cc := acbw.ac.cc
 		opts := acbw.ac.scopts
 		acbw.ac.mu.Lock()
-		
-		
-		
-		
-		
+		// Set old ac.acbw to nil so the Shutdown state update will be ignored
+		// by balancer.
+		//
+		// TODO(bar) the state transition could be wrong when tearDown() old ac
+		// and creating new ac, fix the transition.
 		acbw.ac.acbw = nil
 		acbw.ac.mu.Unlock()
 		acState := acbw.ac.getState()

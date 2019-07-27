@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-
+// Annotations for Bash completion.
 const (
 	BashCompFilenameExt     = "cobra_annotation_bash_completion_filename_extensions"
 	BashCompCustom          = "cobra_annotation_bash_completion_custom"
@@ -129,7 +129,13 @@ __%[1]s_handle_reply()
     fi
 
     if [[ ${#COMPREPLY[@]} -eq 0 ]]; then
-        declare -F __custom_func >/dev/null && __custom_func
+		if declare -F __%[1]s_custom_func >/dev/null; then
+			# try command name qualified custom func
+			__%[1]s_custom_func
+		else
+			# otherwise fall back to unqualified for compatibility
+			declare -F __custom_func >/dev/null && __custom_func
+		fi
     fi
 
     # available in bash-completion >= 2, not always present on macOS
@@ -193,7 +199,8 @@ __%[1]s_handle_flag()
     fi
 
     # skip the argument to a two word flag
-    if __%[1]s_contains_word "${words[c]}" "${two_word_flags[@]}"; then
+    if [[ ${words[c]} != *"="* ]] && __%[1]s_contains_word "${words[c]}" "${two_word_flags[@]}"; then
+			  __%[1]s_debug "${FUNCNAME[0]}: found a flag ${words[c]}, skip the next argument"
         c=$((c+1))
         # if we are looking for a flags value, don't show commands
         if [[ $c -eq $cword ]]; then
@@ -225,12 +232,12 @@ __%[1]s_handle_command()
 
     local next_command
     if [[ -n ${last_command} ]]; then
-        next_command="_${last_command}_${words[c]
+        next_command="_${last_command}_${words[c]//:/__}"
     else
         if [[ $c -eq 0 ]]; then
             next_command="_%[1]s_root_command"
         else
-            next_command="_${words[c]
+            next_command="_${words[c]//:/__}"
         fi
     fi
     c=$((c+1))
@@ -373,6 +380,10 @@ func writeFlag(buf *bytes.Buffer, flag *pflag.Flag, cmd *Command) {
 	}
 	format += "\")\n"
 	buf.WriteString(fmt.Sprintf(format, name))
+	if len(flag.NoOptDefVal) == 0 {
+		format = "    two_word_flags+=(\"--%s\")\n"
+		buf.WriteString(fmt.Sprintf(format, name))
+	}
 	writeFlagHandler(buf, "--"+name, flag.Annotations, cmd)
 }
 
@@ -506,7 +517,7 @@ func gen(buf *bytes.Buffer, cmd *Command) {
 	buf.WriteString("}\n\n")
 }
 
-
+// GenBashCompletion generates bash completion file and writes to the passed writer.
 func (c *Command) GenBashCompletion(w io.Writer) error {
 	buf := new(bytes.Buffer)
 	writePreamble(buf, c.Name())
@@ -524,7 +535,7 @@ func nonCompletableFlag(flag *pflag.Flag) bool {
 	return flag.Hidden || len(flag.Deprecated) > 0
 }
 
-
+// GenBashCompletionFile generates bash completion file.
 func (c *Command) GenBashCompletionFile(filename string) error {
 	outFile, err := os.Create(filename)
 	if err != nil {
@@ -533,52 +544,4 @@ func (c *Command) GenBashCompletionFile(filename string) error {
 	defer outFile.Close()
 
 	return c.GenBashCompletion(outFile)
-}
-
-
-
-func (c *Command) MarkFlagRequired(name string) error {
-	return MarkFlagRequired(c.Flags(), name)
-}
-
-
-
-func (c *Command) MarkPersistentFlagRequired(name string) error {
-	return MarkFlagRequired(c.PersistentFlags(), name)
-}
-
-
-
-func MarkFlagRequired(flags *pflag.FlagSet, name string) error {
-	return flags.SetAnnotation(name, BashCompOneRequiredFlag, []string{"true"})
-}
-
-
-
-func (c *Command) MarkFlagFilename(name string, extensions ...string) error {
-	return MarkFlagFilename(c.Flags(), name, extensions...)
-}
-
-
-
-func (c *Command) MarkFlagCustom(name string, f string) error {
-	return MarkFlagCustom(c.Flags(), name, f)
-}
-
-
-
-func (c *Command) MarkPersistentFlagFilename(name string, extensions ...string) error {
-	return MarkFlagFilename(c.PersistentFlags(), name, extensions...)
-}
-
-
-
-func MarkFlagFilename(flags *pflag.FlagSet, name string, extensions ...string) error {
-	return flags.SetAnnotation(name, BashCompFilenameExt, extensions)
-}
-
-
-
-func MarkFlagCustom(flags *pflag.FlagSet, name string, f string) error {
-	return flags.SetAnnotation(name, BashCompCustom, []string{f})
 }

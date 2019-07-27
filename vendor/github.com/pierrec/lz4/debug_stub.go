@@ -1,4 +1,4 @@
-
+// +build !lz4debug
 
 package lz4
 

@@ -1,9 +1,9 @@
+// Copyright 2015 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-package timeseries 
+// Package timeseries implements a time series structure for stats collection.
+package timeseries // import "golang.org/x/net/internal/timeseries"
 
 import (
 	"fmt"
@@ -23,10 +23,10 @@ var timeSeriesResolutions = []time.Duration{
 	10 * time.Minute,
 	1 * time.Hour,
 	6 * time.Hour,
-	24 * time.Hour,          
-	7 * 24 * time.Hour,      
-	4 * 7 * 24 * time.Hour,  
-	16 * 7 * 24 * time.Hour, 
+	24 * time.Hour,          // 1 day
+	7 * 24 * time.Hour,      // 1 week
+	4 * 7 * 24 * time.Hour,  // 4 weeks
+	16 * 7 * 24 * time.Hour, // 16 weeks
 }
 
 var minuteHourSeriesResolutions = []time.Duration{
@@ -34,27 +34,27 @@ var minuteHourSeriesResolutions = []time.Duration{
 	1 * time.Minute,
 }
 
-
+// An Observable is a kind of data that can be aggregated in a time series.
 type Observable interface {
-	Multiply(ratio float64)    
-	Add(other Observable)      
-	Clear()                    
-	CopyFrom(other Observable) 
+	Multiply(ratio float64)    // Multiplies the data in self by a given ratio
+	Add(other Observable)      // Adds the data from a different observation to self
+	Clear()                    // Clears the observation so it can be reused.
+	CopyFrom(other Observable) // Copies the contents of a given observation to self
 }
 
-
+// Float attaches the methods of Observable to a float64.
 type Float float64
 
-
+// NewFloat returns a Float.
 func NewFloat() Observable {
 	f := Float(0)
 	return &f
 }
 
-
+// String returns the float as a string.
 func (f *Float) String() string { return fmt.Sprintf("%g", f.Value()) }
 
-
+// Value returns the float's value.
 func (f *Float) Value() float64 { return float64(*f) }
 
 func (f *Float) Multiply(ratio float64) { *f *= Float(ratio) }
@@ -71,7 +71,7 @@ func (f *Float) CopyFrom(other Observable) {
 	*f = *o
 }
 
-
+// A Clock tells the current time.
 type Clock interface {
 	Time() time.Time
 }
@@ -82,16 +82,16 @@ var defaultClockInstance defaultClock
 
 func (defaultClock) Time() time.Time { return time.Now() }
 
-
-
-
+// Information kept per level. Each level consists of a circular list of
+// observations. The start of the level may be derived from end and the
+// len(buckets) * sizeInMillis.
 type tsLevel struct {
-	oldest   int               
-	newest   int               
-	end      time.Time         
-	size     time.Duration     
-	buckets  []Observable      
-	provider func() Observable 
+	oldest   int               // index to oldest bucketed Observable
+	newest   int               // index to newest bucketed Observable
+	end      time.Time         // end timestamp for this level
+	size     time.Duration     // duration of the bucketed Observable
+	buckets  []Observable      // collections of observations
+	provider func() Observable // used for creating new Observable
 }
 
 func (l *tsLevel) Clear() {
@@ -112,27 +112,27 @@ func (l *tsLevel) InitLevel(size time.Duration, numBuckets int, f func() Observa
 	l.buckets = make([]Observable, numBuckets)
 }
 
+// Keeps a sequence of levels. Each level is responsible for storing data at
+// a given resolution. For example, the first level stores data at a one
+// minute resolution while the second level stores data at a one hour
+// resolution.
 
-
-
-
-
-
-
-
+// Each level is represented by a sequence of buckets. Each bucket spans an
+// interval equal to the resolution of the level. New observations are added
+// to the last bucket.
 type timeSeries struct {
-	provider    func() Observable 
-	numBuckets  int               
-	levels      []*tsLevel        
-	lastAdd     time.Time         
-	total       Observable        
-	clock       Clock             
-	pending     Observable        
-	pendingTime time.Time         
-	dirty       bool              
+	provider    func() Observable // make more Observable
+	numBuckets  int               // number of buckets in each level
+	levels      []*tsLevel        // levels of bucketed Observable
+	lastAdd     time.Time         // time of last Observable tracked
+	total       Observable        // convenient aggregation of all Observable
+	clock       Clock             // Clock for getting current time
+	pending     Observable        // observations not yet bucketed
+	pendingTime time.Time         // what time are we keeping in pending
+	dirty       bool              // if there are pending observations
 }
 
-
+// init initializes a level according to the supplied criteria.
 func (ts *timeSeries) init(resolutions []time.Duration, f func() Observable, numBuckets int, clock Clock) {
 	ts.provider = f
 	ts.numBuckets = numBuckets
@@ -152,7 +152,7 @@ func (ts *timeSeries) init(resolutions []time.Duration, f func() Observable, num
 	ts.Clear()
 }
 
-
+// Clear removes all observations from the time series.
 func (ts *timeSeries) Clear() {
 	ts.lastAdd = time.Time{}
 	ts.total = ts.resetObservation(ts.total)
@@ -165,12 +165,12 @@ func (ts *timeSeries) Clear() {
 	}
 }
 
-
+// Add records an observation at the current time.
 func (ts *timeSeries) Add(observation Observable) {
 	ts.AddWithTime(observation, ts.clock.Time())
 }
 
-
+// AddWithTime records an observation at the specified time.
 func (ts *timeSeries) AddWithTime(observation Observable, t time.Time) {
 
 	smallBucketDuration := ts.levels[0].size
@@ -186,9 +186,9 @@ func (ts *timeSeries) AddWithTime(observation Observable, t time.Time) {
 		ts.pending.CopyFrom(observation)
 		ts.dirty = true
 	} else if t.After(ts.pendingTime.Add(-1 * smallBucketDuration)) {
-		
-		
-		
+		// The observation is close enough to go into the pending bucket.
+		// This compensates for clock skewing and small scheduling delays
+		// by letting the update stay in the fast path.
 		ts.pending.Add(observation)
 		ts.dirty = true
 	} else {
@@ -196,7 +196,7 @@ func (ts *timeSeries) AddWithTime(observation Observable, t time.Time) {
 	}
 }
 
-
+// mergeValue inserts the observation at the specified time in the past into all levels.
 func (ts *timeSeries) mergeValue(observation Observable, t time.Time) {
 	for _, level := range ts.levels {
 		index := (ts.numBuckets - 1) - int(level.end.Sub(t)/level.size)
@@ -211,7 +211,7 @@ func (ts *timeSeries) mergeValue(observation Observable, t time.Time) {
 	ts.total.Add(observation)
 }
 
-
+// mergePendingUpdates applies the pending updates into all levels.
 func (ts *timeSeries) mergePendingUpdates() {
 	if ts.dirty {
 		ts.mergeValue(ts.pending, ts.pendingTime)
@@ -220,8 +220,8 @@ func (ts *timeSeries) mergePendingUpdates() {
 	}
 }
 
-
-
+// advance cycles the buckets at each level until the latest bucket in
+// each level can hold the time specified.
 func (ts *timeSeries) advance(t time.Time) {
 	if !t.After(ts.levels[0].end) {
 		return
@@ -232,8 +232,8 @@ func (ts *timeSeries) advance(t time.Time) {
 			break
 		}
 
-		
-		
+		// If the time is sufficiently far, just clear the level and advance
+		// directly.
 		if !t.Before(level.end.Add(level.size * time.Duration(ts.numBuckets))) {
 			for _, b := range level.buckets {
 				ts.resetObservation(b)
@@ -252,7 +252,7 @@ func (ts *timeSeries) advance(t time.Time) {
 	}
 }
 
-
+// Latest returns the sum of the num latest buckets from the level.
 func (ts *timeSeries) Latest(level, num int) Observable {
 	now := ts.clock.Time()
 	if ts.levels[0].end.Before(now) {
@@ -278,7 +278,7 @@ func (ts *timeSeries) Latest(level, num int) Observable {
 	return result
 }
 
-
+// LatestBuckets returns a copy of the num latest buckets from level.
 func (ts *timeSeries) LatestBuckets(level, num int) []Observable {
 	if level < 0 || level > len(ts.levels) {
 		log.Print("timeseries: bad level argument: ", level)
@@ -315,7 +315,7 @@ func (ts *timeSeries) LatestBuckets(level, num int) []Observable {
 	return results
 }
 
-
+// ScaleBy updates observations by scaling by factor.
 func (ts *timeSeries) ScaleBy(factor float64) {
 	for _, l := range ts.levels {
 		for i := 0; i < ts.numBuckets; i++ {
@@ -327,30 +327,30 @@ func (ts *timeSeries) ScaleBy(factor float64) {
 	ts.pending.Multiply(factor)
 }
 
-
-
-
+// Range returns the sum of observations added over the specified time range.
+// If start or finish times don't fall on bucket boundaries of the same
+// level, then return values are approximate answers.
 func (ts *timeSeries) Range(start, finish time.Time) Observable {
 	return ts.ComputeRange(start, finish, 1)[0]
 }
 
-
+// Recent returns the sum of observations from the last delta.
 func (ts *timeSeries) Recent(delta time.Duration) Observable {
 	now := ts.clock.Time()
 	return ts.Range(now.Add(-delta), now)
 }
 
-
+// Total returns the total of all observations.
 func (ts *timeSeries) Total() Observable {
 	ts.mergePendingUpdates()
 	return ts.total
 }
 
-
-
-
-
-
+// ComputeRange computes a specified number of values into a slice using
+// the observations recorded over the specified time period. The return
+// values are approximate if the start or finish times don't fall on the
+// bucket boundaries at the same level or if the number of buckets spanning
+// the range is not an integral multiple of num.
 func (ts *timeSeries) ComputeRange(start, finish time.Time, num int) []Observable {
 	if start.After(finish) {
 		log.Printf("timeseries: start > finish, %v>%v", start, finish)
@@ -371,16 +371,16 @@ func (ts *timeSeries) ComputeRange(start, finish time.Time, num int) []Observabl
 		}
 	}
 
-	
-	
-	
+	// Failed to find a level that covers the desired range. So just
+	// extract from the last level, even if it doesn't cover the entire
+	// desired range.
 	ts.extract(ts.levels[len(ts.levels)-1], start, finish, num, results)
 
 	return results
 }
 
-
-
+// RecentList returns the specified number of values in slice over the most
+// recent time period of the specified range.
 func (ts *timeSeries) RecentList(delta time.Duration, num int) []Observable {
 	if delta < 0 {
 		return nil
@@ -389,8 +389,8 @@ func (ts *timeSeries) RecentList(delta time.Duration, num int) []Observable {
 	return ts.ComputeRange(now.Add(-delta), now, num)
 }
 
-
-
+// extract returns a slice of specified number of observations from a given
+// level over a given range.
 func (ts *timeSeries) extract(l *tsLevel, start, finish time.Time, num int, results []Observable) {
 	ts.mergePendingUpdates()
 
@@ -401,18 +401,18 @@ func (ts *timeSeries) extract(l *tsLevel, start, finish time.Time, num int, resu
 
 	srcIndex := 0
 
-	
+	// Where should scanning start?
 	if dstStart.After(srcStart) {
 		advance := dstStart.Sub(srcStart) / srcInterval
 		srcIndex += int(advance)
 		srcStart = srcStart.Add(advance * srcInterval)
 	}
 
-	
-	
-	
-	
-	
+	// The i'th value is computed as show below.
+	// interval = (finish/start)/num
+	// i'th value = sum of observation in range
+	//   [ start + i       * interval,
+	//     start + (i + 1) * interval )
 	for i := 0; i < num; i++ {
 		results[i] = ts.resetObservation(results[i])
 		dstEnd := dstStart.Add(dstInterval)
@@ -425,12 +425,12 @@ func (ts *timeSeries) extract(l *tsLevel, start, finish time.Time, num int, resu
 			if !srcEnd.Before(dstStart) {
 				srcValue := l.buckets[(srcIndex+l.oldest)%ts.numBuckets]
 				if !srcStart.Before(dstStart) && !srcEnd.After(dstEnd) {
-					
+					// dst completely contains src.
 					if srcValue != nil {
 						results[i].Add(srcValue)
 					}
 				} else {
-					
+					// dst partially overlaps src.
 					overlapStart := maxTime(srcStart, dstStart)
 					overlapEnd := minTime(srcEnd, dstEnd)
 					base := srcEnd.Sub(srcStart)
@@ -455,7 +455,7 @@ func (ts *timeSeries) extract(l *tsLevel, start, finish time.Time, num int, resu
 	}
 }
 
-
+// resetObservation clears the content so the struct may be reused.
 func (ts *timeSeries) resetObservation(observation Observable) Observable {
 	if observation == nil {
 		observation = ts.provider()
@@ -465,36 +465,36 @@ func (ts *timeSeries) resetObservation(observation Observable) Observable {
 	return observation
 }
 
-
+// TimeSeries tracks data at granularities from 1 second to 16 weeks.
 type TimeSeries struct {
 	timeSeries
 }
 
-
+// NewTimeSeries creates a new TimeSeries using the function provided for creating new Observable.
 func NewTimeSeries(f func() Observable) *TimeSeries {
 	return NewTimeSeriesWithClock(f, defaultClockInstance)
 }
 
-
-
+// NewTimeSeriesWithClock creates a new TimeSeries using the function provided for creating new Observable and the clock for
+// assigning timestamps.
 func NewTimeSeriesWithClock(f func() Observable, clock Clock) *TimeSeries {
 	ts := new(TimeSeries)
 	ts.timeSeries.init(timeSeriesResolutions, f, timeSeriesNumBuckets, clock)
 	return ts
 }
 
-
+// MinuteHourSeries tracks data at granularities of 1 minute and 1 hour.
 type MinuteHourSeries struct {
 	timeSeries
 }
 
-
+// NewMinuteHourSeries creates a new MinuteHourSeries using the function provided for creating new Observable.
 func NewMinuteHourSeries(f func() Observable) *MinuteHourSeries {
 	return NewMinuteHourSeriesWithClock(f, defaultClockInstance)
 }
 
-
-
+// NewMinuteHourSeriesWithClock creates a new MinuteHourSeries using the function provided for creating new Observable and the clock for
+// assigning timestamps.
 func NewMinuteHourSeriesWithClock(f func() Observable, clock Clock) *MinuteHourSeries {
 	ts := new(MinuteHourSeries)
 	ts.timeSeries.init(minuteHourSeriesResolutions, f,

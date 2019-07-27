@@ -1,22 +1,22 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright (c) 2016 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 package zapcore
 
@@ -32,7 +32,7 @@ import (
 	"go.uber.org/zap/internal/bufferpool"
 )
 
-
+// For JSON-escaping; see jsonEncoder.safeAddString below.
 const _hex = "0123456789abcdef"
 
 var _jsonPool = sync.Pool{New: func() interface{} {
@@ -59,24 +59,24 @@ func putJSONEncoder(enc *jsonEncoder) {
 type jsonEncoder struct {
 	*EncoderConfig
 	buf            *buffer.Buffer
-	spaced         bool 
+	spaced         bool // include spaces after colons and commas
 	openNamespaces int
 
-	
+	// for encoding generic values by reflection
 	reflectBuf *buffer.Buffer
 	reflectEnc *json.Encoder
 }
 
-
-
-
-
-
-
-
-
-
-
+// NewJSONEncoder creates a fast, low-allocation JSON encoder. The encoder
+// appropriately escapes all field keys and values.
+//
+// Note that the encoder doesn't deduplicate keys, so it's possible to produce
+// a message like
+//   {"foo":"bar","foo":"baz"}
+// This is permitted by the JSON specification, but not encouraged. Many
+// libraries will ignore duplicate key-value pairs (typically keeping the last
+// pair) when unmarshaling, but users should attempt to avoid adding duplicate
+// keys.
 func NewJSONEncoder(cfg EncoderConfig) Encoder {
 	return newJSONEncoder(cfg, false)
 }
@@ -137,6 +137,9 @@ func (enc *jsonEncoder) resetReflectBuf() {
 	if enc.reflectBuf == nil {
 		enc.reflectBuf = bufferpool.Get()
 		enc.reflectEnc = json.NewEncoder(enc.reflectBuf)
+
+		// For consistency with our custom JSON encoder.
+		enc.reflectEnc.SetEscapeHTML(false)
 	} else {
 		enc.reflectBuf.Reset()
 	}
@@ -205,11 +208,11 @@ func (enc *jsonEncoder) AppendByteString(val []byte) {
 
 func (enc *jsonEncoder) AppendComplex128(val complex128) {
 	enc.addElementSeparator()
-	
+	// Cast to a platform-independent, fixed-size type.
 	r, i := float64(real(val)), float64(imag(val))
 	enc.buf.AppendByte('"')
-	
-	
+	// Because we're always in a quoted string, we can use strconv without
+	// special-casing NaN and +/-Inf.
 	enc.buf.AppendFloat(r, 64)
 	enc.buf.AppendByte('+')
 	enc.buf.AppendFloat(i, 64)
@@ -221,8 +224,8 @@ func (enc *jsonEncoder) AppendDuration(val time.Duration) {
 	cur := enc.buf.Len()
 	enc.EncodeDuration(val, enc)
 	if cur == enc.buf.Len() {
-		
-		
+		// User-supplied EncodeDuration is a no-op. Fall back to nanoseconds to keep
+		// JSON valid.
 		enc.AppendInt64(int64(val))
 	}
 }
@@ -255,8 +258,8 @@ func (enc *jsonEncoder) AppendTime(val time.Time) {
 	cur := enc.buf.Len()
 	enc.EncodeTime(val, enc)
 	if cur == enc.buf.Len() {
-		
-		
+		// User-supplied EncodeTime is a no-op. Fall back to nanos since epoch to keep
+		// output JSON valid.
 		enc.AppendInt64(val.UnixNano())
 	}
 }
@@ -314,8 +317,8 @@ func (enc *jsonEncoder) EncodeEntry(ent Entry, fields []Field) (*buffer.Buffer, 
 		cur := final.buf.Len()
 		final.EncodeLevel(ent.Level, final)
 		if cur == final.buf.Len() {
-			
-			
+			// User-supplied EncodeLevel was a no-op. Fall back to strings to keep
+			// output JSON valid.
 			final.AppendString(ent.Level.String())
 		}
 	}
@@ -327,16 +330,16 @@ func (enc *jsonEncoder) EncodeEntry(ent Entry, fields []Field) (*buffer.Buffer, 
 		cur := final.buf.Len()
 		nameEncoder := final.EncodeName
 
-		
-		
+		// if no name encoder provided, fall back to FullNameEncoder for backwards
+		// compatibility
 		if nameEncoder == nil {
 			nameEncoder = FullNameEncoder
 		}
 
 		nameEncoder(ent.LoggerName, final)
 		if cur == final.buf.Len() {
-			
-			
+			// User-supplied EncodeName was a no-op. Fall back to strings to
+			// keep output JSON valid.
 			final.AppendString(ent.LoggerName)
 		}
 	}
@@ -345,8 +348,8 @@ func (enc *jsonEncoder) EncodeEntry(ent Entry, fields []Field) (*buffer.Buffer, 
 		cur := final.buf.Len()
 		final.EncodeCaller(ent.Caller, final)
 		if cur == final.buf.Len() {
-			
-			
+			// User-supplied EncodeCaller was a no-op. Fall back to strings to
+			// keep output JSON valid.
 			final.AppendString(ent.Caller.String())
 		}
 	}
@@ -426,9 +429,9 @@ func (enc *jsonEncoder) appendFloat(val float64, bitSize int) {
 	}
 }
 
-
-
-
+// safeAddString JSON-escapes a string and appends it to the internal buffer.
+// Unlike the standard library's encoder, it doesn't attempt to protect the
+// user from browser vulnerabilities or JSONP-related problems.
 func (enc *jsonEncoder) safeAddString(s string) {
 	for i := 0; i < len(s); {
 		if enc.tryAddRuneSelf(s[i]) {
@@ -445,7 +448,7 @@ func (enc *jsonEncoder) safeAddString(s string) {
 	}
 }
 
-
+// safeAddByteString is no-alloc equivalent of safeAddString(string(s)) for s []byte.
 func (enc *jsonEncoder) safeAddByteString(s []byte) {
 	for i := 0; i < len(s); {
 		if enc.tryAddRuneSelf(s[i]) {
@@ -462,7 +465,7 @@ func (enc *jsonEncoder) safeAddByteString(s []byte) {
 	}
 }
 
-
+// tryAddRuneSelf appends b if it is valid UTF-8 character represented in a single byte.
 func (enc *jsonEncoder) tryAddRuneSelf(b byte) bool {
 	if b >= utf8.RuneSelf {
 		return false
@@ -485,7 +488,7 @@ func (enc *jsonEncoder) tryAddRuneSelf(b byte) bool {
 		enc.buf.AppendByte('\\')
 		enc.buf.AppendByte('t')
 	default:
-		
+		// Encode bytes < 0x20, except for the escape sequences above.
 		enc.buf.AppendString(`\u00`)
 		enc.buf.AppendByte(_hex[b>>4])
 		enc.buf.AppendByte(_hex[b&0xF])

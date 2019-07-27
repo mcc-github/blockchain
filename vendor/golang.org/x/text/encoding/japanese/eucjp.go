@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package japanese
 
@@ -13,7 +13,7 @@ import (
 	"golang.org/x/text/transform"
 )
 
-
+// EUCJP is the EUC-JP encoding.
 var EUCJP encoding.Encoding = &eucJP
 
 var eucJP = internal.Encoding{
@@ -24,7 +24,7 @@ var eucJP = internal.Encoding{
 
 type eucJPDecoder struct{ transform.NopResetter }
 
-
+// See https://encoding.spec.whatwg.org/#euc-jp-decoder.
 func (eucJPDecoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err error) {
 	r, size := rune(0), 0
 loop:
@@ -126,24 +126,24 @@ func (eucJPEncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 	for ; nSrc < len(src); nSrc += size {
 		r = rune(src[nSrc])
 
-		
+		// Decode a 1-byte rune.
 		if r < utf8.RuneSelf {
 			size = 1
 
 		} else {
-			
+			// Decode a multi-byte rune.
 			r, size = utf8.DecodeRune(src[nSrc:])
 			if size == 1 {
-				
-				
-				
+				// All valid runes of size 1 (those below utf8.RuneSelf) were
+				// handled above. We have invalid UTF-8 or we haven't seen the
+				// full character yet.
 				if !atEOF && !utf8.FullRune(src[nSrc:]) {
 					err = transform.ErrShortSrc
 					break
 				}
 			}
 
-			
+			// func init checks that the switch covers all tables.
 			switch {
 			case encode0Low <= r && r < encode0High:
 				if r = rune(encode0[r-encode0Low]); r != 0 {
@@ -218,7 +218,7 @@ func (eucJPEncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 }
 
 func init() {
-	
+	// Check that the hard-coded encode switch covers all tables.
 	if numEncodeTables != 6 {
 		panic("bad numEncodeTables")
 	}

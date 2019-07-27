@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package japanese
 
@@ -13,7 +13,7 @@ import (
 	"golang.org/x/text/transform"
 )
 
-
+// ISO2022JP is the ISO-2022-JP encoding.
 var ISO2022JP encoding.Encoding = &iso2022JP
 
 var iso2022JP = internal.Encoding{
@@ -59,7 +59,7 @@ func (d *iso2022JPDecoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc in
 				if !atEOF {
 					return nDst, nSrc, transform.ErrShortSrc
 				}
-				
+				// TODO: is it correct to only skip 1??
 				r, size = '\ufffd', 1
 				goto write
 			}
@@ -67,10 +67,10 @@ func (d *iso2022JPDecoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc in
 			c1 := src[nSrc+1]
 			c2 := src[nSrc+2]
 			switch {
-			case c1 == '$' && (c2 == '@' || c2 == 'B'): 
+			case c1 == '$' && (c2 == '@' || c2 == 'B'): // 0x24 {0x40, 0x42}
 				*d = jis0208State
 				continue
-			case c1 == '$' && c2 == '(': 
+			case c1 == '$' && c2 == '(': // 0x24 0x28
 				if nSrc+3 >= len(src) {
 					if !atEOF {
 						return nDst, nSrc, transform.ErrShortSrc
@@ -83,10 +83,10 @@ func (d *iso2022JPDecoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc in
 					*d = jis0212State
 					continue
 				}
-			case c1 == '(' && (c2 == 'B' || c2 == 'J'): 
+			case c1 == '(' && (c2 == 'B' || c2 == 'J'): // 0x28 {0x42, 0x4A}
 				*d = asciiState
 				continue
-			case c1 == '(' && c2 == 'I': 
+			case c1 == '(' && c2 == 'I': // 0x28 0x49
 				*d = katakanaState
 				continue
 			}
@@ -154,32 +154,32 @@ func (e *iso2022JPEncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc in
 	for ; nSrc < len(src); nSrc += size {
 		r = rune(src[nSrc])
 
-		
+		// Decode a 1-byte rune.
 		if r < utf8.RuneSelf {
 			size = 1
 
 		} else {
-			
+			// Decode a multi-byte rune.
 			r, size = utf8.DecodeRune(src[nSrc:])
 			if size == 1 {
-				
-				
-				
+				// All valid runes of size 1 (those below utf8.RuneSelf) were
+				// handled above. We have invalid UTF-8 or we haven't seen the
+				// full character yet.
 				if !atEOF && !utf8.FullRune(src[nSrc:]) {
 					err = transform.ErrShortSrc
 					break
 				}
 			}
 
-			
-			
-			
-			
-			
-			
-			
-			
-			
+			// func init checks that the switch covers all tables.
+			//
+			// http://encoding.spec.whatwg.org/#iso-2022-jp says that "the index jis0212
+			// is not used by the iso-2022-jp encoder due to lack of widespread support".
+			//
+			// TODO: do we have to special-case U+00A5 and U+203E, as per
+			// http://encoding.spec.whatwg.org/#iso-2022-jp
+			// Doing so would mean that "\u00a5" would not be preserved
+			// after an encode-decode round trip.
 			switch {
 			case encode0Low <= r && r < encode0High:
 				if r = rune(encode0[r-encode0Low]); r>>tableShift == jis0208 {
@@ -210,8 +210,8 @@ func (e *iso2022JPEncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc in
 				}
 			}
 
-			
-			
+			// Switch back to ASCII state in case of error so that an ASCII
+			// replacement character can be written in the correct state.
 			if *e != asciiState {
 				if nDst+3 > len(dst) {
 					err = transform.ErrShortDst

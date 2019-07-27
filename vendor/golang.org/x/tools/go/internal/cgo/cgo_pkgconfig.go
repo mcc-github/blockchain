@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package cgo
 
@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-
+// pkgConfig runs pkg-config with the specified arguments and returns the flags it prints.
 func pkgConfig(mode string, pkgs []string) (flags []string, err error) {
 	cmd := exec.Command("pkg-config", append([]string{mode}, pkgs...)...)
 	out, err := cmd.CombinedOutput()
@@ -29,8 +29,8 @@ func pkgConfig(mode string, pkgs []string) (flags []string, err error) {
 	return
 }
 
-
-
+// pkgConfigFlags calls pkg-config if needed and returns the cflags
+// needed to build the package.
 func pkgConfigFlags(p *build.Package) (cflags []string, err error) {
 	if len(p.CgoPkgConfig) == 0 {
 		return nil, nil

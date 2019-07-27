@@ -1,10 +1,10 @@
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// +build ignore
 
-
-
-
-
-
+// This tool generates types for the various XML formats of CLDR.
 package main
 
 import (
@@ -61,7 +61,7 @@ func main() {
 			}
 		}
 	}
-	fmt.Fprintln(&buf, "
+	fmt.Fprintln(&buf, "// Version is the version of CLDR from which the XML definitions are generated.")
 	fmt.Fprintf(&buf, "const Version = %q\n", version)
 
 	gen.WriteGoFile(*outputFile, "cldr", buf.Bytes())
@@ -74,16 +74,16 @@ func failOnError(err error) {
 	}
 }
 
-
+// configuration data per DTD type
 type dtd struct {
-	file string   
-	root string   
-	top  []string 
+	file string   // base file name
+	root string   // Go name of the root XML element
+	top  []string // create a different type for this section
 
-	skipElem    []string 
-	skipAttr    []string 
-	predefined  []string 
-	forceRepeat []string 
+	skipElem    []string // hard-coded or deprecated elements
+	skipAttr    []string // attributes to exclude
+	predefined  []string // hard-coded elements exist of the form <name>Elem
+	forceRepeat []string // elements to make slices despite DTD
 }
 
 var files = []dtd{
@@ -92,7 +92,7 @@ var files = []dtd{
 		root: "LDMLBCP47",
 		top:  []string{"ldmlBCP47"},
 		skipElem: []string{
-			"cldrVersion", 
+			"cldrVersion", // deprecated, not used
 		},
 	},
 	{
@@ -100,10 +100,10 @@ var files = []dtd{
 		root: "SupplementalData",
 		top:  []string{"supplementalData"},
 		skipElem: []string{
-			"cldrVersion", 
+			"cldrVersion", // deprecated, not used
 		},
 		forceRepeat: []string{
-			"plurals", 
+			"plurals", // data defined in plurals.xml and ordinals.xml
 		},
 	},
 	{
@@ -113,14 +113,14 @@ var files = []dtd{
 			"ldml", "collation", "calendar", "timeZoneNames", "localeDisplayNames", "numbers",
 		},
 		skipElem: []string{
-			"cp",       
-			"special",  
-			"fallback", 
-			"alias",    
-			"default",  
+			"cp",       // not used anywhere
+			"special",  // not used anywhere
+			"fallback", // deprecated, not used
+			"alias",    // in Common
+			"default",  // in Common
 		},
 		skipAttr: []string{
-			"hiraganaQuarternary", 
+			"hiraganaQuarternary", // typo in DTD, correct version included as well
 		},
 		predefined: []string{"rules"},
 	},
@@ -128,51 +128,51 @@ var files = []dtd{
 
 var comments = map[string]string{
 	"ldmlBCP47": `
-
+// LDMLBCP47 holds information on allowable values for various variables in LDML.
 `,
 	"supplementalData": `
-
-
+// SupplementalData holds information relevant for internationalization
+// and proper use of CLDR, but that is not contained in the locale hierarchy.
 `,
 	"ldml": `
-
+// LDML is the top-level type for locale-specific data.
 `,
 	"collation": `
-
-
-
-
+// Collation contains rules that specify a certain sort-order,
+// as a tailoring of the root order. 
+// The parsed rules are obtained by passing a RuleProcessor to Collation's
+// Process method.
 `,
 	"calendar": `
-
-
-
-
+// Calendar specifies the fields used for formatting and parsing dates and times.
+// The month and quarter names are identified numerically, starting at 1.
+// The day (of the week) names are identified with short strings, since there is
+// no universally-accepted numeric designation.
 `,
 	"dates": `
-
+// Dates contains information regarding the format and parsing of dates and times.
 `,
 	"localeDisplayNames": `
-
-
+// LocaleDisplayNames specifies localized display names for scripts, languages,
+// countries, currencies, and variants.
 `,
 	"numbers": `
-
+// Numbers supplies information for formatting and parsing numbers and currencies.
 `,
 }
 
 type element struct {
-	name      string 
-	category  string 
-	signature string 
+	name      string // XML element name
+	category  string // elements contained by this element
+	signature string // category + attrKey*
 
-	attr []*attribute 
-	sub  []struct {   
+	attr []*attribute // attributes supported by this element.
+	sub  []struct {   // parsed and evaluated sub elements of this element.
 		e      *element
-		repeat bool 
+		repeat bool // true if the element needs to be a slice
 	}
 
-	resolved bool 
+	resolved bool // prevent multiple resolutions of this element.
 }
 
 type attribute struct {
@@ -180,7 +180,7 @@ type attribute struct {
 	key  string
 	list []string
 
-	tag string 
+	tag string // Go tag
 }
 
 var (
@@ -190,8 +190,8 @@ var (
 	reToken = regexp.MustCompile(`\w\-`)
 )
 
-
-
+// builder is used to read in the DTD files from CLDR and generate Go code
+// to be used with the encoding/xml package.
 type builder struct {
 	w       io.Writer
 	index   map[string]*element
@@ -209,7 +209,7 @@ func makeBuilder(w io.Writer, d dtd) builder {
 	}
 }
 
-
+// parseDTD parses a DTD file.
 func (b *builder) parseDTD(r io.Reader) {
 	for d := xml.NewDecoder(r); ; {
 		t, err := d.Token()
@@ -256,7 +256,7 @@ func (b *builder) parseDTD(r io.Reader) {
 				b.version = m[5]
 			} else {
 				switch m[1] {
-				case "draft", "references", "alt", "validSubLocales", "standard"  :
+				case "draft", "references", "alt", "validSubLocales", "standard" /* in Common */ :
 				case "type", "choice":
 				default:
 					el.attr = append(el.attr, &attribute{
@@ -273,8 +273,8 @@ func (b *builder) parseDTD(r io.Reader) {
 
 var reCat = regexp.MustCompile(`[ ,\|]*(?:(\(|\)|\#?[\w_-]+)([\*\+\?]?))?`)
 
-
-
+// resolve takes a parsed element and converts it into structured data
+// that can be used to generate the XML code.
 func (b *builder) resolve(e *element) {
 	if e.resolved {
 		return
@@ -322,7 +322,7 @@ func (b *builder) resolve(e *element) {
 	}
 }
 
-
+// return true if s is contained in set.
 func in(set []string, s string) bool {
 	for _, v := range set {
 		if v == s {
@@ -334,13 +334,13 @@ func in(set []string, s string) bool {
 
 var repl = strings.NewReplacer("-", " ", "_", " ")
 
-
-
+// title puts the first character or each character following '_' in title case and
+// removes all occurrences of '_'.
 func title(s string) string {
 	return strings.Replace(strings.Title(repl.Replace(s)), " ", "", -1)
 }
 
-
+// writeElem generates Go code for a single element, recursively.
 func (b *builder) writeElem(tab int, e *element) {
 	p := func(f string, x ...interface{}) {
 		f = strings.Replace(f, "\n", "\n"+strings.Repeat("\t", tab), -1)
@@ -382,7 +382,7 @@ func (b *builder) writeElem(tab int, e *element) {
 	p("\n}")
 }
 
-
+// write generates the Go XML code.
 func (b *builder) write() {
 	for i, name := range b.info.top {
 		e := b.index[name]

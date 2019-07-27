@@ -11,7 +11,7 @@ import (
 type AndMatcher struct {
 	Matchers []types.GomegaMatcher
 
-	
+	// state
 	firstFailedMatcher types.GomegaMatcher
 }
 
@@ -32,22 +32,32 @@ func (m *AndMatcher) FailureMessage(actual interface{}) (message string) {
 }
 
 func (m *AndMatcher) NegatedFailureMessage(actual interface{}) (message string) {
-	
+	// not the most beautiful list of matchers, but not bad either...
 	return format.Message(actual, fmt.Sprintf("To not satisfy all of these matchers: %s", m.Matchers))
 }
 
 func (m *AndMatcher) MatchMayChangeInTheFuture(actual interface{}) bool {
-	
+	/*
+		Example with 3 matchers: A, B, C
+
+		Match evaluates them: T, F, <?>  => F
+		So match is currently F, what should MatchMayChangeInTheFuture() return?
+		Seems like it only depends on B, since currently B MUST change to allow the result to become T
+
+		Match eval: T, T, T  => T
+		So match is currently T, what should MatchMayChangeInTheFuture() return?
+		Seems to depend on ANY of them being able to change to F.
+	*/
 
 	if m.firstFailedMatcher == nil {
-		
+		// so all matchers succeeded.. Any one of them changing would change the result.
 		for _, matcher := range m.Matchers {
 			if oraclematcher.MatchMayChangeInTheFuture(matcher, actual) {
 				return true
 			}
 		}
-		return false 
+		return false // none of were going to change
 	}
-	
+	// one of the matchers failed.. it must be able to change in order to affect the result
 	return oraclematcher.MatchMayChangeInTheFuture(m.firstFailedMatcher, actual)
 }

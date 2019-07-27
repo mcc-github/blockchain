@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2016 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
@@ -14,7 +14,7 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-
+// NoSuchService is the error returned when a given service does not exist.
 type NoSuchService struct {
 	ID  string
 	Err error
@@ -27,19 +27,19 @@ func (err *NoSuchService) Error() string {
 	return "No such service: " + err.ID
 }
 
-
-
-
+// CreateServiceOptions specify parameters to the CreateService function.
+//
+// See https://goo.gl/KrVjHz for more details.
 type CreateServiceOptions struct {
 	Auth AuthConfiguration `qs:"-"`
 	swarm.ServiceSpec
 	Context context.Context
 }
 
-
-
-
-
+// CreateService creates a new service, returning the service instance
+// or an error in case of failure.
+//
+// See https://goo.gl/KrVjHz for more details.
 func (c *Client) CreateService(opts CreateServiceOptions) (*swarm.Service, error) {
 	headers, err := headersWithAuth(opts.Auth)
 	if err != nil {
@@ -63,17 +63,17 @@ func (c *Client) CreateService(opts CreateServiceOptions) (*swarm.Service, error
 	return &service, nil
 }
 
-
-
-
+// RemoveServiceOptions encapsulates options to remove a service.
+//
+// See https://goo.gl/Tqrtya for more details.
 type RemoveServiceOptions struct {
 	ID      string `qs:"-"`
 	Context context.Context
 }
 
-
-
-
+// RemoveService removes a service, returning an error in case of failure.
+//
+// See https://goo.gl/Tqrtya for more details.
 func (c *Client) RemoveService(opts RemoveServiceOptions) error {
 	path := "/services/" + opts.ID
 	resp, err := c.do("DELETE", path, doOptions{context: opts.Context})
@@ -87,9 +87,9 @@ func (c *Client) RemoveService(opts RemoveServiceOptions) error {
 	return nil
 }
 
-
-
-
+// UpdateServiceOptions specify parameters to the UpdateService function.
+//
+// See https://goo.gl/wu3MmS for more details.
 type UpdateServiceOptions struct {
 	Auth              AuthConfiguration `qs:"-"`
 	swarm.ServiceSpec `qs:"-"`
@@ -98,9 +98,9 @@ type UpdateServiceOptions struct {
 	Rollback          string
 }
 
-
-
-
+// UpdateService updates the service at ID with the options
+//
+// See https://goo.gl/wu3MmS for more details.
 func (c *Client) UpdateService(id string, opts UpdateServiceOptions) error {
 	headers, err := headersWithAuth(opts.Auth)
 	if err != nil {
@@ -122,9 +122,9 @@ func (c *Client) UpdateService(id string, opts UpdateServiceOptions) error {
 	return nil
 }
 
-
-
-
+// InspectService returns information about a service by its ID.
+//
+// See https://goo.gl/dHmr75 for more details.
 func (c *Client) InspectService(id string) (*swarm.Service, error) {
 	path := "/services/" + id
 	resp, err := c.do("GET", path, doOptions{})
@@ -142,17 +142,17 @@ func (c *Client) InspectService(id string) (*swarm.Service, error) {
 	return &service, nil
 }
 
-
-
-
+// ListServicesOptions specify parameters to the ListServices function.
+//
+// See https://goo.gl/DwvNMd for more details.
 type ListServicesOptions struct {
 	Filters map[string][]string
 	Context context.Context
 }
 
-
-
-
+// ListServices returns a slice of services matching the given criteria.
+//
+// See https://goo.gl/DwvNMd for more details.
 func (c *Client) ListServices(opts ListServicesOptions) ([]swarm.Service, error) {
 	path := "/services?" + queryString(opts)
 	resp, err := c.do("GET", path, doOptions{context: opts.Context})
@@ -167,8 +167,8 @@ func (c *Client) ListServices(opts ListServicesOptions) ([]swarm.Service, error)
 	return services, nil
 }
 
-
-
+// LogsServiceOptions represents the set of options used when getting logs from a
+// service.
 type LogsServiceOptions struct {
 	Context           context.Context
 	Service           string        `qs:"-"`
@@ -176,10 +176,10 @@ type LogsServiceOptions struct {
 	ErrorStream       io.Writer     `qs:"-"`
 	InactivityTimeout time.Duration `qs:"-"`
 	Tail              string
+	Since             int64
 
-	
+	// Use raw terminal? Usually true when the container contains a TTY.
 	RawTerminal bool `qs:"-"`
-	Since       int64
 	Follow      bool
 	Stdout      bool
 	Stderr      bool
@@ -187,14 +187,14 @@ type LogsServiceOptions struct {
 	Details     bool
 }
 
-
-
-
-
-
-
-
-
+// GetServiceLogs gets stdout and stderr logs from the specified service.
+//
+// When LogsServiceOptions.RawTerminal is set to false, go-dockerclient will multiplex
+// the streams and send the containers stdout to LogsServiceOptions.OutputStream, and
+// stderr to LogsServiceOptions.ErrorStream.
+//
+// When LogsServiceOptions.RawTerminal is true, callers will get the raw stream on
+// LogsServiceOptions.OutputStream.
 func (c *Client) GetServiceLogs(opts LogsServiceOptions) error {
 	if opts.Service == "" {
 		return &NoSuchService{ID: opts.Service}

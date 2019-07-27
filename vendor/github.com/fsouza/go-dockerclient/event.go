@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2014 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
@@ -18,43 +18,43 @@ import (
 	"time"
 )
 
-
-
-
-
-
-
-
-
-
-
-
-
+// APIEvents represents events coming from the Docker API
+// The fields in the Docker API changed in API version 1.22, and
+// events for more than images and containers are now fired off.
+// To maintain forward and backward compatibility, go-dockerclient
+// replicates the event in both the new and old format as faithfully as possible.
+//
+// For events that only exist in 1.22 in later, `Status` is filled in as
+// `"Type:Action"` instead of just `Action` to allow for older clients to
+// differentiate and not break if they rely on the pre-1.22 Status types.
+//
+// The transformEvent method can be consulted for more information about how
+// events are translated from new/old API formats
 type APIEvents struct {
-	
+	// New API Fields in 1.22
 	Action string   `json:"action,omitempty"`
 	Type   string   `json:"type,omitempty"`
 	Actor  APIActor `json:"actor,omitempty"`
 
-	
+	// Old API fields for < 1.22
 	Status string `json:"status,omitempty"`
 	ID     string `json:"id,omitempty"`
 	From   string `json:"from,omitempty"`
 
-	
+	// Fields in both
 	Time     int64 `json:"time,omitempty"`
 	TimeNano int64 `json:"timeNano,omitempty"`
 }
 
-
+// APIActor represents an actor that accomplishes something for an event
 type APIActor struct {
 	ID         string            `json:"id,omitempty"`
 	Attributes map[string]string `json:"attributes,omitempty"`
 }
 
 type eventMonitoringState struct {
-	
-	
+	// `sync/atomic` expects the first word in an allocated struct to be 64-bit
+	// aligned on both ARM and x86-32. See https://goo.gl/zW7dgq for more details.
 	lastSeen int64
 	sync.RWMutex
 	sync.WaitGroup
@@ -70,28 +70,28 @@ const (
 )
 
 var (
-	
-	
+	// ErrNoListeners is the error returned when no listeners are available
+	// to receive an event.
 	ErrNoListeners = errors.New("no listeners present to receive event")
 
-	
-	
+	// ErrListenerAlreadyExists is the error returned when the listerner already
+	// exists.
 	ErrListenerAlreadyExists = errors.New("listener already exists for docker events")
 
-	
-	
+	// ErrTLSNotSupported is the error returned when the client does not support
+	// TLS (this applies to the Windows named pipe client).
 	ErrTLSNotSupported = errors.New("tls not supported by this client")
 
-	
+	// EOFEvent is sent when the event listener receives an EOF error.
 	EOFEvent = &APIEvents{
 		Type:   "EOF",
 		Status: "EOF",
 	}
 )
 
-
-
-
+// AddEventListener adds a new listener to container events in the Docker API.
+//
+// The parameter is a channel through which events will be sent.
 func (c *Client) AddEventListener(listener chan<- *APIEvents) error {
 	var err error
 	if !c.eventMonitor.isEnabled() {
@@ -103,7 +103,7 @@ func (c *Client) AddEventListener(listener chan<- *APIEvents) error {
 	return c.eventMonitor.addListener(listener)
 }
 
-
+// RemoveEventListener removes a listener from the monitor.
 func (c *Client) RemoveEventListener(listener chan *APIEvents) error {
 	err := c.eventMonitor.removeListener(listener)
 	if err != nil {
@@ -207,15 +207,15 @@ func (eventState *eventMonitoringState) monitorEvents(c *Client) {
 	}
 
 	if eventState.noListeners() {
-		
-		
-		
+		// terminate if no listener is available after 5 seconds.
+		// Prevents goroutine leak when RemoveEventListener is called
+		// right after AddEventListener.
 		eventState.disableEventMonitoring()
 		return
 	}
 
 	if err = eventState.connectWithRetry(c); err != nil {
-		
+		// terminate if connect failed
 		eventState.disableEventMonitoring()
 		return
 	}
@@ -330,6 +330,7 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 	if err != nil {
 		return err
 	}
+	//lint:ignore SA1019 this is needed here
 	conn := httputil.NewClientConn(dial, nil)
 	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
@@ -339,6 +340,7 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 	if err != nil {
 		return err
 	}
+	//lint:ignore SA1019 ClientConn is needed here
 	go func(res *http.Response, conn *httputil.ClientConn) {
 		defer conn.Close()
 		defer res.Body.Close()
@@ -349,7 +351,7 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 				if err == io.EOF || err == io.ErrUnexpectedEOF {
 					c.eventMonitor.RLock()
 					if c.eventMonitor.enabled && c.eventMonitor.C == eventChan {
-						
+						// Signal that we're exiting.
 						eventChan <- EOFEvent
 					}
 					c.eventMonitor.RUnlock()
@@ -371,10 +373,10 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 	return nil
 }
 
-
-
+// transformEvent takes an event and determines what version it is from
+// then populates both versions of the event
 func transformEvent(event *APIEvents) {
-	
+	// if event version is <= 1.21 there will be no Action and no Type
 	if event.Action == "" && event.Type == "" {
 		event.Action = event.Status
 		event.Actor.ID = event.ID
@@ -393,10 +395,10 @@ func transformEvent(event *APIEvents) {
 			if event.Type == "image" || event.Type == "container" {
 				event.Status = event.Action
 			} else {
-				
-				
-				
-				
+				// Because just the Status has been overloaded with different Types
+				// if an event is not for an image or a container, we prepend the type
+				// to avoid problems for people relying on actions being only for
+				// images and containers
 				event.Status = event.Type + ":" + event.Action
 			}
 		}

@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package collate
 
@@ -53,15 +53,15 @@ func (s sorter) Swap(i, j int) {
 	s.src.Swap(i, j)
 }
 
-
+// A Lister can be sorted by Collator's Sort method.
 type Lister interface {
 	Len() int
 	Swap(i, j int)
-	
+	// Bytes returns the bytes of the text at index i.
 	Bytes(i int) []byte
 }
 
-
+// Sort uses sort.Sort to sort the strings represented by x using the rules of c.
 func (c *Collator) Sort(x Lister) {
 	n := x.Len()
 	c.sorter.init(n)
@@ -71,7 +71,7 @@ func (c *Collator) Sort(x Lister) {
 	c.sorter.sort(x)
 }
 
-
+// SortStrings uses sort.Sort to sort the strings in x using the rules of c.
 func (c *Collator) SortStrings(x []string) {
 	c.sorter.init(len(x))
 	for i, s := range x {

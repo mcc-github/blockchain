@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reservefs.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package storage
 
@@ -68,9 +68,9 @@ func writeFileSynced(filename string, data []byte, perm os.FileMode) error {
 	return err
 }
 
-const logSizeThreshold = 1024 * 1024 
+const logSizeThreshold = 1024 * 1024 // 1 MiB
 
-
+// fileStorage is a file-system backed storage.
 type fileStorage struct {
 	path     string
 	readOnly bool
@@ -81,16 +81,16 @@ type fileStorage struct {
 	logw    *os.File
 	logSize int64
 	buf     []byte
-	
+	// Opened file counter; if open < 0 means closed.
 	open int
 	day  int
 }
 
-
-
-
-
-
+// OpenFile returns a new filesystem-backed storage implementation with the given
+// path. This also acquire a file lock, so any subsequent attempt to open the
+// same path will fail.
+//
+// The storage must be closed after use, by calling Close method.
 func OpenFile(path string, readOnly bool) (Storage, error) {
 	if fi, err := os.Stat(path); err == nil {
 		if !fi.IsDir() {
@@ -164,7 +164,7 @@ func itoa(buf []byte, i int, wid int) []byte {
 		return append(buf, '0')
 	}
 
-	
+	// Assemble decimal in reverse order.
 	var b [32]byte
 	bp := len(b)
 	for ; u > 0 || wid > 0; u /= 10 {
@@ -185,7 +185,7 @@ func (fs *fileStorage) printDay(t time.Time) {
 
 func (fs *fileStorage) doLog(t time.Time, str string) {
 	if fs.logSize > logSizeThreshold {
-		
+		// Rotate log file.
 		fs.logw.Close()
 		fs.logw = nil
 		fs.logSize = 0
@@ -197,13 +197,13 @@ func (fs *fileStorage) doLog(t time.Time, str string) {
 		if err != nil {
 			return
 		}
-		
+		// Force printDay on new log file.
 		fs.day = 0
 	}
 	fs.printDay(t)
 	hour, min, sec := t.Clock()
 	msec := t.Nanosecond() / 1e3
-	
+	// time
 	fs.buf = itoa(fs.buf[:0], hour, 2)
 	fs.buf = append(fs.buf, ':')
 	fs.buf = itoa(fs.buf, min, 2)
@@ -212,7 +212,7 @@ func (fs *fileStorage) doLog(t time.Time, str string) {
 	fs.buf = append(fs.buf, '.')
 	fs.buf = itoa(fs.buf, msec, 6)
 	fs.buf = append(fs.buf, ' ')
-	
+	// write
 	fs.buf = append(fs.buf, []byte(str)...)
 	fs.buf = append(fs.buf, '\n')
 	n, _ := fs.logw.Write(fs.buf)
@@ -239,7 +239,7 @@ func (fs *fileStorage) log(str string) {
 
 func (fs *fileStorage) setMeta(fd FileDesc) error {
 	content := fsGenName(fd) + "\n"
-	
+	// Check and backup old CURRENT file.
 	currentPath := filepath.Join(fs.path, "CURRENT")
 	if _, err := os.Stat(currentPath); err == nil {
 		b, err := ioutil.ReadFile(currentPath)
@@ -248,7 +248,7 @@ func (fs *fileStorage) setMeta(fd FileDesc) error {
 			return err
 		}
 		if string(b) == content {
-			
+			// Content not changed, do nothing.
 			return nil
 		}
 		if err := writeFileSynced(currentPath+".bak", b, 0644); err != nil {
@@ -263,12 +263,12 @@ func (fs *fileStorage) setMeta(fd FileDesc) error {
 		fs.log(fmt.Sprintf("create CURRENT.%d: %v", fd.Num, err))
 		return err
 	}
-	
+	// Replace CURRENT file.
 	if err := rename(path, currentPath); err != nil {
 		fs.log(fmt.Sprintf("rename CURRENT.%d: %v", fd.Num, err))
 		return err
 	}
-	
+	// Sync root directory.
 	if err := syncDir(fs.path); err != nil {
 		fs.log(fmt.Sprintf("syncDir: %v", err))
 		return err
@@ -303,19 +303,19 @@ func (fs *fileStorage) GetMeta() (FileDesc, error) {
 		return FileDesc{}, err
 	}
 	names, err := dir.Readdirnames(0)
-	
+	// Close the dir first before checking for Readdirnames error.
 	if ce := dir.Close(); ce != nil {
 		fs.log(fmt.Sprintf("close dir: %v", ce))
 	}
 	if err != nil {
 		return FileDesc{}, err
 	}
-	
-	
-	
-	
-	
-	
+	// Try this in order:
+	// - CURRENT.[0-9]+ ('pending rename' file, descending order)
+	// - CURRENT
+	// - CURRENT.bak
+	//
+	// Skip corrupted file or file that point to a missing target file.
 	type currentFile struct {
 		name string
 		fd   FileDesc
@@ -348,7 +348,7 @@ func (fs *fileStorage) GetMeta() (FileDesc, error) {
 	tryCurrents := func(names []string) (*currentFile, error) {
 		var (
 			cur *currentFile
-			
+			// Last corruption error.
 			lastCerr error
 		)
 		for _, name := range names {
@@ -357,12 +357,12 @@ func (fs *fileStorage) GetMeta() (FileDesc, error) {
 			if err == nil {
 				break
 			} else if err == os.ErrNotExist {
-				
+				// Fallback to the next file.
 			} else if isCorrupted(err) {
 				lastCerr = err
-				
+				// Fallback to the next file.
 			} else {
-				
+				// In case the error is due to permission, etc.
 				return nil, err
 			}
 		}
@@ -376,7 +376,7 @@ func (fs *fileStorage) GetMeta() (FileDesc, error) {
 		return cur, nil
 	}
 
-	
+	// Try 'pending rename' files.
 	var nums []int64
 	for _, name := range names {
 		if strings.HasPrefix(name, "CURRENT.") && name != "CURRENT.bak" {
@@ -403,24 +403,24 @@ func (fs *fileStorage) GetMeta() (FileDesc, error) {
 		}
 	}
 
-	
+	// Try CURRENT and CURRENT.bak.
 	curCur, curErr := tryCurrents([]string{"CURRENT", "CURRENT.bak"})
 	if curErr != nil && curErr != os.ErrNotExist && !isCorrupted(curErr) {
 		return FileDesc{}, curErr
 	}
 
-	
+	// pendCur takes precedence, but guards against obsolete pendCur.
 	if pendCur != nil && (curCur == nil || pendCur.fd.Num > curCur.fd.Num) {
 		curCur = pendCur
 	}
 
 	if curCur != nil {
-		
+		// Restore CURRENT file to proper state.
 		if !fs.readOnly && (curCur.name != "CURRENT" || len(pendNames) != 0) {
-			
-			
+			// Ignore setMeta errors, however don't delete obsolete files if we
+			// catch error.
 			if err := fs.setMeta(curCur.fd); err == nil {
-				
+				// Remove 'pending rename' files.
 				for _, name := range pendNames {
 					if err := os.Remove(filepath.Join(fs.path, name)); err != nil {
 						fs.log(fmt.Sprintf("remove %s: %v", name, err))
@@ -431,7 +431,7 @@ func (fs *fileStorage) GetMeta() (FileDesc, error) {
 		return curCur.fd, nil
 	}
 
-	
+	// Nothing found.
 	if isCorrupted(pendErr) {
 		return FileDesc{}, pendErr
 	}
@@ -449,7 +449,7 @@ func (fs *fileStorage) List(ft FileType) (fds []FileDesc, err error) {
 		return
 	}
 	names, err := dir.Readdirnames(0)
-	
+	// Close the dir first before checking for Readdirnames error.
 	if cerr := dir.Close(); cerr != nil {
 		fs.log(fmt.Sprintf("close dir: %v", cerr))
 	}
@@ -561,7 +561,7 @@ func (fs *fileStorage) Close() error {
 	if fs.open < 0 {
 		return ErrClosed
 	}
-	
+	// Clear the finalizer.
 	runtime.SetFinalizer(fs, nil)
 
 	if fs.open > 0 {
@@ -586,8 +586,8 @@ func (fw *fileWrap) Sync() error {
 		return err
 	}
 	if fw.fd.Type == TypeManifest {
-		
-		
+		// Also sync parent directory if file type is manifest.
+		// See: https://code.google.com/p/leveldb/issues/detail?id=190.
 		if err := syncDir(fw.fs.path); err != nil {
 			fw.fs.log(fmt.Sprintf("syncDir: %v", err))
 			return err

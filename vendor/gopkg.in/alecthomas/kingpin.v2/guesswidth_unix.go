@@ -1,4 +1,4 @@
-
+// +build !appengine,linux freebsd darwin dragonfly netbsd openbsd
 
 package kingpin
 
@@ -11,8 +11,8 @@ import (
 )
 
 func guessWidth(w io.Writer) int {
-	
-	
+	// check if COLUMNS env is set to comply with
+	// http://pubs.opengroup.org/onlinepubs/009604499/basedefs/xbd_chap08.html
 	colsStr := os.Getenv("COLUMNS")
 	if colsStr != "" {
 		if cols, err := strconv.Atoi(colsStr); err == nil {

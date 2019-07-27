@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2013, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package leveldb
 
@@ -36,7 +36,7 @@ func (m *memDB) incref() {
 
 func (m *memDB) decref() {
 	if ref := atomic.AddInt32(&m.ref, -1); ref == 0 {
-		
+		// Only put back memdb with std capacity.
 		if m.Capacity() == m.db.s.o.GetWriteBuffer() {
 			m.Reset()
 			m.db.mpoolPut(m.DB)
@@ -48,12 +48,12 @@ func (m *memDB) decref() {
 	}
 }
 
-
+// Get latest sequence number.
 func (db *DB) getSeq() uint64 {
 	return atomic.LoadUint64(&db.seq)
 }
 
-
+// Atomically adds delta to seq.
 func (db *DB) addSeq(delta uint64) {
 	atomic.AddUint64(&db.seq, delta)
 }
@@ -65,7 +65,7 @@ func (db *DB) setSeq(seq uint64) {
 func (db *DB) sampleSeek(ikey internalKey) {
 	v := db.s.version()
 	if v.sampleSeek(ikey) {
-		
+		// Trigger table compaction.
 		db.compTrigger(db.tcompCmdC)
 	}
 	v.release()
@@ -106,7 +106,7 @@ func (db *DB) mpoolDrain() {
 			}
 		case <-db.closeC:
 			ticker.Stop()
-			
+			// Make sure the pool is drained.
 			select {
 			case <-db.memPool:
 			case <-time.After(time.Second):
@@ -117,8 +117,8 @@ func (db *DB) mpoolDrain() {
 	}
 }
 
-
-
+// Create new memdb and froze the old one; need external synchronization.
+// newMem only called synchronously by the writer.
 func (db *DB) newMem(n int) (mem *memDB, err error) {
 	fd := storage.FileDesc{Type: storage.TypeJournal, Num: db.s.allocFileNum()}
 	w, err := db.s.stor.Create(fd)
@@ -145,16 +145,16 @@ func (db *DB) newMem(n int) (mem *memDB, err error) {
 	db.journalFd = fd
 	db.frozenMem = db.mem
 	mem = db.mpoolGet(n)
-	mem.incref() 
-	mem.incref() 
+	mem.incref() // for self
+	mem.incref() // for caller
 	db.mem = mem
-	
-	
+	// The seq only incremented by the writer. And whoever called newMem
+	// should hold write lock, so no need additional synchronization here.
 	db.frozenSeq = db.seq
 	return
 }
 
-
+// Get all memdbs.
 func (db *DB) getMems() (e, f *memDB) {
 	db.memMu.RLock()
 	defer db.memMu.RUnlock()
@@ -169,7 +169,7 @@ func (db *DB) getMems() (e, f *memDB) {
 	return db.mem, db.frozenMem
 }
 
-
+// Get effective memdb.
 func (db *DB) getEffectiveMem() *memDB {
 	db.memMu.RLock()
 	defer db.memMu.RUnlock()
@@ -181,14 +181,14 @@ func (db *DB) getEffectiveMem() *memDB {
 	return db.mem
 }
 
-
+// Check whether we has frozen memdb.
 func (db *DB) hasFrozenMem() bool {
 	db.memMu.RLock()
 	defer db.memMu.RUnlock()
 	return db.frozenMem != nil
 }
 
-
+// Get frozen memdb.
 func (db *DB) getFrozenMem() *memDB {
 	db.memMu.RLock()
 	defer db.memMu.RUnlock()
@@ -198,7 +198,7 @@ func (db *DB) getFrozenMem() *memDB {
 	return db.frozenMem
 }
 
-
+// Drop frozen memdb; assume that frozen memdb isn't nil.
 func (db *DB) dropFrozenMem() {
 	db.memMu.Lock()
 	if err := db.s.stor.Remove(db.frozenJournalFd); err != nil {
@@ -212,7 +212,7 @@ func (db *DB) dropFrozenMem() {
 	db.memMu.Unlock()
 }
 
-
+// Clear mems ptr; used by DB.Close().
 func (db *DB) clearMems() {
 	db.memMu.Lock()
 	db.mem = nil
@@ -220,17 +220,17 @@ func (db *DB) clearMems() {
 	db.memMu.Unlock()
 }
 
-
+// Set closed flag; return true if not already closed.
 func (db *DB) setClosed() bool {
 	return atomic.CompareAndSwapUint32(&db.closed, 0, 1)
 }
 
-
+// Check whether DB was closed.
 func (db *DB) isClosed() bool {
 	return atomic.LoadUint32(&db.closed) != 0
 }
 
-
+// Check read ok status.
 func (db *DB) ok() error {
 	if db.isClosed() {
 		return ErrClosed

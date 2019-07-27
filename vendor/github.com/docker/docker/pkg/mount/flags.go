@@ -1,4 +1,4 @@
-package mount 
+package mount // import "github.com/docker/docker/pkg/mount"
 
 import (
 	"fmt"
@@ -68,30 +68,30 @@ var propagationFlags = map[string]bool{
 	"rslave":      true,
 }
 
-
+// MergeTmpfsOptions merge mount options to make sure there is no duplicate.
 func MergeTmpfsOptions(options []string) ([]string, error) {
-	
-	
-	
+	// We use collisions maps to remove duplicates.
+	// For flag, the key is the flag value (the key for propagation flag is -1)
+	// For data=value, the key is the data
 	flagCollisions := map[int]bool{}
 	dataCollisions := map[string]bool{}
 
 	var newOptions []string
-	
+	// We process in reverse order
 	for i := len(options) - 1; i >= 0; i-- {
 		option := options[i]
 		if option == "defaults" {
 			continue
 		}
 		if f, ok := flags[option]; ok && f.flag != 0 {
-			
+			// There is only one propagation mode
 			key := f.flag
 			if propagationFlags[option] {
 				key = -1
 			}
-			
+			// Check to see if there is collision for flag
 			if !flagCollisions[key] {
-				
+				// We prepend the option and add to collision map
 				newOptions = append([]string{option}, newOptions...)
 				flagCollisions[key] = true
 			}
@@ -102,7 +102,7 @@ func MergeTmpfsOptions(options []string) ([]string, error) {
 			return nil, fmt.Errorf("Invalid tmpfs option %q", opt)
 		}
 		if !dataCollisions[opt[0]] {
-			
+			// We prepend the option and add to collision map
 			newOptions = append([]string{option}, newOptions...)
 			dataCollisions[opt[0]] = true
 		}
@@ -111,8 +111,8 @@ func MergeTmpfsOptions(options []string) ([]string, error) {
 	return newOptions, nil
 }
 
-
-
+// Parse fstab type mount options into mount() flags
+// and device specific data
 func parseOptions(options string) (int, string) {
 	var (
 		flag int
@@ -120,9 +120,9 @@ func parseOptions(options string) (int, string) {
 	)
 
 	for _, o := range strings.Split(options, ",") {
-		
-		
-		
+		// If the option does not exist in the flags table or the flag
+		// is not supported on the platform,
+		// then it is a data value for a specific fs type
 		if f, exists := flags[o]; exists && f.flag != 0 {
 			if f.clear {
 				flag &= ^f.flag
@@ -134,16 +134,4 @@ func parseOptions(options string) (int, string) {
 		}
 	}
 	return flag, strings.Join(data, ",")
-}
-
-
-func ParseTmpfsOptions(options string) (int, string, error) {
-	flags, data := parseOptions(options)
-	for _, o := range strings.Split(data, ",") {
-		opt := strings.SplitN(o, "=", 2)
-		if !validFlags[opt[0]] {
-			return 0, "", fmt.Errorf("Invalid tmpfs option %q", opt)
-		}
-	}
-	return flags, data, nil
 }

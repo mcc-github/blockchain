@@ -1,28 +1,28 @@
+// Copyright 2018 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Package semver implements comparison of semantic version strings.
+// In this package, semantic version strings must begin with a leading "v",
+// as in "v1.0.0".
+//
+// The general form of a semantic version string accepted by this package is
+//
+//	vMAJOR[.MINOR[.PATCH[-PRERELEASE][+BUILD]]]
+//
+// where square brackets indicate optional parts of the syntax;
+// MAJOR, MINOR, and PATCH are decimal integers without extra leading zeros;
+// PRERELEASE and BUILD are each a series of non-empty dot-separated identifiers
+// using only alphanumeric characters and hyphens; and
+// all-numeric PRERELEASE identifiers must not have leading zeros.
+//
+// This package follows Semantic Versioning 2.0.0 (see semver.org)
+// with two exceptions. First, it requires the "v" prefix. Second, it recognizes
+// vMAJOR and vMAJOR.MINOR (with no prerelease or build suffixes)
+// as shorthands for vMAJOR.0.0 and vMAJOR.MINOR.0.
 package semver
 
-
+// parsed returns the parsed form of a semantic version string.
 type parsed struct {
 	major      string
 	minor      string
@@ -33,17 +33,17 @@ type parsed struct {
 	err        string
 }
 
-
+// IsValid reports whether v is a valid semantic version string.
 func IsValid(v string) bool {
 	_, ok := parse(v)
 	return ok
 }
 
-
-
-
-
-
+// Canonical returns the canonical formatting of the semantic version v.
+// It fills in any missing .MINOR or .PATCH and discards build metadata.
+// Two semantic versions compare equal only if their canonical formattings
+// are identical strings.
+// The canonical invalid semantic version is the empty string.
 func Canonical(v string) string {
 	p, ok := parse(v)
 	if !ok {
@@ -58,9 +58,9 @@ func Canonical(v string) string {
 	return v
 }
 
-
-
-
+// Major returns the major version prefix of the semantic version v.
+// For example, Major("v2.1.0") == "v2".
+// If v is an invalid semantic version string, Major returns the empty string.
 func Major(v string) string {
 	pv, ok := parse(v)
 	if !ok {
@@ -69,9 +69,9 @@ func Major(v string) string {
 	return v[:1+len(pv.major)]
 }
 
-
-
-
+// MajorMinor returns the major.minor version prefix of the semantic version v.
+// For example, MajorMinor("v2.1.0") == "v2.1".
+// If v is an invalid semantic version string, MajorMinor returns the empty string.
 func MajorMinor(v string) string {
 	pv, ok := parse(v)
 	if !ok {
@@ -84,9 +84,9 @@ func MajorMinor(v string) string {
 	return v[:i] + "." + pv.minor
 }
 
-
-
-
+// Prerelease returns the prerelease suffix of the semantic version v.
+// For example, Prerelease("v2.1.0-pre+meta") == "-pre".
+// If v is an invalid semantic version string, Prerelease returns the empty string.
 func Prerelease(v string) string {
 	pv, ok := parse(v)
 	if !ok {
@@ -95,9 +95,9 @@ func Prerelease(v string) string {
 	return pv.prerelease
 }
 
-
-
-
+// Build returns the build suffix of the semantic version v.
+// For example, Build("v2.1.0+meta") == "+meta".
+// If v is an invalid semantic version string, Build returns the empty string.
 func Build(v string) string {
 	pv, ok := parse(v)
 	if !ok {
@@ -106,12 +106,12 @@ func Build(v string) string {
 	return pv.build
 }
 
-
-
-
-
-
-
+// Compare returns an integer comparing two versions according to
+// according to semantic version precedence.
+// The result will be 0 if v == w, -1 if v < w, or +1 if v > w.
+//
+// An invalid semantic version string is considered less than a valid one.
+// All invalid semantic version strings compare equal to each other.
 func Compare(v, w string) int {
 	pv, ok1 := parse(v)
 	pw, ok2 := parse(w)
@@ -136,8 +136,8 @@ func Compare(v, w string) int {
 	return comparePrerelease(pv.prerelease, pw.prerelease)
 }
 
-
-
+// Max canonicalizes its arguments and then returns the version string
+// that compares greater.
 func Max(v, w string) string {
 	v = Canonical(v)
 	w = Canonical(w)
@@ -229,10 +229,10 @@ func parseInt(v string) (t, rest string, ok bool) {
 }
 
 func parsePrerelease(v string) (t, rest string, ok bool) {
-	
-	
-	
-	
+	// "A pre-release version MAY be denoted by appending a hyphen and
+	// a series of dot separated identifiers immediately following the patch version.
+	// Identifiers MUST comprise only ASCII alphanumerics and hyphen [0-9A-Za-z-].
+	// Identifiers MUST NOT be empty. Numeric identifiers MUST NOT include leading zeroes."
 	if v == "" || v[0] != '-' {
 		return
 	}
@@ -318,20 +318,20 @@ func compareInt(x, y string) int {
 }
 
 func comparePrerelease(x, y string) int {
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+	// "When major, minor, and patch are equal, a pre-release version has
+	// lower precedence than a normal version.
+	// Example: 1.0.0-alpha < 1.0.0.
+	// Precedence for two pre-release versions with the same major, minor,
+	// and patch version MUST be determined by comparing each dot separated
+	// identifier from left to right until a difference is found as follows:
+	// identifiers consisting of only digits are compared numerically and
+	// identifiers with letters or hyphens are compared lexically in ASCII
+	// sort order. Numeric identifiers always have lower precedence than
+	// non-numeric identifiers. A larger set of pre-release fields has a
+	// higher precedence than a smaller set, if all of the preceding
+	// identifiers are equal.
+	// Example: 1.0.0-alpha < 1.0.0-alpha.1 < 1.0.0-alpha.beta <
+	// 1.0.0-beta < 1.0.0-beta.2 < 1.0.0-beta.11 < 1.0.0-rc.1 < 1.0.0."
 	if x == y {
 		return 0
 	}
@@ -342,8 +342,8 @@ func comparePrerelease(x, y string) int {
 		return -1
 	}
 	for x != "" && y != "" {
-		x = x[1:] 
-		y = y[1:] 
+		x = x[1:] // skip - or .
+		y = y[1:] // skip - or .
 		var dx, dy string
 		dx, x = nextIdent(x)
 		dy, y = nextIdent(y)

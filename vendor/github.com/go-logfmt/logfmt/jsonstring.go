@@ -10,11 +10,11 @@ import (
 	"unicode/utf8"
 )
 
+// Taken from Go's encoding/json and modified for use here.
 
-
-
-
-
+// Copyright 2010 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 var hex = "0123456789abcdef"
 
@@ -33,7 +33,7 @@ func poolBuffer(buf *bytes.Buffer) {
 	bufferPool.Put(buf)
 }
 
-
+// NOTE: keep in sync with writeQuotedBytes below.
 func writeQuotedString(w io.Writer, s string) (int, error) {
 	buf := getBuffer()
 	buf.WriteByte('"')
@@ -61,7 +61,7 @@ func writeQuotedString(w io.Writer, s string) (int, error) {
 				buf.WriteByte('\\')
 				buf.WriteByte('t')
 			default:
-				
+				// This encodes bytes < 0x20 except for \n, \r, and \t.
 				buf.WriteString(`\u00`)
 				buf.WriteByte(hex[b>>4])
 				buf.WriteByte(hex[b&0xF])
@@ -91,7 +91,7 @@ func writeQuotedString(w io.Writer, s string) (int, error) {
 	return n, err
 }
 
-
+// NOTE: keep in sync with writeQuoteString above.
 func writeQuotedBytes(w io.Writer, s []byte) (int, error) {
 	buf := getBuffer()
 	buf.WriteByte('"')
@@ -119,7 +119,7 @@ func writeQuotedBytes(w io.Writer, s []byte) (int, error) {
 				buf.WriteByte('\\')
 				buf.WriteByte('t')
 			default:
-				
+				// This encodes bytes < 0x20 except for \n, \r, and \t.
 				buf.WriteString(`\u00`)
 				buf.WriteByte(hex[b>>4])
 				buf.WriteByte(hex[b&0xF])
@@ -149,8 +149,8 @@ func writeQuotedBytes(w io.Writer, s []byte) (int, error) {
 	return n, err
 }
 
-
-
+// getu4 decodes \uXXXX from the beginning of s, returning the hex value,
+// or it returns -1.
 func getu4(s []byte) rune {
 	if len(s) < 6 || s[0] != '\\' || s[1] != 'u' {
 		return -1
@@ -168,9 +168,9 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 	}
 	s = s[1 : len(s)-1]
 
-	
-	
-	
+	// Check for unusual characters. If there are none,
+	// then no unquoting is needed, so return a slice of the
+	// original bytes.
 	r := 0
 	for r < len(s) {
 		c := s[r]
@@ -194,9 +194,9 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 	b := make([]byte, len(s)+2*utf8.UTFMax)
 	w := copy(b, s[0:r])
 	for r < len(s) {
-		
-		
-		
+		// Out of room?  Can only happen if s is full of
+		// malformed UTF-8 and we're replacing each
+		// byte with RuneError.
 		if w >= len(b)-2*utf8.UTFMax {
 			nb := make([]byte, (len(b)+utf8.UTFMax)*2)
 			copy(nb, b[0:w])
@@ -245,28 +245,28 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 				if utf16.IsSurrogate(rr) {
 					rr1 := getu4(s[r:])
 					if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
-						
+						// A valid pair; consume.
 						r += 6
 						w += utf8.EncodeRune(b[w:], dec)
 						break
 					}
-					
+					// Invalid surrogate; fall back to replacement rune.
 					rr = unicode.ReplacementChar
 				}
 				w += utf8.EncodeRune(b[w:], rr)
 			}
 
-		
+		// Quote, control characters are invalid.
 		case c == '"', c < ' ':
 			return
 
-		
+		// ASCII
 		case c < utf8.RuneSelf:
 			b[w] = c
 			r++
 			w++
 
-		
+		// Coerce to well-formed UTF-8.
 		default:
 			rr, size := utf8.DecodeRune(s[r:])
 			r += size

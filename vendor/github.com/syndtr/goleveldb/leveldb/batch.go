@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package leveldb
 
@@ -16,8 +16,8 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/storage"
 )
 
-
-
+// ErrBatchCorrupted records reason of batch corruption. This error will be
+// wrapped with errors.ErrCorrupted.
 type ErrBatchCorrupted struct {
 	Reason string
 }
@@ -36,7 +36,7 @@ const (
 	batchBufioSize = 16
 )
 
-
+// BatchReplay wraps basic batch operations.
 type BatchReplay interface {
 	Put(key, value []byte)
 	Delete(key []byte)
@@ -63,12 +63,12 @@ func (index batchIndex) kv(data []byte) (key, value []byte) {
 	return index.k(data), index.v(data)
 }
 
-
+// Batch is a write batch.
 type Batch struct {
 	data  []byte
 	index []batchIndex
 
-	
+	// internalLen is sums of key/value pair length plus 8-bytes internal key.
 	internalLen int
 }
 
@@ -111,37 +111,37 @@ func (b *Batch) appendRec(kt keyType, key, value []byte) {
 	b.internalLen += index.keyLen + index.valueLen + 8
 }
 
-
-
-
+// Put appends 'put operation' of the given key/value pair to the batch.
+// It is safe to modify the contents of the argument after Put returns but not
+// before.
 func (b *Batch) Put(key, value []byte) {
 	b.appendRec(keyTypeVal, key, value)
 }
 
-
-
-
+// Delete appends 'delete operation' of the given key to the batch.
+// It is safe to modify the contents of the argument after Delete returns but
+// not before.
 func (b *Batch) Delete(key []byte) {
 	b.appendRec(keyTypeDel, key, nil)
 }
 
-
-
-
-
+// Dump dumps batch contents. The returned slice can be loaded into the
+// batch using Load method.
+// The returned slice is not its own copy, so the contents should not be
+// modified.
 func (b *Batch) Dump() []byte {
 	return b.data
 }
 
-
-
-
-
+// Load loads given slice into the batch. Previous contents of the batch
+// will be discarded.
+// The given slice will not be copied and will be used as batch buffer, so
+// it is not safe to modify the contents of the slice.
 func (b *Batch) Load(data []byte) error {
 	return b.decode(data, -1)
 }
 
-
+// Replay replays batch contents.
 func (b *Batch) Replay(r BatchReplay) error {
 	for _, index := range b.index {
 		switch index.keyType {
@@ -154,12 +154,12 @@ func (b *Batch) Replay(r BatchReplay) error {
 	return nil
 }
 
-
+// Len returns number of records in the batch.
 func (b *Batch) Len() int {
 	return len(b.index)
 }
 
-
+// Reset resets the batch.
 func (b *Batch) Reset() {
 	b.data = b.data[:0]
 	b.index = b.index[:0]
@@ -182,7 +182,7 @@ func (b *Batch) append(p *Batch) {
 	b.index = append(b.index, p.index...)
 	b.internalLen += p.internalLen
 
-	
+	// Updating index offset.
 	if ob != 0 {
 		for ; oi < len(b.index); oi++ {
 			index := &b.index[oi]
@@ -241,14 +241,14 @@ func newBatch() interface{} {
 func decodeBatch(data []byte, fn func(i int, index batchIndex) error) error {
 	var index batchIndex
 	for i, o := 0, 0; o < len(data); i++ {
-		
+		// Key type.
 		index.keyType = keyType(data[o])
 		if index.keyType > keyTypeVal {
 			return newErrBatchCorrupted(fmt.Sprintf("bad record: invalid type %#x", uint(index.keyType)))
 		}
 		o++
 
-		
+		// Key.
 		x, n := binary.Uvarint(data[o:])
 		o += n
 		if n <= 0 || o+int(x) > len(data) {
@@ -258,7 +258,7 @@ func decodeBatch(data []byte, fn func(i int, index batchIndex) error) error {
 		index.keyLen = int(x)
 		o += index.keyLen
 
-		
+		// Value.
 		if index.keyType == keyTypeVal {
 			x, n = binary.Uvarint(data[o:])
 			o += n

@@ -10,15 +10,15 @@ import (
 	"time"
 )
 
-
-
+// typedDecodeHook takes a raw DecodeHookFunc (an interface{}) and turns
+// it into the proper DecodeHookFunc type, such as DecodeHookFuncType.
 func typedDecodeHook(h DecodeHookFunc) DecodeHookFunc {
-	
+	// Create variables here so we can reference them with the reflect pkg
 	var f1 DecodeHookFuncType
 	var f2 DecodeHookFuncKind
 
-	
-	
+	// Fill in the variables into this interface and the rest is done
+	// automatically using the reflect package.
 	potential := []interface{}{f1, f2}
 
 	v := reflect.ValueOf(h)
@@ -33,9 +33,9 @@ func typedDecodeHook(h DecodeHookFunc) DecodeHookFunc {
 	return nil
 }
 
-
-
-
+// DecodeHookExec executes the given decode hook. This should be used
+// since it'll naturally degrade to the older backwards compatible DecodeHookFunc
+// that took reflect.Kind instead of reflect.Type.
 func DecodeHookExec(
 	raw DecodeHookFunc,
 	from reflect.Type, to reflect.Type,
@@ -50,11 +50,11 @@ func DecodeHookExec(
 	}
 }
 
-
-
-
-
-
+// ComposeDecodeHookFunc creates a single DecodeHookFunc that
+// automatically composes multiple DecodeHookFuncs.
+//
+// The composed funcs are called in order, with the result of the
+// previous transformation.
 func ComposeDecodeHookFunc(fs ...DecodeHookFunc) DecodeHookFunc {
 	return func(
 		f reflect.Type,
@@ -67,7 +67,7 @@ func ComposeDecodeHookFunc(fs ...DecodeHookFunc) DecodeHookFunc {
 				return nil, err
 			}
 
-			
+			// Modify the from kind to be correct with the new data
 			f = nil
 			if val := reflect.ValueOf(data); val.IsValid() {
 				f = val.Type()
@@ -78,8 +78,8 @@ func ComposeDecodeHookFunc(fs ...DecodeHookFunc) DecodeHookFunc {
 	}
 }
 
-
-
+// StringToSliceHookFunc returns a DecodeHookFunc that converts
+// string to []string by splitting on the given sep.
 func StringToSliceHookFunc(sep string) DecodeHookFunc {
 	return func(
 		f reflect.Kind,
@@ -98,8 +98,8 @@ func StringToSliceHookFunc(sep string) DecodeHookFunc {
 	}
 }
 
-
-
+// StringToTimeDurationHookFunc returns a DecodeHookFunc that converts
+// strings to time.Duration.
 func StringToTimeDurationHookFunc() DecodeHookFunc {
 	return func(
 		f reflect.Type,
@@ -112,13 +112,13 @@ func StringToTimeDurationHookFunc() DecodeHookFunc {
 			return data, nil
 		}
 
-		
+		// Convert it by parsing
 		return time.ParseDuration(data.(string))
 	}
 }
 
-
-
+// StringToIPHookFunc returns a DecodeHookFunc that converts
+// strings to net.IP
 func StringToIPHookFunc() DecodeHookFunc {
 	return func(
 		f reflect.Type,
@@ -131,7 +131,7 @@ func StringToIPHookFunc() DecodeHookFunc {
 			return data, nil
 		}
 
-		
+		// Convert it by parsing
 		ip := net.ParseIP(data.(string))
 		if ip == nil {
 			return net.IP{}, fmt.Errorf("failed parsing ip %v", data)
@@ -141,8 +141,8 @@ func StringToIPHookFunc() DecodeHookFunc {
 	}
 }
 
-
-
+// StringToIPNetHookFunc returns a DecodeHookFunc that converts
+// strings to net.IPNet
 func StringToIPNetHookFunc() DecodeHookFunc {
 	return func(
 		f reflect.Type,
@@ -155,14 +155,14 @@ func StringToIPNetHookFunc() DecodeHookFunc {
 			return data, nil
 		}
 
-		
+		// Convert it by parsing
 		_, net, err := net.ParseCIDR(data.(string))
 		return net, err
 	}
 }
 
-
-
+// StringToTimeHookFunc returns a DecodeHookFunc that converts
+// strings to time.Time.
 func StringToTimeHookFunc(layout string) DecodeHookFunc {
 	return func(
 		f reflect.Type,
@@ -175,16 +175,16 @@ func StringToTimeHookFunc(layout string) DecodeHookFunc {
 			return data, nil
 		}
 
-		
+		// Convert it by parsing
 		return time.Parse(layout, data.(string))
 	}
 }
 
-
-
-
-
-
+// WeaklyTypedHook is a DecodeHookFunc which adds support for weak typing to
+// the decoder.
+//
+// Note that this is significantly different from the WeaklyTypedInput option
+// of the DecoderConfig.
 func WeaklyTypedHook(
 	f reflect.Kind,
 	t reflect.Kind,

@@ -8,28 +8,28 @@ import (
 )
 
 var siPrefixTable = map[float64]string{
-	-24: "y", 
-	-21: "z", 
-	-18: "a", 
-	-15: "f", 
-	-12: "p", 
-	-9:  "n", 
-	-6:  "µ", 
-	-3:  "m", 
+	-24: "y", // yocto
+	-21: "z", // zepto
+	-18: "a", // atto
+	-15: "f", // femto
+	-12: "p", // pico
+	-9:  "n", // nano
+	-6:  "µ", // micro
+	-3:  "m", // milli
 	0:   "",
-	3:   "k", 
-	6:   "M", 
-	9:   "G", 
-	12:  "T", 
-	15:  "P", 
-	18:  "E", 
-	21:  "Z", 
-	24:  "Y", 
+	3:   "k", // kilo
+	6:   "M", // mega
+	9:   "G", // giga
+	12:  "T", // tera
+	15:  "P", // peta
+	18:  "E", // exa
+	21:  "Z", // zetta
+	24:  "Y", // yotta
 }
 
 var revSIPrefixTable = revfmap(siPrefixTable)
 
-
+// revfmap reverses the map and precomputes the power multiplier
 func revfmap(in map[float64]string) map[string]float64 {
 	rv := map[string]float64{}
 	for k, v := range in {
@@ -50,13 +50,13 @@ func init() {
 	riParseRegex = regexp.MustCompile(ri)
 }
 
-
-
-
-
-
-
-
+// ComputeSI finds the most appropriate SI prefix for the given number
+// and returns the prefix along with the value adjusted to be within
+// that prefix.
+//
+// See also: SI, ParseSI.
+//
+// e.g. ComputeSI(2.2345e-12) -> (2.2345, "p")
 func ComputeSI(input float64) (float64, string) {
 	if input == 0 {
 		return 0, ""
@@ -67,8 +67,8 @@ func ComputeSI(input float64) (float64, string) {
 
 	value := mag / math.Pow(10, exponent)
 
-	
-	
+	// Handle special case where value is exactly 1000.0
+	// Should return 1 M instead of 1000 k
 	if value == 1000.0 {
 		exponent += 3
 		value = mag / math.Pow(10, exponent)
@@ -80,24 +80,24 @@ func ComputeSI(input float64) (float64, string) {
 	return value, prefix
 }
 
-
-
-
-
-
-
-
-
+// SI returns a string with default formatting.
+//
+// SI uses Ftoa to format float value, removing trailing zeros.
+//
+// See also: ComputeSI, ParseSI.
+//
+// e.g. SI(1000000, "B") -> 1 MB
+// e.g. SI(2.2345e-12, "F") -> 2.2345 pF
 func SI(input float64, unit string) string {
 	value, prefix := ComputeSI(input)
 	return Ftoa(value) + " " + prefix + unit
 }
 
-
-
-
-
-
+// SIWithDigits works like SI but limits the resulting string to the
+// given number of decimal places.
+//
+// e.g. SIWithDigits(1000000, 0, "B") -> 1 MB
+// e.g. SIWithDigits(2.2345e-12, 2, "F") -> 2.23 pF
 func SIWithDigits(input float64, decimals int, unit string) string {
 	value, prefix := ComputeSI(input)
 	return FtoaWithDigits(value, decimals) + " " + prefix + unit
@@ -105,11 +105,11 @@ func SIWithDigits(input float64, decimals int, unit string) string {
 
 var errInvalid = errors.New("invalid input")
 
-
-
-
-
-
+// ParseSI parses an SI string back into the number and unit.
+//
+// See also: SI, ComputeSI.
+//
+// e.g. ParseSI("2.2345 pF") -> (2.2345e-12, "F", nil)
 func ParseSI(input string) (float64, string, error) {
 	found := riParseRegex.FindStringSubmatch(input)
 	if len(found) != 4 {

@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2016 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
@@ -14,7 +14,7 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 )
 
-
+// NoSuchNode is the error returned when a given node does not exist.
 type NoSuchNode struct {
 	ID  string
 	Err error
@@ -27,17 +27,17 @@ func (err *NoSuchNode) Error() string {
 	return "No such node: " + err.ID
 }
 
-
-
-
+// ListNodesOptions specify parameters to the ListNodes function.
+//
+// See http://goo.gl/3K4GwU for more details.
 type ListNodesOptions struct {
 	Filters map[string][]string
 	Context context.Context
 }
 
-
-
-
+// ListNodes returns a slice of nodes matching the given criteria.
+//
+// See http://goo.gl/3K4GwU for more details.
 func (c *Client) ListNodes(opts ListNodesOptions) ([]swarm.Node, error) {
 	path := "/nodes?" + queryString(opts)
 	resp, err := c.do("GET", path, doOptions{context: opts.Context})
@@ -52,9 +52,9 @@ func (c *Client) ListNodes(opts ListNodesOptions) ([]swarm.Node, error) {
 	return nodes, nil
 }
 
-
-
-
+// InspectNode returns information about a node by its ID.
+//
+// See http://goo.gl/WjkTOk for more details.
 func (c *Client) InspectNode(id string) (*swarm.Node, error) {
 	resp, err := c.do("GET", "/nodes/"+id, doOptions{})
 	if err != nil {
@@ -71,18 +71,18 @@ func (c *Client) InspectNode(id string) (*swarm.Node, error) {
 	return &node, nil
 }
 
-
-
-
+// UpdateNodeOptions specify parameters to the NodeUpdate function.
+//
+// See http://goo.gl/VPBFgA for more details.
 type UpdateNodeOptions struct {
 	swarm.NodeSpec
 	Version uint64
 	Context context.Context
 }
 
-
-
-
+// UpdateNode updates a node.
+//
+// See http://goo.gl/VPBFgA for more details.
 func (c *Client) UpdateNode(id string, opts UpdateNodeOptions) error {
 	params := make(url.Values)
 	params.Set("version", strconv.FormatUint(opts.Version, 10))
@@ -102,18 +102,18 @@ func (c *Client) UpdateNode(id string, opts UpdateNodeOptions) error {
 	return nil
 }
 
-
-
-
+// RemoveNodeOptions specify parameters to the RemoveNode function.
+//
+// See http://goo.gl/0SNvYg for more details.
 type RemoveNodeOptions struct {
 	ID      string
 	Force   bool
 	Context context.Context
 }
 
-
-
-
+// RemoveNode removes a node.
+//
+// See http://goo.gl/0SNvYg for more details.
 func (c *Client) RemoveNode(opts RemoveNodeOptions) error {
 	params := make(url.Values)
 	params.Set("force", strconv.FormatBool(opts.Force))

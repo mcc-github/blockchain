@@ -1,9 +1,25 @@
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
-
-
-
-
-
+// This file is the implementation of a gRPC server using HTTP/2 which
+// uses the standard Go http2 Server implementation (via the
+// http.Handler interface), rather than speaking low-level HTTP/2
+// frames itself. It is the implementation of *grpc.Server.ServeHTTP.
 
 package transport
 
@@ -28,9 +44,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-
-
-
+// NewServerHandlerTransport returns a ServerTransport handling gRPC
+// from inside an http.Handler. It requires that the http Server
+// supports HTTP/2.
 func NewServerHandlerTransport(w http.ResponseWriter, r *http.Request, stats stats.Handler) (ServerTransport, error) {
 	if r.ProtoMajor != 2 {
 		return nil, errors.New("gRPC requires HTTP/2")
@@ -39,7 +55,7 @@ func NewServerHandlerTransport(w http.ResponseWriter, r *http.Request, stats sta
 		return nil, errors.New("invalid gRPC request method")
 	}
 	contentType := r.Header.Get("Content-Type")
-	
+	// TODO: do we assume contentType is lowercase? we did before
 	contentSubtype, validContentType := contentSubtype(contentType)
 	if !validContentType {
 		return nil, errors.New("invalid gRPC request content-type")
@@ -89,11 +105,11 @@ func NewServerHandlerTransport(w http.ResponseWriter, r *http.Request, stats sta
 	return st, nil
 }
 
-
-
-
-
-
+// serverHandlerTransport is an implementation of ServerTransport
+// which replies to exactly one gRPC request (exactly one HTTP request),
+// using the net/http.Handler interface. This http.Handler is guaranteed
+// at this point to be speaking over HTTP/2, so it's able to speak valid
+// gRPC.
 type serverHandlerTransport struct {
 	rw               http.ResponseWriter
 	req              *http.Request
@@ -104,21 +120,21 @@ type serverHandlerTransport struct {
 	headerMD metadata.MD
 
 	closeOnce sync.Once
-	closedCh  chan struct{} 
+	closedCh  chan struct{} // closed on Close
 
-	
-	
-	
+	// writes is a channel of code to run serialized in the
+	// ServeHTTP (HandleStreams) goroutine. The channel is closed
+	// when WriteStatus is called.
 	writes chan func()
 
-	
-	
+	// block concurrent WriteStatus calls
+	// e.g. grpc/(*serverStream).SendMsg/RecvMsg
 	writeStatusMu sync.Mutex
 
-	
+	// we just mirror the request content-type
 	contentType string
-	
-	
+	// we store both contentType and contentSubtype so we don't keep recreating them
+	// TODO make sure this is consistent across handler_server and http2_server
 	contentSubtype string
 
 	stats stats.Handler
@@ -133,21 +149,21 @@ func (ht *serverHandlerTransport) closeCloseChanOnce() { close(ht.closedCh) }
 
 func (ht *serverHandlerTransport) RemoteAddr() net.Addr { return strAddr(ht.req.RemoteAddr) }
 
-
-
+// strAddr is a net.Addr backed by either a TCP "ip:port" string, or
+// the empty string if unknown.
 type strAddr string
 
 func (a strAddr) Network() string {
 	if a != "" {
-		
-		
-		
-		
-		
-		
-		
-		
-		
+		// Per the documentation on net/http.Request.RemoteAddr, if this is
+		// set, it's set to the IP:port of the peer (hence, TCP):
+		// https://golang.org/pkg/net/http/#Request
+		//
+		// If we want to support Unix sockets later, we can
+		// add our own grpc-specific convention within the
+		// grpc codebase to set RemoteAddr to a different
+		// format, or probably better: we can attach it to the
+		// context and use that from serverHandlerTransport.RemoteAddr.
 		return "tcp"
 	}
 	return ""
@@ -155,7 +171,7 @@ func (a strAddr) Network() string {
 
 func (a strAddr) String() string { return string(a) }
 
-
+// do runs fn in the ServeHTTP goroutine.
 func (ht *serverHandlerTransport) do(fn func()) error {
 	select {
 	case <-ht.closedCh:
@@ -172,9 +188,9 @@ func (ht *serverHandlerTransport) WriteStatus(s *Stream, st *status.Status) erro
 	err := ht.do(func() {
 		ht.writeCommonHeaders(s)
 
-		
-		
-		
+		// And flush, in case no header or body has been sent yet.
+		// This forces a separation of headers and trailers if this is the
+		// first call (for example, in end2end tests's TestNoService).
 		ht.rw.(http.Flusher).Flush()
 
 		h := ht.rw.Header()
@@ -186,7 +202,7 @@ func (ht *serverHandlerTransport) WriteStatus(s *Stream, st *status.Status) erro
 		if p := st.Proto(); p != nil && len(p.Details) > 0 {
 			stBytes, err := proto.Marshal(p)
 			if err != nil {
-				
+				// TODO: return error instead, when callers are able to handle it.
 				panic(err)
 			}
 
@@ -195,20 +211,20 @@ func (ht *serverHandlerTransport) WriteStatus(s *Stream, st *status.Status) erro
 
 		if md := s.Trailer(); len(md) > 0 {
 			for k, vv := range md {
-				
+				// Clients don't tolerate reading restricted headers after some non restricted ones were sent.
 				if isReservedHeader(k) {
 					continue
 				}
 				for _, v := range vv {
-					
-					
+					// http2 ResponseWriter mechanism to send undeclared Trailers after
+					// the headers have possibly been written.
 					h.Add(http2.TrailerPrefix+k, encodeMetadataHeader(k, v))
 				}
 			}
 		}
 	})
 
-	if err == nil { 
+	if err == nil { // transport has not been closed
 		if ht.stats != nil {
 			ht.stats.HandleRPC(s.Context(), &stats.OutTrailer{})
 		}
@@ -217,8 +233,8 @@ func (ht *serverHandlerTransport) WriteStatus(s *Stream, st *status.Status) erro
 	return err
 }
 
-
-
+// writeCommonHeaders sets common headers on the first write
+// call (Write, WriteHeader, or WriteStatus).
 func (ht *serverHandlerTransport) writeCommonHeaders(s *Stream) {
 	if ht.didCommonHeaders {
 		return
@@ -226,14 +242,14 @@ func (ht *serverHandlerTransport) writeCommonHeaders(s *Stream) {
 	ht.didCommonHeaders = true
 
 	h := ht.rw.Header()
-	h["Date"] = nil 
+	h["Date"] = nil // suppress Date to make tests happy; TODO: restore
 	h.Set("Content-Type", ht.contentType)
 
-	
-	
-	
-	
-	
+	// Predeclare trailers we'll set later in WriteStatus (after the body).
+	// This is a SHOULD in the HTTP RFC, and the way you add (known)
+	// Trailers per the net/http.ResponseWriter contract.
+	// See https://golang.org/pkg/net/http/#ResponseWriter
+	// and https://golang.org/pkg/net/http/#example_ResponseWriter_trailers
 	h.Add("Trailer", "Grpc-Status")
 	h.Add("Trailer", "Grpc-Message")
 	h.Add("Trailer", "Grpc-Status-Details-Bin")
@@ -257,7 +273,7 @@ func (ht *serverHandlerTransport) WriteHeader(s *Stream, md metadata.MD) error {
 		ht.writeCommonHeaders(s)
 		h := ht.rw.Header()
 		for k, vv := range md {
-			
+			// Clients don't tolerate reading restricted headers after some non restricted ones were sent.
 			if isReservedHeader(k) {
 				continue
 			}
@@ -279,7 +295,7 @@ func (ht *serverHandlerTransport) WriteHeader(s *Stream, md metadata.MD) error {
 }
 
 func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), traceCtx func(context.Context, string) context.Context) {
-	
+	// With this transport type there will be exactly 1 stream: this HTTP request.
 
 	ctx := ht.req.Context()
 	var cancel context.CancelFunc
@@ -289,7 +305,7 @@ func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), trace
 		ctx, cancel = context.WithCancel(ctx)
 	}
 
-	
+	// requestOver is closed when the status has been written via WriteStatus.
 	requestOver := make(chan struct{})
 	go func() {
 		select {
@@ -304,7 +320,7 @@ func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), trace
 	req := ht.req
 
 	s := &Stream{
-		id:             0, 
+		id:             0, // irrelevant
 		requestRead:    func(int) {},
 		cancel:         cancel,
 		buf:            newRecvBuffer(),
@@ -335,12 +351,12 @@ func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), trace
 		windowHandler: func(int) {},
 	}
 
-	
+	// readerDone is closed when the Body.Read-ing goroutine exits.
 	readerDone := make(chan struct{})
 	go func() {
 		defer close(readerDone)
 
-		
+		// TODO: minimize garbage, optimize recvBuffer code/ownership
 		const readSize = 8196
 		for buf := make([]byte, readSize); ; {
 			n, err := req.Body.Read(buf)
@@ -358,16 +374,16 @@ func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), trace
 		}
 	}()
 
-	
-	
-	
-	
+	// startStream is provided by the *grpc.Server's serveStreams.
+	// It starts a goroutine serving s and exits immediately.
+	// The goroutine that is started is the one that then calls
+	// into ht, calling WriteHeader, Write, WriteStatus, Close, etc.
 	startStream(s)
 
 	ht.runStream()
 	close(requestOver)
 
-	
+	// Wait for reading goroutine to finish.
 	req.Body.Close()
 	<-readerDone
 }
@@ -391,13 +407,13 @@ func (ht *serverHandlerTransport) Drain() {
 	panic("Drain() is not implemented")
 }
 
-
-
-
-
-
-
-
+// mapRecvMsgError returns the non-nil err into the appropriate
+// error value as expected by callers of *grpc.parser.recvMsg.
+// In particular, in can only be:
+//   * io.EOF
+//   * io.ErrUnexpectedEOF
+//   * of type transport.ConnectionError
+//   * an error from the status package
 func mapRecvMsgError(err error) error {
 	if err == io.EOF || err == io.ErrUnexpectedEOF {
 		return err

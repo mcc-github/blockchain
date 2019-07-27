@@ -1,9 +1,10 @@
-
+// +build windows
 
 package remote
 
 import (
 	"errors"
+	"os"
 )
 
 func NewOutputInterceptor() OutputInterceptor {
@@ -20,14 +21,16 @@ func (interceptor *outputInterceptor) StartInterceptingOutput() error {
 	}
 	interceptor.intercepting = true
 
-	
+	// not working on windows...
 
 	return nil
 }
 
 func (interceptor *outputInterceptor) StopInterceptingAndReturnOutput() (string, error) {
-	
+	// not working on windows...
 	interceptor.intercepting = false
 
 	return "", nil
 }
+
+func (interceptor *outputInterceptor) StreamTo(*os.File) {}

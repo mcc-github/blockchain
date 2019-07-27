@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2017 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
@@ -10,7 +10,7 @@ import (
 	"github.com/docker/docker/api/types/registry"
 )
 
-
+// InspectDistribution returns image digest and platform information by contacting the registry
 func (c *Client) InspectDistribution(name string) (*registry.DistributionInspect, error) {
 	path := "/distribution/" + name + "/json"
 	resp, err := c.do("GET", path, doOptions{})

@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-
+// See: http://en.wikipedia.org/wiki/Binary_prefix
 const (
-	
+	// Decimal
 
 	KB = 1000
 	MB = 1000 * KB
@@ -17,7 +17,7 @@ const (
 	TB = 1000 * GB
 	PB = 1000 * TB
 
-	
+	// Binary
 
 	KiB = 1024
 	MiB = 1024 * KiB
@@ -47,47 +47,47 @@ func getSizeAndUnit(size float64, base float64, _map []string) (float64, string)
 	return size, _map[i]
 }
 
-
-
+// CustomSize returns a human-readable approximation of a size
+// using custom format.
 func CustomSize(format string, size float64, base float64, _map []string) string {
 	size, unit := getSizeAndUnit(size, base, _map)
 	return fmt.Sprintf(format, size, unit)
 }
 
-
-
+// HumanSizeWithPrecision allows the size to be in any precision,
+// instead of 4 digit precision used in units.HumanSize.
 func HumanSizeWithPrecision(size float64, precision int) string {
 	size, unit := getSizeAndUnit(size, 1000.0, decimapAbbrs)
 	return fmt.Sprintf("%.*g%s", precision, size, unit)
 }
 
-
-
+// HumanSize returns a human-readable approximation of a size
+// capped at 4 valid numbers (eg. "2.746 MB", "796 KB").
 func HumanSize(size float64) string {
 	return HumanSizeWithPrecision(size, 4)
 }
 
-
-
+// BytesSize returns a human-readable size in bytes, kibibytes,
+// mebibytes, gibibytes, or tebibytes (eg. "44kiB", "17MiB").
 func BytesSize(size float64) string {
 	return CustomSize("%.4g%s", size, 1024.0, binaryAbbrs)
 }
 
-
-
+// FromHumanSize returns an integer from a human-readable specification of a
+// size using SI standard (eg. "44kB", "17MB").
 func FromHumanSize(size string) (int64, error) {
 	return parseSize(size, decimalMap)
 }
 
-
-
-
-
+// RAMInBytes parses a human-readable string representing an amount of RAM
+// in bytes, kibibytes, mebibytes, gibibytes, or tebibytes and
+// returns the number of bytes, or -1 if the string is unparseable.
+// Units are case-insensitive, and the 'b' suffix is optional.
 func RAMInBytes(size string) (int64, error) {
 	return parseSize(size, binaryMap)
 }
 
-
+// Parses the human-readable size string into the amount it represents.
 func parseSize(sizeStr string, uMap unitMap) (int64, error) {
 	matches := sizeRegex.FindStringSubmatch(sizeStr)
 	if len(matches) != 4 {

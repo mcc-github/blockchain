@@ -1,15 +1,15 @@
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package procfs
 
@@ -20,9 +20,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/prometheus/procfs/internal/fs"
 )
 
-
+// CPUStat shows how much time the cpu spend in various stages.
 type CPUStat struct {
 	User      float64
 	Nice      float64
@@ -36,9 +38,9 @@ type CPUStat struct {
 	GuestNice float64
 }
 
-
-
-
+// SoftIRQStat represent the softirq statistics as exported in the procfs stat file.
+// A nice introduction can be found at https://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-9.html
+// It is possible to get per-cpu stats by reading /proc/softirqs
 type SoftIRQStat struct {
 	Hi          uint64
 	Timer       uint64
@@ -52,43 +54,33 @@ type SoftIRQStat struct {
 	Rcu         uint64
 }
 
-
+// Stat represents kernel/system statistics.
 type Stat struct {
-	
+	// Boot time in seconds since the Epoch.
 	BootTime uint64
-	
+	// Summed up cpu statistics.
 	CPUTotal CPUStat
-	
+	// Per-CPU statistics.
 	CPU []CPUStat
-	
+	// Number of times interrupts were handled, which contains numbered and unnumbered IRQs.
 	IRQTotal uint64
-	
+	// Number of times a numbered IRQ was triggered.
 	IRQ []uint64
-	
+	// Number of times a context switch happened.
 	ContextSwitches uint64
-	
+	// Number of times a process was created.
 	ProcessCreated uint64
-	
+	// Number of processes currently running.
 	ProcessesRunning uint64
-	
+	// Number of processes currently blocked (waiting for IO).
 	ProcessesBlocked uint64
-	
+	// Number of times a softirq was scheduled.
 	SoftIRQTotal uint64
-	
+	// Detailed softirq statistics.
 	SoftIRQ SoftIRQStat
 }
 
-
-func NewStat() (Stat, error) {
-	fs, err := NewFS(DefaultMountPoint)
-	if err != nil {
-		return Stat{}, err
-	}
-
-	return fs.NewStat()
-}
-
-
+// Parse a cpu statistics line and returns the CPUStat struct plus the cpu id (or -1 for the overall sum).
 func parseCPUStat(line string) (CPUStat, int64, error) {
 	cpuStat := CPUStat{}
 	var cpu string
@@ -129,7 +121,7 @@ func parseCPUStat(line string) (CPUStat, int64, error) {
 	return cpuStat, cpuID, nil
 }
 
-
+// Parse a softirq line.
 func parseSoftIRQStat(line string) (SoftIRQStat, uint64, error) {
 	softIRQStat := SoftIRQStat{}
 	var total uint64
@@ -149,11 +141,31 @@ func parseSoftIRQStat(line string) (SoftIRQStat, uint64, error) {
 	return softIRQStat, total, nil
 }
 
+// NewStat returns information about current cpu/process statistics.
+// See https://www.kernel.org/doc/Documentation/filesystems/proc.txt
+//
+// Deprecated: use fs.Stat() instead
+func NewStat() (Stat, error) {
+	fs, err := NewFS(fs.DefaultProcMountPoint)
+	if err != nil {
+		return Stat{}, err
+	}
+	return fs.Stat()
+}
 
+// NewStat returns information about current cpu/process statistics.
+// See https://www.kernel.org/doc/Documentation/filesystems/proc.txt
+//
+// Deprecated: use fs.Stat() instead
 func (fs FS) NewStat() (Stat, error) {
-	
+	return fs.Stat()
+}
 
-	f, err := os.Open(fs.Path("stat"))
+// Stat returns information about current cpu/process statistics.
+// See https://www.kernel.org/doc/Documentation/filesystems/proc.txt
+func (fs FS) Stat() (Stat, error) {
+
+	f, err := os.Open(fs.proc.Path("stat"))
 	if err != nil {
 		return Stat{}, err
 	}
@@ -165,7 +177,7 @@ func (fs FS) NewStat() (Stat, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		parts := strings.Fields(scanner.Text())
-		
+		// require at least <key> <value>
 		if len(parts) < 2 {
 			continue
 		}

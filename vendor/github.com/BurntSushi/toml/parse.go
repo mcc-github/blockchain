@@ -14,19 +14,19 @@ type parser struct {
 	types   map[string]tomlType
 	lx      *lexer
 
-	
+	// A list of keys in the order that they appear in the TOML data.
 	ordered []Key
 
-	
+	// the full key for the current hash in scope
 	context Key
 
-	
+	// the base key name for everything except hashes
 	currentKey string
 
-	
+	// rough approximation of line number
 	approxLine int
 
-	
+	// A map of 'key.group.names' to whether they were created implicitly.
 	implicits map[string]bool
 }
 
@@ -141,7 +141,7 @@ func (p *parser) topLevel(item item) {
 	}
 }
 
-
+// Gets a string for a key (or part of a key in a table name).
 func (p *parser) keyString(it item) string {
 	switch it.typ {
 	case itemText:
@@ -156,8 +156,8 @@ func (p *parser) keyString(it item) string {
 	}
 }
 
-
-
+// value translates an expected value from the lexer into a Go value wrapped
+// as an empty interface.
 func (p *parser) value(it item) (interface{}, tomlType) {
 	switch it.typ {
 	case itemString:
@@ -185,11 +185,11 @@ func (p *parser) value(it item) (interface{}, tomlType) {
 		val := strings.Replace(it.val, "_", "", -1)
 		num, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
-			
-			
-			
-			
-			
+			// Distinguish integer values. Normally, it'd be a bug if the lexer
+			// provides an invalid integer, but it's possible that the number is
+			// out of range of valid values (which the lexer cannot determine).
+			// So mark the former as a bug but the latter as a legitimate user
+			// error.
 			if e, ok := err.(*strconv.NumError); ok &&
 				e.Err == strconv.ErrRange {
 
@@ -215,10 +215,10 @@ func (p *parser) value(it item) (interface{}, tomlType) {
 			}
 		}
 		if !numPeriodsOK(it.val) {
-			
-			
-			
-			
+			// As a special case, numbers like '123.' or '1.e2',
+			// which are valid as far as Go/strconv are concerned,
+			// must be rejected because TOML says that a fractional
+			// part consists of '.' followed by 1+ digits.
 			p.panicf("Invalid float %q: '.' must be followed "+
 				"by one or more digits", it.val)
 		}
@@ -288,15 +288,15 @@ func (p *parser) value(it item) (interface{}, tomlType) {
 				continue
 			}
 
-			
+			// retrieve key
 			k := p.next()
 			p.approxLine = k.line
 			kname := p.keyString(k)
 
-			
+			// retrieve value
 			p.currentKey = kname
 			val, typ := p.value(p.next())
-			
+			// make sure we keep metadata up to date
 			p.setType(kname, typ)
 			p.ordered = append(p.ordered, p.context.add(p.currentKey))
 			hash[kname] = val
@@ -309,8 +309,8 @@ func (p *parser) value(it item) (interface{}, tomlType) {
 	panic("unreachable")
 }
 
-
-
+// numUnderscoresOK checks whether each underscore in s is surrounded by
+// characters that are not underscores.
 func numUnderscoresOK(s string) bool {
 	accept := false
 	for _, r := range s {
@@ -326,7 +326,7 @@ func numUnderscoresOK(s string) bool {
 	return accept
 }
 
-
+// numPeriodsOK checks whether every period in s is followed by a digit.
 func numPeriodsOK(s string) bool {
 	period := false
 	for _, r := range s {
@@ -338,35 +338,35 @@ func numPeriodsOK(s string) bool {
 	return !period
 }
 
-
-
-
-
-
-
+// establishContext sets the current context of the parser,
+// where the context is either a hash or an array of hashes. Which one is
+// set depends on the value of the `array` parameter.
+//
+// Establishing the context also makes sure that the key isn't a duplicate, and
+// will create implicit hashes automatically.
 func (p *parser) establishContext(key Key, array bool) {
 	var ok bool
 
-	
+	// Always start at the top level and drill down for our context.
 	hashContext := p.mapping
 	keyContext := make(Key, 0)
 
-	
+	// We only need implicit hashes for key[0:-1]
 	for _, k := range key[0 : len(key)-1] {
 		_, ok = hashContext[k]
 		keyContext = append(keyContext, k)
 
-		
+		// No key? Make an implicit hash and move on.
 		if !ok {
 			p.addImplicit(keyContext)
 			hashContext[k] = make(map[string]interface{})
 		}
 
-		
-		
-		
-		
-		
+		// If the hash context is actually an array of tables, then set
+		// the hash context to the last element in that array.
+		//
+		// Otherwise, it better be a table, since this MUST be a key group (by
+		// virtue of it not being the last element in a key).
 		switch t := hashContext[k].(type) {
 		case []map[string]interface{}:
 			hashContext = t[len(t)-1]
@@ -379,15 +379,15 @@ func (p *parser) establishContext(key Key, array bool) {
 
 	p.context = keyContext
 	if array {
-		
-		
+		// If this is the first element for this array, then allocate a new
+		// list of tables for it.
 		k := key[len(key)-1]
 		if _, ok := hashContext[k]; !ok {
 			hashContext[k] = make([]map[string]interface{}, 0, 5)
 		}
 
-		
-		
+		// Add a new table. But make sure the key hasn't already been used
+		// for something else.
 		if hash, ok := hashContext[k].([]map[string]interface{}); ok {
 			hashContext[k] = append(hash, make(map[string]interface{}))
 		} else {
@@ -400,9 +400,9 @@ func (p *parser) establishContext(key Key, array bool) {
 	p.context = append(p.context, key[len(key)-1])
 }
 
-
-
-
+// setValue sets the given key to the given value in the current context.
+// It will make sure that the key hasn't already been defined, account for
+// implicit key groups.
 func (p *parser) setValue(key string, value interface{}) {
 	var tmpHash interface{}
 	var ok bool
@@ -416,8 +416,8 @@ func (p *parser) setValue(key string, value interface{}) {
 		}
 		switch t := tmpHash.(type) {
 		case []map[string]interface{}:
-			
-			
+			// The context is a table of hashes. Pick the most recent table
+			// defined as the current hash.
 			hash = t[len(t)-1]
 		case map[string]interface{}:
 			hash = t
@@ -429,63 +429,63 @@ func (p *parser) setValue(key string, value interface{}) {
 	keyContext = append(keyContext, key)
 
 	if _, ok := hash[key]; ok {
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+		// Typically, if the given key has already been set, then we have
+		// to raise an error since duplicate keys are disallowed. However,
+		// it's possible that a key was previously defined implicitly. In this
+		// case, it is allowed to be redefined concretely. (See the
+		// `tests/valid/implicit-and-explicit-after.toml` test in `toml-test`.)
+		//
+		// But we have to make sure to stop marking it as an implicit. (So that
+		// another redefinition provokes an error.)
+		//
+		// Note that since it has already been defined (as a hash), we don't
+		// want to overwrite it. So our business is done.
 		if p.isImplicit(keyContext) {
 			p.removeImplicit(keyContext)
 			return
 		}
 
-		
-		
+		// Otherwise, we have a concrete key trying to override a previous
+		// key, which is *always* wrong.
 		p.panicf("Key '%s' has already been defined.", keyContext)
 	}
 	hash[key] = value
 }
 
-
-
-
-
-
+// setType sets the type of a particular value at a given key.
+// It should be called immediately AFTER setValue.
+//
+// Note that if `key` is empty, then the type given will be applied to the
+// current context (which is either a table or an array of tables).
 func (p *parser) setType(key string, typ tomlType) {
 	keyContext := make(Key, 0, len(p.context)+1)
 	for _, k := range p.context {
 		keyContext = append(keyContext, k)
 	}
-	if len(key) > 0 { 
+	if len(key) > 0 { // allow type setting for hashes
 		keyContext = append(keyContext, key)
 	}
 	p.types[keyContext.String()] = typ
 }
 
-
+// addImplicit sets the given Key as having been created implicitly.
 func (p *parser) addImplicit(key Key) {
 	p.implicits[key.String()] = true
 }
 
-
-
+// removeImplicit stops tagging the given key as having been implicitly
+// created.
 func (p *parser) removeImplicit(key Key) {
 	p.implicits[key.String()] = false
 }
 
-
-
+// isImplicit returns true if the key group pointed to by the key was created
+// implicitly.
 func (p *parser) isImplicit(key Key) bool {
 	return p.implicits[key.String()]
 }
 
-
+// current returns the full key name of the current context.
 func (p *parser) current() string {
 	if len(p.currentKey) == 0 {
 		return p.context.String()
@@ -555,16 +555,16 @@ func (p *parser) replaceEscapes(str string) string {
 			replaced = append(replaced, rune(0x005C))
 			r += 1
 		case 'u':
-			
-			
-			
+			// At this point, we know we have a Unicode escape of the form
+			// `uXXXX` at [r, r+5). (Because the lexer guarantees this
+			// for us.)
 			escaped := p.asciiEscapeToUnicode(s[r+1 : r+5])
 			replaced = append(replaced, escaped)
 			r += 5
 		case 'U':
-			
-			
-			
+			// At this point, we know we have a Unicode escape of the form
+			// `uXXXX` at [r, r+9). (Because the lexer guarantees this
+			// for us.)
 			escaped := p.asciiEscapeToUnicode(s[r+1 : r+9])
 			replaced = append(replaced, escaped)
 			r += 9

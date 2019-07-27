@@ -1,25 +1,27 @@
+// Copyright 2017 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
+//+build !gccgo,!appengine
 
 package sha3
 
-
-
-
+// This file contains code for using the 'compute intermediate
+// message digest' (KIMD) and 'compute last message digest' (KLMD)
+// instructions to compute SHA-3 and SHAKE hashes on IBM Z.
 
 import (
 	"hash"
+
+	"golang.org/x/sys/cpu"
 )
 
-
-
+// codes represent 7-bit KIMD/KLMD function codes as defined in
+// the Principles of Operation.
 type code uint64
 
 const (
-	
+	// function codes for KIMD/KLMD
 	sha3_224  code = 32
 	sha3_256       = 33
 	sha3_384       = 34
@@ -29,31 +31,24 @@ const (
 	nopad          = 0x100
 )
 
-
-
-func hasMSA6() bool
-
-
-var hasAsm = hasMSA6()
-
-
-
-
+// kimd is a wrapper for the 'compute intermediate message digest' instruction.
+// src must be a multiple of the rate for the given function code.
+//go:noescape
 func kimd(function code, chain *[200]byte, src []byte)
 
-
-
-
+// klmd is a wrapper for the 'compute last message digest' instruction.
+// src padding is handled by the instruction.
+//go:noescape
 func klmd(function code, chain *[200]byte, dst, src []byte)
 
 type asmState struct {
-	a         [200]byte       
-	buf       []byte          
-	rate      int             
-	storage   [3072]byte      
-	outputLen int             
-	function  code            
-	state     spongeDirection 
+	a         [200]byte       // 1600 bit state
+	buf       []byte          // care must be taken to ensure cap(buf) is a multiple of rate
+	rate      int             // equivalent to block size
+	storage   [3072]byte      // underlying storage for buf
+	outputLen int             // output length if fixed, 0 if not
+	function  code            // KIMD/KLMD function code
+	state     spongeDirection // whether the sponge is absorbing or squeezing
 }
 
 func newAsmState(function code) *asmState {
@@ -80,7 +75,7 @@ func newAsmState(function code) *asmState {
 		panic("sha3: unrecognized function code")
 	}
 
-	
+	// limit s.buf size to a multiple of s.rate
 	s.resetBuf()
 	return &s
 }
@@ -91,23 +86,23 @@ func (s *asmState) clone() *asmState {
 	return &c
 }
 
-
-
+// copyIntoBuf copies b into buf. It will panic if there is not enough space to
+// store all of b.
 func (s *asmState) copyIntoBuf(b []byte) {
 	bufLen := len(s.buf)
 	s.buf = s.buf[:len(s.buf)+len(b)]
 	copy(s.buf[bufLen:], b)
 }
 
-
-
+// resetBuf points buf at storage, sets the length to 0 and sets cap to be a
+// multiple of the rate.
 func (s *asmState) resetBuf() {
 	max := (cap(s.storage) / s.rate) * s.rate
 	s.buf = s.storage[:0:max]
 }
 
-
-
+// Write (via the embedded io.Writer interface) adds more data to the running hash.
+// It never returns an error.
 func (s *asmState) Write(b []byte) (int, error) {
 	if s.state != spongeAbsorbing {
 		panic("sha3: write to sponge after read")
@@ -115,8 +110,8 @@ func (s *asmState) Write(b []byte) (int, error) {
 	length := len(b)
 	for len(b) > 0 {
 		if len(s.buf) == 0 && len(b) >= cap(s.buf) {
-			
-			
+			// Hash the data directly and push any remaining bytes
+			// into the buffer.
 			remainder := len(s.buf) % s.rate
 			kimd(s.function, &s.a, b[:len(b)-remainder])
 			if remainder != 0 {
@@ -126,12 +121,12 @@ func (s *asmState) Write(b []byte) (int, error) {
 		}
 
 		if len(s.buf) == cap(s.buf) {
-			
+			// flush the buffer
 			kimd(s.function, &s.a, s.buf)
 			s.buf = s.buf[:0]
 		}
 
-		
+		// copy as much as we can into the buffer
 		n := len(b)
 		if len(b) > cap(s.buf)-len(s.buf) {
 			n = cap(s.buf) - len(s.buf)
@@ -142,22 +137,22 @@ func (s *asmState) Write(b []byte) (int, error) {
 	return length, nil
 }
 
-
+// Read squeezes an arbitrary number of bytes from the sponge.
 func (s *asmState) Read(out []byte) (n int, err error) {
 	n = len(out)
 
-	
+	// need to pad if we were absorbing
 	if s.state == spongeAbsorbing {
 		s.state = spongeSqueezing
 
-		
+		// write hash directly into out if possible
 		if len(out)%s.rate == 0 {
-			klmd(s.function, &s.a, out, s.buf) 
+			klmd(s.function, &s.a, out, s.buf) // len(out) may be 0
 			s.buf = s.buf[:0]
 			return
 		}
 
-		
+		// write hash into buffer
 		max := cap(s.buf)
 		if max > len(out) {
 			max = (len(out)/s.rate)*s.rate + s.rate
@@ -167,7 +162,7 @@ func (s *asmState) Read(out []byte) (n int, err error) {
 	}
 
 	for len(out) > 0 {
-		
+		// flush the buffer
 		if len(s.buf) != 0 {
 			c := copy(out, s.buf)
 			out = out[c:]
@@ -175,13 +170,13 @@ func (s *asmState) Read(out []byte) (n int, err error) {
 			continue
 		}
 
-		
+		// write hash directly into out if possible
 		if len(out)%s.rate == 0 {
 			klmd(s.function|nopad, &s.a, out, nil)
 			return
 		}
 
-		
+		// write hash into buffer
 		s.resetBuf()
 		if cap(s.buf) > len(out) {
 			s.buf = s.buf[:(len(out)/s.rate)*s.rate+s.rate]
@@ -191,23 +186,23 @@ func (s *asmState) Read(out []byte) (n int, err error) {
 	return
 }
 
-
-
+// Sum appends the current hash to b and returns the resulting slice.
+// It does not change the underlying hash state.
 func (s *asmState) Sum(b []byte) []byte {
 	if s.outputLen == 0 {
 		panic("sha3: cannot call Sum on SHAKE functions")
 	}
 
-	
+	// Copy the state to preserve the original.
 	a := s.a
 
-	
-	
+	// Hash the buffer. Note that we don't clear it because we
+	// aren't updating the state.
 	klmd(s.function, &a, nil, s.buf)
 	return append(b, a[:s.outputLen]...)
 }
 
-
+// Reset resets the Hash to its initial state.
 func (s *asmState) Reset() {
 	for i := range s.a {
 		s.a[i] = 0
@@ -216,73 +211,73 @@ func (s *asmState) Reset() {
 	s.state = spongeAbsorbing
 }
 
-
+// Size returns the number of bytes Sum will return.
 func (s *asmState) Size() int {
 	return s.outputLen
 }
 
-
-
-
-
+// BlockSize returns the hash's underlying block size.
+// The Write method must be able to accept any amount
+// of data, but it may operate more efficiently if all writes
+// are a multiple of the block size.
 func (s *asmState) BlockSize() int {
 	return s.rate
 }
 
-
+// Clone returns a copy of the ShakeHash in its current state.
 func (s *asmState) Clone() ShakeHash {
 	return s.clone()
 }
 
-
-
+// new224Asm returns an assembly implementation of SHA3-224 if available,
+// otherwise it returns nil.
 func new224Asm() hash.Hash {
-	if hasAsm {
+	if cpu.S390X.HasSHA3 {
 		return newAsmState(sha3_224)
 	}
 	return nil
 }
 
-
-
+// new256Asm returns an assembly implementation of SHA3-256 if available,
+// otherwise it returns nil.
 func new256Asm() hash.Hash {
-	if hasAsm {
+	if cpu.S390X.HasSHA3 {
 		return newAsmState(sha3_256)
 	}
 	return nil
 }
 
-
-
+// new384Asm returns an assembly implementation of SHA3-384 if available,
+// otherwise it returns nil.
 func new384Asm() hash.Hash {
-	if hasAsm {
+	if cpu.S390X.HasSHA3 {
 		return newAsmState(sha3_384)
 	}
 	return nil
 }
 
-
-
+// new512Asm returns an assembly implementation of SHA3-512 if available,
+// otherwise it returns nil.
 func new512Asm() hash.Hash {
-	if hasAsm {
+	if cpu.S390X.HasSHA3 {
 		return newAsmState(sha3_512)
 	}
 	return nil
 }
 
-
-
+// newShake128Asm returns an assembly implementation of SHAKE-128 if available,
+// otherwise it returns nil.
 func newShake128Asm() ShakeHash {
-	if hasAsm {
+	if cpu.S390X.HasSHA3 {
 		return newAsmState(shake_128)
 	}
 	return nil
 }
 
-
-
+// newShake256Asm returns an assembly implementation of SHAKE-256 if available,
+// otherwise it returns nil.
 func newShake256Asm() ShakeHash {
-	if hasAsm {
+	if cpu.S390X.HasSHA3 {
 		return newAsmState(shake_256)
 	}
 	return nil

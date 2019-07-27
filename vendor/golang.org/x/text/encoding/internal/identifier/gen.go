@@ -1,8 +1,8 @@
+// Copyright 2015 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
+// +build ignore
 
 package main
 
@@ -30,10 +30,10 @@ type registry struct {
 			} `xml:"xref"`
 			Desc struct {
 				Data string `xml:",innerxml"`
-				
-				
-				
-				
+				// Any []struct {
+				// 	Data string `xml:",chardata"`
+				// } `xml:",any"`
+				// Data string `xml:",chardata"`
 			} `xml:"description,"`
 			MIB   string   `xml:"value"`
 			Alias []string `xml:"alias"`
@@ -58,14 +58,14 @@ func main() {
 		constName := ""
 		for _, a := range rec.Alias {
 			if strings.HasPrefix(a, "cs") && strings.IndexByte(a, '-') == -1 {
-				
+				// Some of the constant definitions have comments in them. Strip those.
 				constName = strings.Title(strings.SplitN(a[2:], "\n", 2)[0])
 			}
 		}
 		if constName == "" {
 			switch rec.MIB {
 			case "2085":
-				constName = "HZGB2312" 
+				constName = "HZGB2312" // Not listed as alias for some reason.
 			default:
 				log.Fatalf("No cs alias defined for %s.", rec.MIB)
 			}
@@ -73,9 +73,9 @@ func main() {
 		if rec.MIME != "" {
 			rec.MIME = fmt.Sprintf(" (MIME: %s)", rec.MIME)
 		}
-		fmt.Fprintf(w, "
+		fmt.Fprintf(w, "// %s is the MIB identifier with IANA name %s%s.\n//\n", constName, rec.Name, rec.MIME)
 		if len(rec.Desc.Data) > 0 {
-			fmt.Fprint(w, "
+			fmt.Fprint(w, "// ")
 			d := xml.NewDecoder(strings.NewReader(rec.Desc.Data))
 			inElem := true
 			attr := ""
@@ -89,12 +89,12 @@ func main() {
 				}
 				switch x := t.(type) {
 				case xml.CharData:
-					attr = "" 
+					attr = "" // Don't need attribute info.
 					a := bytes.Split([]byte(x), []byte("\n"))
 					for i, b := range a {
 						if b = bytes.TrimSpace(b); len(b) != 0 {
 							if !inElem && i > 0 {
-								fmt.Fprint(w, "\n
+								fmt.Fprint(w, "\n// ")
 							}
 							inElem = false
 							fmt.Fprintf(w, "%s ", string(b))
@@ -109,7 +109,12 @@ func main() {
 								use = use || a.Value != "person"
 							}
 							if a.Name.Local == "data" && use {
-								attr = a.Value + " "
+								// Patch up URLs to use https. From some links, the
+								// https version is different from the http one.
+								s := a.Value
+								s = strings.Replace(s, "http://", "https://", -1)
+								s = strings.Replace(s, "/unicode/", "/", -1)
+								attr = s + " "
 							}
 						}
 					}
@@ -123,9 +128,9 @@ func main() {
 		for _, x := range rec.Xref {
 			switch x.Type {
 			case "rfc":
-				fmt.Fprintf(w, "
+				fmt.Fprintf(w, "// Reference: %s\n", strings.ToUpper(x.Data))
 			case "uri":
-				fmt.Fprintf(w, "
+				fmt.Fprintf(w, "// Reference: %s\n", x.Data)
 			}
 		}
 		fmt.Fprintf(w, "%s MIB = %s\n", constName, rec.MIB)

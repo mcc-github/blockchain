@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package main
 
@@ -25,12 +25,12 @@ import (
 )
 
 var (
-	
+	// main operation modes
 	list    = flag.Bool("l", false, "list files whose formatting differs from goimport's")
 	write   = flag.Bool("w", false, "write result to (source) file instead of stdout")
 	doDiff  = flag.Bool("d", false, "display diffs instead of rewriting files")
 	srcdir  = flag.String("srcdir", "", "choose imports as if source code is from `dir`. When operating on a single file, dir may instead be the complete file name.")
-	verbose bool 
+	verbose bool // verbose logging
 
 	cpuProfile     = flag.String("cpuprofile", "", "CPU profile output")
 	memProfile     = flag.String("memprofile", "", "memory profile output")
@@ -62,24 +62,24 @@ func usage() {
 }
 
 func isGoFile(f os.FileInfo) bool {
-	
+	// ignore non-Go files
 	name := f.Name()
 	return !f.IsDir() && !strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".go")
 }
 
-
+// argumentType is which mode goimports was invoked as.
 type argumentType int
 
 const (
-	
+	// fromStdin means the user is piping their source into goimports.
 	fromStdin argumentType = iota
 
-	
-	
+	// singleArg is the common case from editors, when goimports is run on
+	// a single file.
 	singleArg
 
-	
-	
+	// multipleArg is when the user ran "goimports file1.go file2.go"
+	// or ran goimports on a directory tree.
 	multipleArg
 )
 
@@ -107,28 +107,28 @@ func processFile(filename string, in io.Reader, out io.Writer, argType argumentT
 
 	target := filename
 	if *srcdir != "" {
-		
-		
-		
-		
+		// Determine whether the provided -srcdirc is a directory or file
+		// and then use it to override the target.
+		//
+		// See https://github.com/dominikh/go-mode.el/issues/146
 		if isFile(*srcdir) {
 			if argType == multipleArg {
 				return errors.New("-srcdir value can't be a file when passing multiple arguments or when walking directories")
 			}
 			target = *srcdir
 		} else if argType == singleArg && strings.HasSuffix(*srcdir, ".go") && !isDir(*srcdir) {
-			
-			
-			
-			
-			
-			
-			
-			
+			// For a file which doesn't exist on disk yet, but might shortly.
+			// e.g. user in editor opens $DIR/newfile.go and newfile.go doesn't yet exist on disk.
+			// The goimports on-save hook writes the buffer to a temp file
+			// first and runs goimports before the actual save to newfile.go.
+			// The editor's buffer is named "newfile.go" so that is passed to goimports as:
+			//      goimports -srcdir=/gopath/src/pkg/newfile.go /tmp/gofmtXXXXXXXX.go
+			// and then the editor reloads the result from the tmp file and writes
+			// it to newfile.go.
 			target = *srcdir
 		} else {
-			
-			
+			// Pretend that file is from *srcdir in order to decide
+			// visible imports correctly.
 			target = filepath.Join(*srcdir, filepath.Base(filename))
 		}
 	}
@@ -139,13 +139,13 @@ func processFile(filename string, in io.Reader, out io.Writer, argType argumentT
 	}
 
 	if !bytes.Equal(src, res) {
-		
+		// formatting has changed
 		if *list {
 			fmt.Fprintln(out, filename)
 		}
 		if *write {
 			if argType == fromStdin {
-				
+				// filename is "<standard input>"
 				return errors.New("can't use -w on stdin")
 			}
 			err = ioutil.WriteFile(filename, res, 0)
@@ -155,7 +155,7 @@ func processFile(filename string, in io.Reader, out io.Writer, argType argumentT
 		}
 		if *doDiff {
 			if argType == fromStdin {
-				filename = "stdin.go" 
+				filename = "stdin.go" // because <standard input>.orig looks silly
 			}
 			data, err := diff(src, res, filename)
 			if err != nil {
@@ -190,15 +190,15 @@ func walkDir(path string) {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	
-	
-	
+	// call gofmtMain in a separate function
+	// so that it can use defer and have them
+	// run before the exit.
 	gofmtMain()
 	os.Exit(exitCode)
 }
 
-
-
+// parseFlags parses command line flags and returns the paths to process.
+// It's a var so that custom implementations can replace it in other files.
 var parseFlags = func() []string {
 	flag.BoolVar(&verbose, "v", false, "verbose logging")
 
@@ -232,15 +232,15 @@ func gofmtMain() {
 		defer flush()
 		defer pprof.StopCPUProfile()
 	}
-	
-	
-	
+	// doTrace is a conditionally compiled wrapper around runtime/trace. It is
+	// used to allow goimports to compile under gccgo, which does not support
+	// runtime/trace. See https://golang.org/issue/15544.
 	defer doTrace()()
 	if *memProfileRate > 0 {
 		runtime.MemProfileRate = *memProfileRate
 		bw, flush := bufferedFileWriter(*memProfile)
 		defer func() {
-			runtime.GC() 
+			runtime.GC() // materialize all statistics
 			if err := pprof.WriteHeapProfile(bw); err != nil {
 				log.Fatal(err)
 			}
@@ -320,28 +320,28 @@ func diff(b1, b2 []byte, filename string) (data []byte, err error) {
 
 	data, err = exec.Command(cmd, "-u", f1, f2).CombinedOutput()
 	if len(data) > 0 {
-		
-		
+		// diff exits with a non-zero status when the files don't match.
+		// Ignore that failure as long as we get output.
 		return replaceTempFilename(data, filename)
 	}
 	return
 }
 
-
-
-
-
-
-
-
-
-
+// replaceTempFilename replaces temporary filenames in diff with actual one.
+//
+// --- /tmp/gofmt316145376	2017-02-03 19:13:00.280468375 -0500
+// +++ /tmp/gofmt617882815	2017-02-03 19:13:00.280468375 -0500
+// ...
+// ->
+// --- path/to/file.go.orig	2017-02-03 19:13:00.280468375 -0500
+// +++ path/to/file.go	2017-02-03 19:13:00.280468375 -0500
+// ...
 func replaceTempFilename(diff []byte, filename string) ([]byte, error) {
 	bs := bytes.SplitN(diff, []byte{'\n'}, 3)
 	if len(bs) < 3 {
 		return nil, fmt.Errorf("got unexpected diff for %s", filename)
 	}
-	
+	// Preserve timestamps.
 	var t0, t1 []byte
 	if i := bytes.LastIndexByte(bs[0], '\t'); i != -1 {
 		t0 = bs[0][i:]
@@ -349,20 +349,20 @@ func replaceTempFilename(diff []byte, filename string) ([]byte, error) {
 	if i := bytes.LastIndexByte(bs[1], '\t'); i != -1 {
 		t1 = bs[1][i:]
 	}
-	
+	// Always print filepath with slash separator.
 	f := filepath.ToSlash(filename)
 	bs[0] = []byte(fmt.Sprintf("--- %s%s", f+".orig", t0))
 	bs[1] = []byte(fmt.Sprintf("+++ %s%s", f, t1))
 	return bytes.Join(bs, []byte{'\n'}), nil
 }
 
-
+// isFile reports whether name is a file.
 func isFile(name string) bool {
 	fi, err := os.Stat(name)
 	return err == nil && fi.Mode().IsRegular()
 }
 
-
+// isDir reports whether name is a directory.
 func isDir(name string) bool {
 	fi, err := os.Stat(name)
 	return err == nil && fi.IsDir()

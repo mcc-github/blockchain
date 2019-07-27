@@ -6,12 +6,12 @@ type Clock interface {
 	Now() time.Time
 	Sleep(d time.Duration)
 	Since(t time.Time) time.Duration
-	
-	
-	
-	
-	
-	
+	// After waits for the duration to elapse and then sends the current time
+	// on the returned channel.
+	// It is equivalent to clock.NewTimer(d).C.
+	// The underlying Timer is not recovered by the garbage collector
+	// until the timer fires. If efficiency is a concern, use clock.NewTimer
+	// instead and call Timer.Stop if the timer is no longer needed.
 	After(d time.Duration) <-chan time.Time
 
 	NewTimer(d time.Duration) Timer

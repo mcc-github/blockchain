@@ -1,10 +1,10 @@
 package units
 
-
-
+// Base2Bytes is the old non-SI power-of-2 byte scale (1024 bytes in a kilobyte,
+// etc.).
 type Base2Bytes int64
 
-
+// Base-2 byte units.
 const (
 	Kibibyte Base2Bytes = 1024
 	KiB                 = Kibibyte
@@ -25,8 +25,8 @@ var (
 	oldBytesUnitMap = MakeUnitMap("B", "B", 1024)
 )
 
-
-
+// ParseBase2Bytes supports both iB and B in base-2 multipliers. That is, KB
+// and KiB are both 1024.
 func ParseBase2Bytes(s string) (Base2Bytes, error) {
 	n, err := ParseUnit(s, bytesUnitMap)
 	if err != nil {
@@ -43,10 +43,10 @@ var (
 	metricBytesUnitMap = MakeUnitMap("B", "B", 1000)
 )
 
-
+// MetricBytes are SI byte units (1000 bytes in a kilobyte).
 type MetricBytes SI
 
-
+// SI base-10 byte units.
 const (
 	Kilobyte MetricBytes = 1000
 	KB                   = Kilobyte
@@ -62,7 +62,7 @@ const (
 	EB                   = Exabyte
 )
 
-
+// ParseMetricBytes parses base-10 metric byte units. That is, KB is 1000 bytes.
 func ParseMetricBytes(s string) (MetricBytes, error) {
 	n, err := ParseUnit(s, metricBytesUnitMap)
 	return MetricBytes(n), err
@@ -72,8 +72,8 @@ func (m MetricBytes) String() string {
 	return ToString(int64(m), 1000, "B", "B")
 }
 
-
-
+// ParseStrictBytes supports both iB and B suffixes for base 2 and metric,
+// respectively. That is, KiB represents 1024 and KB represents 1000.
 func ParseStrictBytes(s string) (int64, error) {
 	n, err := ParseUnit(s, bytesUnitMap)
 	if err != nil {

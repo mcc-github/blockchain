@@ -1,32 +1,76 @@
+// Copyright 2018 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// +build ignore
+// +build aix
 
+/*
+Input to cgo -godefs.  See also mkerrors.sh and mkall.sh
+*/
 
-
-
-
-
-
-
-
-
+// +godefs map struct_in_addr [4]byte /* in_addr */
+// +godefs map struct_in6_addr [16]byte /* in6_addr */
 
 package unix
 
+/*
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/limits.h>
+#include <sys/un.h>
+#include <utime.h>
+#include <sys/utsname.h>
+#include <sys/poll.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/statfs.h>
+#include <sys/termio.h>
+#include <sys/ioctl.h>
 
+#include <termios.h>
+
+#include <net/if.h>
+#include <net/if_dl.h>
+#include <netinet/in.h>
+#include <netinet/icmp6.h>
+
+
+#include <dirent.h>
+#include <fcntl.h>
+
+enum {
+	sizeofPtr = sizeof(void*),
+};
+
+union sockaddr_all {
+	struct sockaddr s1;     // this one gets used for fields
+	struct sockaddr_in s2;  // these pad it out
+	struct sockaddr_in6 s3;
+	struct sockaddr_un s4;
+	struct sockaddr_dl s5;
+};
+
+struct sockaddr_any {
+	struct sockaddr addr;
+	char pad[sizeof(union sockaddr_all) - sizeof(struct sockaddr)];
+};
+
+*/
 import "C"
 
-
+// Machine characteristics
 
 const (
-	sizeofPtr      = C.sizeofPtr
-	sizeofShort    = C.sizeof_short
-	sizeofInt      = C.sizeof_int
-	sizeofLong     = C.sizeof_long
-	sizeofLongLong = C.sizeof_longlong
+	SizeofPtr      = C.sizeofPtr
+	SizeofShort    = C.sizeof_short
+	SizeofInt      = C.sizeof_int
+	SizeofLong     = C.sizeof_long
+	SizeofLongLong = C.sizeof_longlong
 	PathMax        = C.PATH_MAX
 )
 
-
+// Basic types
 
 type (
 	_C_short     C.short
@@ -39,11 +83,9 @@ type off64 C.off64_t
 type off C.off_t
 type Mode_t C.mode_t
 
-
+// Time
 
 type Timespec C.struct_timespec
-
-type StTimespec C.struct_st_timespec
 
 type Timeval C.struct_timeval
 
@@ -59,7 +101,7 @@ type Utimbuf C.struct_utimbuf
 
 type Timezone C.struct_timezone
 
-
+// Processes
 
 type Rusage C.struct_rusage
 
@@ -71,7 +113,7 @@ type _Gid_t C.gid_t
 
 type dev_t C.dev_t
 
-
+// Files
 
 type Stat_t C.struct_stat
 
@@ -81,13 +123,15 @@ type Statx_t C.struct_statx
 
 type Dirent C.struct_dirent
 
-
+// Sockets
 
 type RawSockaddrInet4 C.struct_sockaddr_in
 
 type RawSockaddrInet6 C.struct_sockaddr_in6
 
 type RawSockaddrUnix C.struct_sockaddr_un
+
+type RawSockaddrDatalink C.struct_sockaddr_dl
 
 type RawSockaddr C.struct_sockaddr
 
@@ -112,20 +156,21 @@ type Linger C.struct_linger
 type Msghdr C.struct_msghdr
 
 const (
-	SizeofSockaddrInet4 = C.sizeof_struct_sockaddr_in
-	SizeofSockaddrInet6 = C.sizeof_struct_sockaddr_in6
-	SizeofSockaddrAny   = C.sizeof_struct_sockaddr_any
-	SizeofSockaddrUnix  = C.sizeof_struct_sockaddr_un
-	SizeofLinger        = C.sizeof_struct_linger
-	SizeofIPMreq        = C.sizeof_struct_ip_mreq
-	SizeofIPv6Mreq      = C.sizeof_struct_ipv6_mreq
-	SizeofIPv6MTUInfo   = C.sizeof_struct_ip6_mtuinfo
-	SizeofMsghdr        = C.sizeof_struct_msghdr
-	SizeofCmsghdr       = C.sizeof_struct_cmsghdr
-	SizeofICMPv6Filter  = C.sizeof_struct_icmp6_filter
+	SizeofSockaddrInet4    = C.sizeof_struct_sockaddr_in
+	SizeofSockaddrInet6    = C.sizeof_struct_sockaddr_in6
+	SizeofSockaddrAny      = C.sizeof_struct_sockaddr_any
+	SizeofSockaddrUnix     = C.sizeof_struct_sockaddr_un
+	SizeofSockaddrDatalink = C.sizeof_struct_sockaddr_dl
+	SizeofLinger           = C.sizeof_struct_linger
+	SizeofIPMreq           = C.sizeof_struct_ip_mreq
+	SizeofIPv6Mreq         = C.sizeof_struct_ipv6_mreq
+	SizeofIPv6MTUInfo      = C.sizeof_struct_ip6_mtuinfo
+	SizeofMsghdr           = C.sizeof_struct_msghdr
+	SizeofCmsghdr          = C.sizeof_struct_cmsghdr
+	SizeofICMPv6Filter     = C.sizeof_struct_icmp6_filter
 )
 
-
+// Routing and interface messages
 
 const (
 	SizeofIfMsghdr = C.sizeof_struct_if_msghdr
@@ -133,7 +178,7 @@ const (
 
 type IfMsgHdr C.struct_if_msghdr
 
-
+// Misc
 
 type FdSet C.fd_set
 
@@ -149,7 +194,7 @@ const (
 	AT_SYMLINK_NOFOLLOW = C.AT_SYMLINK_NOFOLLOW
 )
 
-
+// Terminal handling
 
 type Termios C.struct_termios
 
@@ -157,7 +202,7 @@ type Termio C.struct_termio
 
 type Winsize C.struct_winsize
 
-
+//poll
 
 type PollFd struct {
 	Fd      int32
@@ -178,11 +223,11 @@ const (
 	POLLWRNORM = C.POLLWRNORM
 )
 
-
+//flock_t
 
 type Flock_t C.struct_flock64
 
-
+// Statfs
 
 type Fsid_t C.struct_fsid_t
 type Fsid64_t C.struct_fsid64_t

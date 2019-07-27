@@ -8,19 +8,19 @@ import (
 	"time"
 )
 
-
+// ConsumerMessage encapsulates a Kafka message returned by the consumer.
 type ConsumerMessage struct {
 	Key, Value     []byte
 	Topic          string
 	Partition      int32
 	Offset         int64
-	Timestamp      time.Time       
-	BlockTimestamp time.Time       
-	Headers        []*RecordHeader 
+	Timestamp      time.Time       // only set if kafka is version 0.10+, inner message timestamp
+	BlockTimestamp time.Time       // only set if kafka is version 0.10+, outer (compressed) block timestamp
+	Headers        []*RecordHeader // only set if kafka is version 0.11+
 }
 
-
-
+// ConsumerError is what is provided to the user when an error occurs.
+// It wraps an error and includes the topic and partition.
 type ConsumerError struct {
 	Topic     string
 	Partition int32
@@ -31,46 +31,46 @@ func (ce ConsumerError) Error() string {
 	return fmt.Sprintf("kafka: error while consuming %s/%d: %s", ce.Topic, ce.Partition, ce.Err)
 }
 
-
-
-
+// ConsumerErrors is a type that wraps a batch of errors and implements the Error interface.
+// It can be returned from the PartitionConsumer's Close methods to avoid the need to manually drain errors
+// when stopping.
 type ConsumerErrors []*ConsumerError
 
 func (ce ConsumerErrors) Error() string {
 	return fmt.Sprintf("kafka: %d errors while consuming", len(ce))
 }
 
-
-
-
-
-
-
-
-
+// Consumer manages PartitionConsumers which process Kafka messages from brokers. You MUST call Close()
+// on a consumer to avoid leaks, it will not be garbage-collected automatically when it passes out of
+// scope.
+//
+// Sarama's Consumer type does not currently support automatic consumer-group rebalancing and offset tracking.
+// For Zookeeper-based tracking (Kafka 0.8.2 and earlier), the https://github.com/wvanbergen/kafka library
+// builds on Sarama to add this support. For Kafka-based tracking (Kafka 0.9 and later), the
+// https://github.com/bsm/sarama-cluster library builds on Sarama to add this support.
 type Consumer interface {
 
-	
-	
-	
+	// Topics returns the set of available topics as retrieved from the cluster
+	// metadata. This method is the same as Client.Topics(), and is provided for
+	// convenience.
 	Topics() ([]string, error)
 
-	
-	
+	// Partitions returns the sorted list of all partition IDs for the given topic.
+	// This method is the same as Client.Partitions(), and is provided for convenience.
 	Partitions(topic string) ([]int32, error)
 
-	
-	
-	
-	
+	// ConsumePartition creates a PartitionConsumer on the given topic/partition with
+	// the given offset. It will return an error if this Consumer is already consuming
+	// on the given topic/partition. Offset can be a literal offset, or OffsetNewest
+	// or OffsetOldest
 	ConsumePartition(topic string, partition int32, offset int64) (PartitionConsumer, error)
 
-	
-	
+	// HighWaterMarks returns the current high water marks for each topic and partition.
+	// Consistency between partitions is not guaranteed since high water marks are updated separately.
 	HighWaterMarks() map[string]map[int32]int64
 
-	
-	
+	// Close shuts down the consumer. It must be called after all child
+	// PartitionConsumers have already been closed.
 	Close() error
 }
 
@@ -84,7 +84,7 @@ type consumer struct {
 	brokerConsumers map[*Broker]*brokerConsumer
 }
 
-
+// NewConsumer creates a new consumer using the given broker addresses and configuration.
 func NewConsumer(addrs []string, config *Config) (Consumer, error) {
 	client, err := NewClient(addrs, config)
 	if err != nil {
@@ -99,10 +99,10 @@ func NewConsumer(addrs []string, config *Config) (Consumer, error) {
 	return c, nil
 }
 
-
-
+// NewConsumerFromClient creates a new consumer using the given client. It is still
+// necessary to call Close() on the underlying client when shutting down this consumer.
 func NewConsumerFromClient(client Client) (Consumer, error) {
-	
+	// Check that we are not dealing with a closed Client before processing any other arguments
 	if client.Closed() {
 		return nil, ErrClosedClient
 	}
@@ -246,58 +246,58 @@ func (c *consumer) abandonBrokerConsumer(brokerWorker *brokerConsumer) {
 	delete(c.brokerConsumers, brokerWorker.broker)
 }
 
+// PartitionConsumer
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// PartitionConsumer processes Kafka messages from a given topic and partition. You MUST call one of Close() or
+// AsyncClose() on a PartitionConsumer to avoid leaks; it will not be garbage-collected automatically when it passes out
+// of scope.
+//
+// The simplest way of using a PartitionConsumer is to loop over its Messages channel using a for/range
+// loop. The PartitionConsumer will only stop itself in one case: when the offset being consumed is reported
+// as out of range by the brokers. In this case you should decide what you want to do (try a different offset,
+// notify a human, etc) and handle it appropriately. For all other error cases, it will just keep retrying.
+// By default, it logs these errors to sarama.Logger; if you want to be notified directly of all errors, set
+// your config's Consumer.Return.Errors to true and read from the Errors channel, using a select statement
+// or a separate goroutine. Check out the Consumer examples to see implementations of these different approaches.
+//
+// To terminate such a for/range loop while the loop is executing, call AsyncClose. This will kick off the process of
+// consumer tear-down & return imediately. Continue to loop, servicing the Messages channel until the teardown process
+// AsyncClose initiated closes it (thus terminating the for/range loop). If you've already ceased reading Messages, call
+// Close; this will signal the PartitionConsumer's goroutines to begin shutting down (just like AsyncClose), but will
+// also drain the Messages channel, harvest all errors & return them once cleanup has completed.
 type PartitionConsumer interface {
 
-	
-	
-	
-	
+	// AsyncClose initiates a shutdown of the PartitionConsumer. This method will return immediately, after which you
+	// should continue to service the 'Messages' and 'Errors' channels until they are empty. It is required to call this
+	// function, or Close before a consumer object passes out of scope, as it will otherwise leak memory. You must call
+	// this before calling Close on the underlying client.
 	AsyncClose()
 
-	
-	
-	
-	
-	
+	// Close stops the PartitionConsumer from fetching messages. It will initiate a shutdown just like AsyncClose, drain
+	// the Messages channel, harvest any errors & return them to the caller. Note that if you are continuing to service
+	// the Messages channel when this function is called, you will be competing with Close for messages; consider
+	// calling AsyncClose, instead. It is required to call this function (or AsyncClose) before a consumer object passes
+	// out of scope, as it will otherwise leak memory. You must call this before calling Close on the underlying client.
 	Close() error
 
-	
-	
+	// Messages returns the read channel for the messages that are returned by
+	// the broker.
 	Messages() <-chan *ConsumerMessage
 
-	
-	
-	
-	
+	// Errors returns a read channel of errors that occurred during consuming, if
+	// enabled. By default, errors are logged and not returned over this channel.
+	// If you want to implement any custom error handling, set your config's
+	// Consumer.Return.Errors setting to true, and read from this channel.
 	Errors() <-chan *ConsumerError
 
-	
-	
-	
+	// HighWaterMarkOffset returns the high water mark offset of the partition,
+	// i.e. the offset that will be used for the next message that will be produced.
+	// You can use this to determine how far behind the processing is.
 	HighWaterMarkOffset() int64
 }
 
 type partitionConsumer struct {
-	highWaterMarkOffset int64 
+	highWaterMarkOffset int64 // must be at the top of the struct because https://golang.org/pkg/sync/atomic/#pkg-note-BUG
 	consumer            *consumer
 	conf                *Config
 	topic               string
@@ -316,7 +316,7 @@ type partitionConsumer struct {
 	offset    int64
 }
 
-var errTimedOut = errors.New("timed out feeding messages to the user") 
+var errTimedOut = errors.New("timed out feeding messages to the user") // not user-facing
 
 func (child *partitionConsumer) sendError(err error) {
 	cErr := &ConsumerError{
@@ -409,10 +409,10 @@ func (child *partitionConsumer) Errors() <-chan *ConsumerError {
 }
 
 func (child *partitionConsumer) AsyncClose() {
-	
-	
-	
-	
+	// this triggers whatever broker owns this child to abandon it and close its trigger channel, which causes
+	// the dispatcher to exit its loop, which removes it from the consumer then closes its 'messages' and
+	// 'errors' channel (alternatively, if the child is already at the dispatcher for some reason, that will
+	// also just close itself)
 	child.closeOnce.Do(func() {
 		close(child.dying)
 	})
@@ -423,7 +423,7 @@ func (child *partitionConsumer) Close() error {
 
 	go withRecover(func() {
 		for range child.messages {
-			
+			// drain
 		}
 	})
 
@@ -466,8 +466,8 @@ feederLoop:
 					child.broker.input <- child
 					continue feederLoop
 				} else {
-					
-					
+					// current message has not been sent, return to select
+					// statement
 					firstAttempt = false
 					goto messageSelect
 				}
@@ -555,13 +555,13 @@ func (child *partitionConsumer) parseResponse(response *FetchResponse) ([]*Consu
 		if err != nil {
 			return nil, err
 		}
-		
-		
+		// We got no messages. If we got a trailing one then we need to ask for more data.
+		// Otherwise we just poll again and wait for one to be produced...
 		if partialTrailingMessage {
 			if child.conf.Consumer.Fetch.Max > 0 && child.fetchSize == child.conf.Consumer.Fetch.Max {
-				
+				// we can't ask for more data, we've hit the configured limit
 				child.sendError(ErrMessageTooLarge)
-				child.offset++ 
+				child.offset++ // skip this one so we can keep processing future messages
 			} else {
 				child.fetchSize *= 2
 				if child.conf.Consumer.Fetch.Max > 0 && child.fetchSize > child.conf.Consumer.Fetch.Max {
@@ -573,7 +573,7 @@ func (child *partitionConsumer) parseResponse(response *FetchResponse) ([]*Consu
 		return nil, nil
 	}
 
-	
+	// we got messages, reset our fetch size in case it was increased for a previous request
 	child.fetchSize = child.conf.Consumer.Fetch.Default
 	atomic.StoreInt64(&child.highWaterMarkOffset, block.HighWaterMarkOffset)
 
@@ -605,7 +605,7 @@ func (child *partitionConsumer) parseResponse(response *FetchResponse) ([]*Consu
 	return messages, nil
 }
 
-
+// brokerConsumer
 
 type brokerConsumer struct {
 	consumer         *consumer
@@ -638,11 +638,11 @@ func (c *consumer) newBrokerConsumer(broker *Broker) *brokerConsumer {
 func (bc *brokerConsumer) subscriptionManager() {
 	var buffer []*partitionConsumer
 
-	
-	
-	
-	
-	
+	// The subscriptionManager constantly accepts new subscriptions on `input` (even when the main subscriptionConsumer
+	// goroutine is in the middle of a network request) and batches it up. The main worker goroutine picks
+	// up a batch of new subscriptions between every network request by reading from `newSubscriptions`, so we give
+	// it nil if no new subscriptions are available. We also write to `wait` only when new subscriptions is available,
+	// so the main goroutine can block waiting for work if it has none.
 	for {
 		if len(buffer) > 0 {
 			select {
@@ -676,15 +676,15 @@ done:
 }
 
 func (bc *brokerConsumer) subscriptionConsumer() {
-	<-bc.wait 
+	<-bc.wait // wait for our first piece of work
 
-	
+	// the subscriptionConsumer ensures we will get nil right away if no new subscriptions is available
 	for newSubscriptions := range bc.newSubscriptions {
 		bc.updateSubscriptions(newSubscriptions)
 
 		if len(bc.subscriptions) == 0 {
-			
-			
+			// We're about to be shut down or we're about to receive more subscriptions.
+			// Either way, the signal just hasn't propagated to our goroutine yet.
 			<-bc.wait
 			continue
 		}
@@ -725,7 +725,7 @@ func (bc *brokerConsumer) updateSubscriptions(newSubscriptions []*partitionConsu
 }
 
 func (bc *brokerConsumer) handleResponses() {
-	
+	// handles the response codes left for us by our subscriptions, and abandons ones that have been closed
 	for child := range bc.subscriptions {
 		result := child.responseResult
 		child.responseResult = nil
@@ -738,20 +738,20 @@ func (bc *brokerConsumer) handleResponses() {
 				bc.broker.ID(), child.topic, child.partition)
 			delete(bc.subscriptions, child)
 		case ErrOffsetOutOfRange:
-			
-			
+			// there's no point in retrying this it will just fail the same way again
+			// shut it down and force the user to choose what to do
 			child.sendError(result)
 			Logger.Printf("consumer/%s/%d shutting down because %s\n", child.topic, child.partition, result)
 			close(child.trigger)
 			delete(bc.subscriptions, child)
 		case ErrUnknownTopicOrPartition, ErrNotLeaderForPartition, ErrLeaderNotAvailable, ErrReplicaNotAvailable:
-			
+			// not an error, but does need redispatching
 			Logger.Printf("consumer/broker/%d abandoned subscription to %s/%d because %s\n",
 				bc.broker.ID(), child.topic, child.partition, result)
 			child.trigger <- none{}
 			delete(bc.subscriptions, child)
 		default:
-			
+			// dunno, tell the user and try redispatching
 			child.sendError(result)
 			Logger.Printf("consumer/broker/%d abandoned subscription to %s/%d because %s\n",
 				bc.broker.ID(), child.topic, child.partition, result)
@@ -763,7 +763,7 @@ func (bc *brokerConsumer) handleResponses() {
 
 func (bc *brokerConsumer) abort(err error) {
 	bc.consumer.abandonBrokerConsumer(bc)
-	_ = bc.broker.Close() 
+	_ = bc.broker.Close() // we don't care about the error this might return, we already have one
 
 	for child := range bc.subscriptions {
 		child.sendError(err)
@@ -796,7 +796,7 @@ func (bc *brokerConsumer) fetchNewMessages() (*FetchResponse, error) {
 	}
 	if bc.consumer.conf.Version.IsAtLeast(V0_11_0_0) {
 		request.Version = 4
-		request.Isolation = ReadUncommitted 
+		request.Isolation = ReadUncommitted // We don't support yet transactions.
 	}
 
 	for child := range bc.subscriptions {

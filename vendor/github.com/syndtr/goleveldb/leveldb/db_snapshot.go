@@ -1,8 +1,8 @@
-
-
-
-
-
+// Copyright (c) 2012, Suryandaru Triandana <syndtr@gmail.com>
+// All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 package leveldb
 
@@ -24,7 +24,7 @@ type snapshotElement struct {
 	e   *list.Element
 }
 
-
+// Acquires a snapshot, based on latest sequence.
 func (db *DB) acquireSnapshot() *snapshotElement {
 	db.snapsMu.Lock()
 	defer db.snapsMu.Unlock()
@@ -45,7 +45,7 @@ func (db *DB) acquireSnapshot() *snapshotElement {
 	return se
 }
 
-
+// Releases given snapshot element.
 func (db *DB) releaseSnapshot(se *snapshotElement) {
 	db.snapsMu.Lock()
 	defer db.snapsMu.Unlock()
@@ -59,7 +59,7 @@ func (db *DB) releaseSnapshot(se *snapshotElement) {
 	}
 }
 
-
+// Gets minimum sequence that not being snapshotted.
 func (db *DB) minSeq() uint64 {
 	db.snapsMu.Lock()
 	defer db.snapsMu.Unlock()
@@ -71,7 +71,7 @@ func (db *DB) minSeq() uint64 {
 	return db.getSeq()
 }
 
-
+// Snapshot is a DB snapshot.
 type Snapshot struct {
 	db       *DB
 	elem     *snapshotElement
@@ -79,7 +79,7 @@ type Snapshot struct {
 	released bool
 }
 
-
+// Creates new snapshot object.
 func (db *DB) newSnapshot() *Snapshot {
 	snap := &Snapshot{
 		db:   db,
@@ -94,11 +94,11 @@ func (snap *Snapshot) String() string {
 	return fmt.Sprintf("leveldb.Snapshot{%d}", snap.elem.seq)
 }
 
-
-
-
-
-
+// Get gets the value for the given key. It returns ErrNotFound if
+// the DB does not contains the key.
+//
+// The caller should not modify the contents of the returned slice, but
+// it is safe to modify the contents of the argument after Get returns.
 func (snap *Snapshot) Get(key []byte, ro *opt.ReadOptions) (value []byte, err error) {
 	err = snap.db.ok()
 	if err != nil {
@@ -113,9 +113,9 @@ func (snap *Snapshot) Get(key []byte, ro *opt.ReadOptions) (value []byte, err er
 	return snap.db.get(nil, nil, key, snap.elem.seq, ro)
 }
 
-
-
-
+// Has returns true if the DB does contains the given key.
+//
+// It is safe to modify the contents of the argument after Get returns.
 func (snap *Snapshot) Has(key []byte, ro *opt.ReadOptions) (ret bool, err error) {
 	err = snap.db.ok()
 	if err != nil {
@@ -130,23 +130,27 @@ func (snap *Snapshot) Has(key []byte, ro *opt.ReadOptions) (ret bool, err error)
 	return snap.db.has(nil, nil, key, snap.elem.seq, ro)
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// NewIterator returns an iterator for the snapshot of the underlying DB.
+// The returned iterator is not safe for concurrent use, but it is safe to use
+// multiple iterators concurrently, with each in a dedicated goroutine.
+// It is also safe to use an iterator concurrently with modifying its
+// underlying DB. The resultant key/value pairs are guaranteed to be
+// consistent.
+//
+// Slice allows slicing the iterator to only contains keys in the given
+// range. A nil Range.Start is treated as a key before all keys in the
+// DB. And a nil Range.Limit is treated as a key after all keys in
+// the DB.
+//
+// WARNING: Any slice returned by interator (e.g. slice returned by calling
+// Iterator.Key() or Iterator.Value() methods), its content should not be
+// modified unless noted otherwise.
+//
+// The iterator must be released after use, by calling Release method.
+// Releasing the snapshot doesn't mean releasing the iterator too, the
+// iterator would be still valid until released.
+//
+// Also read Iterator documentation of the leveldb/iterator package.
 func (snap *Snapshot) NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator {
 	if err := snap.db.ok(); err != nil {
 		return iterator.NewEmptyIterator(err)
@@ -156,22 +160,22 @@ func (snap *Snapshot) NewIterator(slice *util.Range, ro *opt.ReadOptions) iterat
 	if snap.released {
 		return iterator.NewEmptyIterator(ErrSnapshotReleased)
 	}
-	
-	
+	// Since iterator already hold version ref, it doesn't need to
+	// hold snapshot ref.
 	return snap.db.newIterator(nil, nil, snap.elem.seq, slice, ro)
 }
 
-
-
-
-
-
+// Release releases the snapshot. This will not release any returned
+// iterators, the iterators would still be valid until released or the
+// underlying DB is closed.
+//
+// Other methods should not be called after the snapshot has been released.
 func (snap *Snapshot) Release() {
 	snap.mu.Lock()
 	defer snap.mu.Unlock()
 
 	if !snap.released {
-		
+		// Clear the finalizer.
 		runtime.SetFinalizer(snap, nil)
 
 		snap.released = true

@@ -1,15 +1,15 @@
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright 2015 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package prometheus
 
@@ -31,48 +31,48 @@ type processCollector struct {
 	startTime       *Desc
 }
 
-
-
+// ProcessCollectorOpts defines the behavior of a process metrics collector
+// created with NewProcessCollector.
 type ProcessCollectorOpts struct {
-	
-	
-	
-	
+	// PidFn returns the PID of the process the collector collects metrics
+	// for. It is called upon each collection. By default, the PID of the
+	// current process is used, as determined on construction time by
+	// calling os.Getpid().
 	PidFn func() (int, error)
-	
-	
+	// If non-empty, each of the collected metrics is prefixed by the
+	// provided string and an underscore ("_").
 	Namespace string
-	
-	
-	
-	
-	
-	
-	
+	// If true, any error encountered during collection is reported as an
+	// invalid metric (see NewInvalidMetric). Otherwise, errors are ignored
+	// and the collected metrics will be incomplete. (Possibly, no metrics
+	// will be collected at all.) While that's usually not desired, it is
+	// appropriate for the common "mix-in" of process metrics, where process
+	// metrics are nice to have, but failing to collect them should not
+	// disrupt the collection of the remaining metrics.
 	ReportErrors bool
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// NewProcessCollector returns a collector which exports the current state of
+// process metrics including CPU, memory and file descriptor usage as well as
+// the process start time. The detailed behavior is defined by the provided
+// ProcessCollectorOpts. The zero value of ProcessCollectorOpts creates a
+// collector for the current process with an empty namespace string and no error
+// reporting.
+//
+// Currently, the collector depends on a Linux-style proc filesystem and
+// therefore only exports metrics for Linux.
+//
+// Note: An older version of this function had the following signature:
+//
+//     NewProcessCollector(pid int, namespace string) Collector
+//
+// Most commonly, it was called as
+//
+//     NewProcessCollector(os.Getpid(), "")
+//
+// The following call of the current version is equivalent to the above:
+//
+//     NewProcessCollector(ProcessCollectorOpts{})
 func NewProcessCollector(opts ProcessCollectorOpts) Collector {
 	ns := ""
 	if len(opts.Namespace) > 0 {
@@ -125,8 +125,8 @@ func NewProcessCollector(opts ProcessCollectorOpts) Collector {
 		c.pidFn = opts.PidFn
 	}
 
-	
-	if _, err := procfs.NewStat(); err == nil {
+	// Set up process metric collection if supported by the runtime.
+	if _, err := procfs.NewDefaultFS(); err == nil {
 		c.collectFn = c.processCollect
 	} else {
 		c.collectFn = func(ch chan<- Metric) {
@@ -137,7 +137,7 @@ func NewProcessCollector(opts ProcessCollectorOpts) Collector {
 	return c
 }
 
-
+// Describe returns all descriptions of the collector.
 func (c *processCollector) Describe(ch chan<- *Desc) {
 	ch <- c.cpuTotal
 	ch <- c.openFDs
@@ -148,7 +148,7 @@ func (c *processCollector) Describe(ch chan<- *Desc) {
 	ch <- c.startTime
 }
 
-
+// Collect returns the current state of all metrics of the collector.
 func (c *processCollector) Collect(ch chan<- Metric) {
 	c.collectFn(ch)
 }
@@ -166,7 +166,7 @@ func (c *processCollector) processCollect(ch chan<- Metric) {
 		return
 	}
 
-	if stat, err := p.NewStat(); err == nil {
+	if stat, err := p.Stat(); err == nil {
 		ch <- MustNewConstMetric(c.cpuTotal, CounterValue, stat.CPUTime())
 		ch <- MustNewConstMetric(c.vsize, GaugeValue, float64(stat.VirtualMemory()))
 		ch <- MustNewConstMetric(c.rss, GaugeValue, float64(stat.ResidentMemory()))
@@ -185,7 +185,7 @@ func (c *processCollector) processCollect(ch chan<- Metric) {
 		c.reportError(ch, c.openFDs, err)
 	}
 
-	if limits, err := p.NewLimits(); err == nil {
+	if limits, err := p.Limits(); err == nil {
 		ch <- MustNewConstMetric(c.maxFDs, GaugeValue, float64(limits.OpenFiles))
 		ch <- MustNewConstMetric(c.maxVsize, GaugeValue, float64(limits.AddressSpace))
 	} else {

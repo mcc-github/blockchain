@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-
-
+// Error implements the error interface and can represents multiple
+// errors that occur in the course of a single decode.
 type Error struct {
 	Errors []string
 }
@@ -25,8 +25,8 @@ func (e *Error) Error() string {
 		len(e.Errors), strings.Join(points, "\n"))
 }
 
-
-
+// WrappedErrors implements the errwrap.Wrapper interface to make this
+// return value more useful with the errwrap and go-multierror libraries.
 func (e *Error) WrappedErrors() []error {
 	if e == nil {
 		return nil

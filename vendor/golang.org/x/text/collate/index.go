@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package collate
 
@@ -24,8 +24,8 @@ func getTable(t tableIndex) *colltab.Table {
 	}
 }
 
-
-
+// tableIndex holds information for constructing a table
+// for a certain locale based on the main table.
 type tableIndex struct {
 	lookupOffset uint32
 	valuesOffset uint32

@@ -1,8 +1,8 @@
+// Copyright 2018 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
+// +build freebsd netbsd
 
 package unix
 
@@ -11,7 +11,7 @@ import (
 	"unsafe"
 )
 
-
+// Derive extattr namespace and attribute name
 
 func xattrnamespace(fullattr string) (ns int, attr string, err error) {
 	s := strings.IndexByte(fullattr, '.')
@@ -40,7 +40,7 @@ func initxattrdest(dest []byte, idx int) (d unsafe.Pointer) {
 	}
 }
 
-
+// FreeBSD and NetBSD implement their own syscalls to handle extended attributes
 
 func Getxattr(file string, attr string, dest []byte) (sz int, err error) {
 	d := initxattrdest(dest, 0)
@@ -78,10 +78,13 @@ func Lgetxattr(link string, attr string, dest []byte) (sz int, err error) {
 	return ExtattrGetLink(link, nsid, a, uintptr(d), destsize)
 }
 
-
+// flags are unused on FreeBSD
 
 func Fsetxattr(fd int, attr string, data []byte, flags int) (err error) {
-	d := unsafe.Pointer(&data[0])
+	var d unsafe.Pointer
+	if len(data) > 0 {
+		d = unsafe.Pointer(&data[0])
+	}
 	datasiz := len(data)
 
 	nsid, a, err := xattrnamespace(attr)
@@ -94,7 +97,10 @@ func Fsetxattr(fd int, attr string, data []byte, flags int) (err error) {
 }
 
 func Setxattr(file string, attr string, data []byte, flags int) (err error) {
-	d := unsafe.Pointer(&data[0])
+	var d unsafe.Pointer
+	if len(data) > 0 {
+		d = unsafe.Pointer(&data[0])
+	}
 	datasiz := len(data)
 
 	nsid, a, err := xattrnamespace(attr)
@@ -107,7 +113,10 @@ func Setxattr(file string, attr string, data []byte, flags int) (err error) {
 }
 
 func Lsetxattr(link string, attr string, data []byte, flags int) (err error) {
-	d := unsafe.Pointer(&data[0])
+	var d unsafe.Pointer
+	if len(data) > 0 {
+		d = unsafe.Pointer(&data[0])
+	}
 	datasiz := len(data)
 
 	nsid, a, err := xattrnamespace(attr)
@@ -153,12 +162,18 @@ func Listxattr(file string, dest []byte) (sz int, err error) {
 	d := initxattrdest(dest, 0)
 	destsiz := len(dest)
 
-	
+	// FreeBSD won't allow you to list xattrs from multiple namespaces
 	s := 0
 	for _, nsid := range [...]int{EXTATTR_NAMESPACE_USER, EXTATTR_NAMESPACE_SYSTEM} {
 		stmp, e := ExtattrListFile(file, nsid, uintptr(d), destsiz)
 
-		
+		/* Errors accessing system attrs are ignored so that
+		 * we can implement the Linux-like behavior of omitting errors that
+		 * we don't have read permissions on
+		 *
+		 * Linux will still error if we ask for user attributes on a file that
+		 * we don't have read permissions on, so don't ignore those errors
+		 */
 		if e != nil && e == EPERM && nsid != EXTATTR_NAMESPACE_USER {
 			continue
 		} else if e != nil {

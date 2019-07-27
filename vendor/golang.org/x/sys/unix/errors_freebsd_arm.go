@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2017 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package unix
 
@@ -203,7 +203,7 @@ const (
 	IFT_X25PLE                        = 0x28
 	IFT_XETHER                        = 0x1a
 
-	
+	// missing constants on FreeBSD-11.1-RELEASE, copied from old values in ztypes_freebsd_arm.go
 	IFF_SMART       = 0x20
 	IFT_FAITH       = 0xf2
 	IFT_IPXIP       = 0xf9

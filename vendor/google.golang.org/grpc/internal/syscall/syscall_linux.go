@@ -1,9 +1,25 @@
+// +build !appengine
 
+/*
+ *
+ * Copyright 2018 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
-
-
-
-
+// Package syscall provides functionalities that grpc uses to get low-level operating system
+// stats/info.
 package syscall
 
 import (
@@ -16,7 +32,7 @@ import (
 	"google.golang.org/grpc/grpclog"
 )
 
-
+// GetCPUTime returns the how much CPU time has passed since the start of this process.
 func GetCPUTime() int64 {
 	var ts unix.Timespec
 	if err := unix.ClockGettime(unix.CLOCK_PROCESS_CPUTIME_ID, &ts); err != nil {
@@ -25,18 +41,18 @@ func GetCPUTime() int64 {
 	return ts.Nano()
 }
 
-
+// Rusage is an alias for syscall.Rusage under linux non-appengine environment.
 type Rusage syscall.Rusage
 
-
+// GetRusage returns the resource usage of current process.
 func GetRusage() (rusage *Rusage) {
 	rusage = new(Rusage)
 	syscall.Getrusage(syscall.RUSAGE_SELF, (*syscall.Rusage)(rusage))
 	return
 }
 
-
-
+// CPUTimeDiff returns the differences of user CPU time and system CPU time used
+// between two Rusage structs.
 func CPUTimeDiff(first *Rusage, latest *Rusage) (float64, float64) {
 	f := (*syscall.Rusage)(first)
 	l := (*syscall.Rusage)(latest)
@@ -53,11 +69,11 @@ func CPUTimeDiff(first *Rusage, latest *Rusage) (float64, float64) {
 	return uTimeElapsed, sTimeElapsed
 }
 
-
+// SetTCPUserTimeout sets the TCP user timeout on a connection's socket
 func SetTCPUserTimeout(conn net.Conn, timeout time.Duration) error {
 	tcpconn, ok := conn.(*net.TCPConn)
 	if !ok {
-		
+		// not a TCP connection. exit early
 		return nil
 	}
 	rawConn, err := tcpconn.SyscallConn()
@@ -74,7 +90,7 @@ func SetTCPUserTimeout(conn net.Conn, timeout time.Duration) error {
 	return nil
 }
 
-
+// GetTCPUserTimeout gets the TCP user timeout on a connection's socket
 func GetTCPUserTimeout(conn net.Conn) (opt int, err error) {
 	tcpconn, ok := conn.(*net.TCPConn)
 	if !ok {

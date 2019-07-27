@@ -1,4 +1,4 @@
-
+// +build go1.6
 
 package humanize
 
@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-
-
+// BigCommaf produces a string form of the given big.Float in base 10
+// with commas after every three orders of magnitude.
 func BigCommaf(v *big.Float) string {
 	buf := &bytes.Buffer{}
 	if v.Sign() < 0 {

@@ -13,7 +13,7 @@ type realEncoder struct {
 	registry metrics.Registry
 }
 
-
+// primitives
 
 func (re *realEncoder) putInt8(in int8) {
 	re.raw[re.off] = byte(in)
@@ -52,7 +52,7 @@ func (re *realEncoder) putBool(in bool) {
 	re.putInt8(0)
 }
 
-
+// collection
 
 func (re *realEncoder) putRawBytes(in []byte) error {
 	copy(re.raw[re.off:], in)
@@ -134,7 +134,7 @@ func (re *realEncoder) offset() int {
 	return re.off
 }
 
-
+// stacks
 
 func (re *realEncoder) push(in pushEncoder) {
 	in.saveOffset(re.off)
@@ -143,14 +143,14 @@ func (re *realEncoder) push(in pushEncoder) {
 }
 
 func (re *realEncoder) pop() error {
-	
+	// this is go's ugly pop pattern (the inverse of append)
 	in := re.stack[len(re.stack)-1]
 	re.stack = re.stack[:len(re.stack)-1]
 
 	return in.run(re.off, re.raw)
 }
 
-
+// we do record metrics during the real encoder pass
 func (re *realEncoder) metricRegistry() metrics.Registry {
 	return re.registry
 }

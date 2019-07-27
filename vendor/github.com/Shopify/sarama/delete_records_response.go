@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-
-
-
-
-
-
+// response message format is:
+// throttleMs(int32) [topic]
+// where topic is:
+//  name(string) [partition]
+// where partition is:
+//  id(int32) low_watermark(int64) error_code(int16)
 
 type DeleteRecordsResponse struct {
 	Version      int16

@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 go-dockerclient authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package docker
 
@@ -16,16 +16,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/go-units"
+	units "github.com/docker/go-units"
 )
 
-
-
+// ErrContainerAlreadyExists is the error returned by CreateContainer when the
+// container already exists.
 var ErrContainerAlreadyExists = errors.New("container already exists")
 
-
-
-
+// ListContainersOptions specify parameters to the ListContainers function.
+//
+// See https://goo.gl/kaOHGw for more details.
 type ListContainersOptions struct {
 	All     bool
 	Size    bool
@@ -36,7 +36,7 @@ type ListContainersOptions struct {
 	Context context.Context
 }
 
-
+// APIPort is a type that represents a port mapping returned by the Docker API
 type APIPort struct {
 	PrivatePort int64  `json:"PrivatePort,omitempty" yaml:"PrivatePort,omitempty" toml:"PrivatePort,omitempty"`
 	PublicPort  int64  `json:"PublicPort,omitempty" yaml:"PublicPort,omitempty" toml:"PublicPort,omitempty"`
@@ -44,7 +44,7 @@ type APIPort struct {
 	IP          string `json:"IP,omitempty" yaml:"IP,omitempty" toml:"IP,omitempty"`
 }
 
-
+// APIMount represents a mount point for a container.
 type APIMount struct {
 	Name        string `json:"Name,omitempty" yaml:"Name,omitempty" toml:"Name,omitempty"`
 	Source      string `json:"Source,omitempty" yaml:"Source,omitempty" toml:"Source,omitempty"`
@@ -52,11 +52,11 @@ type APIMount struct {
 	Driver      string `json:"Driver,omitempty" yaml:"Driver,omitempty" toml:"Driver,omitempty"`
 	Mode        string `json:"Mode,omitempty" yaml:"Mode,omitempty" toml:"Mode,omitempty"`
 	RW          bool   `json:"RW,omitempty" yaml:"RW,omitempty" toml:"RW,omitempty"`
-	Propogation string `json:"Propogation,omitempty" yaml:"Propogation,omitempty" toml:"Propogation,omitempty"`
+	Propagation string `json:"Propagation,omitempty" yaml:"Propagation,omitempty" toml:"Propagation,omitempty"`
 }
 
-
-
+// APIContainers represents each container in the list returned by
+// ListContainers.
 type APIContainers struct {
 	ID         string            `json:"Id" yaml:"Id" toml:"Id"`
 	Image      string            `json:"Image,omitempty" yaml:"Image,omitempty" toml:"Image,omitempty"`
@@ -73,15 +73,15 @@ type APIContainers struct {
 	Mounts     []APIMount        `json:"Mounts,omitempty" yaml:"Mounts,omitempty" toml:"Mounts,omitempty"`
 }
 
-
-
+// NetworkList encapsulates a map of networks, as returned by the Docker API in
+// ListContainers.
 type NetworkList struct {
 	Networks map[string]ContainerNetwork `json:"Networks" yaml:"Networks,omitempty" toml:"Networks,omitempty"`
 }
 
-
-
-
+// ListContainers returns a slice of containers matching the given criteria.
+//
+// See https://goo.gl/kaOHGw for more details.
 func (c *Client) ListContainers(opts ListContainersOptions) ([]APIContainers, error) {
 	path := "/containers/json?" + queryString(opts)
 	resp, err := c.do("GET", path, doOptions{context: opts.Context})
@@ -96,16 +96,16 @@ func (c *Client) ListContainers(opts ListContainersOptions) ([]APIContainers, er
 	return containers, nil
 }
 
-
-
+// Port represents the port number and the protocol, in the form
+// <number>/<protocol>. For example: 80/tcp.
 type Port string
 
-
+// Port returns the number of the port.
 func (p Port) Port() string {
 	return strings.Split(string(p), "/")[0]
 }
 
-
+// Proto returns the name of the protocol.
 func (p Port) Proto() string {
 	parts := strings.Split(string(p), "/")
 	if len(parts) == 1 {
@@ -114,7 +114,7 @@ func (p Port) Proto() string {
 	return parts[1]
 }
 
-
+// HealthCheck represents one check of health.
 type HealthCheck struct {
 	Start    time.Time `json:"Start,omitempty" yaml:"Start,omitempty" toml:"Start,omitempty"`
 	End      time.Time `json:"End,omitempty" yaml:"End,omitempty" toml:"End,omitempty"`
@@ -122,14 +122,14 @@ type HealthCheck struct {
 	Output   string    `json:"Output,omitempty" yaml:"Output,omitempty" toml:"Output,omitempty"`
 }
 
-
+// Health represents the health of a container.
 type Health struct {
 	Status        string        `json:"Status,omitempty" yaml:"Status,omitempty" toml:"Status,omitempty"`
 	FailingStreak int           `json:"FailingStreak,omitempty" yaml:"FailingStreak,omitempty" toml:"FailingStreak,omitempty"`
 	Log           []HealthCheck `json:"Log,omitempty" yaml:"Log,omitempty" toml:"Log,omitempty"`
 }
 
-
+// State represents the state of a container.
 type State struct {
 	Status            string    `json:"Status,omitempty" yaml:"Status,omitempty" toml:"Status,omitempty"`
 	Running           bool      `json:"Running,omitempty" yaml:"Running,omitempty" toml:"Running,omitempty"`
@@ -146,7 +146,7 @@ type State struct {
 	Health            Health    `json:"Health,omitempty" yaml:"Health,omitempty" toml:"Health,omitempty"`
 }
 
-
+// String returns a human-readable description of the state
 func (s *State) String() string {
 	if s.Running {
 		if s.Paused {
@@ -178,7 +178,7 @@ func (s *State) String() string {
 	return fmt.Sprintf("Exited (%d) %s ago", s.ExitCode, units.HumanDuration(time.Now().UTC().Sub(s.FinishedAt)))
 }
 
-
+// StateString returns a single string to describe state
 func (s *State) StateString() string {
 	if s.Running {
 		if s.Paused {
@@ -201,18 +201,18 @@ func (s *State) StateString() string {
 	return "exited"
 }
 
-
-
+// PortBinding represents the host/container port mapping as returned in the
+// `docker inspect` json
 type PortBinding struct {
 	HostIP   string `json:"HostIp,omitempty" yaml:"HostIp,omitempty" toml:"HostIp,omitempty"`
 	HostPort string `json:"HostPort,omitempty" yaml:"HostPort,omitempty" toml:"HostPort,omitempty"`
 }
 
-
-
+// PortMapping represents a deprecated field in the `docker inspect` output,
+// and its value as found in NetworkSettings should always be nil
 type PortMapping map[string]string
 
-
+// ContainerNetwork represents the networking settings of a container per network.
 type ContainerNetwork struct {
 	Aliases             []string `json:"Aliases,omitempty" yaml:"Aliases,omitempty" toml:"Aliases,omitempty"`
 	MacAddress          string   `json:"MacAddress,omitempty" yaml:"MacAddress,omitempty" toml:"MacAddress,omitempty"`
@@ -226,7 +226,7 @@ type ContainerNetwork struct {
 	NetworkID           string   `json:"NetworkID,omitempty" yaml:"NetworkID,omitempty" toml:"NetworkID,omitempty"`
 }
 
-
+// NetworkSettings contains network-related information about a container
 type NetworkSettings struct {
 	Networks               map[string]ContainerNetwork `json:"Networks,omitempty" yaml:"Networks,omitempty" toml:"Networks,omitempty"`
 	IPAddress              string                      `json:"IPAddress,omitempty" yaml:"IPAddress,omitempty" toml:"IPAddress,omitempty"`
@@ -248,8 +248,8 @@ type NetworkSettings struct {
 	SecondaryIPv6Addresses []string                    `json:"SecondaryIPv6Addresses,omitempty" yaml:"SecondaryIPv6Addresses,omitempty" toml:"SecondaryIPv6Addresses,omitempty"`
 }
 
-
-
+// PortMappingAPI translates the port mappings as contained in NetworkSettings
+// into the format in which they would appear when returned by the API
 func (settings *NetworkSettings) PortMappingAPI() []APIPort {
 	var mapping []APIPort
 	for port, bindings := range settings.Ports {
@@ -283,9 +283,9 @@ func parsePort(rawPort string) (int, error) {
 	return int(port), nil
 }
 
-
-
-
+// Config is the list of configuration options used when creating a container.
+// Config does not contain the options that are specific to starting a container on a
+// given host.  Those are contained in HostConfig
 type Config struct {
 	Hostname          string              `json:"Hostname,omitempty" yaml:"Hostname,omitempty" toml:"Hostname,omitempty"`
 	Domainname        string              `json:"Domainname,omitempty" yaml:"Domainname,omitempty" toml:"Domainname,omitempty"`
@@ -305,7 +305,7 @@ type Config struct {
 	Cmd               []string            `json:"Cmd" yaml:"Cmd" toml:"Cmd"`
 	Shell             []string            `json:"Shell,omitempty" yaml:"Shell,omitempty" toml:"Shell,omitempty"`
 	Healthcheck       *HealthConfig       `json:"Healthcheck,omitempty" yaml:"Healthcheck,omitempty" toml:"Healthcheck,omitempty"`
-	DNS               []string            `json:"Dns,omitempty" yaml:"Dns,omitempty" toml:"Dns,omitempty"` 
+	DNS               []string            `json:"Dns,omitempty" yaml:"Dns,omitempty" toml:"Dns,omitempty"` // For Docker API v1.9 and below only
 	Image             string              `json:"Image,omitempty" yaml:"Image,omitempty" toml:"Image,omitempty"`
 	Volumes           map[string]struct{} `json:"Volumes,omitempty" yaml:"Volumes,omitempty" toml:"Volumes,omitempty"`
 	VolumeDriver      string              `json:"VolumeDriver,omitempty" yaml:"VolumeDriver,omitempty" toml:"VolumeDriver,omitempty"`
@@ -325,14 +325,14 @@ type Config struct {
 	StdinOnce         bool                `json:"StdinOnce,omitempty" yaml:"StdinOnce,omitempty" toml:"StdinOnce,omitempty"`
 	NetworkDisabled   bool                `json:"NetworkDisabled,omitempty" yaml:"NetworkDisabled,omitempty" toml:"NetworkDisabled,omitempty"`
 
-	
-	
+	// This is no longer used and has been kept here for backward
+	// compatibility, please use HostConfig.VolumesFrom.
 	VolumesFrom string `json:"VolumesFrom,omitempty" yaml:"VolumesFrom,omitempty" toml:"VolumesFrom,omitempty"`
 }
 
-
-
-
+// HostMount represents a mount point in the container in HostConfig.
+//
+// It has been added in the version 1.25 of the Docker API
 type HostMount struct {
 	Target        string         `json:"Target,omitempty" yaml:"Target,omitempty" toml:"Target,omitempty"`
 	Source        string         `json:"Source,omitempty" yaml:"Source,omitempty" toml:"Source,omitempty"`
@@ -343,34 +343,34 @@ type HostMount struct {
 	TempfsOptions *TempfsOptions `json:"TempfsOptions,omitempty" yaml:"TempfsOptions,omitempty" toml:"TempfsOptions,omitempty"`
 }
 
-
+// BindOptions contains optional configuration for the bind type
 type BindOptions struct {
 	Propagation string `json:"Propagation,omitempty" yaml:"Propagation,omitempty" toml:"Propagation,omitempty"`
 }
 
-
+// VolumeOptions contains optional configuration for the volume type
 type VolumeOptions struct {
 	NoCopy       bool               `json:"NoCopy,omitempty" yaml:"NoCopy,omitempty" toml:"NoCopy,omitempty"`
 	Labels       map[string]string  `json:"Labels,omitempty" yaml:"Labels,omitempty" toml:"Labels,omitempty"`
 	DriverConfig VolumeDriverConfig `json:"DriverConfig,omitempty" yaml:"DriverConfig,omitempty" toml:"DriverConfig,omitempty"`
 }
 
-
+// TempfsOptions contains optional configuration for the tempfs type
 type TempfsOptions struct {
 	SizeBytes int64 `json:"SizeBytes,omitempty" yaml:"SizeBytes,omitempty" toml:"SizeBytes,omitempty"`
 	Mode      int   `json:"Mode,omitempty" yaml:"Mode,omitempty" toml:"Mode,omitempty"`
 }
 
-
+// VolumeDriverConfig holds a map of volume driver specific options
 type VolumeDriverConfig struct {
 	Name    string            `json:"Name,omitempty" yaml:"Name,omitempty" toml:"Name,omitempty"`
 	Options map[string]string `json:"Options,omitempty" yaml:"Options,omitempty" toml:"Options,omitempty"`
 }
 
-
-
-
-
+// Mount represents a mount point in the container.
+//
+// It has been added in the version 1.20 of the Docker API, available since
+// Docker 1.8.
 type Mount struct {
 	Name        string
 	Source      string
@@ -380,22 +380,22 @@ type Mount struct {
 	RW          bool
 }
 
-
+// LogConfig defines the log driver type and the configuration for it.
 type LogConfig struct {
 	Type   string            `json:"Type,omitempty" yaml:"Type,omitempty" toml:"Type,omitempty"`
 	Config map[string]string `json:"Config,omitempty" yaml:"Config,omitempty" toml:"Config,omitempty"`
 }
 
-
-
-
+// ULimit defines system-wide resource limitations This can help a lot in
+// system administration, e.g. when a user starts too many processes and
+// therefore makes the system unresponsive for other users.
 type ULimit struct {
 	Name string `json:"Name,omitempty" yaml:"Name,omitempty" toml:"Name,omitempty"`
 	Soft int64  `json:"Soft,omitempty" yaml:"Soft,omitempty" toml:"Soft,omitempty"`
 	Hard int64  `json:"Hard,omitempty" yaml:"Hard,omitempty" toml:"Hard,omitempty"`
 }
 
-
+// SwarmNode containers information about which Swarm node the container is on.
 type SwarmNode struct {
 	ID     string            `json:"ID,omitempty" yaml:"ID,omitempty" toml:"ID,omitempty"`
 	IP     string            `json:"IP,omitempty" yaml:"IP,omitempty" toml:"IP,omitempty"`
@@ -406,39 +406,39 @@ type SwarmNode struct {
 	Labels map[string]string `json:"Labels,omitempty" yaml:"Labels,omitempty" toml:"Labels,omitempty"`
 }
 
-
-
+// GraphDriver contains information about the GraphDriver used by the
+// container.
 type GraphDriver struct {
 	Name string            `json:"Name,omitempty" yaml:"Name,omitempty" toml:"Name,omitempty"`
 	Data map[string]string `json:"Data,omitempty" yaml:"Data,omitempty" toml:"Data,omitempty"`
 }
 
-
-
-
-
+// HealthConfig holds configuration settings for the HEALTHCHECK feature
+//
+// It has been added in the version 1.24 of the Docker API, available since
+// Docker 1.12.
 type HealthConfig struct {
-	
-	
-	
-	
-	
-	
-	
+	// Test is the test to perform to check that the container is healthy.
+	// An empty slice means to inherit the default.
+	// The options are:
+	// {} : inherit healthcheck
+	// {"NONE"} : disable healthcheck
+	// {"CMD", args...} : exec arguments directly
+	// {"CMD-SHELL", command} : run command with system's default shell
 	Test []string `json:"Test,omitempty" yaml:"Test,omitempty" toml:"Test,omitempty"`
 
-	
-	Interval    time.Duration `json:"Interval,omitempty" yaml:"Interval,omitempty" toml:"Interval,omitempty"`          
-	Timeout     time.Duration `json:"Timeout,omitempty" yaml:"Timeout,omitempty" toml:"Timeout,omitempty"`             
-	StartPeriod time.Duration `json:"StartPeriod,omitempty" yaml:"StartPeriod,omitempty" toml:"StartPeriod,omitempty"` 
+	// Zero means to inherit. Durations are expressed as integer nanoseconds.
+	Interval    time.Duration `json:"Interval,omitempty" yaml:"Interval,omitempty" toml:"Interval,omitempty"`          // Interval is the time to wait between checks.
+	Timeout     time.Duration `json:"Timeout,omitempty" yaml:"Timeout,omitempty" toml:"Timeout,omitempty"`             // Timeout is the time to wait before considering the check to have hung.
+	StartPeriod time.Duration `json:"StartPeriod,omitempty" yaml:"StartPeriod,omitempty" toml:"StartPeriod,omitempty"` // The start period for the container to initialize before the retries starts to count down.
 
-	
-	
+	// Retries is the number of consecutive failures needed to consider a container as unhealthy.
+	// Zero means inherit.
 	Retries int `json:"Retries,omitempty" yaml:"Retries,omitempty" toml:"Retries,omitempty"`
 }
 
-
-
+// Container is the type encompasing everything about a container - its config,
+// hostconfig, etc.
 type Container struct {
 	ID string `json:"Id" yaml:"Id" toml:"Id"`
 
@@ -475,9 +475,9 @@ type Container struct {
 	AppArmorProfile string `json:"AppArmorProfile,omitempty" yaml:"AppArmorProfile,omitempty" toml:"AppArmorProfile,omitempty"`
 }
 
-
-
-
+// UpdateContainerOptions specify parameters to the UpdateContainer function.
+//
+// See https://goo.gl/Y6fXUy for more details.
 type UpdateContainerOptions struct {
 	BlkioWeight        int           `json:"BlkioWeight"`
 	CPUShares          int           `json:"CpuShares"`
@@ -495,9 +495,9 @@ type UpdateContainerOptions struct {
 	Context            context.Context
 }
 
-
-
-
+// UpdateContainer updates the container at ID with the options
+//
+// See https://goo.gl/Y6fXUy for more details.
 func (c *Client) UpdateContainer(id string, opts UpdateContainerOptions) error {
 	resp, err := c.do("POST", fmt.Sprintf("/containers/"+id+"/update"), doOptions{
 		data:      opts,
@@ -511,21 +511,21 @@ func (c *Client) UpdateContainer(id string, opts UpdateContainerOptions) error {
 	return nil
 }
 
-
-
-
+// RenameContainerOptions specify parameters to the RenameContainer function.
+//
+// See https://goo.gl/46inai for more details.
 type RenameContainerOptions struct {
-	
+	// ID of container to rename
 	ID string `qs:"-"`
 
-	
+	// New name
 	Name    string `json:"name,omitempty" yaml:"name,omitempty"`
 	Context context.Context
 }
 
-
-
-
+// RenameContainer updates and existing containers name
+//
+// See https://goo.gl/46inai for more details.
 func (c *Client) RenameContainer(opts RenameContainerOptions) error {
 	resp, err := c.do("POST", fmt.Sprintf("/containers/"+opts.ID+"/rename?%s", queryString(opts)), doOptions{
 		context: opts.Context,
@@ -537,17 +537,17 @@ func (c *Client) RenameContainer(opts RenameContainerOptions) error {
 	return nil
 }
 
-
-
-
+// InspectContainer returns information about a container by its ID.
+//
+// See https://goo.gl/FaI5JT for more details.
 func (c *Client) InspectContainer(id string) (*Container, error) {
 	return c.inspectContainer(id, doOptions{})
 }
 
-
-
-
-
+// InspectContainerWithContext returns information about a container by its ID.
+// The context object can be used to cancel the inspect request.
+//
+// See https://goo.gl/FaI5JT for more details.
 func (c *Client) InspectContainerWithContext(id string, ctx context.Context) (*Container, error) {
 	return c.inspectContainer(id, doOptions{context: ctx})
 }
@@ -569,9 +569,9 @@ func (c *Client) inspectContainer(id string, opts doOptions) (*Container, error)
 	return &container, nil
 }
 
-
-
-
+// ContainerChanges returns changes in the filesystem of the given container.
+//
+// See https://goo.gl/15KKzh for more details.
 func (c *Client) ContainerChanges(id string) ([]Change, error) {
 	path := "/containers/" + id + "/changes"
 	resp, err := c.do("GET", path, doOptions{})
@@ -589,9 +589,9 @@ func (c *Client) ContainerChanges(id string) ([]Change, error) {
 	return changes, nil
 }
 
-
-
-
+// CreateContainerOptions specify parameters to the CreateContainer function.
+//
+// See https://goo.gl/tyzwVM for more details.
 type CreateContainerOptions struct {
 	Name             string
 	Config           *Config           `qs:"-"`
@@ -600,13 +600,13 @@ type CreateContainerOptions struct {
 	Context          context.Context
 }
 
-
-
-
-
-
-
-
+// CreateContainer creates a new container, returning the container instance,
+// or an error in case of failure.
+//
+// The returned container instance contains only the container ID. To get more
+// details about the container after creating it, use InspectContainer.
+//
+// See https://goo.gl/tyzwVM for more details.
 func (c *Client) CreateContainer(opts CreateContainerOptions) (*Container, error) {
 	path := "/containers/create?" + queryString(opts)
 	resp, err := c.do(
@@ -627,14 +627,14 @@ func (c *Client) CreateContainer(opts CreateContainerOptions) (*Container, error
 	)
 
 	if e, ok := err.(*Error); ok {
-		if e.Status == http.StatusNotFound {
+		if e.Status == http.StatusNotFound && strings.Contains(e.Message, "No such image") {
 			return nil, ErrNoSuchImage
 		}
 		if e.Status == http.StatusConflict {
 			return nil, ErrContainerAlreadyExists
 		}
-		
-		
+		// Workaround for 17.09 bug returning 400 instead of 409.
+		// See https://github.com/moby/moby/issues/35021
 		if e.Status == http.StatusBadRequest && strings.Contains(e.Message, "Conflict.") {
 			return nil, ErrContainerAlreadyExists
 		}
@@ -654,76 +654,76 @@ func (c *Client) CreateContainer(opts CreateContainerOptions) (*Container, error
 	return &container, nil
 }
 
-
-
+// KeyValuePair is a type for generic key/value pairs as used in the Lxc
+// configuration
 type KeyValuePair struct {
 	Key   string `json:"Key,omitempty" yaml:"Key,omitempty" toml:"Key,omitempty"`
 	Value string `json:"Value,omitempty" yaml:"Value,omitempty" toml:"Value,omitempty"`
 }
 
-
-
-
-
-
-
-
-
-
-
+// RestartPolicy represents the policy for automatically restarting a container.
+//
+// Possible values are:
+//
+//   - always: the docker daemon will always restart the container
+//   - on-failure: the docker daemon will restart the container on failures, at
+//                 most MaximumRetryCount times
+//   - unless-stopped: the docker daemon will always restart the container except
+//                 when user has manually stopped the container
+//   - no: the docker daemon will not restart the container automatically
 type RestartPolicy struct {
 	Name              string `json:"Name,omitempty" yaml:"Name,omitempty" toml:"Name,omitempty"`
 	MaximumRetryCount int    `json:"MaximumRetryCount,omitempty" yaml:"MaximumRetryCount,omitempty" toml:"MaximumRetryCount,omitempty"`
 }
 
-
-
+// AlwaysRestart returns a restart policy that tells the Docker daemon to
+// always restart the container.
 func AlwaysRestart() RestartPolicy {
 	return RestartPolicy{Name: "always"}
 }
 
-
-
+// RestartOnFailure returns a restart policy that tells the Docker daemon to
+// restart the container on failures, trying at most maxRetry times.
 func RestartOnFailure(maxRetry int) RestartPolicy {
 	return RestartPolicy{Name: "on-failure", MaximumRetryCount: maxRetry}
 }
 
-
-
+// RestartUnlessStopped returns a restart policy that tells the Docker daemon to
+// always restart the container except when user has manually stopped the container.
 func RestartUnlessStopped() RestartPolicy {
 	return RestartPolicy{Name: "unless-stopped"}
 }
 
-
-
+// NeverRestart returns a restart policy that tells the Docker daemon to never
+// restart the container on failures.
 func NeverRestart() RestartPolicy {
 	return RestartPolicy{Name: "no"}
 }
 
-
-
+// Device represents a device mapping between the Docker host and the
+// container.
 type Device struct {
 	PathOnHost        string `json:"PathOnHost,omitempty" yaml:"PathOnHost,omitempty" toml:"PathOnHost,omitempty"`
 	PathInContainer   string `json:"PathInContainer,omitempty" yaml:"PathInContainer,omitempty" toml:"PathInContainer,omitempty"`
 	CgroupPermissions string `json:"CgroupPermissions,omitempty" yaml:"CgroupPermissions,omitempty" toml:"CgroupPermissions,omitempty"`
 }
 
-
-
+// BlockWeight represents a relative device weight for an individual device inside
+// of a container
 type BlockWeight struct {
 	Path   string `json:"Path,omitempty"`
 	Weight string `json:"Weight,omitempty"`
 }
 
-
-
+// BlockLimit represents a read/write limit in IOPS or Bandwidth for a device
+// inside of a container
 type BlockLimit struct {
 	Path string `json:"Path,omitempty"`
 	Rate int64  `json:"Rate,omitempty"`
 }
 
-
-
+// HostConfig contains the container options related to starting a container on
+// a given host
 type HostConfig struct {
 	Binds                []string               `json:"Binds,omitempty" yaml:"Binds,omitempty" toml:"Binds,omitempty"`
 	CapAdd               []string               `json:"CapAdd,omitempty" yaml:"CapAdd,omitempty" toml:"CapAdd,omitempty"`
@@ -733,7 +733,7 @@ type HostConfig struct {
 	LxcConf              []KeyValuePair         `json:"LxcConf,omitempty" yaml:"LxcConf,omitempty" toml:"LxcConf,omitempty"`
 	PortBindings         map[Port][]PortBinding `json:"PortBindings,omitempty" yaml:"PortBindings,omitempty" toml:"PortBindings,omitempty"`
 	Links                []string               `json:"Links,omitempty" yaml:"Links,omitempty" toml:"Links,omitempty"`
-	DNS                  []string               `json:"Dns,omitempty" yaml:"Dns,omitempty" toml:"Dns,omitempty"` 
+	DNS                  []string               `json:"Dns,omitempty" yaml:"Dns,omitempty" toml:"Dns,omitempty"` // For Docker API v1.10 and above only
 	DNSOptions           []string               `json:"DnsOptions,omitempty" yaml:"DnsOptions,omitempty" toml:"DnsOptions,omitempty"`
 	DNSSearch            []string               `json:"DnsSearch,omitempty" yaml:"DnsSearch,omitempty" toml:"DnsSearch,omitempty"`
 	ExtraHosts           []string               `json:"ExtraHosts,omitempty" yaml:"ExtraHosts,omitempty" toml:"ExtraHosts,omitempty"`
@@ -754,7 +754,6 @@ type HostConfig struct {
 	MemoryReservation    int64                  `json:"MemoryReservation,omitempty" yaml:"MemoryReservation,omitempty" toml:"MemoryReservation,omitempty"`
 	KernelMemory         int64                  `json:"KernelMemory,omitempty" yaml:"KernelMemory,omitempty" toml:"KernelMemory,omitempty"`
 	MemorySwap           int64                  `json:"MemorySwap,omitempty" yaml:"MemorySwap,omitempty" toml:"MemorySwap,omitempty"`
-	MemorySwappiness     int64                  `json:"MemorySwappiness,omitempty" yaml:"MemorySwappiness,omitempty" toml:"MemorySwappiness,omitempty"`
 	CPUShares            int64                  `json:"CpuShares,omitempty" yaml:"CpuShares,omitempty" toml:"CpuShares,omitempty"`
 	CPUSet               string                 `json:"Cpuset,omitempty" yaml:"Cpuset,omitempty" toml:"Cpuset,omitempty"`
 	CPUSetCPUs           string                 `json:"CpusetCpus,omitempty" yaml:"CpusetCpus,omitempty" toml:"CpusetCpus,omitempty"`
@@ -772,14 +771,11 @@ type HostConfig struct {
 	Ulimits              []ULimit               `json:"Ulimits,omitempty" yaml:"Ulimits,omitempty" toml:"Ulimits,omitempty"`
 	VolumeDriver         string                 `json:"VolumeDriver,omitempty" yaml:"VolumeDriver,omitempty" toml:"VolumeDriver,omitempty"`
 	OomScoreAdj          int                    `json:"OomScoreAdj,omitempty" yaml:"OomScoreAdj,omitempty" toml:"OomScoreAdj,omitempty"`
-	PidsLimit            int64                  `json:"PidsLimit,omitempty" yaml:"PidsLimit,omitempty" toml:"PidsLimit,omitempty"`
+	MemorySwappiness     *int64                 `json:"MemorySwappiness,omitempty" yaml:"MemorySwappiness,omitempty" toml:"MemorySwappiness,omitempty"`
+	PidsLimit            *int64                 `json:"PidsLimit,omitempty" yaml:"PidsLimit,omitempty" toml:"PidsLimit,omitempty"`
+	OOMKillDisable       *bool                  `json:"OomKillDisable,omitempty" yaml:"OomKillDisable,omitempty" toml:"OomKillDisable,omitempty"`
 	ShmSize              int64                  `json:"ShmSize,omitempty" yaml:"ShmSize,omitempty" toml:"ShmSize,omitempty"`
 	Tmpfs                map[string]string      `json:"Tmpfs,omitempty" yaml:"Tmpfs,omitempty" toml:"Tmpfs,omitempty"`
-	Privileged           bool                   `json:"Privileged,omitempty" yaml:"Privileged,omitempty" toml:"Privileged,omitempty"`
-	PublishAllPorts      bool                   `json:"PublishAllPorts,omitempty" yaml:"PublishAllPorts,omitempty" toml:"PublishAllPorts,omitempty"`
-	ReadonlyRootfs       bool                   `json:"ReadonlyRootfs,omitempty" yaml:"ReadonlyRootfs,omitempty" toml:"ReadonlyRootfs,omitempty"`
-	OOMKillDisable       bool                   `json:"OomKillDisable,omitempty" yaml:"OomKillDisable,omitempty" toml:"OomKillDisable,omitempty"`
-	AutoRemove           bool                   `json:"AutoRemove,omitempty" yaml:"AutoRemove,omitempty" toml:"AutoRemove,omitempty"`
 	StorageOpt           map[string]string      `json:"StorageOpt,omitempty" yaml:"StorageOpt,omitempty" toml:"StorageOpt,omitempty"`
 	Sysctls              map[string]string      `json:"Sysctls,omitempty" yaml:"Sysctls,omitempty" toml:"Sysctls,omitempty"`
 	CPUCount             int64                  `json:"CpuCount,omitempty" yaml:"CpuCount,omitempty"`
@@ -787,38 +783,42 @@ type HostConfig struct {
 	IOMaximumBandwidth   int64                  `json:"IOMaximumBandwidth,omitempty" yaml:"IOMaximumBandwidth,omitempty"`
 	IOMaximumIOps        int64                  `json:"IOMaximumIOps,omitempty" yaml:"IOMaximumIOps,omitempty"`
 	Mounts               []HostMount            `json:"Mounts,omitempty" yaml:"Mounts,omitempty" toml:"Mounts,omitempty"`
-	Init                 bool                   `json:",omitempty" yaml:",omitempty"`
 	Runtime              string                 `json:"Runtime,omitempty" yaml:"Runtime,omitempty" toml:"Runtime,omitempty"`
+	Init                 bool                   `json:",omitempty" yaml:",omitempty"`
+	Privileged           bool                   `json:"Privileged,omitempty" yaml:"Privileged,omitempty" toml:"Privileged,omitempty"`
+	PublishAllPorts      bool                   `json:"PublishAllPorts,omitempty" yaml:"PublishAllPorts,omitempty" toml:"PublishAllPorts,omitempty"`
+	ReadonlyRootfs       bool                   `json:"ReadonlyRootfs,omitempty" yaml:"ReadonlyRootfs,omitempty" toml:"ReadonlyRootfs,omitempty"`
+	AutoRemove           bool                   `json:"AutoRemove,omitempty" yaml:"AutoRemove,omitempty" toml:"AutoRemove,omitempty"`
 }
 
-
-
+// NetworkingConfig represents the container's networking configuration for each of its interfaces
+// Carries the networking configs specified in the `docker run` and `docker network connect` commands
 type NetworkingConfig struct {
-	EndpointsConfig map[string]*EndpointConfig `json:"EndpointsConfig" yaml:"EndpointsConfig" toml:"EndpointsConfig"` 
+	EndpointsConfig map[string]*EndpointConfig `json:"EndpointsConfig" yaml:"EndpointsConfig" toml:"EndpointsConfig"` // Endpoint configs for each connecting network
 }
 
-
-
-
-
-
-
-
-
+// StartContainer starts a container, returning an error in case of failure.
+//
+// Passing the HostConfig to this method has been deprecated in Docker API 1.22
+// (Docker Engine 1.10.x) and totally removed in Docker API 1.24 (Docker Engine
+// 1.12.x). The client will ignore the parameter when communicating with Docker
+// API 1.24 or greater.
+//
+// See https://goo.gl/fbOSZy for more details.
 func (c *Client) StartContainer(id string, hostConfig *HostConfig) error {
 	return c.startContainer(id, hostConfig, doOptions{})
 }
 
-
-
-
-
-
-
-
-
-
-
+// StartContainerWithContext starts a container, returning an error in case of
+// failure. The context can be used to cancel the outstanding start container
+// request.
+//
+// Passing the HostConfig to this method has been deprecated in Docker API 1.22
+// (Docker Engine 1.10.x) and totally removed in Docker API 1.24 (Docker Engine
+// 1.12.x). The client will ignore the parameter when communicating with Docker
+// API 1.24 or greater.
+//
+// See https://goo.gl/fbOSZy for more details.
 func (c *Client) StartContainerWithContext(id string, hostConfig *HostConfig, ctx context.Context) error {
 	return c.startContainer(id, hostConfig, doOptions{context: ctx})
 }
@@ -846,19 +846,19 @@ func (c *Client) startContainer(id string, hostConfig *HostConfig, opts doOption
 	return nil
 }
 
-
-
-
-
+// StopContainer stops a container, killing it after the given timeout (in
+// seconds).
+//
+// See https://goo.gl/R9dZcV for more details.
 func (c *Client) StopContainer(id string, timeout uint) error {
 	return c.stopContainer(id, timeout, doOptions{})
 }
 
-
-
-
-
-
+// StopContainerWithContext stops a container, killing it after the given
+// timeout (in seconds). The context can be used to cancel the stop
+// container request.
+//
+// See https://goo.gl/R9dZcV for more details.
 func (c *Client) StopContainerWithContext(id string, timeout uint, ctx context.Context) error {
 	return c.stopContainer(id, timeout, doOptions{context: ctx})
 }
@@ -879,10 +879,10 @@ func (c *Client) stopContainer(id string, timeout uint, opts doOptions) error {
 	return nil
 }
 
-
-
-
-
+// RestartContainer stops a container, killing it after the given timeout (in
+// seconds), during the stop process.
+//
+// See https://goo.gl/MrAKQ5 for more details.
 func (c *Client) RestartContainer(id string, timeout uint) error {
 	path := fmt.Sprintf("/containers/%s/restart?t=%d", id, timeout)
 	resp, err := c.do("POST", path, doOptions{})
@@ -896,9 +896,9 @@ func (c *Client) RestartContainer(id string, timeout uint) error {
 	return nil
 }
 
-
-
-
+// PauseContainer pauses the given container.
+//
+// See https://goo.gl/D1Yaii for more details.
 func (c *Client) PauseContainer(id string) error {
 	path := fmt.Sprintf("/containers/%s/pause", id)
 	resp, err := c.do("POST", path, doOptions{})
@@ -912,9 +912,9 @@ func (c *Client) PauseContainer(id string) error {
 	return nil
 }
 
-
-
-
+// UnpauseContainer unpauses the given container.
+//
+// See https://goo.gl/sZ2faO for more details.
 func (c *Client) UnpauseContainer(id string) error {
 	path := fmt.Sprintf("/containers/%s/unpause", id)
 	resp, err := c.do("POST", path, doOptions{})
@@ -928,18 +928,18 @@ func (c *Client) UnpauseContainer(id string) error {
 	return nil
 }
 
-
-
-
-
+// TopResult represents the list of processes running in a container, as
+// returned by /containers/<id>/top.
+//
+// See https://goo.gl/FLwpPl for more details.
 type TopResult struct {
 	Titles    []string
 	Processes [][]string
 }
 
-
-
-
+// TopContainer returns processes running inside a container
+//
+// See https://goo.gl/FLwpPl for more details.
 func (c *Client) TopContainer(id string, psArgs string) (TopResult, error) {
 	var args string
 	var result TopResult
@@ -959,9 +959,9 @@ func (c *Client) TopContainer(id string, psArgs string) (TopResult, error) {
 	return result, err
 }
 
-
-
-
+// Stats represents container statistics, returned by /containers/<id>/stats.
+//
+// See https://goo.gl/Dk3Xio for more details.
 type Stats struct {
 	Read      time.Time `json:"read,omitempty" yaml:"read,omitempty" toml:"read,omitempty"`
 	PreRead   time.Time `json:"preread,omitempty" yaml:"preread,omitempty" toml:"preread,omitempty"`
@@ -1033,7 +1033,7 @@ type Stats struct {
 	} `json:"storage_stats,omitempty" yaml:"storage_stats,omitempty" toml:"storage_stats,omitempty"`
 }
 
-
+// NetworkStats is a stats entry for network stats
 type NetworkStats struct {
 	RxDropped uint64 `json:"rx_dropped,omitempty" yaml:"rx_dropped,omitempty" toml:"rx_dropped,omitempty"`
 	RxBytes   uint64 `json:"rx_bytes,omitempty" yaml:"rx_bytes,omitempty" toml:"rx_bytes,omitempty"`
@@ -1045,7 +1045,7 @@ type NetworkStats struct {
 	TxBytes   uint64 `json:"tx_bytes,omitempty" yaml:"tx_bytes,omitempty" toml:"tx_bytes,omitempty"`
 }
 
-
+// CPUStats is a stats entry for cpu stats
 type CPUStats struct {
 	CPUUsage struct {
 		PercpuUsage       []uint64 `json:"percpu_usage,omitempty" yaml:"percpu_usage,omitempty" toml:"percpu_usage,omitempty"`
@@ -1062,7 +1062,7 @@ type CPUStats struct {
 	} `json:"throttling_data,omitempty" yaml:"throttling_data,omitempty" toml:"throttling_data,omitempty"`
 }
 
-
+// BlkioStatsEntry is a stats entry for blkio_stats
 type BlkioStatsEntry struct {
 	Major uint64 `json:"major,omitempty" yaml:"major,omitempty" toml:"major,omitempty"`
 	Minor uint64 `json:"minor,omitempty" yaml:"minor,omitempty" toml:"minor,omitempty"`
@@ -1070,32 +1070,32 @@ type BlkioStatsEntry struct {
 	Value uint64 `json:"value,omitempty" yaml:"value,omitempty" toml:"value,omitempty"`
 }
 
-
-
-
+// StatsOptions specify parameters to the Stats function.
+//
+// See https://goo.gl/Dk3Xio for more details.
 type StatsOptions struct {
 	ID     string
 	Stats  chan<- *Stats
 	Stream bool
-	
+	// A flag that enables stopping the stats operation
 	Done <-chan bool
-	
+	// Initial connection timeout
 	Timeout time.Duration
-	
-	
+	// Timeout with no data is received, it's reset every time new data
+	// arrives
 	InactivityTimeout time.Duration `qs:"-"`
 	Context           context.Context
 }
 
-
-
-
-
-
-
-
-
-
+// Stats sends container statistics for the given container to the given channel.
+//
+// This function is blocking, similar to a streaming call for logs, and should be run
+// on a separate goroutine from the caller. Note that this function will block until
+// the given container is removed, not just exited. When finished, this function
+// will close the given channel. Alternatively, function can be stopped by
+// signaling on the Done channel.
+//
+// See https://goo.gl/Dk3Xio for more details.
 func (c *Client) Stats(opts StatsOptions) (retErr error) {
 	errC := make(chan error, 1)
 	readCloser, writeCloser := io.Pipe()
@@ -1103,13 +1103,8 @@ func (c *Client) Stats(opts StatsOptions) (retErr error) {
 	defer func() {
 		close(opts.Stats)
 
-		select {
-		case err := <-errC:
-			if err != nil && retErr == nil {
-				retErr = err
-			}
-		default:
-			
+		if err := <-errC; err != nil && retErr == nil {
+			retErr = err
 		}
 
 		if err := readCloser.Close(); err != nil && retErr == nil {
@@ -1119,6 +1114,7 @@ func (c *Client) Stats(opts StatsOptions) (retErr error) {
 
 	reqSent := make(chan struct{})
 	go func() {
+		defer close(errC)
 		err := c.stream("GET", fmt.Sprintf("/containers/%s/stats?stream=%v", opts.ID, opts.Stream), streamOptions{
 			rawJSONStream:     true,
 			useJSONDecoder:    true,
@@ -1140,13 +1136,12 @@ func (c *Client) Stats(opts StatsOptions) (retErr error) {
 			err = closeErr
 		}
 		errC <- err
-		close(errC)
 	}()
 
 	quit := make(chan struct{})
 	defer close(quit)
 	go func() {
-		
+		// block here waiting for the signal to stop function
 		select {
 		case <-opts.Done:
 			readCloser.Close()
@@ -1168,24 +1163,24 @@ func (c *Client) Stats(opts StatsOptions) (retErr error) {
 	return nil
 }
 
-
-
-
-
+// KillContainerOptions represents the set of options that can be used in a
+// call to KillContainer.
+//
+// See https://goo.gl/JnTxXZ for more details.
 type KillContainerOptions struct {
-	
+	// The ID of the container.
 	ID string `qs:"-"`
 
-	
-	
+	// The signal to send to the container. When omitted, Docker server
+	// will assume SIGKILL.
 	Signal  Signal
 	Context context.Context
 }
 
-
-
-
-
+// KillContainer sends a signal to a container, returning an error in case of
+// failure.
+//
+// See https://goo.gl/JnTxXZ for more details.
 func (c *Client) KillContainer(opts KillContainerOptions) error {
 	path := "/containers/" + opts.ID + "/kill" + "?" + queryString(opts)
 	resp, err := c.do("POST", path, doOptions{context: opts.Context})
@@ -1207,26 +1202,26 @@ func (c *Client) KillContainer(opts KillContainerOptions) error {
 	return nil
 }
 
-
-
-
+// RemoveContainerOptions encapsulates options to remove a container.
+//
+// See https://goo.gl/hL5IPC for more details.
 type RemoveContainerOptions struct {
-	
+	// The ID of the container.
 	ID string `qs:"-"`
 
-	
-	
+	// A flag that indicates whether Docker should remove the volumes
+	// associated to the container.
 	RemoveVolumes bool `qs:"v"`
 
-	
-	
+	// A flag that indicates whether Docker should remove the container
+	// even if it is currently running.
 	Force   bool
 	Context context.Context
 }
 
-
-
-
+// RemoveContainer removes a container, returning an error in case of failure.
+//
+// See https://goo.gl/hL5IPC for more details.
 func (c *Client) RemoveContainer(opts RemoveContainerOptions) error {
 	path := "/containers/" + opts.ID + "?" + queryString(opts)
 	resp, err := c.do("DELETE", path, doOptions{context: opts.Context})
@@ -1240,10 +1235,10 @@ func (c *Client) RemoveContainer(opts RemoveContainerOptions) error {
 	return nil
 }
 
-
-
-
-
+// UploadToContainerOptions is the set of options that can be used when
+// uploading an archive into a container.
+//
+// See https://goo.gl/g25o7u for more details.
 type UploadToContainerOptions struct {
 	InputStream          io.Reader `json:"-" qs:"-"`
 	Path                 string    `qs:"path"`
@@ -1251,10 +1246,10 @@ type UploadToContainerOptions struct {
 	Context              context.Context
 }
 
-
-
-
-
+// UploadToContainer uploads a tar archive to be extracted to a path in the
+// filesystem of the container.
+//
+// See https://goo.gl/g25o7u for more details.
 func (c *Client) UploadToContainer(id string, opts UploadToContainerOptions) error {
 	url := fmt.Sprintf("/containers/%s/archive?", id) + queryString(opts)
 
@@ -1264,10 +1259,10 @@ func (c *Client) UploadToContainer(id string, opts UploadToContainerOptions) err
 	})
 }
 
-
-
-
-
+// DownloadFromContainerOptions is the set of options that can be used when
+// downloading resources from a container.
+//
+// See https://goo.gl/W49jxK for more details.
 type DownloadFromContainerOptions struct {
 	OutputStream      io.Writer     `json:"-" qs:"-"`
 	Path              string        `qs:"path"`
@@ -1275,9 +1270,9 @@ type DownloadFromContainerOptions struct {
 	Context           context.Context
 }
 
-
-
-
+// DownloadFromContainer downloads a tar archive of files or folders in a container.
+//
+// See https://goo.gl/W49jxK for more details.
 func (c *Client) DownloadFromContainer(id string, opts DownloadFromContainerOptions) error {
 	url := fmt.Sprintf("/containers/%s/archive?", id) + queryString(opts)
 
@@ -1289,10 +1284,10 @@ func (c *Client) DownloadFromContainer(id string, opts DownloadFromContainerOpti
 	})
 }
 
-
-
-
-
+// CopyFromContainerOptions contains the set of options used for copying
+// files from a container.
+//
+// Deprecated: Use DownloadFromContainerOptions and DownloadFromContainer instead.
 type CopyFromContainerOptions struct {
 	OutputStream io.Writer `json:"-"`
 	Container    string    `json:"-"`
@@ -1300,9 +1295,9 @@ type CopyFromContainerOptions struct {
 	Context      context.Context `json:"-"`
 }
 
-
-
-
+// CopyFromContainer copies files from a container.
+//
+// Deprecated: Use DownloadFromContainer and DownloadFromContainer instead.
 func (c *Client) CopyFromContainer(opts CopyFromContainerOptions) error {
 	if opts.Container == "" {
 		return &NoSuchContainer{ID: opts.Container}
@@ -1329,19 +1324,19 @@ func (c *Client) CopyFromContainer(opts CopyFromContainerOptions) error {
 	return err
 }
 
-
-
-
-
+// WaitContainer blocks until the given container stops, return the exit code
+// of the container status.
+//
+// See https://goo.gl/4AGweZ for more details.
 func (c *Client) WaitContainer(id string) (int, error) {
 	return c.waitContainer(id, doOptions{})
 }
 
-
-
-
-
-
+// WaitContainerWithContext blocks until the given container stops, return the exit code
+// of the container status. The context object can be used to cancel the
+// inspect request.
+//
+// See https://goo.gl/4AGweZ for more details.
 func (c *Client) WaitContainerWithContext(id string, ctx context.Context) (int, error) {
 	return c.waitContainer(id, doOptions{context: ctx})
 }
@@ -1362,9 +1357,9 @@ func (c *Client) waitContainer(id string, opts doOptions) (int, error) {
 	return r.StatusCode, nil
 }
 
-
-
-
+// CommitContainerOptions aggregates parameters to the CommitContainer method.
+//
+// See https://goo.gl/CzIguf for more details.
 type CommitContainerOptions struct {
 	Container  string
 	Repository string `qs:"repo"`
@@ -1376,9 +1371,9 @@ type CommitContainerOptions struct {
 	Context    context.Context
 }
 
-
-
-
+// CommitContainer creates a new image from a container's changes.
+//
+// See https://goo.gl/CzIguf for more details.
 func (c *Client) CommitContainer(opts CommitContainerOptions) (*Image, error) {
 	path := "/commit?" + queryString(opts)
 	resp, err := c.do("POST", path, doOptions{
@@ -1399,45 +1394,45 @@ func (c *Client) CommitContainer(opts CommitContainerOptions) (*Image, error) {
 	return &image, nil
 }
 
-
-
-
-
+// AttachToContainerOptions is the set of options that can be used when
+// attaching to a container.
+//
+// See https://goo.gl/JF10Zk for more details.
 type AttachToContainerOptions struct {
 	Container    string    `qs:"-"`
 	InputStream  io.Reader `qs:"-"`
 	OutputStream io.Writer `qs:"-"`
 	ErrorStream  io.Writer `qs:"-"`
 
-	
-	
-	
-	
-	
+	// If set, after a successful connect, a sentinel will be sent and then the
+	// client will block on receive before continuing.
+	//
+	// It must be an unbuffered channel. Using a buffered channel can lead
+	// to unexpected behavior.
 	Success chan struct{}
 
-	
+	// Use raw terminal? Usually true when the container contains a TTY.
 	RawTerminal bool `qs:"-"`
 
-	
+	// Get container logs, sending it to OutputStream.
 	Logs bool
 
-	
+	// Stream the response?
 	Stream bool
 
-	
+	// Attach to stdin, and use InputStream.
 	Stdin bool
 
-	
+	// Attach to stdout, and use OutputStream.
 	Stdout bool
 
-	
+	// Attach to stderr, and use ErrorStream.
 	Stderr bool
 }
 
-
-
-
+// AttachToContainer attaches to a container, using the given options.
+//
+// See https://goo.gl/JF10Zk for more details.
 func (c *Client) AttachToContainer(opts AttachToContainerOptions) error {
 	cw, err := c.AttachToContainerNonBlocking(opts)
 	if err != nil {
@@ -1446,10 +1441,10 @@ func (c *Client) AttachToContainer(opts AttachToContainerOptions) error {
 	return cw.Wait()
 }
 
-
-
-
-
+// AttachToContainerNonBlocking attaches to a container, using the given options.
+// This function does not block.
+//
+// See https://goo.gl/NKpkFk for more details.
 func (c *Client) AttachToContainerNonBlocking(opts AttachToContainerOptions) (CloseWaiter, error) {
 	if opts.Container == "" {
 		return nil, &NoSuchContainer{ID: opts.Container}
@@ -1464,10 +1459,10 @@ func (c *Client) AttachToContainerNonBlocking(opts AttachToContainerOptions) (Cl
 	})
 }
 
-
-
-
-
+// LogsOptions represents the set of options used when getting logs from a
+// container.
+//
+// See https://goo.gl/krK0ZH for more details.
 type LogsOptions struct {
 	Context           context.Context
 	Container         string        `qs:"-"`
@@ -1482,21 +1477,21 @@ type LogsOptions struct {
 	Stderr     bool
 	Timestamps bool
 
-	
+	// Use raw terminal? Usually true when the container contains a TTY.
 	RawTerminal bool `qs:"-"`
 }
 
-
-
-
-
-
-
-
-
-
-
-
+// Logs gets stdout and stderr logs from the specified container.
+//
+// When LogsOptions.RawTerminal is set to false, go-dockerclient will multiplex
+// the streams and send the containers stdout to LogsOptions.OutputStream, and
+// stderr to LogsOptions.ErrorStream.
+//
+// When LogsOptions.RawTerminal is true, callers will get the raw stream on
+// LogsOptions.OutputStream. The caller can use libraries such as dlog
+// (github.com/ahmetalpbalkan/dlog).
+//
+// See https://goo.gl/krK0ZH for more details.
 func (c *Client) Logs(opts LogsOptions) error {
 	if opts.Container == "" {
 		return &NoSuchContainer{ID: opts.Container}
@@ -1514,9 +1509,9 @@ func (c *Client) Logs(opts LogsOptions) error {
 	})
 }
 
-
-
-
+// ResizeContainerTTY resizes the terminal to the given height and width.
+//
+// See https://goo.gl/FImjeq for more details.
 func (c *Client) ResizeContainerTTY(id string, height, width int) error {
 	params := make(url.Values)
 	params.Set("h", strconv.Itoa(height))
@@ -1529,10 +1524,10 @@ func (c *Client) ResizeContainerTTY(id string, height, width int) error {
 	return nil
 }
 
-
-
-
-
+// ExportContainerOptions is the set of parameters to the ExportContainer
+// method.
+//
+// See https://goo.gl/yGJCIh for more details.
 type ExportContainerOptions struct {
 	ID                string
 	OutputStream      io.Writer
@@ -1540,10 +1535,10 @@ type ExportContainerOptions struct {
 	Context           context.Context
 }
 
-
-
-
-
+// ExportContainer export the contents of container id as tar archive
+// and prints the exported contents to stdout.
+//
+// See https://goo.gl/yGJCIh for more details.
 func (c *Client) ExportContainer(opts ExportContainerOptions) error {
 	if opts.ID == "" {
 		return &NoSuchContainer{ID: opts.ID}
@@ -1557,25 +1552,25 @@ func (c *Client) ExportContainer(opts ExportContainerOptions) error {
 	})
 }
 
-
-
-
+// PruneContainersOptions specify parameters to the PruneContainers function.
+//
+// See https://goo.gl/wnkgDT for more details.
 type PruneContainersOptions struct {
 	Filters map[string][]string
 	Context context.Context
 }
 
-
-
-
+// PruneContainersResults specify results from the PruneContainers function.
+//
+// See https://goo.gl/wnkgDT for more details.
 type PruneContainersResults struct {
 	ContainersDeleted []string
 	SpaceReclaimed    int64
 }
 
-
-
-
+// PruneContainers deletes containers which are stopped.
+//
+// See https://goo.gl/wnkgDT for more details.
 func (c *Client) PruneContainers(opts PruneContainersOptions) (*PruneContainersResults, error) {
 	path := "/containers/prune?" + queryString(opts)
 	resp, err := c.do("POST", path, doOptions{context: opts.Context})
@@ -1590,7 +1585,7 @@ func (c *Client) PruneContainers(opts PruneContainersOptions) (*PruneContainersR
 	return &results, nil
 }
 
-
+// NoSuchContainer is the error returned when a given container does not exist.
 type NoSuchContainer struct {
 	ID  string
 	Err error
@@ -1603,8 +1598,8 @@ func (err *NoSuchContainer) Error() string {
 	return "No such container: " + err.ID
 }
 
-
-
+// ContainerAlreadyRunning is the error returned when a given container is
+// already running.
 type ContainerAlreadyRunning struct {
 	ID string
 }
@@ -1613,8 +1608,8 @@ func (err *ContainerAlreadyRunning) Error() string {
 	return "Container already running: " + err.ID
 }
 
-
-
+// ContainerNotRunning is the error returned when a given container is not
+// running.
 type ContainerNotRunning struct {
 	ID string
 }

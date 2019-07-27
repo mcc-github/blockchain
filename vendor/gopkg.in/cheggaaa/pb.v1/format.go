@@ -8,13 +8,13 @@ import (
 type Units int
 
 const (
-	
+	// U_NO are default units, they represent a simple value and are not formatted at all.
 	U_NO Units = iota
-	
+	// U_BYTES units are formatted in a human readable way (B, KiB, MiB, ...)
 	U_BYTES
-	
+	// U_BYTES_DEC units are like U_BYTES, but base 10 (B, KB, MB, ...)
 	U_BYTES_DEC
-	
+	// U_DURATION units are formatted in a human readable way (3h14m15s)
 	U_DURATION
 )
 
@@ -73,7 +73,7 @@ func (f *formatter) String() (out string) {
 	return
 }
 
-
+// Convert bytes to human readable string. Like 2 MiB, 64.2 KiB, 52 B
 func formatBytes(i int64) (result string) {
 	switch {
 	case i >= TiB:
@@ -90,7 +90,7 @@ func formatBytes(i int64) (result string) {
 	return
 }
 
-
+// Convert bytes to base-10 human readable string. Like 2 MB, 64.2 KB, 52 B
 func formatBytesDec(i int64) (result string) {
 	switch {
 	case i >= TB:

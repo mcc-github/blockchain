@@ -11,14 +11,14 @@ type GomegaFailWrapper struct {
 	TWithHelper TWithHelper
 }
 
-
+//A simple *testing.T interface wrapper
 type GomegaTestingT interface {
 	Fatalf(format string, args ...interface{})
 }
 
-
-
-
+//All Gomega matchers must implement the GomegaMatcher interface
+//
+//For details on writing custom matchers, check out: http://onsi.github.io/gomega/#adding-your-own-matchers
 type GomegaMatcher interface {
 	Match(actual interface{}) (success bool, err error)
 	FailureMessage(actual interface{}) (message string)

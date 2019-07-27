@@ -25,19 +25,19 @@ type evaluationStage struct {
 
 	leftStage, rightStage *evaluationStage
 
-	
+	// the operation that will be used to evaluate this stage (such as adding [left] to [right] and return the result)
 	operator evaluationOperator
 
-	
+	// ensures that both left and right values are appropriate for this stage. Returns an error if they aren't operable.
 	leftTypeCheck  stageTypeCheck
 	rightTypeCheck stageTypeCheck
 
-	
-	
-	
+	// if specified, will override whatever is used in "leftTypeCheck" and "rightTypeCheck".
+	// primarily used for specific operators that don't care which side a given type is on, but still requires one side to be of a given type
+	// (like string concat)
 	typeCheck stageCombinedTypeCheck
 
-	
+	// regardless of which type check is used, this string format will be used as the error message for type errors
 	typeErrorFormat string
 }
 
@@ -87,7 +87,7 @@ func noopStageRight(left interface{}, right interface{}, parameters Parameters) 
 
 func addStage(left interface{}, right interface{}, parameters Parameters) (interface{}, error) {
 
-	
+	// string concat if either are strings
 	if isString(left) || isString(right) {
 		return fmt.Sprintf("%v%v", left, right), nil
 	}
@@ -271,7 +271,7 @@ func inStage(left interface{}, right interface{}, parameters Parameters) (interf
 	return false, nil
 }
 
-
+//
 
 func isString(value interface{}) bool {
 
@@ -309,7 +309,10 @@ func isFloat64(value interface{}) bool {
 	return false
 }
 
-
+/*
+	Addition usually means between numbers, but can also mean string concat.
+	String concat needs one (or both) of the sides to be a string.
+*/
 func additionTypeCheck(left interface{}, right interface{}) bool {
 
 	if isFloat64(left) && isFloat64(right) {
@@ -321,7 +324,10 @@ func additionTypeCheck(left interface{}, right interface{}) bool {
 	return true
 }
 
-
+/*
+	Comparison can either be between numbers, or lexicographic between two strings,
+	but never between the two.
+*/
 func comparatorTypeCheck(left interface{}, right interface{}) bool {
 
 	if isFloat64(left) && isFloat64(right) {
@@ -341,7 +347,10 @@ func isArray(value interface{}) bool {
 	return false
 }
 
-
+/*
+	Converting a boolean to an interface{} requires an allocation.
+	We can use interned bools to avoid this cost.
+*/
 func boolIface(b bool) interface{} {
 	if b {
 		return _true

@@ -1,4 +1,20 @@
-
+/*
+ *
+ * Copyright 2018 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 package binarylog
 
@@ -17,12 +33,12 @@ import (
 )
 
 var (
-	defaultSink Sink = &noopSink{} 
+	defaultSink Sink = &noopSink{} // TODO(blog): change this default (file in /tmp).
 )
 
-
-
-
+// SetDefaultSink sets the sink where binary logs will be written to.
+//
+// Not thread safe. Only set during initialization.
 func SetDefaultSink(s Sink) {
 	if defaultSink != nil {
 		defaultSink.Close()
@@ -30,13 +46,13 @@ func SetDefaultSink(s Sink) {
 	defaultSink = s
 }
 
-
+// Sink writes log entry into the binary log sink.
 type Sink interface {
-	
-	
-	
+	// Write will be called to write the log entry into the sink.
+	//
+	// It should be thread-safe so it can be called in parallel.
 	Write(*pb.GrpcLogEntry) error
-	
+	// Close will be called when the Sink is replaced by a new Sink.
 	Close() error
 }
 
@@ -45,12 +61,12 @@ type noopSink struct{}
 func (ns *noopSink) Write(*pb.GrpcLogEntry) error { return nil }
 func (ns *noopSink) Close() error                 { return nil }
 
-
-
-
-
-
-
+// newWriterSink creates a binary log sink with the given writer.
+//
+// Write() marshalls the proto message and writes it to the given writer. Each
+// message is prefixed with a 4 byte big endian unsigned integer as the length.
+//
+// No buffer is done, Close() doesn't try to close the writer.
 func newWriterSink(w io.Writer) *writerSink {
 	return &writerSink{out: w}
 }
@@ -80,15 +96,15 @@ func (ws *writerSink) Close() error { return nil }
 type bufWriteCloserSink struct {
 	mu     sync.Mutex
 	closer io.Closer
-	out    *writerSink   
-	buf    *bufio.Writer 
+	out    *writerSink   // out is built on buf.
+	buf    *bufio.Writer // buf is kept for flush.
 
 	writeStartOnce sync.Once
 	writeTicker    *time.Ticker
 }
 
 func (fs *bufWriteCloserSink) Write(e *pb.GrpcLogEntry) error {
-	
+	// Start the write loop when Write is called.
 	fs.writeStartOnce.Do(fs.startFlushGoroutine)
 	fs.mu.Lock()
 	if err := fs.out.Write(e); err != nil {
@@ -135,8 +151,8 @@ func newBufWriteCloserSink(o io.WriteCloser) Sink {
 	}
 }
 
-
-
+// NewTempFileSink creates a temp file and returns a Sink that writes to this
+// file.
 func NewTempFileSink() (Sink, error) {
 	tempFile, err := ioutil.TempFile("/tmp", "grpcgo_binarylog_*.txt")
 	if err != nil {

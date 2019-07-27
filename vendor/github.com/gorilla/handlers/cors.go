@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-
+// CORSOption represents a functional option for configuring the CORS middleware.
 type CORSOption func(*cors) error
 
 type cors struct {
@@ -21,13 +21,13 @@ type cors struct {
 	allowCredentials       bool
 }
 
-
+// OriginValidator takes an origin string and returns whether or not that origin is allowed.
 type OriginValidator func(string) bool
 
 var (
 	defaultCorsMethods = []string{"GET", "HEAD", "POST"}
 	defaultCorsHeaders = []string{"Accept", "Accept-Language", "Content-Language", "Origin"}
-	
+	// (WebKit/Safari v9 sends the Origin header by default in AJAX requests)
 )
 
 const (
@@ -118,9 +118,9 @@ func (ch *cors) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		returnOrigin = "*"
 	} else {
 		for _, o := range ch.allowedOrigins {
-			
-			
-			
+			// A configuration of * is different than explicitly setting an allowed
+			// origin. Returning arbitrary origin headers in an access control allow
+			// origin header is unsafe and is not required by any use case.
 			if o == corsOriginMatchAll {
 				returnOrigin = "*"
 				break
@@ -135,25 +135,25 @@ func (ch *cors) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ch.h.ServeHTTP(w, r)
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// CORS provides Cross-Origin Resource Sharing middleware.
+// Example:
+//
+//  import (
+//      "net/http"
+//
+//      "github.com/gorilla/handlers"
+//      "github.com/gorilla/mux"
+//  )
+//
+//  func main() {
+//      r := mux.NewRouter()
+//      r.HandleFunc("/users", UserEndpoint)
+//      r.HandleFunc("/projects", ProjectEndpoint)
+//
+//      // Apply the CORS middleware to our top-level router, with the defaults.
+//      http.ListenAndServe(":8000", handlers.CORS()(r))
+//  }
+//
 func CORS(opts ...CORSOption) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		ch := parseCORSOptions(opts...)
@@ -176,16 +176,16 @@ func parseCORSOptions(opts ...CORSOption) *cors {
 	return ch
 }
 
+//
+// Functional options for configuring CORS.
+//
 
-
-
-
-
-
-
-
-
-
+// AllowedHeaders adds the provided headers to the list of allowed headers in a
+// CORS request.
+// This is an append operation so the headers Accept, Accept-Language,
+// and Content-Language are always allowed.
+// Content-Type must be explicitly declared if accepting Content-Types other than
+// application/x-www-form-urlencoded, multipart/form-data, or text/plain.
 func AllowedHeaders(headers []string) CORSOption {
 	return func(ch *cors) error {
 		for _, v := range headers {
@@ -203,10 +203,10 @@ func AllowedHeaders(headers []string) CORSOption {
 	}
 }
 
-
-
-
-
+// AllowedMethods can be used to explicitly allow methods in the
+// Access-Control-Allow-Methods header.
+// This is a replacement operation so you must also
+// pass GET, HEAD, and POST if you wish to support those methods.
 func AllowedMethods(methods []string) CORSOption {
 	return func(ch *cors) error {
 		ch.allowedMethods = []string{}
@@ -225,9 +225,9 @@ func AllowedMethods(methods []string) CORSOption {
 	}
 }
 
-
-
-
+// AllowedOrigins sets the allowed origins for CORS requests, as used in the
+// 'Allow-Access-Control-Origin' HTTP header.
+// Note: Passing in a []string{"*"} will allow any domain.
 func AllowedOrigins(origins []string) CORSOption {
 	return func(ch *cors) error {
 		for _, v := range origins {
@@ -242,8 +242,8 @@ func AllowedOrigins(origins []string) CORSOption {
 	}
 }
 
-
-
+// AllowedOriginValidator sets a function for evaluating allowed origins in CORS requests, represented by the
+// 'Allow-Access-Control-Origin' HTTP header.
 func AllowedOriginValidator(fn OriginValidator) CORSOption {
 	return func(ch *cors) error {
 		ch.allowedOriginValidator = fn
@@ -251,8 +251,8 @@ func AllowedOriginValidator(fn OriginValidator) CORSOption {
 	}
 }
 
-
-
+// ExposeHeaders can be used to specify headers that are available
+// and will not be stripped out by the user-agent.
 func ExposedHeaders(headers []string) CORSOption {
 	return func(ch *cors) error {
 		ch.exposedHeaders = []string{}
@@ -271,12 +271,12 @@ func ExposedHeaders(headers []string) CORSOption {
 	}
 }
 
-
-
-
+// MaxAge determines the maximum age (in seconds) between preflight requests. A
+// maximum of 10 minutes is allowed. An age above this value will default to 10
+// minutes.
 func MaxAge(age int) CORSOption {
 	return func(ch *cors) error {
-		
+		// Maximum of 10 minutes.
 		if age > 600 {
 			age = 600
 		}
@@ -286,9 +286,9 @@ func MaxAge(age int) CORSOption {
 	}
 }
 
-
-
-
+// IgnoreOptions causes the CORS middleware to ignore OPTIONS requests, instead
+// passing them through to the next handler. This is useful when your application
+// or framework has a pre-existing mechanism for responding to OPTIONS requests.
 func IgnoreOptions() CORSOption {
 	return func(ch *cors) error {
 		ch.ignoreOptions = true
@@ -296,8 +296,8 @@ func IgnoreOptions() CORSOption {
 	}
 }
 
-
-
+// AllowCredentials can be used to specify that the user agent may pass
+// authentication details along with the request.
 func AllowCredentials() CORSOption {
 	return func(ch *cors) error {
 		ch.allowCredentials = true

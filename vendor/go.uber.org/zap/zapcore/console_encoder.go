@@ -1,22 +1,22 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Copyright (c) 2016 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 package zapcore
 
@@ -47,14 +47,14 @@ type consoleEncoder struct {
 	*jsonEncoder
 }
 
-
-
-
-
-
-
-
-
+// NewConsoleEncoder creates an encoder whose output is designed for human -
+// rather than machine - consumption. It serializes the core log entry data
+// (message, level, timestamp, etc.) in a plain-text format and leaves the
+// structured context as JSON.
+//
+// Note that although the console encoder doesn't use the keys specified in the
+// encoder configuration, it will omit any element whose key is set to the empty
+// string.
 func NewConsoleEncoder(cfg EncoderConfig) Encoder {
 	return consoleEncoder{newJSONEncoder(cfg, true)}
 }
@@ -66,12 +66,12 @@ func (c consoleEncoder) Clone() Encoder {
 func (c consoleEncoder) EncodeEntry(ent Entry, fields []Field) (*buffer.Buffer, error) {
 	line := bufferpool.Get()
 
-	
-	
-	
-	
-	
-	
+	// We don't want the entry's metadata to be quoted and escaped (if it's
+	// encoded as strings), which means that we can't use the JSON encoder. The
+	// simplest option is to use the memory encoder and fmt.Fprint.
+	//
+	// If this ever becomes a performance bottleneck, we can implement
+	// ArrayEncoder for our plain-text format.
 	arr := getSliceEncoder()
 	if c.TimeKey != "" && c.EncodeTime != nil {
 		c.EncodeTime(ent.Time, arr)
@@ -83,7 +83,7 @@ func (c consoleEncoder) EncodeEntry(ent Entry, fields []Field) (*buffer.Buffer, 
 		nameEncoder := c.EncodeName
 
 		if nameEncoder == nil {
-			
+			// Fall back to FullNameEncoder for backward compatibility.
 			nameEncoder = FullNameEncoder
 		}
 
@@ -100,17 +100,17 @@ func (c consoleEncoder) EncodeEntry(ent Entry, fields []Field) (*buffer.Buffer, 
 	}
 	putSliceEncoder(arr)
 
-	
+	// Add the message itself.
 	if c.MessageKey != "" {
 		c.addTabIfNecessary(line)
 		line.AppendString(ent.Message)
 	}
 
-	
+	// Add any structured context.
 	c.writeContext(line, fields)
 
-	
-	
+	// If there's no stacktrace key, honor that; this allows users to force
+	// single-line output.
 	if ent.Stack != "" && c.StacktraceKey != "" {
 		line.AppendByte('\n')
 		line.AppendString(ent.Stack)

@@ -5,12 +5,12 @@ import (
 	"sort"
 )
 
-
-
-
+// BalanceStrategyPlan is the results of any BalanceStrategy.Plan attempt.
+// It contains an allocation of topic/partitions by memberID in the form of
+// a `memberID -> topic -> partitions` map.
 type BalanceStrategyPlan map[string]map[string][]int32
 
-
+// Add assigns a topic with a number partitions to a member.
 func (p BalanceStrategyPlan) Add(memberID, topic string, partitions ...int32) {
 	if len(partitions) == 0 {
 		return
@@ -21,25 +21,25 @@ func (p BalanceStrategyPlan) Add(memberID, topic string, partitions ...int32) {
 	p[memberID][topic] = append(p[memberID][topic], partitions...)
 }
 
+// --------------------------------------------------------------------
 
-
-
-
+// BalanceStrategy is used to balance topics and partitions
+// across memebers of a consumer group
 type BalanceStrategy interface {
-	
+	// Name uniquely identifies the strategy.
 	Name() string
 
-	
-	
+	// Plan accepts a map of `memberID -> metadata` and a map of `topic -> partitions`
+	// and returns a distribution plan.
 	Plan(members map[string]ConsumerGroupMemberMetadata, topics map[string][]int32) (BalanceStrategyPlan, error)
 }
 
+// --------------------------------------------------------------------
 
-
-
-
-
-
+// BalanceStrategyRange is the default and assigns partitions as ranges to consumer group members.
+// Example with one topic T with six partitions (0..5) and two members (M1, M2):
+//   M1: {T: [0, 1, 2]}
+//   M2: {T: [3, 4, 5]}
 var BalanceStrategyRange = &balanceStrategy{
 	name: "range",
 	coreFn: func(plan BalanceStrategyPlan, memberIDs []string, topic string, partitions []int32) {
@@ -54,10 +54,10 @@ var BalanceStrategyRange = &balanceStrategy{
 	},
 }
 
-
-
-
-
+// BalanceStrategyRoundRobin assigns partitions to members in alternating order.
+// Example with topic T with six partitions (0..5) and two members (M1, M2):
+//   M1: {T: [0, 2, 4]}
+//   M2: {T: [1, 3, 5]}
 var BalanceStrategyRoundRobin = &balanceStrategy{
 	name: "roundrobin",
 	coreFn: func(plan BalanceStrategyPlan, memberIDs []string, topic string, partitions []int32) {
@@ -68,19 +68,19 @@ var BalanceStrategyRoundRobin = &balanceStrategy{
 	},
 }
 
-
+// --------------------------------------------------------------------
 
 type balanceStrategy struct {
 	name   string
 	coreFn func(plan BalanceStrategyPlan, memberIDs []string, topic string, partitions []int32)
 }
 
-
+// Name implements BalanceStrategy.
 func (s *balanceStrategy) Name() string { return s.name }
 
-
+// Balance implements BalanceStrategy.
 func (s *balanceStrategy) Plan(members map[string]ConsumerGroupMemberMetadata, topics map[string][]int32) (BalanceStrategyPlan, error) {
-	
+	// Build members by topic map
 	mbt := make(map[string][]string)
 	for memberID, meta := range members {
 		for _, topic := range meta.Topics {
@@ -88,7 +88,7 @@ func (s *balanceStrategy) Plan(members map[string]ConsumerGroupMemberMetadata, t
 		}
 	}
 
-	
+	// Sort members for each topic
 	for topic, memberIDs := range mbt {
 		sort.Sort(&balanceStrategySortable{
 			topic:     topic,
@@ -96,7 +96,7 @@ func (s *balanceStrategy) Plan(members map[string]ConsumerGroupMemberMetadata, t
 		})
 	}
 
-	
+	// Assemble plan
 	plan := make(BalanceStrategyPlan, len(members))
 	for topic, memberIDs := range mbt {
 		s.coreFn(plan, memberIDs, topic, topics[topic])

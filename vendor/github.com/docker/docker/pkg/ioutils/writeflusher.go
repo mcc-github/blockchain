@@ -1,13 +1,13 @@
-package ioutils 
+package ioutils // import "github.com/docker/docker/pkg/ioutils"
 
 import (
 	"io"
 	"sync"
 )
 
-
-
-
+// WriteFlusher wraps the Write and Flush operation ensuring that every write
+// is a flush. In addition, the Close method can be called to intercept
+// Read/Write calls if the targets lifecycle has already ended.
 type WriteFlusher struct {
 	w           io.Writer
 	flusher     flusher
@@ -31,11 +31,11 @@ func (wf *WriteFlusher) Write(b []byte) (n int, err error) {
 	}
 
 	n, err = wf.w.Write(b)
-	wf.Flush() 
+	wf.Flush() // every write is a flush.
 	return n, err
 }
 
-
+// Flush the stream immediately.
 func (wf *WriteFlusher) Flush() {
 	select {
 	case <-wf.closed:
@@ -49,12 +49,12 @@ func (wf *WriteFlusher) Flush() {
 	wf.flusher.Flush()
 }
 
-
-
+// Flushed returns the state of flushed.
+// If it's flushed, return true, or else it return false.
 func (wf *WriteFlusher) Flushed() bool {
-	
-	
-	
+	// BUG(stevvooe): Remove this method. Its use is inherently racy. Seems to
+	// be used to detect whether or a response code has been issued or not.
+	// Another hook should be used instead.
 	var flushed bool
 	select {
 	case <-wf.flushed:
@@ -64,9 +64,9 @@ func (wf *WriteFlusher) Flushed() bool {
 	return flushed
 }
 
-
-
-
+// Close closes the write flusher, disallowing any further writes to the
+// target. After the flusher is closed, all calls to write or flush will
+// result in an error.
 func (wf *WriteFlusher) Close() error {
 	wf.closeLock.Lock()
 	defer wf.closeLock.Unlock()
@@ -80,7 +80,7 @@ func (wf *WriteFlusher) Close() error {
 	return nil
 }
 
-
+// NewWriteFlusher returns a new WriteFlusher.
 func NewWriteFlusher(w io.Writer) *WriteFlusher {
 	var fl flusher
 	if f, ok := w.(flusher); ok {

@@ -2,22 +2,22 @@ package ansiterm
 
 const LogEnv = "DEBUG_TERMINAL"
 
-
-
-
-
-
-
-
-
-
-
+// ANSI constants
+// References:
+// -- http://www.ecma-international.org/publications/standards/Ecma-048.htm
+// -- http://man7.org/linux/man-pages/man4/console_codes.4.html
+// -- http://manpages.ubuntu.com/manpages/intrepid/man4/console_codes.4.html
+// -- http://en.wikipedia.org/wiki/ANSI_escape_code
+// -- http://vt100.net/emu/dec_ansi_parser
+// -- http://vt100.net/emu/vt500_parser.svg
+// -- http://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+// -- http://www.inwap.com/pdp10/ansicode.txt
 const (
-	
-	
-	
-	
-	
+	// ECMA-48 Set Graphics Rendition
+	// Note:
+	// -- Constants leading with an underscore (e.g., _ANSI_xxx) are unsupported or reserved
+	// -- Fonts could possibly be supported via SetCurrentConsoleFontEx
+	// -- Windows does not expose the per-window cursor (i.e., caret) blink times
 	ANSI_SGR_RESET              = 0
 	ANSI_SGR_BOLD               = 1
 	ANSI_SGR_DIM                = 2
@@ -68,7 +68,7 @@ const (
 	ANSI_SGR_BACKGROUND_WHITE   = 47
 	_ANSI_SGR_RESERVED_02       = 48
 	ANSI_SGR_BACKGROUND_DEFAULT = 49
-	
+	// 50 - 65: Unsupported
 
 	ANSI_MAX_CMD_LENGTH = 4096
 
@@ -127,23 +127,23 @@ func getByteRange(start byte, end byte) []byte {
 var toGroundBytes = getToGroundBytes()
 var executors = getExecuteBytes()
 
-
-
+// SPACE		  20+A0 hex  Always and everywhere a blank space
+// Intermediate	  20-2F hex   !"#$%&'()*+,-./
 var intermeds = getByteRange(0x20, 0x2F)
 
-
-
+// Parameters	  30-3F hex  0123456789:;<=>?
+// CSI Parameters 30-39, 3B hex 0123456789;
 var csiParams = getByteRange(0x30, 0x3F)
 
 var csiCollectables = append(getByteRange(0x30, 0x39), getByteRange(0x3B, 0x3F)...)
 
-
+// Uppercase	  40-5F hex  @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
 var upperCase = getByteRange(0x40, 0x5F)
 
-
+// Lowercase	  60-7E hex  `abcdefghijlkmnopqrstuvwxyz{|}~
 var lowerCase = getByteRange(0x60, 0x7E)
 
-
+// Alphabetics	  40-7E hex  (all of upper and lower case)
 var alphabetics = append(upperCase, lowerCase...)
 
 var printables = getByteRange(0x20, 0x7F)
@@ -151,8 +151,8 @@ var printables = getByteRange(0x20, 0x7F)
 var escapeIntermediateToGroundBytes = getByteRange(0x30, 0x7E)
 var escapeToGroundBytes = getEscapeToGroundBytes()
 
-
-
+// See http://www.vt100.net/emu/vt500_parser.png for description of the complex
+// byte ranges below
 
 func getEscapeToGroundBytes() []byte {
 	escapeToGroundBytes := getByteRange(0x30, 0x4F)
@@ -182,7 +182,7 @@ func getToGroundBytes() []byte {
 	return groundBytes
 }
 
-
-
-
-
+// Delete		     7F hex  Always and everywhere ignored
+// C1 Control	  80-9F hex  32 additional control characters
+// G1 Displayable A1-FE hex  94 additional displayable characters
+// Special		  A0+FF hex  Same as SPACE and DELETE

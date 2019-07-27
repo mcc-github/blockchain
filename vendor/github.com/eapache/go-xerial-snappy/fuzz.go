@@ -1,4 +1,4 @@
-
+// +build gofuzz
 
 package snappy
 

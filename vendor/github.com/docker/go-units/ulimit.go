@@ -6,14 +6,14 @@ import (
 	"strings"
 )
 
-
+// Ulimit is a human friendly version of Rlimit.
 type Ulimit struct {
 	Name string
 	Hard int64
 	Soft int64
 }
 
-
+// Rlimit specifies the resource limits, such as max open files.
 type Rlimit struct {
 	Type int    `json:"type,omitempty"`
 	Hard uint64 `json:"hard,omitempty"`
@@ -21,10 +21,10 @@ type Rlimit struct {
 }
 
 const (
-	
-	
-	
-	
+	// magic numbers for making the syscall
+	// some of these are defined in the syscall package, but not all.
+	// Also since Windows client doesn't get access to the syscall package, need to
+	//	define these here
 	rlimitAs         = 9
 	rlimitCore       = 4
 	rlimitCPU        = 0
@@ -44,7 +44,7 @@ const (
 )
 
 var ulimitNameMapping = map[string]int{
-	
+	//"as":         rlimitAs, // Disabled since this doesn't seem usable with the way Docker inits a container.
 	"core":       rlimitCore,
 	"cpu":        rlimitCPU,
 	"data":       rlimitData,
@@ -62,7 +62,7 @@ var ulimitNameMapping = map[string]int{
 	"stack":      rlimitStack,
 }
 
-
+// ParseUlimit parses and returns a Ulimit from the specified string.
 func ParseUlimit(val string) (*Ulimit, error) {
 	parts := strings.SplitN(val, "=", 2)
 	if len(parts) != 2 {
@@ -75,7 +75,7 @@ func ParseUlimit(val string) (*Ulimit, error) {
 
 	var (
 		soft int64
-		hard = &soft 
+		hard = &soft // default to soft in case no hard was set
 		temp int64
 		err  error
 	)
@@ -103,7 +103,7 @@ func ParseUlimit(val string) (*Ulimit, error) {
 	return &Ulimit{Name: parts[0], Soft: soft, Hard: *hard}, nil
 }
 
-
+// GetRlimit returns the RLimit corresponding to Ulimit.
 func (u *Ulimit) GetRlimit() (*Rlimit, error) {
 	t, exists := ulimitNameMapping[u.Name]
 	if !exists {

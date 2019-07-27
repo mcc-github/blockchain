@@ -14,7 +14,7 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
-
+// Broker represents a single Kafka broker connection. All operations on this object are entirely concurrency-safe.
 type Broker struct {
 	id   int32
 	addr string
@@ -53,17 +53,17 @@ type responsePromise struct {
 	errors        chan error
 }
 
-
-
+// NewBroker creates and returns a Broker targeting the given host:port address.
+// This does not attempt to actually connect, you have to call Open() for that.
 func NewBroker(addr string) *Broker {
 	return &Broker{id: -1, addr: addr}
 }
 
-
-
-
-
-
+// Open tries to connect to the Broker if it is not already connected or connecting, but does not block
+// waiting for the connection to complete. This means that any subsequent operations on the broker will
+// block waiting for the connection to succeed or fail. To get the effect of a fully synchronous Open call,
+// follow it by a call to Connected(). The only errors Open will return directly are ConfigurationError or
+// AlreadyConnected. If conf is nil, the result of NewConfig() is used.
 func (b *Broker) Open(conf *Config) error {
 	if !atomic.CompareAndSwapInt32(&b.opened, 0, 1) {
 		return ErrAlreadyConnected
@@ -104,7 +104,7 @@ func (b *Broker) Open(conf *Config) error {
 
 		b.conf = conf
 
-		
+		// Create or reuse the global metrics shared between brokers
 		b.incomingByteRate = metrics.GetOrRegisterMeter("incoming-byte-rate", conf.MetricRegistry)
 		b.requestRate = metrics.GetOrRegisterMeter("request-rate", conf.MetricRegistry)
 		b.requestSize = getOrRegisterHistogram("request-size", conf.MetricRegistry)
@@ -112,8 +112,8 @@ func (b *Broker) Open(conf *Config) error {
 		b.outgoingByteRate = metrics.GetOrRegisterMeter("outgoing-byte-rate", conf.MetricRegistry)
 		b.responseRate = metrics.GetOrRegisterMeter("response-rate", conf.MetricRegistry)
 		b.responseSize = getOrRegisterHistogram("response-size", conf.MetricRegistry)
-		
-		
+		// Do not gather metrics for seeded broker (only used during bootstrap) because they share
+		// the same id (-1) and are already exposed through the global metrics above
 		if b.id >= 0 {
 			b.brokerIncomingByteRate = getOrRegisterBrokerMeter("incoming-byte-rate", b, conf.MetricRegistry)
 			b.brokerRequestRate = getOrRegisterBrokerMeter("request-rate", b, conf.MetricRegistry)
@@ -153,8 +153,8 @@ func (b *Broker) Open(conf *Config) error {
 	return nil
 }
 
-
-
+// Connected returns true if the broker is connected and false otherwise. If the broker is not
+// connected but it had tried to connect, the error from that connection attempt is also returned.
 func (b *Broker) Connected() (bool, error) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
@@ -198,14 +198,25 @@ func (b *Broker) Close() error {
 	return err
 }
 
-
+// ID returns the broker ID retrieved from Kafka's metadata, or -1 if that is not known.
 func (b *Broker) ID() int32 {
 	return b.id
 }
 
-
+// Addr returns the broker address as either retrieved from Kafka's metadata or passed to NewBroker.
 func (b *Broker) Addr() string {
 	return b.addr
+}
+
+// Rack returns the broker's rack as retrieved from Kafka's metadata or the
+// empty string if it is not known.  The returned value corresponds to the
+// broker's broker.rack configuration setting.  Requires protocol version to be
+// at least v0.10.0.0.
+func (b *Broker) Rack() string {
+	if b.rack == nil {
+		return ""
+	}
+	return *b.rack
 }
 
 func (b *Broker) GetMetadata(request *MetadataRequest) (*MetadataResponse, error) {
@@ -586,7 +597,7 @@ func (b *Broker) send(rb protocolBody, promiseResponse bool) (*responsePromise, 
 	b.correlationID++
 
 	if !promiseResponse {
-		
+		// Record request latency without the response
 		b.updateRequestLatencyMetrics(time.Since(requestTime))
 		return nil, nil
 	}
@@ -712,8 +723,8 @@ func (b *Broker) responseReceiver() {
 		}
 		if decodedHeader.correlationID != response.correlationID {
 			b.updateIncomingCommunicationMetrics(bytesReadHeader, requestLatency)
-			
-			
+			// TODO if decoded ID < cur ID, discard until we catch up
+			// TODO if decoded ID > cur ID, save it so when cur ID catches up we have a response
 			dead = PacketDecodingError{fmt.Sprintf("correlation ID didn't match, wanted %d, got %d", response.correlationID, decodedHeader.correlationID)}
 			response.errors <- dead
 			continue
@@ -754,8 +765,8 @@ func (b *Broker) sendAndReceiveSASLPlainHandshake() error {
 		return err
 	}
 	b.correlationID++
-	
-	header := make([]byte, 8) 
+	//wait for the response
+	header := make([]byte, 8) // response header
 	_, err = io.ReadFull(b.conn, header)
 	if err != nil {
 		Logger.Printf("Failed to read SASL handshake header : %s\n", err.Error())
@@ -783,24 +794,24 @@ func (b *Broker) sendAndReceiveSASLPlainHandshake() error {
 	return nil
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Kafka 0.10.0 plans to support SASL Plain and Kerberos as per PR #812 (KIP-43)/(JIRA KAFKA-3149)
+// Some hosted kafka services such as IBM Message Hub already offer SASL/PLAIN auth with Kafka 0.9
+//
+// In SASL Plain, Kafka expects the auth header to be in the following format
+// Message format (from https://tools.ietf.org/html/rfc4616):
+//
+//   message   = [authzid] UTF8NUL authcid UTF8NUL passwd
+//   authcid   = 1*SAFE ; MUST accept up to 255 octets
+//   authzid   = 1*SAFE ; MUST accept up to 255 octets
+//   passwd    = 1*SAFE ; MUST accept up to 255 octets
+//   UTF8NUL   = %x00 ; UTF-8 encoded NUL character
+//
+//   SAFE      = UTF1 / UTF2 / UTF3 / UTF4
+//                  ;; any UTF-8 encoded Unicode character except NUL
+//
+// When credentials are valid, Kafka returns a 4 byte array of null characters.
+// When credentials are invalid, Kafka closes the connection. This does not seem to be the ideal way
+// of responding to bad credentials but thats how its being done today.
 func (b *Broker) sendAndReceiveSASLPlainAuth() error {
 	if b.conf.Net.SASL.Handshake {
 		handshakeErr := b.sendAndReceiveSASLPlainHandshake()
@@ -810,7 +821,7 @@ func (b *Broker) sendAndReceiveSASLPlainAuth() error {
 		}
 	}
 	length := 1 + len(b.conf.Net.SASL.User) + 1 + len(b.conf.Net.SASL.Password)
-	authBytes := make([]byte, length+4) 
+	authBytes := make([]byte, length+4) //4 byte length header + auth data
 	binary.BigEndian.PutUint32(authBytes, uint32(length))
 	copy(authBytes[4:], []byte("\x00"+b.conf.Net.SASL.User+"\x00"+b.conf.Net.SASL.Password))
 
@@ -831,8 +842,8 @@ func (b *Broker) sendAndReceiveSASLPlainAuth() error {
 	header := make([]byte, 4)
 	n, err := io.ReadFull(b.conn, header)
 	b.updateIncomingCommunicationMetrics(n, time.Since(requestTime))
-	
-	
+	// If the credentials are valid, we would get a 4 byte response filled with null characters.
+	// Otherwise, the broker closes the connection and we get an EOF
 	if err != nil {
 		Logger.Printf("Failed to read response while authenticating with SASL to broker %s: %s\n", b.addr, err.Error())
 		return err

@@ -38,10 +38,18 @@ var stageSymbolMap = map[OperatorSymbol]evaluationOperator{
 	SEPARATE:       separatorStage,
 }
 
-
+/*
+	A "precedent" is a function which will recursively parse new evaluateionStages from a given stream of tokens.
+	It's called a `precedent` because it is expected to handle exactly what precedence of operator,
+	and defer to other `precedent`s for other operators.
+*/
 type precedent func(stream *tokenStream) (*evaluationStage, error)
 
-
+/*
+	A convenience function for specifying the behavior of a `precedent`.
+	Most `precedent` functions can be described by the same function, just with different type checks, symbols, and error formats.
+	This struct is passed to `makePrecedentFromPlanner` to create a `precedent` function.
+*/
 type precedencePlanner struct {
 	validSymbols map[string]OperatorSymbol
 	validKinds   []TokenKind
@@ -66,9 +74,9 @@ var planSeparator precedent
 
 func init() {
 
-	
-	
-	
+	// all these stages can use the same code (in `planPrecedenceLevel`) to execute,
+	// they simply need different type checks, symbols, and recursive precedents.
+	// While not all precedent phases are listed here, most can be represented this way.
 	planPrefix = makePrecedentFromPlanner(&precedencePlanner{
 		validSymbols:    prefixSymbols,
 		validKinds:      []TokenKind{PREFIX},
@@ -136,7 +144,10 @@ func init() {
 	})
 }
 
-
+/*
+	Given a planner, creates a function which will evaluate a specific precedence level of operators,
+	and link it to other `precedent`s which recurse to parse other precedence levels.
+*/
 func makePrecedentFromPlanner(planner *precedencePlanner) precedent {
 
 	var generated precedent
@@ -162,7 +173,11 @@ func makePrecedentFromPlanner(planner *precedencePlanner) precedent {
 	return generated
 }
 
-
+/*
+	Creates a `evaluationStageList` object which represents an execution plan (or tree)
+	which is used to completely evaluate a set of tokens at evaluation-time.
+	The three stages of evaluation can be thought of as parsing strings to tokens, then tokens to a stage list, then evaluation with parameters.
+*/
 func planStages(tokens []ExpressionToken) (*evaluationStage, error) {
 
 	stream := newTokenStream(tokens)
@@ -172,8 +187,8 @@ func planStages(tokens []ExpressionToken) (*evaluationStage, error) {
 		return nil, err
 	}
 
-	
-	
+	// while we're now fully-planned, we now need to re-order same-precedence operators.
+	// this could probably be avoided with a different planning method
 	reorderStages(stage)
 
 	stage = elideLiterals(stage)
@@ -189,7 +204,10 @@ func planTokens(stream *tokenStream) (*evaluationStage, error) {
 	return planSeparator(stream)
 }
 
-
+/*
+	The most usual method of parsing an evaluation stage for a given precedence.
+	Most stages use the same logic
+*/
 func planPrecedenceLevel(
 	stream *tokenStream,
 	typeErrorFormat string,
@@ -271,7 +289,9 @@ func planPrecedenceLevel(
 	return leftStage, nil
 }
 
-
+/*
+	A special case where functions need to be of higher precedence than values, and need a special wrapped execution stage operator.
+*/
 func planFunction(stream *tokenStream) (*evaluationStage, error) {
 
 	var token ExpressionToken
@@ -299,7 +319,10 @@ func planFunction(stream *tokenStream) (*evaluationStage, error) {
 	}, nil
 }
 
-
+/*
+	A truly special precedence function, this handles all the "lowest-case" errata of the process, including literals, parmeters,
+	clauses, and prefixes.
+*/
 func planValue(stream *tokenStream) (*evaluationStage, error) {
 
 	var token ExpressionToken
@@ -319,12 +342,12 @@ func planValue(stream *tokenStream) (*evaluationStage, error) {
 			return nil, err
 		}
 
-		
+		// advance past the CLAUSE_CLOSE token. We know that it's a CLAUSE_CLOSE, because at parse-time we check for unbalanced parens.
 		stream.next()
 
-		
-		
-		
+		// the stage we got represents all of the logic contained within the parens
+		// but for technical reasons, we need to wrap this stage in a "noop" stage which breaks long chains of precedence.
+		// see github #33.
 		ret = &evaluationStage {
 			rightStage: ret,
 			operator: noopStageRight,
@@ -335,8 +358,8 @@ func planValue(stream *tokenStream) (*evaluationStage, error) {
 
 	case CLAUSE_CLOSE:
 
-		
-		
+		// when functions have empty params, this will be hit. In this case, we don't have any evaluation stage to do,
+		// so we just return nil so that the stage planner continues on its way.
 		stream.rewind()
 		return nil, nil
 
@@ -372,14 +395,19 @@ func planValue(stream *tokenStream) (*evaluationStage, error) {
 	}, nil
 }
 
-
+/*
+	Convenience function to pass a triplet of typechecks between `findTypeChecks` and `planPrecedenceLevel`.
+	Each of these members may be nil, which indicates that type does not matter for that value.
+*/
 type typeChecks struct {
 	left     stageTypeCheck
 	right    stageTypeCheck
 	combined stageCombinedTypeCheck
 }
 
-
+/*
+	Maps a given [symbol] to a set of typechecks to be used during runtime.
+*/
 func findTypeChecks(symbol OperatorSymbol) typeChecks {
 
 	switch symbol {
@@ -458,7 +486,7 @@ func findTypeChecks(symbol OperatorSymbol) typeChecks {
 			left: isBool,
 		}
 
-	
+	// unchecked cases
 	case EQ:
 		fallthrough
 	case NEQ:
@@ -472,10 +500,13 @@ func findTypeChecks(symbol OperatorSymbol) typeChecks {
 	}
 }
 
-
+/*
+	During stage planning, stages of equal precedence are parsed such that they'll be evaluated in reverse order.
+	For commutative operators like "+" or "-", it's no big deal. But for order-specific operators, it ruins the expected result.
+*/
 func reorderStages(rootStage *evaluationStage) {
 
-	
+	// traverse every rightStage until we find multiples in a row of the same precedence.
 	var identicalPrecedences []*evaluationStage
 	var currentStage, nextStage *evaluationStage
 	var precedence, currentPrecedence operatorPrecedence
@@ -488,7 +519,7 @@ func reorderStages(rootStage *evaluationStage) {
 		currentStage = nextStage
 		nextStage = currentStage.rightStage
 
-		
+		// left depth first, since this entire method only looks for precedences down the right side of the tree
 		if currentStage.leftStage != nil {
 			reorderStages(currentStage.leftStage)
 		}
@@ -500,8 +531,8 @@ func reorderStages(rootStage *evaluationStage) {
 			continue
 		}
 
-		
-		
+		// precedence break.
+		// See how many in a row we had, and reorder if there's more than one.
 		if len(identicalPrecedences) > 1 {
 			mirrorStageSubtree(identicalPrecedences)
 		}
@@ -515,14 +546,18 @@ func reorderStages(rootStage *evaluationStage) {
 	}
 }
 
-
+/*
+	Performs a "mirror" on a subtree of stages.
+	This mirror functionally inverts the order of execution for all members of the [stages] list.
+	That list is assumed to be a root-to-leaf (ordered) list of evaluation stages, where each is a right-hand stage of the last.
+*/
 func mirrorStageSubtree(stages []*evaluationStage) {
 
 	var rootStage, inverseStage, carryStage, frontStage *evaluationStage
 
 	stagesLength := len(stages)
 
-	
+	// reverse all right/left
 	for _, frontStage = range stages {
 
 		carryStage = frontStage.rightStage
@@ -530,7 +565,7 @@ func mirrorStageSubtree(stages []*evaluationStage) {
 		frontStage.leftStage = carryStage
 	}
 
-	
+	// end left swaps with root right
 	rootStage = stages[0]
 	frontStage = stages[stagesLength-1]
 
@@ -538,7 +573,7 @@ func mirrorStageSubtree(stages []*evaluationStage) {
 	frontStage.leftStage = rootStage.rightStage
 	rootStage.rightStage = carryStage
 
-	
+	// for all non-root non-end stages, right is swapped with inverse stage right in list
 	for i := 0; i < (stagesLength-2)/2+1; i++ {
 
 		frontStage = stages[i+1]
@@ -549,7 +584,7 @@ func mirrorStageSubtree(stages []*evaluationStage) {
 		inverseStage.rightStage = carryStage
 	}
 
-	
+	// swap all other information with inverse stages
 	for i := 0; i < stagesLength/2; i++ {
 
 		frontStage = stages[i]
@@ -558,7 +593,9 @@ func mirrorStageSubtree(stages []*evaluationStage) {
 	}
 }
 
-
+/*
+	Recurses through all operators in the entire tree, eliding operators where both sides are literals.
+*/
 func elideLiterals(root *evaluationStage) *evaluationStage {
 
 	if root.leftStage != nil {
@@ -572,13 +609,17 @@ func elideLiterals(root *evaluationStage) *evaluationStage {
 	return elideStage(root)
 }
 
-
+/*
+	Elides a specific stage, if possible.
+	Returns the unmodified [root] stage if it cannot or should not be elided.
+	Otherwise, returns a new stage representing the condensed value from the elided stages.
+*/
 func elideStage(root *evaluationStage) *evaluationStage {
 
 	var leftValue, rightValue, result interface{}
 	var err error
 
-	
+	// right side must be a non-nil value. Left side must be nil or a value.
 	if root.rightStage == nil ||
 		root.rightStage.symbol != LITERAL ||
 		root.leftStage == nil ||
@@ -586,7 +627,7 @@ func elideStage(root *evaluationStage) *evaluationStage {
 		return root
 	}
 
-	
+	// don't elide some operators
 	switch root.symbol {
 	case SEPARATE:
 		fallthrough
@@ -594,8 +635,8 @@ func elideStage(root *evaluationStage) *evaluationStage {
 		return root
 	}
 
-	
-	
+	// both sides are values, get their actual values.
+	// errors should be near-impossible here. If we encounter them, just abort this optimization.
 	leftValue, err = root.leftStage.operator(nil, nil, nil)
 	if err != nil {
 		return root
@@ -606,7 +647,7 @@ func elideStage(root *evaluationStage) *evaluationStage {
 		return root
 	}
 
-	
+	// typcheck, since the grammar checker is a bit loose with which operator symbols go together.
 	err = typeCheck(root.leftTypeCheck, leftValue, root.symbol, root.typeErrorFormat)
 	if err != nil {
 		return root
@@ -621,7 +662,7 @@ func elideStage(root *evaluationStage) *evaluationStage {
 		return root
 	}
 
-	
+	// pre-calculate, and return a new stage representing the result.
 	result, err = root.operator(leftValue, rightValue, nil)
 	if err != nil {
 		return root

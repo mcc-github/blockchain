@@ -1,4 +1,4 @@
-
+// +build gofuzz
 
 package logfmt
 
@@ -12,7 +12,7 @@ import (
 	kr "github.com/kr/logfmt"
 )
 
-
+// Fuzz checks reserialized data matches
 func Fuzz(data []byte) int {
 	parsed, err := parse(data)
 	if err != nil {
@@ -36,20 +36,20 @@ func Fuzz(data []byte) int {
 	return 1
 }
 
-
+// FuzzVsKR checks go-logfmt/logfmt against kr/logfmt
 func FuzzVsKR(data []byte) int {
 	parsed, err := parse(data)
 	parsedKR, errKR := parseKR(data)
 
-	
-	
-	
+	// github.com/go-logfmt/logfmt is a stricter parser. It returns errors for
+	// more inputs than github.com/kr/logfmt. Ignore any inputs that have a
+	// stict error.
 	if err != nil {
 		return 0
 	}
 
-	
-	
+	// Fail if the more forgiving parser finds an error not found by the
+	// stricter parser.
 	if errKR != nil {
 		panic(fmt.Sprintf("unmatched error: %v", errKR))
 	}

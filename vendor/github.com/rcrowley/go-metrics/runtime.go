@@ -52,25 +52,25 @@ var (
 	threadCreateProfile = pprof.Lookup("threadcreate")
 )
 
-
-
+// Capture new values for the Go runtime statistics exported in
+// runtime.MemStats.  This is designed to be called as a goroutine.
 func CaptureRuntimeMemStats(r Registry, d time.Duration) {
 	for _ = range time.Tick(d) {
 		CaptureRuntimeMemStatsOnce(r)
 	}
 }
 
-
-
-
-
-
-
-
-
+// Capture new values for the Go runtime statistics exported in
+// runtime.MemStats.  This is designed to be called in a background
+// goroutine.  Giving a registry which has not been given to
+// RegisterRuntimeMemStats will panic.
+//
+// Be very careful with this because runtime.ReadMemStats calls the C
+// functions runtime·semacquire(&runtime·worldsema) and runtime·stoptheworld()
+// and that last one does what it says on the tin.
 func CaptureRuntimeMemStatsOnce(r Registry) {
 	t := time.Now()
-	runtime.ReadMemStats(&memStats) 
+	runtime.ReadMemStats(&memStats) // This takes 50-200us.
 	runtimeMetrics.ReadMemStats.UpdateSince(t)
 
 	runtimeMetrics.MemStats.Alloc.Update(int64(memStats.Alloc))
@@ -104,7 +104,7 @@ func CaptureRuntimeMemStatsOnce(r Registry) {
 	runtimeMetrics.MemStats.NumGC.Update(int64(memStats.NumGC - numGC))
 	runtimeMetrics.MemStats.GCCPUFraction.Update(gcCPUFraction(&memStats))
 
-	
+	// <https://code.google.com/p/go/source/browse/src/pkg/runtime/mgc0.c>
 	i := numGC % uint32(len(memStats.PauseNs))
 	ii := memStats.NumGC % uint32(len(memStats.PauseNs))
 	if memStats.NumGC-numGC >= uint32(len(memStats.PauseNs)) {
@@ -142,9 +142,9 @@ func CaptureRuntimeMemStatsOnce(r Registry) {
 	runtimeMetrics.NumThread.Update(int64(threadCreateProfile.Count()))
 }
 
-
-
-
+// Register runtimeMetrics for the Go runtime statistics exported in runtime and
+// specifically runtime.MemStats.  The runtimeMetrics are named by their
+// fully-qualified Go symbols, i.e. runtime.MemStats.Alloc.
 func RegisterRuntimeMemStats(r Registry) {
 	runtimeMetrics.MemStats.Alloc = NewGauge()
 	runtimeMetrics.MemStats.BuckHashSys = NewGauge()

@@ -39,7 +39,7 @@ func parseTokens(expression string, functions map[string]ExpressionFunction) ([]
 			return ret, err
 		}
 
-		
+		// append this valid token
 		ret = append(ret, token)
 	}
 
@@ -64,12 +64,12 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 	var completed bool
 	var err error
 
-	
-	
-	
-	
-	
-	
+	// numeric is 0-9, or .
+	// string starts with '
+	// variable is alphanumeric, always starts with a letter
+	// bracket always means variable
+	// symbols are anything non-alphanumeric
+	// all others read into a buffer until they reach the end of the stream
 	for stream.canRead() {
 
 		character = stream.readCharacter()
@@ -80,7 +80,7 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 
 		kind = UNKNOWN
 
-		
+		// numeric constant
 		if isNumeric(character) {
 
 			tokenString = readTokenUntilFalse(stream, isNumeric)
@@ -94,7 +94,7 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 			break
 		}
 
-		
+		// comma, separator
 		if character == ',' {
 
 			tokenValue = ","
@@ -102,7 +102,7 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 			break
 		}
 
-		
+		// escaped variable
 		if character == '[' {
 
 			tokenValue, completed = readUntilFalse(stream, true, false, true, isNotClosingBracket)
@@ -112,12 +112,12 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 				return ExpressionToken{}, errors.New("Unclosed parameter bracket"), false
 			}
 
-			
+			// above method normally rewinds us to the closing bracket, which we want to skip.
 			stream.rewind(-1)
 			break
 		}
 
-		
+		// regular variable - or function?
 		if unicode.IsLetter(character) {
 
 			tokenString = readTokenUntilFalse(stream, isVariableName)
@@ -125,7 +125,7 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 			tokenValue = tokenString
 			kind = VARIABLE
 
-			
+			// boolean?
 			if tokenValue == "true" {
 
 				kind = BOOLEAN
@@ -139,15 +139,15 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 				}
 			}
 
-			
+			// textual operator?
 			if tokenValue == "in" || tokenValue == "IN" {
 
-				
+				// force lower case for consistency
 				tokenValue = "in"
 				kind = COMPARATOR
 			}
 
-			
+			// function?
 			function, found = functions[tokenString]
 			if found {
 				kind = FUNCTION
@@ -163,10 +163,10 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 				return ExpressionToken{}, errors.New("Unclosed string literal"), false
 			}
 
-			
+			// advance the stream one position, since reading until false assumes the terminator is a real token
 			stream.rewind(-1)
 
-			
+			// check to see if this can be parsed as a time.
 			tokenTime, found = tryParseTime(tokenValue.(string))
 			if found {
 				kind = TIME
@@ -189,12 +189,12 @@ func readToken(stream *lexerStream, state lexerState, functions map[string]Expre
 			break
 		}
 
-		
+		// must be a known symbol
 		tokenString = readTokenUntilFalse(stream, isNotAlphanumeric)
 		tokenValue = tokenString
 
-		
-		
+		// quick hack for the case where "-" can mean "prefixed negation" or "minus", which are used
+		// very differently.
 		if state.canTransitionTo(PREFIX) {
 			_, found = prefixSymbols[tokenString]
 			if found {
@@ -250,7 +250,10 @@ func readTokenUntilFalse(stream *lexerStream, condition func(rune) bool) string 
 	return ret
 }
 
-
+/*
+	Returns the string that was read until the given [condition] was false, or whitespace was broken.
+	Returns false if the stream ended before whitespace was broken or condition was met.
+*/
 func readUntilFalse(stream *lexerStream, includeWhitespace bool, breakWhitespace bool, allowEscaping bool, condition func(rune) bool) (string, bool) {
 
 	var tokenBuffer bytes.Buffer
@@ -263,7 +266,7 @@ func readUntilFalse(stream *lexerStream, includeWhitespace bool, breakWhitespace
 
 		character = stream.readCharacter()
 
-		
+		// Use backslashes to escape anything
 		if allowEscaping && character == '\\' {
 
 			character = stream.readCharacter()
@@ -294,7 +297,10 @@ func readUntilFalse(stream *lexerStream, includeWhitespace bool, breakWhitespace
 	return tokenBuffer.String(), conditioned
 }
 
-
+/*
+	Checks to see if any optimizations can be performed on the given [tokens], which form a complete, valid expression.
+	The returns slice will represent the optimized (or unmodified) list of tokens to use.
+*/
 func optimizeTokens(tokens []ExpressionToken) ([]ExpressionToken, error) {
 
 	var token ExpressionToken
@@ -304,7 +310,7 @@ func optimizeTokens(tokens []ExpressionToken) ([]ExpressionToken, error) {
 
 	for index, token = range tokens {
 
-		
+		// if we find a regex operator, and the right-hand value is a constant, precompile and replace with a pattern.
 		if token.Kind != COMPARATOR {
 			continue
 		}
@@ -331,7 +337,9 @@ func optimizeTokens(tokens []ExpressionToken) ([]ExpressionToken, error) {
 	return tokens, nil
 }
 
-
+/*
+	Checks the balance of tokens which have multiple parts, such as parenthesis.
+*/
 func checkBalance(tokens []ExpressionToken) error {
 
 	var stream *tokenStream
@@ -390,7 +398,11 @@ func isNotClosingBracket(character rune) bool {
 	return character != ']'
 }
 
-
+/*
+	Attempts to parse the [candidate] as a Time.
+	Tries a series of standardized date formats, returns the Time if one applies,
+	otherwise returns false through the second return.
+*/
 func tryParseTime(candidate string) (time.Time, bool) {
 
 	var ret time.Time
@@ -403,14 +415,14 @@ func tryParseTime(candidate string) (time.Time, bool) {
 		time.Kitchen,
 		time.RFC3339,
 		time.RFC3339Nano,
-		"2006-01-02",                         
-		"2006-01-02 15:04",                   
-		"2006-01-02 15:04:05",                
-		"2006-01-02 15:04:05-07:00",          
-		"2006-01-02T15Z0700",                 
-		"2006-01-02T15:04Z0700",              
-		"2006-01-02T15:04:05Z0700",           
-		"2006-01-02T15:04:05.999999999Z0700", 
+		"2006-01-02",                         // RFC 3339
+		"2006-01-02 15:04",                   // RFC 3339 with minutes
+		"2006-01-02 15:04:05",                // RFC 3339 with seconds
+		"2006-01-02 15:04:05-07:00",          // RFC 3339 with seconds and timezone
+		"2006-01-02T15Z0700",                 // ISO8601 with hour
+		"2006-01-02T15:04Z0700",              // ISO8601 with minutes
+		"2006-01-02T15:04:05Z0700",           // ISO8601 with seconds
+		"2006-01-02T15:04:05.999999999Z0700", // ISO8601 with nanoseconds
 	}
 
 	for _, format := range timeFormats {

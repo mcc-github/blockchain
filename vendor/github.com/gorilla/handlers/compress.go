@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2013 The Gorilla Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package handlers
 
@@ -44,31 +44,31 @@ type flusher interface {
 }
 
 func (w *compressResponseWriter) Flush() {
-	
+	// Flush compressed data if compressor supports it.
 	if f, ok := w.Writer.(flusher); ok {
 		f.Flush()
 	}
-	
+	// Flush HTTP response.
 	if w.Flusher != nil {
 		w.Flusher.Flush()
 	}
 }
 
-
-
-
-
-
+// CompressHandler gzip compresses HTTP responses for clients that support it
+// via the 'Accept-Encoding' header.
+//
+// Compressing TLS traffic may leak the page contents to an attacker if the
+// page contains user input: http://security.stackexchange.com/a/102015/12208
 func CompressHandler(h http.Handler) http.Handler {
 	return CompressHandlerLevel(h, gzip.DefaultCompression)
 }
 
-
-
-
-
-
-
+// CompressHandlerLevel gzip compresses HTTP responses with specified compression level
+// for clients that support it via the 'Accept-Encoding' header.
+//
+// The compression level should be gzip.DefaultCompression, gzip.NoCompression,
+// or any integer value between gzip.BestSpeed and gzip.BestCompression inclusive.
+// gzip.DefaultCompression is used in case of invalid compression level.
 func CompressHandlerLevel(h http.Handler, level int) http.Handler {
 	if level < gzip.DefaultCompression || level > gzip.BestCompression {
 		level = gzip.DefaultCompression
@@ -86,7 +86,7 @@ func CompressHandlerLevel(h http.Handler, level int) http.Handler {
 				defer gw.Close()
 
 				h, hok := w.(http.Hijacker)
-				if !hok { 
+				if !hok { /* w is not Hijacker... oh well... */
 					h = nil
 				}
 
@@ -117,7 +117,7 @@ func CompressHandlerLevel(h http.Handler, level int) http.Handler {
 				defer fw.Close()
 
 				h, hok := w.(http.Hijacker)
-				if !hok { 
+				if !hok { /* w is not Hijacker... oh well... */
 					h = nil
 				}
 

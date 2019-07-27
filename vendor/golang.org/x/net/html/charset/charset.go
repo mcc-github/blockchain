@@ -1,12 +1,12 @@
+// Copyright 2013 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-
-
-
-
-
-
-
-package charset 
+// Package charset provides common text encodings for HTML documents.
+//
+// The mapping from encoding labels to encodings is defined at
+// https://encoding.spec.whatwg.org/.
+package charset // import "golang.org/x/net/html/charset"
 
 import (
 	"bytes"
@@ -23,11 +23,11 @@ import (
 	"golang.org/x/text/transform"
 )
 
-
-
-
-
-
+// Lookup returns the encoding with the specified label, and its canonical
+// name. It returns nil and the empty string if label is not one of the
+// standard encodings for HTML. Matching is case-insensitive and ignores
+// leading and trailing whitespace. Encoders will use HTML escape sequences for
+// runes that are not supported by the character set.
 func Lookup(label string) (e encoding.Encoding, name string) {
 	e, err := htmlindex.Get(label)
 	if err != nil {
@@ -40,15 +40,15 @@ func Lookup(label string) (e encoding.Encoding, name string) {
 type htmlEncoding struct{ encoding.Encoding }
 
 func (h *htmlEncoding) NewEncoder() *encoding.Encoder {
-	
-	
+	// HTML requires a non-terminating legacy encoder. We use HTML escapes to
+	// substitute unsupported code points.
 	return encoding.HTMLEscapeUnsupported(h.Encoding.NewEncoder())
 }
 
-
-
-
-
+// DetermineEncoding determines the encoding of an HTML document by examining
+// up to the first 1024 bytes of content and the declared Content-Type.
+//
+// See http://www.whatwg.org/specs/web-apps/current-work/multipage/parsing.html#determining-the-character-encoding
 func DetermineEncoding(content []byte, contentType string) (e encoding.Encoding, name string, certain bool) {
 	if len(content) > 1024 {
 		content = content[:1024]
@@ -76,8 +76,8 @@ func DetermineEncoding(content []byte, contentType string) (e encoding.Encoding,
 		}
 	}
 
-	
-	
+	// Try to detect UTF-8.
+	// First eliminate any partial rune at the end.
 	for i := len(content) - 1; i >= 0 && i > len(content)-4; i-- {
 		b := content[i]
 		if b < 0x80 {
@@ -99,12 +99,12 @@ func DetermineEncoding(content []byte, contentType string) (e encoding.Encoding,
 		return encoding.Nop, "utf-8", false
 	}
 
-	
+	// TODO: change default depending on user's locale?
 	return charmap.Windows1252, "windows-1252", false
 }
 
-
-
+// NewReader returns an io.Reader that converts the content of r to UTF-8.
+// It calls DetermineEncoding to find out what r's encoding is.
 func NewReader(r io.Reader, contentType string) (io.Reader, error) {
 	preview := make([]byte, 1024)
 	n, err := io.ReadFull(r, preview)
@@ -124,10 +124,10 @@ func NewReader(r io.Reader, contentType string) (io.Reader, error) {
 	return r, nil
 }
 
-
-
-
-
+// NewReaderLabel returns a reader that converts from the specified charset to
+// UTF-8. It uses Lookup to find the encoding that corresponds to label, and
+// returns an error if Lookup returns nil. It is suitable for use as
+// encoding/xml.Decoder's CharsetReader function.
 func NewReaderLabel(label string, input io.Reader) (io.Reader, error) {
 	e, _ := Lookup(label)
 	if e == nil {

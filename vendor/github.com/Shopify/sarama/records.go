@@ -11,7 +11,7 @@ const (
 	magicLength = 1
 )
 
-
+// Records implements a union type containing either a RecordBatch or a legacy MessageSet.
 type Records struct {
 	recordsType int
 	MsgSet      *MessageSet
@@ -26,9 +26,9 @@ func newDefaultRecords(batch *RecordBatch) Records {
 	return Records{recordsType: defaultRecords, RecordBatch: batch}
 }
 
-
-
-
+// setTypeFromFields sets type of Records depending on which of MsgSet or RecordBatch is not nil.
+// The first return value indicates whether both fields are nil (and the type is not set).
+// If both fields are not nil, it returns an error.
 func (r *Records) setTypeFromFields() (bool, error) {
 	if r.MsgSet == nil && r.RecordBatch == nil {
 		return true, nil

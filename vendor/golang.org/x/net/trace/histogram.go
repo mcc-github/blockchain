@@ -1,10 +1,10 @@
-
-
-
+// Copyright 2015 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package trace
 
-
+// This file implements histogramming for RPC statistics collection.
 
 import (
 	"bytes"
@@ -21,20 +21,20 @@ const (
 	bucketCount = 38
 )
 
-
-
-
+// histogram keeps counts of values in buckets that are spaced
+// out in powers of 2: 0-1, 2-3, 4-7...
+// histogram implements timeseries.Observable
 type histogram struct {
-	sum          int64   
-	sumOfSquares float64 
-	buckets      []int64 
-	value        int     
-	valueCount   int64   
+	sum          int64   // running total of measurements
+	sumOfSquares float64 // square of running total
+	buckets      []int64 // bucketed values for histogram
+	value        int     // holds a single value as an optimization
+	valueCount   int64   // number of values recorded for single value
 }
 
-
+// AddMeasurement records a value measurement observation to the histogram.
 func (h *histogram) addMeasurement(value int64) {
-	
+	// TODO: assert invariant
 	h.sum += value
 	h.sumOfSquares += float64(value) * float64(value)
 
@@ -80,7 +80,7 @@ func getBucket(i int64) (index int) {
 	return
 }
 
-
+// Total returns the number of recorded observations.
 func (h *histogram) total() (total int64) {
 	if h.valueCount >= 0 {
 		total = h.valueCount
@@ -91,7 +91,7 @@ func (h *histogram) total() (total int64) {
 	return
 }
 
-
+// Average returns the average value of recorded observations.
 func (h *histogram) average() float64 {
 	t := h.total()
 	if t == 0 {
@@ -100,7 +100,7 @@ func (h *histogram) average() float64 {
 	return float64(h.sum) / float64(t)
 }
 
-
+// Variance returns the variance of recorded observations.
 func (h *histogram) variance() float64 {
 	t := float64(h.total())
 	if t == 0 {
@@ -110,17 +110,17 @@ func (h *histogram) variance() float64 {
 	return h.sumOfSquares/t - s*s
 }
 
-
+// StandardDeviation returns the standard deviation of recorded observations.
 func (h *histogram) standardDeviation() float64 {
 	return math.Sqrt(h.variance())
 }
 
-
-
+// PercentileBoundary estimates the value that the given fraction of recorded
+// observations are less than.
 func (h *histogram) percentileBoundary(percentile float64) int64 {
 	total := h.total()
 
-	
+	// Corner cases (make sure result is strictly less than Total())
 	if total == 0 {
 		return 0
 	} else if total == 1 {
@@ -134,11 +134,11 @@ func (h *histogram) percentileBoundary(percentile float64) int64 {
 		value := h.buckets[i]
 		runningTotal += value
 		if runningTotal == percentOfTotal {
-			
-			
-			
-			
-			
+			// We hit an exact bucket boundary. If the next bucket has data, it is a
+			// good estimate of the value. If the bucket is empty, we interpolate the
+			// midpoint between the next bucket's boundary and the next non-zero
+			// bucket. If the remaining buckets are all empty, then we use the
+			// boundary for the next bucket as the estimate.
 			j := uint8(i + 1)
 			min := bucketBoundary(j)
 			if runningTotal < total {
@@ -149,7 +149,7 @@ func (h *histogram) percentileBoundary(percentile float64) int64 {
 			max := bucketBoundary(j)
 			return min + round(float64(max-min)/2)
 		} else if runningTotal > percentOfTotal {
-			
+			// The value is in this bucket. Interpolate the value.
 			delta := runningTotal - percentOfTotal
 			percentBucket := float64(value-delta) / float64(value)
 			bucketMin := bucketBoundary(uint8(i))
@@ -161,21 +161,21 @@ func (h *histogram) percentileBoundary(percentile float64) int64 {
 	return bucketBoundary(bucketCount - 1)
 }
 
-
+// Median returns the estimated median of the observed values.
 func (h *histogram) median() int64 {
 	return h.percentileBoundary(0.5)
 }
 
-
+// Add adds other to h.
 func (h *histogram) Add(other timeseries.Observable) {
 	o := other.(*histogram)
 	if o.valueCount == 0 {
-		
+		// Other histogram is empty
 	} else if h.valueCount >= 0 && o.valueCount > 0 && h.value == o.value {
-		
+		// Both have a single bucketed value, aggregate them
 		h.valueCount += o.valueCount
 	} else {
-		
+		// Two different values necessitate buckets in this histogram
 		h.allocateBuckets()
 		if o.valueCount >= 0 {
 			h.buckets[o.value] += o.valueCount
@@ -189,7 +189,7 @@ func (h *histogram) Add(other timeseries.Observable) {
 	h.sum += o.sum
 }
 
-
+// Clear resets the histogram to an empty state, removing all observed values.
 func (h *histogram) Clear() {
 	h.buckets = nil
 	h.value = 0
@@ -198,7 +198,7 @@ func (h *histogram) Clear() {
 	h.sumOfSquares = 0
 }
 
-
+// CopyFrom copies from other, which must be a *histogram, into h.
 func (h *histogram) CopyFrom(other timeseries.Observable) {
 	o := other.(*histogram)
 	if o.valueCount == -1 {
@@ -211,7 +211,7 @@ func (h *histogram) CopyFrom(other timeseries.Observable) {
 	h.valueCount = o.valueCount
 }
 
-
+// Multiply scales the histogram by the specified ratio.
 func (h *histogram) Multiply(ratio float64) {
 	if h.valueCount == -1 {
 		for i := range h.buckets {
@@ -224,7 +224,7 @@ func (h *histogram) Multiply(ratio float64) {
 	h.sumOfSquares = h.sumOfSquares * ratio
 }
 
-
+// New creates a new histogram.
 func (h *histogram) New() timeseries.Observable {
 	r := new(histogram)
 	r.Clear()
@@ -236,12 +236,12 @@ func (h *histogram) String() string {
 		h.sum, h.sumOfSquares, h.value, h.valueCount, h.buckets)
 }
 
-
+// round returns the closest int64 to the argument
 func round(in float64) int64 {
 	return int64(math.Floor(in + 0.5))
 }
 
-
+// bucketBoundary returns the first value in the bucket.
 func bucketBoundary(bucket uint8) int64 {
 	if bucket == 0 {
 		return 0
@@ -249,7 +249,7 @@ func bucketBoundary(bucket uint8) int64 {
 	return 1 << bucket
 }
 
-
+// bucketData holds data about a specific bucket for use in distTmpl.
 type bucketData struct {
 	Lower, Upper       int64
 	N                  int64
@@ -257,22 +257,22 @@ type bucketData struct {
 	GraphWidth         int
 }
 
-
+// data holds data about a Distribution for use in distTmpl.
 type data struct {
 	Buckets                 []*bucketData
 	Count, Median           int64
 	Mean, StandardDeviation float64
 }
 
-
+// maxHTMLBarWidth is the maximum width of the HTML bar for visualizing buckets.
 const maxHTMLBarWidth = 350.0
 
-
+// newData returns data representing h for use in distTmpl.
 func (h *histogram) newData() *data {
-	
+	// Force the allocation of buckets to simplify the rendering implementation
 	h.allocateBuckets()
-	
-	
+	// We scale the bars on the right so that the largest bar is
+	// maxHTMLBarWidth pixels in width.
 	maxBucket := int64(0)
 	for _, n := range h.buckets {
 		if n > maxBucket {
@@ -333,7 +333,7 @@ var distTmplOnce sync.Once
 
 func distTmpl() *template.Template {
 	distTmplOnce.Do(func() {
-		
+		// Input: data
 		distTmplCache = template.Must(template.New("distTmpl").Parse(`
 <table>
 <tr>

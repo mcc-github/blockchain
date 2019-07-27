@@ -5,7 +5,12 @@ import (
 	"regexp"
 )
 
-
+/*
+ * Given a root node, walks its top level statements and returns
+ * points to function nodes to rewrite as It statements.
+ * These functions, according to Go testing convention, must be named
+ * TestWithCamelCasedName and receive a single *testing.T argument.
+ */
 func findTestFuncs(rootNode *ast.File) (testsToRewrite []*ast.FuncDecl) {
 	testNameRegexp := regexp.MustCompile("^Test[0-9A-Z].+")
 
@@ -29,7 +34,10 @@ func findTestFuncs(rootNode *ast.File) (testsToRewrite []*ast.FuncDecl) {
 	return
 }
 
-
+/*
+ * convenience function that looks at args to a function and determines if its
+ * params include an argument of type  *testing.T
+ */
 func receivesTestingT(node *ast.FuncDecl) bool {
 	if len(node.Type.Params.List) != 1 {
 		return false

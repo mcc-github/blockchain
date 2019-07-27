@@ -12,14 +12,14 @@ type cmdMixin struct {
 	actionMixin
 }
 
-
-
+// CmdCompletion returns completion options for arguments, if that's where
+// parsing left off, or commands if there aren't any unsatisfied args.
 func (c *cmdMixin) CmdCompletion(context *ParseContext) []string {
 	var options []string
 
-	
-	
-	
+	// Count args already satisfied - we won't complete those, and add any
+	// default commands' alternatives, since they weren't listed explicitly
+	// and the user may want to explicitly list something else.
 	argsSatisfied := 0
 	for _, el := range context.Elements {
 		switch clause := el.Clause.(type) {
@@ -34,10 +34,10 @@ func (c *cmdMixin) CmdCompletion(context *ParseContext) []string {
 	}
 
 	if argsSatisfied < len(c.argGroup.args) {
-		
+		// Since not all args have been satisfied, show options for the current one
 		options = append(options, c.argGroup.args[argsSatisfied].resolveCompletions()...)
 	} else {
-		
+		// If all args are satisfied, then go back to completing commands
 		for _, cmd := range c.cmdGroup.commandOrder {
 			if !cmd.hidden {
 				options = append(options, cmd.name)
@@ -49,23 +49,23 @@ func (c *cmdMixin) CmdCompletion(context *ParseContext) []string {
 }
 
 func (c *cmdMixin) FlagCompletion(flagName string, flagValue string) (choices []string, flagMatch bool, optionMatch bool) {
-	
-	
-	
+	// Check if flagName matches a known flag.
+	// If it does, show the options for the flag
+	// Otherwise, show all flags
 
 	options := []string{}
 
 	for _, flag := range c.flagGroup.flagOrder {
-		
+		// Loop through each flag and determine if a match exists
 		if flag.name == flagName {
-			
+			// User typed entire flag. Need to look for flag options.
 			options = flag.resolveCompletions()
 			if len(options) == 0 {
-				
+				// No Options to Choose From, Assume Match.
 				return options, true, true
 			}
 
-			
+			// Loop options to find if the user specified value matches
 			isPrefix := false
 			matched := false
 
@@ -77,8 +77,8 @@ func (c *cmdMixin) FlagCompletion(flagName string, flagValue string) (choices []
 				}
 			}
 
-			
-			
+			// Matched Flag Directly
+			// Flag Value Not Prefixed, and Matched Directly
 			return options, true, !isPrefix && matched
 		}
 
@@ -86,7 +86,7 @@ func (c *cmdMixin) FlagCompletion(flagName string, flagValue string) (choices []
 			options = append(options, "--"+flag.name)
 		}
 	}
-	
+	// No Flag directly matched.
 	return options, false, false
 
 }
@@ -115,10 +115,10 @@ func (c *cmdGroup) cmdNames() []string {
 	return names
 }
 
-
-
-
-
+// GetArg gets a command definition.
+//
+// This allows existing commands to be modified after definition but before parsing. Useful for
+// modular applications.
 func (c *cmdGroup) GetCommand(name string) *CmdClause {
 	return c.commands[name]
 }
@@ -183,8 +183,8 @@ func (c *cmdGroup) have() bool {
 
 type CmdClauseValidator func(*CmdClause) error
 
-
-
+// A CmdClause is a single top-level command. It encapsulates a set of flags
+// and either subcommands or positional arguments.
 type CmdClause struct {
 	cmdMixin
 	app            *Application
@@ -209,13 +209,13 @@ func newCommand(app *Application, name, help string) *CmdClause {
 	return c
 }
 
-
+// Add an Alias for this command.
 func (c *CmdClause) Alias(name string) *CmdClause {
 	c.aliases = append(c.aliases, name)
 	return c
 }
 
-
+// Validate sets a validation function to run when parsing.
 func (c *CmdClause) Validate(validator CmdClauseValidator) *CmdClause {
 	c.validator = validator
 	return c
@@ -229,14 +229,14 @@ func (c *CmdClause) FullCommand() string {
 	return strings.Join(out, " ")
 }
 
-
+// Command adds a new sub-command.
 func (c *CmdClause) Command(name, help string) *CmdClause {
 	cmd := c.addCommand(name, help)
 	cmd.parent = c
 	return cmd
 }
 
-
+// Default makes this command the default if commands don't match.
 func (c *CmdClause) Default() *CmdClause {
 	c.isDefault = true
 	return c

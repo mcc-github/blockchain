@@ -1,9 +1,9 @@
 package units
 
-
+// SI units.
 type SI int64
 
-
+// SI unit multiples.
 const (
 	Kilo SI = 1000
 	Mega    = Kilo * 1000

@@ -2,34 +2,34 @@ package lv
 
 import "sync"
 
-
+// NewSpace returns an N-dimensional vector space.
 func NewSpace() *Space {
 	return &Space{}
 }
 
-
-
-
+// Space represents an N-dimensional vector space. Each name and unique label
+// value pair establishes a new dimension and point within that dimension. Order
+// matters, i.e. [a=1 b=2] identifies a different timeseries than [b=2 a=1].
 type Space struct {
 	mtx   sync.RWMutex
 	nodes map[string]*node
 }
 
-
-
+// Observe locates the time series identified by the name and label values in
+// the vector space, and appends the value to the list of observations.
 func (s *Space) Observe(name string, lvs LabelValues, value float64) {
 	s.nodeFor(name).observe(lvs, value)
 }
 
-
-
-
+// Add locates the time series identified by the name and label values in
+// the vector space, and appends the delta to the last value in the list of
+// observations.
 func (s *Space) Add(name string, lvs LabelValues, delta float64) {
 	s.nodeFor(name).add(lvs, delta)
 }
 
-
-
+// Walk traverses the vector space and invokes fn for each non-empty time series
+// which is encountered. Return false to abort the traversal.
 func (s *Space) Walk(fn func(name string, lvs LabelValues, observations []float64) bool) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -41,8 +41,8 @@ func (s *Space) Walk(fn func(name string, lvs LabelValues, observations []float6
 	}
 }
 
-
-
+// Reset empties the current space and returns a new Space with the old
+// contents. Reset a Space to get an immutable copy suitable for walking.
 func (s *Space) Reset() *Space {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
@@ -65,9 +65,9 @@ func (s *Space) nodeFor(name string) *node {
 	return n
 }
 
-
-
-
+// node exists at a specific point in the N-dimensional vector space of all
+// possible label values. The node collects observations and has child nodes
+// with greater specificity.
 type node struct {
 	mtx          sync.RWMutex
 	observations []float64
