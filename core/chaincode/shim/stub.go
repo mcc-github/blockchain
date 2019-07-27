@@ -3,19 +3,21 @@ Copyright IBM Corp. All Rights Reserved.
 
 SPDX-License-Identifier: Apache-2.0
 */
+
 package shim
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"unicode/utf8"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/timestamp"
-	commonledger "github.com/mcc-github/blockchain/common/ledger"
+	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protoutil"
-	"github.com/pkg/errors"
 )
 
 
@@ -57,21 +59,62 @@ func newChaincodeStub(handler *Handler, channelId, txid string, input *pb.Chainc
 	if signedProposal != nil {
 		var err error
 
-		stub.proposal, err = protoutil.GetProposal(signedProposal.ProposalBytes)
+		stub.proposal = &pb.Proposal{}
+		err = proto.Unmarshal(signedProposal.ProposalBytes, stub.proposal)
 		if err != nil {
-			return nil, errors.WithMessage(err, "failed extracting signedProposal from signed signedProposal")
+
+			return nil, fmt.Errorf("failed to extract Proposal from SignedProposal: %s", err)
 		}
 
 		
-		stub.creator, stub.transient, err = protoutil.GetChaincodeProposalContext(stub.proposal)
-		if err != nil {
-			return nil, errors.WithMessage(err, "failed extracting signedProposal fields")
+		if len(stub.proposal.GetHeader()) == 0 {
+			return nil, errors.New("failed to extract Proposal fields: proposal header is nil")
 		}
 
-		stub.binding, err = protoutil.ComputeProposalBinding(stub.proposal)
-		if err != nil {
-			return nil, errors.WithMessage(err, "failed computing binding from signedProposal")
+		
+		hdr := &common.Header{}
+		if err := proto.Unmarshal(stub.proposal.GetHeader(), hdr); err != nil {
+			return nil, fmt.Errorf("failed to extract proposal header: %s", err)
 		}
+
+		
+		chdr := &common.ChannelHeader{}
+		if err := proto.Unmarshal(hdr.ChannelHeader, chdr); err != nil {
+			return nil, fmt.Errorf("failed to extract channel header: %s", err)
+		}
+		validTypes := map[common.HeaderType]bool{
+			common.HeaderType_ENDORSER_TRANSACTION: true,
+			common.HeaderType_CONFIG:               true,
+		}
+		if !validTypes[common.HeaderType(chdr.GetType())] {
+			return nil, fmt.Errorf(
+				"invalid channel header type. Expected %s or %s, received %s",
+				common.HeaderType_ENDORSER_TRANSACTION,
+				common.HeaderType_CONFIG,
+				common.HeaderType(chdr.GetType()),
+			)
+		}
+
+		
+		shdr := &common.SignatureHeader{}
+		if err := proto.Unmarshal(hdr.GetSignatureHeader(), shdr); err != nil {
+			return nil, fmt.Errorf("failed to extract signature header: %s", err)
+		}
+		stub.creator = shdr.GetCreator()
+
+		
+		payload := &pb.ChaincodeProposalPayload{}
+		if err := proto.Unmarshal(stub.proposal.GetPayload(), payload); err != nil {
+			return nil, fmt.Errorf("failed to extract proposal payload: %s", err)
+		}
+		stub.transient = payload.GetTransientMap()
+
+		
+		epoch := make([]byte, 8)
+		binary.LittleEndian.PutUint64(epoch, chdr.GetEpoch())
+		digest := sha256.Sum256(append(append(shdr.GetNonce(), stub.creator...), epoch...))
+		stub.binding = digest[:]
+
 	}
 
 	return stub, nil
@@ -295,6 +338,10 @@ type HistoryQueryIterator struct {
 	*CommonIterator
 }
 
+
+
+type queryResult interface{}
+
 type resultType uint8
 
 const (
@@ -373,7 +420,7 @@ func (s *ChaincodeStub) GetHistoryForKey(key string) (HistoryQueryIteratorInterf
 
 
 func (s *ChaincodeStub) CreateCompositeKey(objectType string, attributes []string) (string, error) {
-	return createCompositeKey(objectType, attributes)
+	return CreateCompositeKey(objectType, attributes)
 }
 
 
@@ -381,7 +428,7 @@ func (s *ChaincodeStub) SplitCompositeKey(compositeKey string) (string, []string
 	return splitCompositeKey(compositeKey)
 }
 
-func createCompositeKey(objectType string, attributes []string) (string, error) {
+func CreateCompositeKey(objectType string, attributes []string) (string, error) {
 	if err := validateCompositeKeyAttribute(objectType); err != nil {
 		return "", err
 	}
@@ -409,11 +456,11 @@ func splitCompositeKey(compositeKey string) (string, []string, error) {
 
 func validateCompositeKeyAttribute(str string) error {
 	if !utf8.ValidString(str) {
-		return errors.Errorf("not a valid utf8 string: [%x]", str)
+		return fmt.Errorf("not a valid utf8 string: [%x]", str)
 	}
 	for index, runeValue := range str {
 		if runeValue == minUnicodeRuneValue || runeValue == maxUnicodeRuneValue {
-			return errors.Errorf(`input contain unicode %#U starting at position [%d]. %#U and %#U are not allowed in the input attribute of a composite key`,
+			return fmt.Errorf(`input contains unicode %#U starting at position [%d]. %#U and %#U are not allowed in the input attribute of a composite key`,
 				runeValue, index, minUnicodeRuneValue, maxUnicodeRuneValue)
 		}
 	}
@@ -427,7 +474,7 @@ func validateCompositeKeyAttribute(str string) error {
 func validateSimpleKeys(simpleKeys ...string) error {
 	for _, key := range simpleKeys {
 		if len(key) > 0 && key[0] == compositeKeyNamespace[0] {
-			return errors.Errorf(`first character of the key [%s] contains a null character which is not allowed`, key)
+			return fmt.Errorf(`first character of the key [%s] contains a null character which is not allowed`, key)
 		}
 	}
 	return nil
@@ -539,12 +586,12 @@ func (iter *CommonIterator) HasNext() bool {
 
 
 func (iter *CommonIterator) getResultFromBytes(queryResultBytes *pb.QueryResultBytes,
-	rType resultType) (commonledger.QueryResult, error) {
+	rType resultType) (queryResult, error) {
 
 	if rType == STATE_QUERY_RESULT {
 		stateQueryResult := &queryresult.KV{}
 		if err := proto.Unmarshal(queryResultBytes.ResultBytes, stateQueryResult); err != nil {
-			return nil, errors.Wrap(err, "error unmarshaling result from bytes")
+			return nil, fmt.Errorf("error unmarshaling result from bytes: %s", err)
 		}
 		return stateQueryResult, nil
 
@@ -571,12 +618,11 @@ func (iter *CommonIterator) fetchNextQueryResult() error {
 
 
 
-func (iter *CommonIterator) nextResult(rType resultType) (commonledger.QueryResult, error) {
+func (iter *CommonIterator) nextResult(rType resultType) (queryResult, error) {
 	if iter.currentLoc < len(iter.response.Results) {
 		
 		queryResult, err := iter.getResultFromBytes(iter.response.Results[iter.currentLoc], rType)
 		if err != nil {
-			chaincodeLogger.Errorf("Failed to decode query results: %+v", err)
 			return nil, err
 		}
 		iter.currentLoc++
@@ -584,7 +630,6 @@ func (iter *CommonIterator) nextResult(rType resultType) (commonledger.QueryResu
 		if iter.currentLoc == len(iter.response.Results) && iter.response.HasMore {
 			
 			if err = iter.fetchNextQueryResult(); err != nil {
-				chaincodeLogger.Errorf("Failed to fetch next results: %+v", err)
 				return nil, err
 			}
 		}
@@ -665,13 +710,14 @@ func (s *ChaincodeStub) GetArgsSlice() ([]byte, error) {
 
 
 func (s *ChaincodeStub) GetTxTimestamp() (*timestamp.Timestamp, error) {
-	hdr, err := protoutil.GetHeader(s.proposal.Header)
-	if err != nil {
-		return nil, err
+	hdr := &common.Header{}
+	if err := proto.Unmarshal(s.proposal.Header, hdr); err != nil {
+		return nil, fmt.Errorf("error unmarshaling Header: %s", err)
 	}
-	chdr, err := protoutil.UnmarshalChannelHeader(hdr.ChannelHeader)
-	if err != nil {
-		return nil, err
+
+	chdr := &common.ChannelHeader{}
+	if err := proto.Unmarshal(hdr.ChannelHeader, chdr); err != nil {
+		return nil, fmt.Errorf("error unmarshaling ChannelHeader: %s", err)
 	}
 
 	return chdr.GetTimestamp(), nil

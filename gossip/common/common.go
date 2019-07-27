@@ -36,14 +36,14 @@ type MessageAcceptor func(interface{}) bool
 
 
 type Payload struct {
-	ChainID ChainID 
-	Data    []byte  
-	Hash    string  
-	SeqNum  uint64  
+	ChannelID ChannelID 
+	Data      []byte    
+	Hash      string    
+	SeqNum    uint64    
 }
 
 
-type ChainID []byte
+type ChannelID []byte
 
 
 

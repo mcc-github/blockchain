@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 syntax = "proto3";
 
 option go_package = "github.com/mcc-github/blockchain/protos/token";
+option java_package = "org.mcc-github.blockchain.protos.token";
 
 package token;
 

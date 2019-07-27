@@ -30,6 +30,8 @@ var (
 	connWG sync.WaitGroup
 )
 
+const peerTLSEnabled = false
+
 func newConnection() *grpc.ClientConn {
 	
 	
@@ -569,10 +571,10 @@ func TestProductionUsage(t *testing.T) {
 	os := mocks.NewOrderer(5612, t)
 	os.SetNextExpectedSeek(5)
 
-	connFact := func(endpoint string) (*grpc.ClientConn, error) {
+	connFact := func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
 		return grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
 	}
-	prod := comm.NewConnectionProducer(connFact, []string{"localhost:5612"})
+	prod := comm.NewConnectionProducer(connFact, []string{"localhost:5612"}, defDeliverClientDialOpts(), peerTLSEnabled, DefaultConnectionTimeout)
 	clFact := func(cc *grpc.ClientConn) orderer.AtomicBroadcastClient {
 		return orderer.NewAtomicBroadcastClient(cc)
 	}
@@ -621,10 +623,10 @@ func TestDisconnect(t *testing.T) {
 		}
 	}
 
-	connFact := func(endpoint string) (*grpc.ClientConn, error) {
+	connFact := func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
 		return grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
 	}
-	prod := comm.NewConnectionProducer(connFact, []string{"localhost:5613", "localhost:5614"})
+	prod := comm.NewConnectionProducer(connFact, []string{"localhost:5613", "localhost:5614"}, defDeliverClientDialOpts(), peerTLSEnabled, DefaultConnectionTimeout)
 	clFact := func(cc *grpc.ClientConn) orderer.AtomicBroadcastClient {
 		return orderer.NewAtomicBroadcastClient(cc)
 	}
@@ -678,4 +680,19 @@ func newTestSeekInfo() *orderer.SeekInfo {
 		Stop:     &orderer.SeekPosition{Type: &orderer.SeekPosition_Specified{Specified: &orderer.SeekSpecified{Number: math.MaxUint64}}},
 		Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
 	}
+}
+
+func defDeliverClientDialOpts() []grpc.DialOption {
+	dialOpts := []grpc.DialOption{grpc.WithBlock()}
+
+	dialOpts = append(
+		dialOpts,
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(comm.MaxRecvMsgSize),
+			grpc.MaxCallSendMsgSize(comm.MaxSendMsgSize)))
+
+	kaOpts := comm.DefaultKeepaliveOptions
+	dialOpts = append(dialOpts, comm.ClientKeepaliveOptions(kaOpts)...)
+
+	return dialOpts
 }

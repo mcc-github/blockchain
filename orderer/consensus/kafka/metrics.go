@@ -130,9 +130,19 @@ var (
 		LabelNames:   []string{"topic"},
 		StatsdFormat: "%{#fqname}.%{topic}",
 	}
+
+	lastOffsetPersisted = metrics.GaugeOpts{
+		Namespace:    "consensus",
+		Subsystem:    "kafka",
+		Name:         "last_offset_persisted",
+		Help:         "The offset specified in the block metadata of the most recently committed block.",
+		LabelNames:   []string{"channel"},
+		StatsdFormat: "%{#fqname}.%{channel}",
+	}
 )
 
 type Metrics struct {
+	
 	IncomingByteRate  metrics.Gauge
 	OutgoingByteRate  metrics.Gauge
 	RequestRate       metrics.Gauge
@@ -146,6 +156,9 @@ type Metrics struct {
 	CompressionRatio  metrics.Gauge
 
 	GoMetricsRegistry gometrics.Registry
+
+	
+	LastOffsetPersisted metrics.Gauge
 }
 
 func NewMetrics(p metrics.Provider, registry gometrics.Registry) *Metrics {
@@ -163,6 +176,8 @@ func NewMetrics(p metrics.Provider, registry gometrics.Registry) *Metrics {
 		CompressionRatio:  p.NewGauge(compressionRatio),
 
 		GoMetricsRegistry: registry,
+
+		LastOffsetPersisted: p.NewGauge(lastOffsetPersisted),
 	}
 }
 

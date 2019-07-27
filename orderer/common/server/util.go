@@ -13,12 +13,13 @@ import (
 
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	fileledger "github.com/mcc-github/blockchain/common/ledger/blockledger/file"
-	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
+	"github.com/mcc-github/blockchain/common/ledger/blockledger/fileledger"
+	"github.com/mcc-github/blockchain/common/ledger/blockledger/ramledger"
+	"github.com/mcc-github/blockchain/common/metrics"
 	config "github.com/mcc-github/blockchain/orderer/common/localconfig"
 )
 
-func createLedgerFactory(conf *config.TopLevel) (blockledger.Factory, string) {
+func createLedgerFactory(conf *config.TopLevel, metricsProvider metrics.Provider) (blockledger.Factory, string) {
 	var lf blockledger.Factory
 	var ld string
 	switch conf.General.LedgerType {
@@ -28,7 +29,7 @@ func createLedgerFactory(conf *config.TopLevel) (blockledger.Factory, string) {
 			ld = createTempDir(conf.FileLedger.Prefix)
 		}
 		logger.Debug("Ledger dir:", ld)
-		lf = fileledger.New(ld)
+		lf = fileledger.New(ld, metricsProvider)
 		
 		
 		

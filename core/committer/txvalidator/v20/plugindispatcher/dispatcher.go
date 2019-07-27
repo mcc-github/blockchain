@@ -27,7 +27,7 @@ import (
 type ChannelResources interface {
 	
 	
-	GetMSPIDs(cid string) []string
+	GetMSPIDs() []string
 }
 
 

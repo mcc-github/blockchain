@@ -109,7 +109,7 @@ func (s *DiscoverySupport) SatisfiesPrincipal(channel string, rawIdentity []byte
 type ChannelPolicyManagerGetter interface {
 	
 	
-	Manager(channelID string) (policies.Manager, bool)
+	Manager(channelID string) policies.Manager
 }
 
 
@@ -131,7 +131,7 @@ type ChannelVerifier struct {
 
 
 func (cv *ChannelVerifier) VerifyByChannel(channel string, sd *protoutil.SignedData) error {
-	mgr, _ := cv.Manager(channel)
+	mgr := cv.Manager(channel)
 	if mgr == nil {
 		return errors.Errorf("policy manager for channel %s doesn't exist", channel)
 	}

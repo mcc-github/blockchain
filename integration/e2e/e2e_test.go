@@ -114,7 +114,7 @@ var _ = Describe("EndToEnd", func() {
 			network.CreateAndJoinChannel(orderer, "testchannel")
 
 			By("deploying the chaincode")
-			nwo.DeployChaincode(network, "testchannel", orderer, chaincode)
+			nwo.DeployChaincodeLegacy(network, "testchannel", orderer, chaincode)
 
 			By("getting the client peer by name")
 			peer := network.Peer("Org1", "peer1")
@@ -154,7 +154,7 @@ var _ = Describe("EndToEnd", func() {
 			peer := network.Peer("Org1", "peer1")
 
 			network.CreateAndJoinChannel(orderer, "testchannel")
-			nwo.DeployChaincode(network, "testchannel", orderer, chaincode)
+			nwo.DeployChaincodeLegacy(network, "testchannel", orderer, chaincode)
 			RunQueryInvokeQuery(network, orderer, peer, "testchannel")
 
 			CheckPeerOperationEndpoints(network, network.Peer("Org2", "peer1"))
@@ -179,12 +179,12 @@ var _ = Describe("EndToEnd", func() {
 
 			By("Create first channel and deploy the chaincode")
 			network.CreateAndJoinChannel(orderer, "testchannel1")
-			nwo.DeployChaincode(network, "testchannel1", orderer, chaincode)
+			nwo.DeployChaincodeLegacy(network, "testchannel1", orderer, chaincode)
 			RunQueryInvokeQuery(network, orderer, peer, "testchannel1")
 
 			By("Create second channel and deploy chaincode")
 			network.CreateAndJoinChannel(orderer, "testchannel2")
-			nwo.InstantiateChaincode(network, "testchannel2", orderer, chaincode, peer, network.PeersWithChannel("testchannel2")...)
+			nwo.InstantiateChaincodeLegacy(network, "testchannel2", orderer, chaincode, peer, network.PeersWithChannel("testchannel2")...)
 			RunQueryInvokeQuery(network, orderer, peer, "testchannel2")
 
 			By("Update consensus metadata to increase snapshot interval")
@@ -295,6 +295,9 @@ func CheckPeerStatsdMetrics(contents, prefix string) {
 	Expect(contents).To(ContainSubstring(prefix + ".grpc.server.unary_requests_received.protos_Endorser.ProcessProposal:"))
 	Expect(contents).To(ContainSubstring(prefix + ".grpc.server.unary_requests_completed.protos_Endorser.ProcessProposal.OK:"))
 	Expect(contents).To(ContainSubstring(prefix + ".grpc.server.unary_request_duration.protos_Endorser.ProcessProposal.OK:"))
+	Expect(contents).To(ContainSubstring(prefix + ".ledger.blockchain_height"))
+	Expect(contents).To(ContainSubstring(prefix + ".ledger.blockstorage_commit_time"))
+	Expect(contents).To(ContainSubstring(prefix + ".ledger.blockstorage_and_pvtdata_commit_time"))
 }
 
 func CheckPeerStatsdStreamMetrics(contents string) {
@@ -319,6 +322,8 @@ func CheckOrdererStatsdMetrics(contents, prefix string) {
 	Expect(contents).To(ContainSubstring(prefix + ".grpc.server.stream_requests_completed.orderer_AtomicBroadcast.Deliver."))
 	Expect(contents).To(ContainSubstring(prefix + ".grpc.server.stream_messages_received.orderer_AtomicBroadcast.Deliver"))
 	Expect(contents).To(ContainSubstring(prefix + ".grpc.server.stream_messages_sent.orderer_AtomicBroadcast.Deliver"))
+	Expect(contents).To(ContainSubstring(prefix + ".ledger.blockchain_height"))
+	Expect(contents).To(ContainSubstring(prefix + ".ledger.blockstorage_commit_time"))
 }
 
 func OrdererOperationalClients(network *nwo.Network, orderer *nwo.Orderer) (authClient, unauthClient *http.Client) {
@@ -416,6 +421,9 @@ func CheckPeerPrometheusMetrics(client *http.Client, url string) {
 	Expect(body).To(ContainSubstring(`grpc_server_stream_messages_sent{method="DeliverFiltered",service="protos_Deliver"}`))
 	Expect(body).To(ContainSubstring(`# TYPE grpc_comm_conn_closed counter`))
 	Expect(body).To(ContainSubstring(`# TYPE grpc_comm_conn_opened counter`))
+	Expect(body).To(ContainSubstring(`ledger_blockchain_height`))
+	Expect(body).To(ContainSubstring(`ledger_blockstorage_commit_time_bucket`))
+	Expect(body).To(ContainSubstring(`ledger_blockstorage_and_pvtdata_commit_time_bucket`))
 }
 
 func CheckOrdererPrometheusMetrics(client *http.Client, url string) {
@@ -435,6 +443,8 @@ func CheckOrdererPrometheusMetrics(client *http.Client, url string) {
 	Expect(body).To(ContainSubstring(`grpc_server_stream_request_duration_sum{code="OK",method="Broadcast",service="orderer_AtomicBroadcast"`))
 	Expect(body).To(ContainSubstring(`# TYPE grpc_comm_conn_closed counter`))
 	Expect(body).To(ContainSubstring(`# TYPE grpc_comm_conn_opened counter`))
+	Expect(body).To(ContainSubstring(`ledger_blockchain_height`))
+	Expect(body).To(ContainSubstring(`ledger_blockstorage_commit_time_bucket`))
 }
 
 func CheckLogspecOperations(client *http.Client, logspecURL string) {

@@ -1,11 +1,13 @@
 
 
 
-package lifecycle 
+package lifecycle
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	math "math"
+)
 
 
 var _ = proto.Marshal
@@ -16,7 +18,7 @@ var _ = math.Inf
 
 
 
-const _ = proto.ProtoPackageIsVersion2 
+const _ = proto.ProtoPackageIsVersion3 
 
 
 
@@ -33,16 +35,17 @@ func (m *ChaincodeEndorsementInfo) Reset()         { *m = ChaincodeEndorsementIn
 func (m *ChaincodeEndorsementInfo) String() string { return proto.CompactTextString(m) }
 func (*ChaincodeEndorsementInfo) ProtoMessage()    {}
 func (*ChaincodeEndorsementInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chaincode_definition_bcb7540be0cd1d31, []int{0}
+	return fileDescriptor_f0faa93bbd697c66, []int{0}
 }
+
 func (m *ChaincodeEndorsementInfo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ChaincodeEndorsementInfo.Unmarshal(m, b)
 }
 func (m *ChaincodeEndorsementInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ChaincodeEndorsementInfo.Marshal(b, m, deterministic)
 }
-func (dst *ChaincodeEndorsementInfo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ChaincodeEndorsementInfo.Merge(dst, src)
+func (m *ChaincodeEndorsementInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChaincodeEndorsementInfo.Merge(m, src)
 }
 func (m *ChaincodeEndorsementInfo) XXX_Size() int {
 	return xxx_messageInfo_ChaincodeEndorsementInfo.Size(m)
@@ -88,16 +91,17 @@ func (m *ChaincodeValidationInfo) Reset()         { *m = ChaincodeValidationInfo
 func (m *ChaincodeValidationInfo) String() string { return proto.CompactTextString(m) }
 func (*ChaincodeValidationInfo) ProtoMessage()    {}
 func (*ChaincodeValidationInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chaincode_definition_bcb7540be0cd1d31, []int{1}
+	return fileDescriptor_f0faa93bbd697c66, []int{1}
 }
+
 func (m *ChaincodeValidationInfo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ChaincodeValidationInfo.Unmarshal(m, b)
 }
 func (m *ChaincodeValidationInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ChaincodeValidationInfo.Marshal(b, m, deterministic)
 }
-func (dst *ChaincodeValidationInfo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ChaincodeValidationInfo.Merge(dst, src)
+func (m *ChaincodeValidationInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChaincodeValidationInfo.Merge(m, src)
 }
 func (m *ChaincodeValidationInfo) XXX_Size() int {
 	return xxx_messageInfo_ChaincodeValidationInfo.Size(m)
@@ -128,10 +132,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("peer/lifecycle/chaincode_definition.proto", fileDescriptor_chaincode_definition_bcb7540be0cd1d31)
+	proto.RegisterFile("peer/lifecycle/chaincode_definition.proto", fileDescriptor_f0faa93bbd697c66)
 }
 
-var fileDescriptor_chaincode_definition_bcb7540be0cd1d31 = []byte{
+var fileDescriptor_f0faa93bbd697c66 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x54, 0x91, 0x41, 0x4b, 0xc4, 0x30,
 	0x14, 0x84, 0xa9, 0x82, 0xba, 0x61, 0x05, 0x37, 0x0a, 0xf6, 0xb8, 0xac, 0x97, 0x15, 0x35, 0x41,

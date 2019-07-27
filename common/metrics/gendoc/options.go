@@ -149,6 +149,15 @@ func populateOption(lit *ast.CompositeLit, target interface{}) (interface{}, err
 			case "Buckets":
 
 			
+			case "LabelHelp":
+				labelHelp, err := asStringMap(kv.Value.(*ast.CompositeLit))
+				if err != nil {
+					return nil, err
+				}
+				labelHelpValue := reflect.ValueOf(labelHelp)
+				field.Set(labelHelpValue)
+
+			
 			case "LabelNames":
 				labelNames, err := stringSlice(kv.Value.(*ast.CompositeLit))
 				if err != nil {
@@ -186,4 +195,23 @@ func stringSlice(lit *ast.CompositeLit) ([]string, error) {
 	}
 
 	return slice, nil
+}
+
+func asStringMap(lit *ast.CompositeLit) (map[string]string, error) {
+	m := map[string]string{}
+
+	for _, elem := range lit.Elts {
+		elem := elem.(*ast.KeyValueExpr)
+		key, err := strconv.Unquote(elem.Key.(*ast.BasicLit).Value)
+		if err != nil {
+			return nil, err
+		}
+		value, err := strconv.Unquote(elem.Value.(*ast.BasicLit).Value)
+		if err != nil {
+			return nil, err
+		}
+		m[key] = value
+	}
+
+	return m, nil
 }

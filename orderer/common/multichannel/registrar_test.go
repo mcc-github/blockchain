@@ -11,7 +11,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
+	"github.com/mcc-github/blockchain/common/ledger/blockledger/ramledger"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	mockchannelconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
@@ -51,37 +51,6 @@ func newRAMLedgerAndFactory(maxSize int,
 		panic(err)
 	}
 	return rlf, rl
-}
-
-func newRAMLedgerAndFactory3Chan(maxSize int,
-	chainID string, genesisBlockSys *cb.Block,
-	chainID1 string, genesisBlockStd1 *cb.Block,
-	chainID2 string, genesisBlockStd2 *cb.Block) (blockledger.Factory, []blockledger.ReadWriter) {
-	var rls []blockledger.ReadWriter
-	rlf, rl := newRAMLedgerAndFactory(maxSize, chainID, genesisBlockSys)
-	rls = append(rls, rl)
-
-	rl, err := rlf.GetOrCreate(chainID1)
-	if err != nil {
-		panic(err)
-	}
-	err = rl.Append(genesisBlockStd1)
-	if err != nil {
-		panic(err)
-	}
-	rls = append(rls, rl)
-
-	rl, err = rlf.GetOrCreate(chainID2)
-	if err != nil {
-		panic(err)
-	}
-	err = rl.Append(genesisBlockStd2)
-	if err != nil {
-		panic(err)
-	}
-	rls = append(rls, rl)
-
-	return rlf, rls
 }
 
 func testMessageOrderAndRetrieval(maxMessageCount uint32, chainID string, chainSupport *ChainSupport, lr blockledger.ReadWriter, t *testing.T) {

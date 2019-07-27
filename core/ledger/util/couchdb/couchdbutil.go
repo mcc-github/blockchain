@@ -191,6 +191,9 @@ func ConstructMetadataDBName(dbName string) string {
 
 
 
+
+
+
 func ConstructNamespaceDBName(chainName, namespace string) string {
 	
 	escapedNamespace := escapeUpperCase(namespace)

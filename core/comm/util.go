@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
+	"net"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
@@ -33,27 +34,26 @@ func AddPemToCertPool(pemCerts []byte, pool *x509.CertPool) error {
 
 
 func pemToX509Certs(pemCerts []byte) ([]*x509.Certificate, []string, error) {
+	var certs []*x509.Certificate
+	var subjects []string
 
 	
-	certs := []*x509.Certificate{}
-	subjects := []string{}
 	for len(pemCerts) > 0 {
 		var block *pem.Block
 		block, pemCerts = pem.Decode(pemCerts)
 		if block == nil {
 			break
 		}
-		
 
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
-			return nil, subjects, err
-		} else {
-			certs = append(certs, cert)
-			
-			subjects = append(subjects, string(cert.RawSubject))
+			return nil, []string{}, err
 		}
+
+		certs = append(certs, cert)
+		subjects = append(subjects, string(cert.RawSubject))
 	}
+
 	return certs, subjects, nil
 }
 
@@ -152,4 +152,21 @@ func ExtractRawCertificateFromContext(ctx context.Context) []byte {
 		return nil
 	}
 	return cert.Raw
+}
+
+
+func GetLocalIP() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+	for _, address := range addrs {
+		
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String(), nil
+			}
+		}
+	}
+	return "", errors.Errorf("no non-loopback, IPv4 interface detected")
 }

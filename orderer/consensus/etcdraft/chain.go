@@ -16,7 +16,6 @@ import (
 
 	"code.cloudfoundry.org/clock"
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/consensus"
@@ -115,6 +114,9 @@ type Options struct {
 	
 	BlockMetadata *etcdraft.BlockMetadata
 	Consenters    map[uint64]*etcdraft.Consenter
+
+	
+	MigrationInit bool
 
 	Metrics *Metrics
 	Cert    []byte
@@ -258,6 +260,7 @@ func NewChain(
 		Metrics: &Metrics{
 			ClusterSize:             opts.Metrics.ClusterSize.With("channel", support.ChainID()),
 			IsLeader:                opts.Metrics.IsLeader.With("channel", support.ChainID()),
+			ActiveNodes:             opts.Metrics.ActiveNodes.With("channel", support.ChainID()),
 			CommittedBlockNumber:    opts.Metrics.CommittedBlockNumber.With("channel", support.ChainID()),
 			SnapshotBlockNumber:     opts.Metrics.SnapshotBlockNumber.With("channel", support.ChainID()),
 			LeaderChanges:           opts.Metrics.LeaderChanges.With("channel", support.ChainID()),
@@ -273,6 +276,7 @@ func NewChain(
 	
 	c.Metrics.ClusterSize.Set(float64(len(c.opts.BlockMetadata.ConsenterIds)))
 	c.Metrics.IsLeader.Set(float64(0)) 
+	c.Metrics.ActiveNodes.Set(float64(0))
 	c.Metrics.CommittedBlockNumber.Set(float64(c.lastBlock.Header.Number))
 	c.Metrics.SnapshotBlockNumber.Set(float64(c.lastSnapBlockNum))
 
@@ -320,7 +324,7 @@ func (c *Chain) Start() {
 	}
 
 	isJoin := c.support.Height() > 1
-	if isJoin && c.support.DetectConsensusMigration() {
+	if isJoin && c.opts.MigrationInit {
 		isJoin = false
 		c.logger.Infof("Consensus-type migration detected, starting new raft node on an existing channel; height=%d", c.support.Height())
 	}
@@ -330,7 +334,7 @@ func (c *Chain) Start() {
 	close(c.errorC)
 
 	go c.gc()
-	go c.serveRequest()
+	go c.run()
 
 	es := c.newEvictionSuspector()
 
@@ -357,88 +361,7 @@ func (c *Chain) Order(env *common.Envelope, configSeq uint64) error {
 
 func (c *Chain) Configure(env *common.Envelope, configSeq uint64) error {
 	c.Metrics.ConfigProposalsReceived.Add(1)
-	if err := c.checkConfigUpdateValidity(env); err != nil {
-		c.logger.Warnf("Rejected config: %s", err)
-		c.Metrics.ProposalFailures.Add(1)
-		return err
-	}
 	return c.Submit(&orderer.SubmitRequest{LastValidationSeq: configSeq, Payload: env, Channel: c.channelID}, 0)
-}
-
-
-func (c *Chain) checkConfigUpdateValidity(ctx *common.Envelope) error {
-	var err error
-	payload, err := protoutil.UnmarshalPayload(ctx.Payload)
-	if err != nil {
-		return err
-	}
-	chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
-	if err != nil {
-		return err
-	}
-
-	if chdr.Type != int32(common.HeaderType_ORDERER_TRANSACTION) &&
-		chdr.Type != int32(common.HeaderType_CONFIG) {
-		return errors.Errorf("config transaction has unknown header type: %s", common.HeaderType(chdr.Type))
-	}
-
-	if chdr.Type == int32(common.HeaderType_ORDERER_TRANSACTION) {
-		newChannelConfig, err := protoutil.UnmarshalEnvelope(payload.Data)
-		if err != nil {
-			return err
-		}
-
-		payload, err = protoutil.UnmarshalPayload(newChannelConfig.Payload)
-		if err != nil {
-			return err
-		}
-	}
-
-	configUpdate, err := configtx.UnmarshalConfigUpdateFromPayload(payload)
-	if err != nil {
-		return err
-	}
-
-	metadata, err := MetadataFromConfigUpdate(configUpdate)
-	if err != nil {
-		return err
-	}
-
-	if metadata == nil {
-		return nil 
-	}
-
-	if err = CheckConfigMetadata(metadata); err != nil {
-		return err
-	}
-
-	switch chdr.Type {
-	case int32(common.HeaderType_ORDERER_TRANSACTION):
-		c.raftMetadataLock.RLock()
-		set := MembershipByCert(c.opts.Consenters)
-		c.raftMetadataLock.RUnlock()
-
-		for _, c := range metadata.Consenters {
-			if _, exits := set[string(c.ClientTlsCert)]; !exits {
-				return errors.Errorf("new channel has consenter that is not part of system consenter set")
-			}
-		}
-
-		return nil
-
-	case int32(common.HeaderType_CONFIG):
-		c.raftMetadataLock.RLock()
-		_, err = ComputeMembershipChanges(c.opts.BlockMetadata, c.opts.Consenters, metadata.Consenters)
-		c.raftMetadataLock.RUnlock()
-
-		return err
-
-	default:
-		
-		c.logger.Panicf("Programming error, unknown header type")
-	}
-
-	return nil
 }
 
 
@@ -560,7 +483,7 @@ func isCandidate(state raft.StateType) bool {
 	return state == raft.StatePreCandidate || state == raft.StateCandidate
 }
 
-func (c *Chain) serveRequest() {
+func (c *Chain) run() {
 	ticking := false
 	timer := c.clock.NewTimer(time.Second)
 	
@@ -802,6 +725,7 @@ func (c *Chain) serveRequest() {
 			}
 
 		case <-c.doneC:
+			stopTimer()
 			cancelProp()
 
 			select {
@@ -863,12 +787,8 @@ func (c *Chain) ordered(msg *orderer.SubmitRequest) (batches [][]*common.Envelop
 				c.Metrics.ProposalFailures.Add(1)
 				return nil, true, errors.Errorf("bad config message: %s", err)
 			}
-
-			if err = c.checkConfigUpdateValidity(msg.Payload); err != nil {
-				c.Metrics.ProposalFailures.Add(1)
-				return nil, true, errors.Errorf("bad config message: %s", err)
-			}
 		}
+
 		batch := c.support.BlockCutter().Cut()
 		batches = [][]*common.Envelope{}
 		if len(batch) != 0 {
@@ -1047,40 +967,41 @@ func (c *Chain) apply(ents []raftpb.Entry) {
 
 			
 			
+			var configureComm bool
 			if c.confChangeInProgress != nil &&
 				c.confChangeInProgress.NodeID == cc.NodeID &&
 				c.confChangeInProgress.Type == cc.Type {
 
-				if err := c.configureComm(); err != nil {
-					c.logger.Panicf("Failed to configure communication: %s", err)
-				}
-
+				configureComm = true
 				c.confChangeInProgress = nil
 				c.configInflight = false
 				
 				c.Metrics.ClusterSize.Set(float64(len(c.opts.BlockMetadata.ConsenterIds)))
 			}
 
-			if cc.Type == raftpb.ConfChangeRemoveNode && cc.NodeID == c.raftID {
-				c.logger.Infof("Current node removed from replica set for channel %s", c.channelID)
-				
-				
-				lead := atomic.LoadUint64(&c.lastKnownLeader)
-				if lead == c.raftID {
-					c.logger.Info("This node is being removed as current leader, halt with delay")
-					c.configInflight = true 
-					go func() {
-						select {
-						case <-c.clock.After(time.Duration(c.opts.ElectionTick) * c.opts.TickInterval):
-						case <-c.doneC:
-						}
+			lead := atomic.LoadUint64(&c.lastKnownLeader)
+			removeLeader := cc.Type == raftpb.ConfChangeRemoveNode && cc.NodeID == lead
+			shouldHalt := cc.Type == raftpb.ConfChangeRemoveNode && cc.NodeID == c.raftID
 
-						c.Halt()
-					}()
-				} else {
-					go c.Halt()
+			
+			go func() {
+				if removeLeader {
+					c.logger.Infof("Current leader is being removed from channel, attempt leadership transfer")
+					c.Node.abdicateLeader(lead)
 				}
-			}
+
+				if configureComm && !shouldHalt { 
+					if err := c.configureComm(); err != nil {
+						c.logger.Panicf("Failed to configure communication: %s", err)
+					}
+				}
+
+				if shouldHalt {
+					c.logger.Infof("This node is being removed from replica set")
+					c.Halt()
+					return
+				}
+			}()
 		}
 
 		if ents[i].Index > c.appliedIndex {
@@ -1153,11 +1074,11 @@ func (c *Chain) remotePeers() ([]cluster.RemoteNode, error) {
 		if raftID == c.raftID {
 			continue
 		}
-		serverCertAsDER, err := c.pemToDER(consenter.ServerTlsCert, raftID, "server")
+		serverCertAsDER, err := pemToDER(consenter.ServerTlsCert, raftID, "server", c.logger)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
-		clientCertAsDER, err := c.pemToDER(consenter.ClientTlsCert, raftID, "client")
+		clientCertAsDER, err := pemToDER(consenter.ClientTlsCert, raftID, "client", c.logger)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
@@ -1171,10 +1092,10 @@ func (c *Chain) remotePeers() ([]cluster.RemoteNode, error) {
 	return nodes, nil
 }
 
-func (c *Chain) pemToDER(pemBytes []byte, id uint64, certType string) ([]byte, error) {
+func pemToDER(pemBytes []byte, id uint64, certType string, logger *flogging.FabricLogger) ([]byte, error) {
 	bl, _ := pem.Decode(pemBytes)
 	if bl == nil {
-		c.logger.Errorf("Rejecting PEM block of %s TLS cert for node %d, offending PEM is: %s", certType, id, string(pemBytes))
+		logger.Errorf("Rejecting PEM block of %s TLS cert for node %d, offending PEM is: %s", certType, id, string(pemBytes))
 		return nil, errors.Errorf("invalid PEM block")
 	}
 	return bl.Bytes, nil

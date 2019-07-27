@@ -1,6 +1,5 @@
 /*
 Copyright IBM Corp. All Rights Reserved.
-
 SPDX-License-Identifier: Apache-2.0
 */
 
@@ -10,156 +9,132 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
-	"github.com/spf13/viper"
-
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	mscc "github.com/mcc-github/blockchain/common/mocks/scc"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	"github.com/mcc-github/blockchain/core/deliverservice"
-	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt/ledgermgmttest"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
 	ledgermocks "github.com/mcc-github/blockchain/core/ledger/mock"
-	"github.com/mcc-github/blockchain/gossip/api"
+	"github.com/mcc-github/blockchain/core/transientstore"
+	"github.com/mcc-github/blockchain/gossip/gossip"
+	gossipmetrics "github.com/mcc-github/blockchain/gossip/metrics"
 	"github.com/mcc-github/blockchain/gossip/service"
+	gossipservice "github.com/mcc-github/blockchain/gossip/service"
 	peergossip "github.com/mcc-github/blockchain/internal/peer/gossip"
 	"github.com/mcc-github/blockchain/internal/peer/gossip/mocks"
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
+	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
-type mockDeliveryClient struct {
+func TestMain(m *testing.M) {
+	msptesttools.LoadMSPSetupForTesting()
+	rc := m.Run()
+	os.Exit(rc)
 }
 
-func (ds *mockDeliveryClient) UpdateEndpoints(chainID string, endpoints []string) error {
-	return nil
-}
+func NewTestPeer(t *testing.T) (*Peer, func()) {
+	tempdir, err := ioutil.TempDir("", "peer-test")
+	require.NoError(t, err, "failed to create temporary directory")
 
+	
+	signer := mgmt.GetLocalSigningIdentityOrPanic()
+	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager())
+	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager())
+	defaultSecureDialOpts := func() []grpc.DialOption { return []grpc.DialOption{grpc.WithInsecure()} }
+	defaultDeliverClientDialOpts := []grpc.DialOption{grpc.WithBlock()}
+	defaultDeliverClientDialOpts = append(
+		defaultDeliverClientDialOpts,
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(comm.MaxRecvMsgSize),
+			grpc.MaxCallSendMsgSize(comm.MaxSendMsgSize)))
+	defaultDeliverClientDialOpts = append(
+		defaultDeliverClientDialOpts,
+		comm.ClientKeepaliveOptions(comm.DefaultKeepaliveOptions)...,
+	)
+	gossipConfig, err := gossip.GlobalConfig("localhost:0", nil)
 
+	gossipService, err := gossipservice.New(
+		signer,
+		gossipmetrics.NewGossipMetrics(&disabled.Provider{}),
+		"localhost:0",
+		grpc.NewServer(),
+		messageCryptoService,
+		secAdv,
+		defaultSecureDialOpts,
+		nil,
+		defaultDeliverClientDialOpts,
+		gossipConfig,
+		&service.ServiceConfig{},
+		&deliverservice.DeliverServiceConfig{
+			ReConnectBackoffThreshold:   deliverservice.DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: deliverservice.DefaultReConnectTotalTimeThreshold,
+		},
+	)
+	require.NoError(t, err, "failed to create gossip service")
 
-func (ds *mockDeliveryClient) StartDeliverForChannel(chainID string, ledgerInfo blocksprovider.LedgerInfo, f func()) error {
-	return nil
-}
+	ledgerMgr, err := constructLedgerMgrWithTestDefaults(filepath.Join(tempdir, "ledgersData"))
+	require.NoError(t, err, "failed to create ledger manager")
 
-
-
-func (ds *mockDeliveryClient) StopDeliverForChannel(chainID string) error {
-	return nil
-}
-
-
-func (*mockDeliveryClient) Stop() {
-}
-
-type mockDeliveryClientFactory struct {
-}
-
-func (*mockDeliveryClientFactory) Service(g service.GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverservice.DeliverService, error) {
-	return &mockDeliveryClient{}, nil
-}
-
-func TestNewPeerServer(t *testing.T) {
-	server, err := NewPeerServer(":4050", comm.ServerConfig{})
-	assert.NoError(t, err, "NewPeerServer returned unexpected error")
-	assert.Equal(t, "[::]:4050", server.Address(), "NewPeerServer returned the wrong address")
-	server.Stop()
-
-	_, err = NewPeerServer("", comm.ServerConfig{})
-	assert.Error(t, err, "expected NewPeerServer to return error with missing address")
-}
-
-func TestInitChain(t *testing.T) {
-	chainId := "testChain"
-	chainInitializer = func(cid string) {
-		assert.Equal(t, chainId, cid, "chainInitializer received unexpected cid")
+	peerInstance := &Peer{
+		GossipService: gossipService,
+		StoreProvider: transientstore.NewStoreProvider(
+			filepath.Join(tempdir, "transientstore"),
+		),
+		LedgerMgr: ledgerMgr,
 	}
-	InitChain(chainId)
+
+	cleanup := func() {
+		ledgerMgr.Close()
+		os.RemoveAll(tempdir)
+	}
+	return peerInstance, cleanup
 }
 
 func TestInitialize(t *testing.T) {
-	rootFSPath, err := ioutil.TempDir("", "ledgersData")
-	if err != nil {
-		t.Fatalf("Failed to create ledger directory: %s", err)
-	}
-	defer os.RemoveAll(rootFSPath)
+	peerInstance, cleanup := NewTestPeer(t)
+	defer cleanup()
 
-	Initialize(
+	peerInstance.Initialize(
 		nil,
 		(&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(),
 		plugin.MapBasedMapper(map[string]validation.PluginFactory{}),
-		nil,
 		&ledgermocks.DeployedChaincodeInfoProvider{},
 		nil,
-		&disabled.Provider{},
 		nil,
-		nil,
-		&ledger.Config{
-			RootFSPath: rootFSPath,
-			StateDB: &ledger.StateDB{
-				LevelDBPath: filepath.Join(rootFSPath, "stateleveldb"),
-			},
-			PrivateData: &ledger.PrivateData{
-				StorePath:       filepath.Join(rootFSPath, "pvtdataStore"),
-				MaxBatchSize:    5000,
-				BatchesInterval: 1000,
-				PurgeInterval:   100,
-			},
-			HistoryDB: &ledger.HistoryDB{
-				Enabled: true,
-			},
-		},
 		runtime.NumCPU(),
 	)
 }
 
-func TestCreateChainFromBlock(t *testing.T) {
-	peerFSPath, err := ioutil.TempDir("", "ledgersData")
-	if err != nil {
-		t.Fatalf("Failed to create peer directory: %s", err)
-	}
-	defer os.RemoveAll(peerFSPath)
-	viper.Set("peer.fileSystemPath", peerFSPath)
+func TestCreateChannel(t *testing.T) {
+	peerInstance, cleanup := NewTestPeer(t)
+	defer cleanup()
 
-	Initialize(
-		nil,
+	var initArg string
+	peerInstance.Initialize(
+		func(cid string) { initArg = cid },
 		(&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(),
 		plugin.MapBasedMapper(map[string]validation.PluginFactory{}),
-		&platforms.Registry{},
 		&ledgermocks.DeployedChaincodeInfoProvider{},
 		nil,
-		&disabled.Provider{},
 		nil,
-		nil,
-		&ledger.Config{
-			RootFSPath: filepath.Join(peerFSPath, "ledgersData"),
-			StateDB: &ledger.StateDB{
-				LevelDBPath: filepath.Join(peerFSPath, "ledgersData", "stateleveldb"),
-			},
-			PrivateData: &ledger.PrivateData{
-				StorePath:       filepath.Join(peerFSPath, "ledgersData", "pvtdataStore"),
-				MaxBatchSize:    5000,
-				BatchesInterval: 1000,
-				PurgeInterval:   100,
-			},
-			HistoryDB: &ledger.HistoryDB{
-				Enabled: true,
-			},
-		},
 		runtime.NumCPU(),
 	)
+
 	testChainID := fmt.Sprintf("mytestchainid-%d", rand.Int())
 	block, err := configtxtest.MakeGenesisBlock(testChainID)
 	if err != nil {
@@ -167,125 +142,70 @@ func TestCreateChainFromBlock(t *testing.T) {
 		t.FailNow()
 	}
 
-	
-	grpcServer := grpc.NewServer()
-	socket, err := net.Listen("tcp", "localhost:0")
-	require.NoError(t, err)
-
-	msptesttools.LoadMSPSetupForTesting()
-
-	signer := mgmt.GetLocalSigningIdentityOrPanic()
-	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager())
-	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager())
-	var defaultSecureDialOpts = func() []grpc.DialOption {
-		var dialOpts []grpc.DialOption
-		dialOpts = append(dialOpts, grpc.WithInsecure())
-		return dialOpts
-	}
-	err = service.InitGossipServiceCustomDeliveryFactory(
-		signer,
-		&disabled.Provider{},
-		socket.Addr().String(),
-		grpcServer,
-		nil,
-		&mockDeliveryClientFactory{},
-		messageCryptoService,
-		secAdv,
-		defaultSecureDialOpts,
-	)
-
-	assert.NoError(t, err)
-
-	go grpcServer.Serve(socket)
-	defer grpcServer.Stop()
-
-	err = CreateChainFromBlock(block, nil, &mock.DeployedChaincodeInfoProvider{}, nil, nil)
+	err = peerInstance.CreateChannel(block, nil, &mock.DeployedChaincodeInfoProvider{}, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create chain %s", err)
 	}
 
+	assert.Equal(t, testChainID, initArg)
+
 	
-	ledger := GetLedger(testChainID)
+	ledger := peerInstance.GetLedger(testChainID)
 	if ledger == nil {
 		t.Fatalf("failed to get correct ledger")
 	}
 
 	
-	block, err = getCurrConfigBlockFromLedger(ledger)
+	block, err = ConfigBlockFromLedger(ledger)
 	assert.NoError(t, err, "Failed to get config block from ledger")
 	assert.NotNil(t, block, "Config block should not be nil")
 	assert.Equal(t, uint64(0), block.Header.Number, "config block should have been block 0")
 
 	
-	ledger = GetLedger("BogusChain")
+	ledger = peerInstance.GetLedger("BogusChain")
 	if ledger != nil {
 		t.Fatalf("got a bogus ledger")
 	}
 
 	
-	block = GetCurrConfigBlock(testChainID)
-	if block == nil {
-		t.Fatalf("failed to get correct block")
-	}
-
-	cfgSupport := configSupport{}
-	chCfg := cfgSupport.GetChannelConfig(testChainID)
-	assert.NotNil(t, chCfg, "failed to get channel config")
-
-	
-	block = GetCurrConfigBlock("BogusBlock")
-	if block != nil {
-		t.Fatalf("got a bogus block")
-	}
-
-	
-	pmgr := GetPolicyManager(testChainID)
+	pmgr := peerInstance.GetPolicyManager(testChainID)
 	if pmgr == nil {
 		t.Fatal("failed to get PolicyManager")
 	}
 
 	
-	pmgr = GetPolicyManager("BogusChain")
+	pmgr = peerInstance.GetPolicyManager("BogusChain")
 	if pmgr != nil {
 		t.Fatal("got a bogus PolicyManager")
 	}
 
-	
-	pmg := NewChannelPolicyManagerGetter()
-	assert.NotNil(t, pmg, "PolicyManagerGetter should not be nil")
-
-	pmgr, ok := pmg.Manager(testChainID)
-	assert.NotNil(t, pmgr, "PolicyManager should not be nil")
-	assert.Equal(t, true, ok, "expected Manage() to return true")
-
-	SetCurrConfigBlock(block, testChainID)
-
-	channels := GetChannelsInfo()
+	channels := peerInstance.GetChannelsInfo()
 	if len(channels) != 1 {
 		t.Fatalf("incorrect number of channels")
 	}
-
-	
-	chains.Lock()
-	chains.list = map[string]*chain{}
-	chains.Unlock()
-}
-
-func TestGetLocalIP(t *testing.T) {
-	ip, err := GetLocalIP()
-	assert.NoError(t, err)
-	t.Log(ip)
 }
 
 func TestDeliverSupportManager(t *testing.T) {
-	
-	MockInitialize()
+	peerInstance, cleanup := NewTestPeer(t)
+	defer cleanup()
 
-	manager := &DeliverChainManager{}
+	manager := &DeliverChainManager{Peer: peerInstance}
+
 	chainSupport := manager.GetChain("fake")
 	assert.Nil(t, chainSupport, "chain support should be nil")
 
-	MockCreateChain("testchain")
+	peerInstance.channels = map[string]*Channel{"testchain": {}}
 	chainSupport = manager.GetChain("testchain")
 	assert.NotNil(t, chainSupport, "chain support should not be nil")
+}
+
+func constructLedgerMgrWithTestDefaults(ledgersDataDir string) (*ledgermgmt.LedgerMgr, error) {
+	ledgerInitializer := ledgermgmttest.NewInitializer(ledgersDataDir)
+	ledgerInitializer.CustomTxProcessors = map[common.HeaderType]ledger.CustomTxProcessor{
+		common.HeaderType_CONFIG: &ConfigTxProcessor{},
+	}
+	ledgerInitializer.Config.HistoryDBConfig = &ledger.HistoryDBConfig{
+		Enabled: true,
+	}
+	return ledgermgmt.NewLedgerMgr(ledgerInitializer), nil
 }

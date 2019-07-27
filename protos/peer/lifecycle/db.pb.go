@@ -1,11 +1,13 @@
 
 
 
-package lifecycle 
+package lifecycle
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	math "math"
+)
 
 
 var _ = proto.Marshal
@@ -16,7 +18,7 @@ var _ = math.Inf
 
 
 
-const _ = proto.ProtoPackageIsVersion2 
+const _ = proto.ProtoPackageIsVersion3 
 
 
 
@@ -33,16 +35,17 @@ func (m *StateMetadata) Reset()         { *m = StateMetadata{} }
 func (m *StateMetadata) String() string { return proto.CompactTextString(m) }
 func (*StateMetadata) ProtoMessage()    {}
 func (*StateMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_db_111b6af4c0cb631d, []int{0}
+	return fileDescriptor_389b29a8aaf0aebb, []int{0}
 }
+
 func (m *StateMetadata) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StateMetadata.Unmarshal(m, b)
 }
 func (m *StateMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_StateMetadata.Marshal(b, m, deterministic)
 }
-func (dst *StateMetadata) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StateMetadata.Merge(dst, src)
+func (m *StateMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StateMetadata.Merge(m, src)
 }
 func (m *StateMetadata) XXX_Size() int {
 	return xxx_messageInfo_StateMetadata.Size(m)
@@ -83,16 +86,17 @@ func (m *StateData) Reset()         { *m = StateData{} }
 func (m *StateData) String() string { return proto.CompactTextString(m) }
 func (*StateData) ProtoMessage()    {}
 func (*StateData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_db_111b6af4c0cb631d, []int{1}
+	return fileDescriptor_389b29a8aaf0aebb, []int{1}
 }
+
 func (m *StateData) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StateData.Unmarshal(m, b)
 }
 func (m *StateData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_StateData.Marshal(b, m, deterministic)
 }
-func (dst *StateData) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StateData.Merge(dst, src)
+func (m *StateData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StateData.Merge(m, src)
 }
 func (m *StateData) XXX_Size() int {
 	return xxx_messageInfo_StateData.Size(m)
@@ -154,83 +158,12 @@ func (m *StateData) GetString_() string {
 }
 
 
-func (*StateData) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
-	return _StateData_OneofMarshaler, _StateData_OneofUnmarshaler, _StateData_OneofSizer, []interface{}{
+func (*StateData) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
 		(*StateData_Int64)(nil),
 		(*StateData_Bytes)(nil),
 		(*StateData_String_)(nil),
 	}
-}
-
-func _StateData_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
-	m := msg.(*StateData)
-	
-	switch x := m.Type.(type) {
-	case *StateData_Int64:
-		b.EncodeVarint(1<<3 | proto.WireVarint)
-		b.EncodeVarint(uint64(x.Int64))
-	case *StateData_Bytes:
-		b.EncodeVarint(2<<3 | proto.WireBytes)
-		b.EncodeRawBytes(x.Bytes)
-	case *StateData_String_:
-		b.EncodeVarint(3<<3 | proto.WireBytes)
-		b.EncodeStringBytes(x.String_)
-	case nil:
-	default:
-		return fmt.Errorf("StateData.Type has unexpected type %T", x)
-	}
-	return nil
-}
-
-func _StateData_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
-	m := msg.(*StateData)
-	switch tag {
-	case 1: 
-		if wire != proto.WireVarint {
-			return true, proto.ErrInternalBadWireType
-		}
-		x, err := b.DecodeVarint()
-		m.Type = &StateData_Int64{int64(x)}
-		return true, err
-	case 2: 
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		x, err := b.DecodeRawBytes(true)
-		m.Type = &StateData_Bytes{x}
-		return true, err
-	case 3: 
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		x, err := b.DecodeStringBytes()
-		m.Type = &StateData_String_{x}
-		return true, err
-	default:
-		return false, nil
-	}
-}
-
-func _StateData_OneofSizer(msg proto.Message) (n int) {
-	m := msg.(*StateData)
-	
-	switch x := m.Type.(type) {
-	case *StateData_Int64:
-		n += 1 
-		n += proto.SizeVarint(uint64(x.Int64))
-	case *StateData_Bytes:
-		n += 1 
-		n += proto.SizeVarint(uint64(len(x.Bytes)))
-		n += len(x.Bytes)
-	case *StateData_String_:
-		n += 1 
-		n += proto.SizeVarint(uint64(len(x.String_)))
-		n += len(x.String_)
-	case nil:
-	default:
-		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
-	}
-	return n
 }
 
 func init() {
@@ -238,9 +171,9 @@ func init() {
 	proto.RegisterType((*StateData)(nil), "lifecycle.StateData")
 }
 
-func init() { proto.RegisterFile("peer/lifecycle/db.proto", fileDescriptor_db_111b6af4c0cb631d) }
+func init() { proto.RegisterFile("peer/lifecycle/db.proto", fileDescriptor_389b29a8aaf0aebb) }
 
-var fileDescriptor_db_111b6af4c0cb631d = []byte{
+var fileDescriptor_389b29a8aaf0aebb = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x54, 0x90, 0x31, 0x4f, 0xc3, 0x30,
 	0x10, 0x85, 0x1b, 0x02, 0x11, 0x39, 0xc1, 0x92, 0xa1, 0x44, 0x4c, 0x55, 0xa7, 0x0c, 0xc8, 0x1e,

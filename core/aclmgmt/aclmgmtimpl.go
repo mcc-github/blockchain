@@ -6,6 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 package aclmgmt
 
+import "github.com/mcc-github/blockchain/core/policy"
+
 
 
 
@@ -28,8 +30,8 @@ func (am *aclMgmtImpl) CheckACL(resName string, channelID string, idinfo interfa
 
 
 
-func NewACLProvider(rg ResourceGetter) ACLProvider {
+func NewACLProvider(rg ResourceGetter, policyChecker policy.PolicyChecker) ACLProvider {
 	return &aclMgmtImpl{
-		rescfgProvider: newResourceProvider(rg, newDefaultACLProvider()),
+		rescfgProvider: newResourceProvider(rg, newDefaultACLProvider(policyChecker)),
 	}
 }

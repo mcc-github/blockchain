@@ -9,48 +9,47 @@ package comm
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"sync"
 
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/msp"
 	"google.golang.org/grpc/credentials"
 )
 
 var commLogger = flogging.MustGetLogger("comm")
-var credSupport *CredentialSupport
-var once sync.Once
 
 
 type CredentialSupport struct {
-	sync.RWMutex
-	AppRootCAsByChain     map[string][][]byte
-	OrdererRootCAsByChain map[string][][]byte
-	ClientRootCAs         [][]byte
-	ServerRootCAs         [][]byte
+	mutex                 sync.RWMutex
+	appRootCAsByChain     map[string][][]byte
+	ordererRootCAsByChain map[string][][]byte
+	serverRootCAs         [][]byte
 	clientCert            tls.Certificate
 }
 
 
-func GetCredentialSupport() *CredentialSupport {
-
-	once.Do(func() {
-		credSupport = &CredentialSupport{
-			AppRootCAsByChain:     make(map[string][][]byte),
-			OrdererRootCAsByChain: make(map[string][][]byte),
-		}
-	})
-	return credSupport
+func NewCredentialSupport(rootCAs ...[]byte) *CredentialSupport {
+	return &CredentialSupport{
+		appRootCAsByChain:     make(map[string][][]byte),
+		ordererRootCAsByChain: make(map[string][][]byte),
+		serverRootCAs:         rootCAs,
+	}
 }
 
 
 
 func (cs *CredentialSupport) SetClientCertificate(cert tls.Certificate) {
+	cs.mutex.Lock()
 	cs.clientCert = cert
+	cs.mutex.Unlock()
 }
 
 
 func (cs *CredentialSupport) GetClientCertificate() tls.Certificate {
+	cs.mutex.RLock()
+	defer cs.mutex.RUnlock()
 	return cs.clientCert
 }
 
@@ -58,54 +57,43 @@ func (cs *CredentialSupport) GetClientCertificate() tls.Certificate {
 
 
 func (cs *CredentialSupport) GetDeliverServiceCredentials(channelID string) (credentials.TransportCredentials, error) {
-	cs.RLock()
-	defer cs.RUnlock()
+	cs.mutex.RLock()
+	defer cs.mutex.RUnlock()
 
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cs.clientCert},
-	}
-	certPool := x509.NewCertPool()
-
-	rootCACerts, exists := cs.OrdererRootCAsByChain[channelID]
+	rootCACerts, exists := cs.ordererRootCAsByChain[channelID]
 	if !exists {
-		commLogger.Errorf("Attempted to obtain root CA certs of a non existent channel: %s", channelID)
+		commLogger.Errorf("Attempted to obtain root CA certs of an unknown channel: %s", channelID)
 		return nil, fmt.Errorf("didn't find any root CA certs for channel %s", channelID)
 	}
 
+	certPool := x509.NewCertPool()
 	for _, cert := range rootCACerts {
-		block, _ := pem.Decode(cert)
-		if block != nil {
-			cert, err := x509.ParseCertificate(block.Bytes)
-			if err == nil {
-				certPool.AddCert(cert)
-			} else {
-				commLogger.Warningf("Failed to add root cert to credentials (%s)", err)
-			}
-		} else {
-			commLogger.Warning("Failed to add root cert to credentials")
+		err := AddPemToCertPool(cert, certPool)
+		if err != nil {
+			commLogger.Warningf("Failed to add root cert to credentials (%s)", err)
+			continue
 		}
 	}
-	tlsConfig.RootCAs = certPool
-	return credentials.NewTLS(tlsConfig), nil
+
+	return credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cs.clientCert},
+		RootCAs:      certPool,
+	}), nil
 }
 
 
 
 func (cs *CredentialSupport) GetPeerCredentials() credentials.TransportCredentials {
-	cs.RLock()
-	defer cs.RUnlock()
+	cs.mutex.RLock()
+	defer cs.mutex.RUnlock()
 
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cs.clientCert},
-	}
-	certPool := x509.NewCertPool()
-	appRootCAs := [][]byte{}
-	for _, appRootCA := range cs.AppRootCAsByChain {
+	var appRootCAs [][]byte
+	appRootCAs = append(appRootCAs, cs.serverRootCAs...)
+	for _, appRootCA := range cs.appRootCAsByChain {
 		appRootCAs = append(appRootCAs, appRootCA...)
 	}
-	
-	appRootCAs = append(appRootCAs, cs.ServerRootCAs...)
-	
+
+	certPool := x509.NewCertPool()
 	for _, appRootCA := range appRootCAs {
 		err := AddPemToCertPool(appRootCA, certPool)
 		if err != nil {
@@ -113,6 +101,78 @@ func (cs *CredentialSupport) GetPeerCredentials() credentials.TransportCredentia
 		}
 	}
 
-	tlsConfig.RootCAs = certPool
-	return credentials.NewTLS(tlsConfig)
+	return credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cs.clientCert},
+		RootCAs:      certPool,
+	})
+}
+
+func (cs *CredentialSupport) AppRootCAsByChain() map[string][][]byte {
+	cs.mutex.RLock()
+	defer cs.mutex.RUnlock()
+	return cs.appRootCAsByChain
+}
+
+
+
+
+func (cs *CredentialSupport) BuildTrustedRootsForChain(cm channelconfig.Resources) {
+	appOrgMSPs := make(map[string]struct{})
+	if ac, ok := cm.ApplicationConfig(); ok {
+		for _, appOrg := range ac.Organizations() {
+			appOrgMSPs[appOrg.MSPID()] = struct{}{}
+		}
+	}
+
+	ordOrgMSPs := make(map[string]struct{})
+	if ac, ok := cm.OrdererConfig(); ok {
+		for _, ordOrg := range ac.Organizations() {
+			ordOrgMSPs[ordOrg.MSPID()] = struct{}{}
+		}
+	}
+
+	cid := cm.ConfigtxValidator().ChainID()
+	msps, err := cm.MSPManager().GetMSPs()
+	if err != nil {
+		commLogger.Errorf("Error getting root CAs for channel %s (%s)", cid, err)
+		return
+	}
+
+	var appRootCAs, ordererRootCAs [][]byte
+	for k, v := range msps {
+		
+		if v.GetType() != msp.FABRIC {
+			continue
+		}
+
+		for _, root := range v.GetTLSRootCerts() {
+			
+			if _, ok := appOrgMSPs[k]; ok {
+				commLogger.Debugf("adding app root CAs for MSP [%s]", k)
+				appRootCAs = append(appRootCAs, root)
+			}
+			
+			if _, ok := ordOrgMSPs[k]; ok {
+				commLogger.Debugf("adding orderer root CAs for MSP [%s]", k)
+				ordererRootCAs = append(ordererRootCAs, root)
+			}
+		}
+		for _, intermediate := range v.GetTLSIntermediateCerts() {
+			
+			if _, ok := appOrgMSPs[k]; ok {
+				commLogger.Debugf("adding app root CAs for MSP [%s]", k)
+				appRootCAs = append(appRootCAs, intermediate)
+			}
+			
+			if _, ok := ordOrgMSPs[k]; ok {
+				commLogger.Debugf("adding orderer root CAs for MSP [%s]", k)
+				ordererRootCAs = append(ordererRootCAs, intermediate)
+			}
+		}
+	}
+
+	cs.mutex.Lock()
+	cs.appRootCAsByChain[cid] = appRootCAs
+	cs.ordererRootCAsByChain[cid] = ordererRootCAs
+	cs.mutex.Unlock()
 }

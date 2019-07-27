@@ -160,7 +160,6 @@ type msgInspection func(t *testing.T, index int, m *receivedMsg)
 
 func TestAnchorPeer(t *testing.T) {
 	t.Parallel()
-	defer testWG.Done()
 	
 	
 	
@@ -244,7 +243,7 @@ func TestAnchorPeer(t *testing.T) {
 			},
 		},
 	}
-	channel := common.ChainID("TEST")
+	channel := common.ChannelID("TEST")
 	endpoint := fmt.Sprintf("127.0.0.1:%d", port)
 	
 	p := newGossipInstanceWithGRPCWithExternalEndpoint(0, port, grpc, cert, secDialOpt, cs, endpoint)
@@ -269,7 +268,6 @@ func TestAnchorPeer(t *testing.T) {
 
 func TestBootstrapPeerMisConfiguration(t *testing.T) {
 	t.Parallel()
-	defer testWG.Done()
 	
 	
 	

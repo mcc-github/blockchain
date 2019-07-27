@@ -7,8 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package historyleveldb
 
 import (
-	"bytes"
-
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/util"
@@ -53,6 +51,16 @@ func newHistoryScanner(compositePartialKey []byte, namespace string, key string,
 	return &historyScanner{compositePartialKey, namespace, key, dbItr, blockStore}
 }
 
+
+
+
+
+
+
+
+
+
+
 func (scanner *historyScanner) Next() (commonledger.QueryResult, error) {
 	for {
 		if !scanner.dbItr.Next() {
@@ -76,18 +84,27 @@ func (scanner *historyScanner) Next() (commonledger.QueryResult, error) {
 		
 		
 		
-		if bytes.Contains(blockNumTranNumBytes[:len(blockNumTranNumBytes)-1], historydb.CompositeKeySep) {
-			logger.Debugf("Some other key [%#v] found in the range while scanning history for key [%#v]. Skipping...",
-				historyKey, scanner.key)
+		
+		
+		
+		
+		blockNum, tranNum, err := decodeBlockNumTranNum(blockNumTranNumBytes)
+		if err != nil {
+			logger.Warnf("Some other key [%#v] found in the range while scanning history for key [%#v]. Skipping (decoding error: %s)",
+				historyKey, scanner.key, err)
 			continue
 		}
-		blockNum, bytesConsumed := util.DecodeOrderPreservingVarUint64(blockNumTranNumBytes[0:])
-		tranNum, _ := util.DecodeOrderPreservingVarUint64(blockNumTranNumBytes[bytesConsumed:])
+
 		logger.Debugf("Found history record for namespace:%s key:%s at blockNumTranNum %v:%v\n",
 			scanner.namespace, scanner.key, blockNum, tranNum)
 
 		
 		tranEnvelope, err := scanner.blockStore.RetrieveTxByBlockNumTranNum(blockNum, tranNum)
+		if err == blkstorage.ErrNotFoundInIndex {
+			logger.Warnf("Some other clashing key [%#v] found in the range while scanning history for key [%#v]. Skipping (cannot find block:tx)",
+				historyKey, scanner.key)
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -97,7 +114,16 @@ func (scanner *historyScanner) Next() (commonledger.QueryResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		logger.Debugf("Found historic key value for namespace:%s key:%s from transaction %s\n",
+		if queryResult == nil {
+			
+			
+			
+			
+			logger.Warnf("Some other key [%#v] found in the range while scanning history for key [%#v]. Skipping (namespace or key not found)",
+				historyKey, scanner.key)
+			continue
+		}
+		logger.Debugf("Found historic key value for namespace:%s key:%s from transaction %s",
 			scanner.namespace, scanner.key, queryResult.(*queryresult.KeyModification).TxId)
 		return queryResult, nil
 	}
@@ -153,9 +179,31 @@ func getKeyModificationFromTran(tranEnvelope *common.Envelope, namespace string,
 						Timestamp: timestamp, IsDelete: kvWrite.IsDelete}, nil
 				}
 			} 
-			return nil, errors.New("key not found in namespace's writeset")
+			logger.Debugf("key [%s] not found in namespace [%s]'s writeset", key, namespace)
+			return nil, nil
 		} 
 	} 
-	return nil, errors.New("namespace not found in transaction's ReadWriteSets")
+	logger.Debugf("namespace [%s] not found in transaction's ReadWriteSets", namespace)
+	return nil, nil
+}
 
+
+func decodeBlockNumTranNum(blockNumTranNumBytes []byte) (uint64, uint64, error) {
+	blockNum, blockBytesConsumed, err := util.DecodeOrderPreservingVarUint64(blockNumTranNumBytes)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	tranNum, tranBytesConsumed, err := util.DecodeOrderPreservingVarUint64(blockNumTranNumBytes[blockBytesConsumed:])
+	if err != nil {
+		return 0, 0, err
+	}
+
+	
+	if blockBytesConsumed+tranBytesConsumed != len(blockNumTranNumBytes) {
+		return 0, 0, errors.Errorf("number of decoded bytes (%d) is not equal to the length of blockNumTranNumBytes (%d)",
+			blockBytesConsumed+tranBytesConsumed, len(blockNumTranNumBytes))
+	}
+
+	return blockNum, tranNum, nil
 }

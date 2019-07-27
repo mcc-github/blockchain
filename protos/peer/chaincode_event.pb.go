@@ -1,11 +1,13 @@
 
 
 
-package peer 
+package peer
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	math "math"
+)
 
 
 var _ = proto.Marshal
@@ -16,7 +18,7 @@ var _ = math.Inf
 
 
 
-const _ = proto.ProtoPackageIsVersion2 
+const _ = proto.ProtoPackageIsVersion3 
 
 
 
@@ -34,16 +36,17 @@ func (m *ChaincodeEvent) Reset()         { *m = ChaincodeEvent{} }
 func (m *ChaincodeEvent) String() string { return proto.CompactTextString(m) }
 func (*ChaincodeEvent) ProtoMessage()    {}
 func (*ChaincodeEvent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chaincode_event_8b41fbbca4a6aed1, []int{0}
+	return fileDescriptor_e11f3d5e149f14fa, []int{0}
 }
+
 func (m *ChaincodeEvent) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ChaincodeEvent.Unmarshal(m, b)
 }
 func (m *ChaincodeEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ChaincodeEvent.Marshal(b, m, deterministic)
 }
-func (dst *ChaincodeEvent) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ChaincodeEvent.Merge(dst, src)
+func (m *ChaincodeEvent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChaincodeEvent.Merge(m, src)
 }
 func (m *ChaincodeEvent) XXX_Size() int {
 	return xxx_messageInfo_ChaincodeEvent.Size(m)
@@ -86,11 +89,9 @@ func init() {
 	proto.RegisterType((*ChaincodeEvent)(nil), "protos.ChaincodeEvent")
 }
 
-func init() {
-	proto.RegisterFile("peer/chaincode_event.proto", fileDescriptor_chaincode_event_8b41fbbca4a6aed1)
-}
+func init() { proto.RegisterFile("peer/chaincode_event.proto", fileDescriptor_e11f3d5e149f14fa) }
 
-var fileDescriptor_chaincode_event_8b41fbbca4a6aed1 = []byte{
+var fileDescriptor_e11f3d5e149f14fa = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x48, 0x4d, 0x2d,
 	0xd2, 0x4f, 0xce, 0x48, 0xcc, 0xcc, 0x4b, 0xce, 0x4f, 0x49, 0x8d, 0x4f, 0x2d, 0x4b, 0xcd, 0x2b,

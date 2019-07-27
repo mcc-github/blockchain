@@ -197,7 +197,61 @@ func (msp *bccspmsp) validateIdentityOUsV11(id *identity) error {
 		}
 	}
 	if counter != 1 {
-		return errors.Errorf("the identity must be a client, a peer or an orderer identity to be valid, not a combination of them. OUs: [%v], MSP: [%s]", id.GetOrganizationalUnits(), msp.name)
+		return errors.Errorf("the identity must be a client or a peer identity to be valid, not a combination of them. OUs: [%v], MSP: [%s]", id.GetOrganizationalUnits(), msp.name)
+	}
+
+	return nil
+}
+
+func (msp *bccspmsp) validateIdentityOUsV142(id *identity) error {
+	
+	err := msp.validateIdentityOUsV1(id)
+	if err != nil {
+		return err
+	}
+
+	
+	if !msp.ouEnforcement {
+		
+		return nil
+	}
+
+	
+	
+	counter := 0
+	validOUs := make(map[string]*OUIdentifier)
+	if msp.clientOU != nil {
+		validOUs[msp.clientOU.OrganizationalUnitIdentifier] = msp.clientOU
+	}
+	if msp.peerOU != nil {
+		validOUs[msp.peerOU.OrganizationalUnitIdentifier] = msp.peerOU
+	}
+	if msp.adminOU != nil {
+		validOUs[msp.adminOU.OrganizationalUnitIdentifier] = msp.adminOU
+	}
+	if msp.ordererOU != nil {
+		validOUs[msp.ordererOU.OrganizationalUnitIdentifier] = msp.ordererOU
+	}
+
+	for _, OU := range id.GetOrganizationalUnits() {
+		
+		nodeOU := validOUs[OU.OrganizationalUnitIdentifier]
+		if nodeOU == nil {
+			continue
+		}
+
+		
+		
+		if len(nodeOU.CertifiersIdentifier) != 0 && !bytes.Equal(nodeOU.CertifiersIdentifier, OU.CertifiersIdentifier) {
+			return errors.Errorf("certifiersIdentifier does not match: [%v], MSP: [%s]", id.GetOrganizationalUnits(), msp.name)
+		}
+		counter++
+		if counter > 1 {
+			break
+		}
+	}
+	if counter != 1 {
+		return errors.Errorf("the identity must be a client, a peer, an orderer or an admin identity to be valid, not a combination of them. OUs: [%v], MSP: [%s]", id.GetOrganizationalUnits(), msp.name)
 	}
 
 	return nil

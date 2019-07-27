@@ -496,3 +496,38 @@ func GetProposalHash1(header *common.Header, ccPropPayl []byte, visibility []byt
 	hash2.Write(ppBytes)
 	return hash2.Sum(nil), nil
 }
+
+
+
+
+func GetOrComputeTxIDFromEnvelope(txEnvelopBytes []byte) (string, error) {
+	txEnvelope, err := UnmarshalEnvelope(txEnvelopBytes)
+	if err != nil {
+		return "", errors.WithMessage(err, "error getting txID from envelope")
+	}
+
+	txPayload, err := UnmarshalPayload(txEnvelope.Payload)
+	if err != nil {
+		return "", errors.WithMessage(err, "error getting txID from payload")
+	}
+
+	if txPayload.Header == nil {
+		return "", errors.New("error getting txID from header: payload header is nil")
+	}
+
+	chdr, err := UnmarshalChannelHeader(txPayload.Header.ChannelHeader)
+	if err != nil {
+		return "", errors.WithMessage(err, "error getting txID from channel header")
+	}
+
+	if chdr.TxId != "" {
+		return chdr.TxId, nil
+	}
+
+	sighdr, err := UnmarshalSignatureHeader(txPayload.Header.SignatureHeader)
+	if err != nil {
+		return "", errors.WithMessage(err, "error getting nonce and creator for computing txID")
+	}
+
+	return ComputeTxID(sighdr.Nonce, sighdr.Creator)
+}

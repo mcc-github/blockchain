@@ -178,13 +178,8 @@ func (bw *BlockWriter) WriteBlock(block *cb.Block, encodedMetadataValue []byte) 
 
 
 func (bw *BlockWriter) commitBlock(encodedMetadataValue []byte) {
-	
-	if encodedMetadataValue != nil {
-		bw.lastBlock.Metadata.Metadata[cb.BlockMetadataIndex_ORDERER] = protoutil.MarshalOrPanic(&cb.Metadata{Value: encodedMetadataValue})
-	}
-
-	bw.addLastConfigSignature(bw.lastBlock)
-	bw.addBlockSignature(bw.lastBlock)
+	bw.addLastConfig(bw.lastBlock)
+	bw.addBlockSignature(bw.lastBlock, encodedMetadataValue)
 
 	err := bw.support.Append(bw.lastBlock)
 	if err != nil {
@@ -193,14 +188,14 @@ func (bw *BlockWriter) commitBlock(encodedMetadataValue []byte) {
 	logger.Debugf("[channel: %s] Wrote block [%d]", bw.support.ChainID(), bw.lastBlock.GetHeader().Number)
 }
 
-func (bw *BlockWriter) addBlockSignature(block *cb.Block) {
+func (bw *BlockWriter) addBlockSignature(block *cb.Block, consenterMetadata []byte) {
 	blockSignature := &cb.MetadataSignature{
 		SignatureHeader: protoutil.MarshalOrPanic(protoutil.NewSignatureHeaderOrPanic(bw.support)),
 	}
 
 	blockSignatureValue := protoutil.MarshalOrPanic(&cb.OrdererBlockMetadata{
 		LastConfig:        &cb.LastConfig{Index: bw.lastConfigBlockNum},
-		ConsenterMetadata: bw.lastBlock.Metadata.Metadata[cb.BlockMetadataIndex_ORDERER],
+		ConsenterMetadata: protoutil.MarshalOrPanic(&cb.Metadata{Value: consenterMetadata}),
 	})
 
 	blockSignature.Signature = protoutil.SignOrPanic(
@@ -216,7 +211,7 @@ func (bw *BlockWriter) addBlockSignature(block *cb.Block) {
 	})
 }
 
-func (bw *BlockWriter) addLastConfigSignature(block *cb.Block) {
+func (bw *BlockWriter) addLastConfig(block *cb.Block) {
 	configSeq := bw.support.Sequence()
 	if configSeq > bw.lastConfigSeq {
 		logger.Debugf("[channel: %s] Detected lastConfigSeq transitioning from %d to %d, setting lastConfigBlockNum from %d to %d", bw.support.ChainID(), bw.lastConfigSeq, configSeq, bw.lastConfigBlockNum, block.Header.Number)

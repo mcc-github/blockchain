@@ -37,7 +37,6 @@ import (
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/msp"
-	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/orderer/common/bootstrap/file"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
@@ -52,7 +51,7 @@ import (
 	"github.com/mcc-github/blockchain/protoutil"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var logger = flogging.MustGetLogger("orderer.common.server")
@@ -84,26 +83,28 @@ func Main() {
 		os.Exit(1)
 	}
 	initializeLogging()
-	initializeLocalMsp(conf)
 
 	prettyPrintStruct(conf)
-	Start(fullCmd, conf)
-}
 
-
-func Start(cmd string, conf *localconfig.TopLevel) {
 	bootstrapBlock := extractBootstrapBlock(conf)
 	if err := ValidateBootstrapBlock(bootstrapBlock); err != nil {
 		logger.Panicf("Failed validating bootstrap block: %v", err)
 	}
 
-	lf, _ := createLedgerFactory(conf)
+	opsSystem := newOperationsSystem(conf.Operations, conf.Metrics)
+	if err = opsSystem.Start(); err != nil {
+		logger.Panicf("failed to initialize operations subsystem: %s", err)
+	}
+	defer opsSystem.Stop()
+	metricsProvider := opsSystem.Provider
+
+	lf, _ := createLedgerFactory(conf, metricsProvider)
 	sysChanLastConfigBlock := extractSysChanLastConfig(lf, bootstrapBlock)
 	clusterBootBlock := selectClusterBootBlock(bootstrapBlock, sysChanLastConfigBlock)
 
 	clusterType := isClusterType(clusterBootBlock)
 
-	signer, signErr := mspmgmt.GetLocalMSP().GetDefaultSigningIdentity()
+	signer, signErr := loadLocalMSP(conf).GetDefaultSigningIdentity()
 	if signErr != nil {
 		logger.Panicf("Failed to get local MSP identity: %s", signErr)
 	}
@@ -119,15 +120,8 @@ func Start(cmd string, conf *localconfig.TopLevel) {
 		r.replicateIfNeeded(bootstrapBlock)
 	}
 
-	opsSystem := newOperationsSystem(conf.Operations, conf.Metrics)
-	err := opsSystem.Start()
-	if err != nil {
-		logger.Panicf("failed to initialize operations subsystem: %s", err)
-	}
-	defer opsSystem.Stop()
-	metricsProvider := opsSystem.Provider
 	logObserver := floggingmetrics.NewObserver(metricsProvider)
-	flogging.Global.SetObserver(logObserver)
+	flogging.SetObserver(logObserver)
 
 	serverConfig := initializeServerConfig(conf, metricsProvider)
 	grpcServer := initializeGrpcServer(conf, serverConfig)
@@ -164,7 +158,20 @@ func Start(cmd string, conf *localconfig.TopLevel) {
 		}
 	}
 
-	manager := initializeMultichannelRegistrar(clusterBootBlock, r, clusterDialer, clusterServerConfig, clusterGRPCServer, conf, signer, metricsProvider, opsSystem, lf, tlsCallback)
+	manager := initializeMultichannelRegistrar(
+		clusterBootBlock,
+		r,
+		clusterDialer,
+		clusterServerConfig,
+		clusterGRPCServer,
+		conf,
+		signer,
+		metricsProvider,
+		opsSystem,
+		lf,
+		tlsCallback,
+	)
+
 	mutualTLS := serverConfig.SecOpts.UseTLS && serverConfig.SecOpts.RequireClientCert
 	server := NewServer(manager, metricsProvider, &conf.Debug, conf.General.Authentication.TimeWindow, mutualTLS)
 
@@ -192,12 +199,12 @@ func Start(cmd string, conf *localconfig.TopLevel) {
 
 func extractSysChanLastConfig(lf blockledger.Factory, bootstrapBlock *cb.Block) *cb.Block {
 	
-	num := len(lf.ChainIDs())
-	if num == 0 {
-		logger.Info("Bootstrapping because no existing chains")
+	chainCount := len(lf.ChainIDs())
+	if chainCount == 0 {
+		logger.Info("Bootstrapping because no existing channels")
 		return nil
 	}
-	logger.Infof("Not bootstrapping because of %d existing chains", num)
+	logger.Infof("Not bootstrapping because of %d existing channels", chainCount)
 
 	systemChannelName, err := protoutil.GetChainIDFromBlock(bootstrapBlock)
 	if err != nil {
@@ -236,7 +243,7 @@ func createReplicator(
 	lf blockledger.Factory,
 	bootstrapBlock *cb.Block,
 	conf *localconfig.TopLevel,
-	secOpts *comm.SecureOptions,
+	secOpts comm.SecureOptions,
 	signer identity.SignerSerializer,
 ) *replicationInitiator {
 	logger := flogging.MustGetLogger("orderer.common.cluster")
@@ -368,7 +375,7 @@ func configureClusterListener(conf *localconfig.TopLevel, generalConf comm.Serve
 		MetricsProvider:    generalConf.MetricsProvider,
 		Logger:             generalConf.Logger,
 		KaOpts:             generalConf.KaOpts,
-		SecOpts: &comm.SecureOptions{
+		SecOpts: comm.SecureOptions{
 			CipherSuites:      comm.DefaultTLSCipherSuites,
 			ClientRootCAs:     clientRootCAs,
 			RequireClientCert: true,
@@ -394,7 +401,7 @@ func initializeClusterClientConfig(conf *localconfig.TopLevel, clusterType bool,
 		AsyncConnect: true,
 		KaOpts:       comm.DefaultKeepaliveOptions,
 		Timeout:      conf.General.Cluster.DialTimeout,
-		SecOpts:      &comm.SecureOptions{},
+		SecOpts:      comm.SecureOptions{},
 	}
 
 	if (!conf.General.TLS.Enabled) || conf.General.Cluster.ClientCertificate == "" {
@@ -423,7 +430,7 @@ func initializeClusterClientConfig(conf *localconfig.TopLevel, clusterType bool,
 		serverRootCAs = append(serverRootCAs, rootCACert)
 	}
 
-	cc.SecOpts = &comm.SecureOptions{
+	cc.SecOpts = comm.SecureOptions{
 		RequireClientCert: true,
 		CipherSuites:      comm.DefaultTLSCipherSuites,
 		ServerRootCAs:     serverRootCAs,
@@ -437,7 +444,7 @@ func initializeClusterClientConfig(conf *localconfig.TopLevel, clusterType bool,
 
 func initializeServerConfig(conf *localconfig.TopLevel, metricsProvider metrics.Provider) comm.ServerConfig {
 	
-	secureOpts := &comm.SecureOptions{
+	secureOpts := comm.SecureOptions{
 		UseTLS:            conf.General.TLS.Enabled,
 		RequireClientCert: conf.General.TLS.ClientAuthRequired,
 	}
@@ -495,10 +502,11 @@ func initializeServerConfig(conf *localconfig.TopLevel, metricsProvider metrics.
 	}
 
 	return comm.ServerConfig{
-		SecOpts:         secureOpts,
-		KaOpts:          kaOpts,
-		Logger:          commLogger,
-		MetricsProvider: metricsProvider,
+		SecOpts:           secureOpts,
+		KaOpts:            kaOpts,
+		Logger:            commLogger,
+		MetricsProvider:   metricsProvider,
+		ConnectionTimeout: conf.General.ConnectionTimeout,
 		StreamInterceptors: []grpc.StreamServerInterceptor{
 			grpcmetrics.StreamServerInterceptor(grpcmetrics.NewStreamMetrics(metricsProvider)),
 			grpclogging.StreamServerInterceptor(flogging.MustGetLogger("comm.grpc.server").Zap()),
@@ -541,11 +549,11 @@ func extractBootstrapBlock(conf *localconfig.TopLevel) *cb.Block {
 func initializeBootstrapChannel(genesisBlock *cb.Block, lf blockledger.Factory) {
 	chainID, err := protoutil.GetChainIDFromBlock(genesisBlock)
 	if err != nil {
-		logger.Fatal("Failed to parse chain ID from genesis block:", err)
+		logger.Fatal("Failed to parse channel ID from genesis block:", err)
 	}
 	gl, err := lf.GetOrCreate(chainID)
 	if err != nil {
-		logger.Fatal("Failed to create the system chain:", err)
+		logger.Fatal("Failed to create the system channel:", err)
 	}
 
 	if err := gl.Append(genesisBlock); err != nil {
@@ -592,12 +600,30 @@ func initializeGrpcServer(conf *localconfig.TopLevel, serverConfig comm.ServerCo
 	return grpcServer
 }
 
-func initializeLocalMsp(conf *localconfig.TopLevel) {
+func loadLocalMSP(conf *localconfig.TopLevel) msp.MSP {
 	
-	err := mspmgmt.LoadLocalMsp(conf.General.LocalMSPDir, conf.General.BCCSP, conf.General.LocalMSPID)
-	if err != nil { 
-		logger.Fatal("Failed to initialize local MSP:", err)
+	
+	mspConfig, err := msp.GetLocalMspConfig(conf.General.LocalMSPDir, conf.General.BCCSP, conf.General.LocalMSPID)
+	if err != nil {
+		logger.Panicf("Failed to get local msp config: %v", err)
 	}
+
+	typ := msp.ProviderTypeToString(msp.FABRIC)
+	opts, found := msp.Options[typ]
+	if !found {
+		logger.Panicf("MSP option for type %s is not found", typ)
+	}
+
+	localmsp, err := msp.New(opts)
+	if err != nil {
+		logger.Panicf("Failed to load local MSP: %v", err)
+	}
+
+	if err = localmsp.Setup(mspConfig); err != nil {
+		logger.Panicf("Failed to setup local msp with config: %v", err)
+	}
+
+	return localmsp
 }
 
 
@@ -625,7 +651,7 @@ func initializeMultichannelRegistrar(
 	if len(lf.ChainIDs()) == 0 {
 		initializeBootstrapChannel(genesisBlock, lf)
 	} else {
-		logger.Info("Not bootstrapping because of existing chains")
+		logger.Info("Not bootstrapping because of existing channels")
 	}
 
 	consenters := make(map[string]consensus.Consenter)

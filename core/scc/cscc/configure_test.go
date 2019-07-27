@@ -7,56 +7,47 @@ SPDX-License-Identifier: Apache-2.0
 package cscc
 
 import (
-	"fmt"
+	"errors"
+	"io/ioutil"
 	"net"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/config"
-	"github.com/mcc-github/blockchain/common/configtx"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/genesis"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
-	"github.com/mcc-github/blockchain/common/mocks/scc"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
-	aclmocks "github.com/mcc-github/blockchain/core/aclmgmt/mocks"
-	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/deliverservice"
-	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt/ledgermgmttest"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
-	policymocks "github.com/mcc-github/blockchain/core/policy/mocks"
-	"github.com/mcc-github/blockchain/core/scc/cscc/mock"
-	"github.com/mcc-github/blockchain/gossip/api"
+	"github.com/mcc-github/blockchain/core/scc/cscc/mocks"
+	"github.com/mcc-github/blockchain/core/transientstore"
+	"github.com/mcc-github/blockchain/gossip/gossip"
+	gossipmetrics "github.com/mcc-github/blockchain/gossip/metrics"
 	"github.com/mcc-github/blockchain/gossip/service"
 	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	peergossip "github.com/mcc-github/blockchain/internal/peer/gossip"
-	"github.com/mcc-github/blockchain/internal/peer/gossip/mocks"
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
-	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
-
-
-
-type configManager interface {
-	config.Manager
-}
 
 
 
@@ -66,137 +57,131 @@ type aclProvider interface {
 
 
 
-type configtxValidator interface {
-	configtx.Validator
-}
-
-type mockDeliveryClient struct {
-}
-
-func (ds *mockDeliveryClient) UpdateEndpoints(chainID string, endpoints []string) error {
-	return nil
+type chaincodeStub interface {
+	shim.ChaincodeStubInterface
 }
 
 
 
-func (ds *mockDeliveryClient) StartDeliverForChannel(chainID string, ledgerInfo blocksprovider.LedgerInfo, f func()) error {
-	return nil
+type channelPolicyManagerGetter interface {
+	policies.ChannelPolicyManagerGetter
 }
 
 
 
-func (ds *mockDeliveryClient) StopDeliverForChannel(chainID string) error {
-	return nil
+type policyChecker interface {
+	policy.PolicyChecker
 }
 
 
-func (*mockDeliveryClient) Stop() {
 
+type storeProvider interface {
+	transientstore.StoreProvider
 }
-
-type mockDeliveryClientFactory struct {
-}
-
-func (*mockDeliveryClientFactory) Service(g service.GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverservice.DeliverService, error) {
-	return &mockDeliveryClient{}, nil
-}
-
-var mockAclProvider *aclmocks.MockACLProvider
 
 func TestMain(m *testing.M) {
 	msptesttools.LoadMSPSetupForTesting()
+	rc := m.Run()
+	os.Exit(rc)
 
-	mockAclProvider = &aclmocks.MockACLProvider{}
-	mockAclProvider.Reset()
-
-	os.Exit(m.Run())
 }
 
 func TestConfigerInit(t *testing.T) {
-	e := New(nil, mockAclProvider, nil, nil, nil)
-	stub := shim.NewMockStub("PeerConfiger", e)
-
-	if res := stub.MockInit("1", nil); res.Status != shim.OK {
-		fmt.Println("Init failed", string(res.Message))
-		t.FailNow()
+	mockACLProvider := &mocks.ACLProvider{}
+	mockStub := &mocks.ChaincodeStub{}
+	cscc := &PeerConfiger{
+		aclProvider: mockACLProvider,
 	}
+	res := cscc.Init(mockStub)
+	assert.Equal(t, int32(shim.OK), res.Status)
 }
 
 func TestConfigerInvokeInvalidParameters(t *testing.T) {
-	e := New(nil, mockAclProvider, nil, nil, nil)
-	stub := shim.NewMockStub("PeerConfiger", e)
+	mockACLProvider := &mocks.ACLProvider{}
+	cscc := &PeerConfiger{
+		aclProvider: mockACLProvider,
+	}
+	mockStub := &mocks.ChaincodeStub{}
 
-	res := stub.MockInit("1", nil)
-	assert.Equal(t, res.Status, int32(shim.OK), "Init failed")
+	mockStub.GetArgsReturns(nil)
+	res := cscc.Invoke(mockStub)
+	assert.NotEqual(
+		t,
+		int32(shim.OK),
+		res.Status,
+		"cscc invoke expected to fail having zero arguments",
+	)
+	assert.Equal(t, "Incorrect number of arguments, 0", res.Message)
 
-	res = stub.MockInvoke("2", nil)
-	assert.Equal(t, res.Status, int32(shim.ERROR), "CSCC invoke expected to fail having zero arguments")
-	assert.Equal(t, res.Message, "Incorrect number of arguments, 0")
-
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_GetChannels, "", (*pb.SignedProposal)(nil)).Return(errors.New("Failed authorization"))
+	mockACLProvider.CheckACLReturns(errors.New("Failed authorization"))
 	args := [][]byte{[]byte("GetChannels")}
-	res = stub.MockInvokeWithSignedProposal("3", args, nil)
-	assert.Equal(t, res.Status, int32(shim.ERROR), "CSCC invoke expected to fail no signed proposal provided")
-	assert.Contains(t, res.Message, "access denied for [GetChannels]")
+	mockStub.GetArgsReturns(args)
+	res = cscc.Invoke(mockStub)
+	assert.NotEqual(
+		t,
+		int32(shim.OK),
+		res.Status,
+		"invoke expected to fail no signed proposal provided",
+	)
+	assert.Equal(t, "access denied for [GetChannels]: Failed authorization", res.Message)
 
+	mockACLProvider.CheckACLReturns(nil)
 	args = [][]byte{[]byte("fooFunction"), []byte("testChainID")}
-	res = stub.MockInvoke("5", args)
-	assert.Equal(t, res.Status, int32(shim.ERROR), "CSCC invoke expected wrong function name provided")
-	assert.Equal(t, res.Message, "Requested function fooFunction not found.")
+	mockStub.GetArgsReturns(args)
+	res = cscc.Invoke(mockStub)
+	assert.NotEqual(
+		t,
+		int32(shim.OK),
+		res.Status,
+		"invoke invoke expected wrong function name provided",
+	)
+	assert.Equal(t, "Requested function fooFunction not found.", res.Message)
 
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_GetConfigBlock, "testChainID", (*pb.SignedProposal)(nil)).Return(errors.New("Nil SignedProposal"))
+	mockACLProvider.CheckACLReturns(errors.New("Failed authorization"))
 	args = [][]byte{[]byte("GetConfigBlock"), []byte("testChainID")}
-	res = stub.MockInvokeWithSignedProposal("4", args, nil)
-	assert.Equal(t, res.Status, int32(shim.ERROR), "CSCC invoke expected to fail no signed proposal provided")
-	assert.Contains(t, res.Message, "Nil SignedProposal")
-	mockAclProvider.AssertExpectations(t)
+	mockStub.GetArgsReturns(args)
+	res = cscc.Invoke(mockStub)
+	assert.NotEqual(
+		t,
+		int32(shim.OK),
+		res.Status,
+		"invoke expected to fail no signed proposal provided",
+	)
+	assert.Equal(
+		t,
+		"access denied for [GetConfigBlock][testChainID]: Failed authorization",
+		res.Message,
+	)
 }
 
 func TestConfigerInvokeJoinChainMissingParams(t *testing.T) {
-	viper.Set("peer.fileSystemPath", "/tmp/mcc-githubtest/")
-	os.Mkdir("/tmp/mcc-githubtest", 0755)
-	defer os.RemoveAll("/tmp/mcc-githubtest/")
-
-	e := New(nil, mockAclProvider, nil, nil, nil)
-	stub := shim.NewMockStub("PeerConfiger", e)
-
-	if res := stub.MockInit("1", nil); res.Status != shim.OK {
-		fmt.Println("Init failed", string(res.Message))
-		t.FailNow()
+	cscc := &PeerConfiger{
+		aclProvider: &mocks.ACLProvider{},
 	}
-
-	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_JoinChain, "", (*pb.SignedProposal)(nil)).Return(nil)
-	args := [][]byte{[]byte("JoinChain")}
-	if res := stub.MockInvoke("2", args); res.Status == shim.OK {
-		t.Fatalf("cscc invoke JoinChain should have failed with invalid number of args: %v", args)
-	}
+	mockStub := &mocks.ChaincodeStub{}
+	mockStub.GetArgsReturns([][]byte{[]byte("JoinChain")})
+	res := cscc.Invoke(mockStub)
+	assert.NotEqual(
+		t,
+		int32(shim.OK),
+		res.Status,
+		"cscc invoke JoinChain should have failed with invalid number of args",
+	)
 }
 
 func TestConfigerInvokeJoinChainWrongParams(t *testing.T) {
-
-	viper.Set("peer.fileSystemPath", "/tmp/mcc-githubtest/")
-	os.Mkdir("/tmp/mcc-githubtest", 0755)
-	defer os.RemoveAll("/tmp/mcc-githubtest/")
-
-	e := New(nil, mockAclProvider, nil, nil, nil)
-	stub := shim.NewMockStub("PeerConfiger", e)
-
-	if res := stub.MockInit("1", nil); res.Status != shim.OK {
-		fmt.Println("Init failed", string(res.Message))
-		t.FailNow()
+	cscc := &PeerConfiger{
+		aclProvider: &mocks.ACLProvider{},
 	}
-
-	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_JoinChain, "", (*pb.SignedProposal)(nil)).Return(nil)
-	args := [][]byte{[]byte("JoinChain"), []byte("action")}
-	if res := stub.MockInvoke("2", args); res.Status == shim.OK {
-		t.Fatalf("cscc invoke JoinChain should have failed with null genesis block.  args: %v", args)
-	}
+	mockStub := &mocks.ChaincodeStub{}
+	mockStub.GetArgsReturns([][]byte{[]byte("JoinChain"), []byte("action")})
+	res := cscc.Invoke(mockStub)
+	assert.NotEqual(
+		t,
+		int32(shim.OK),
+		res.Status,
+		"cscc invoke JoinChain should have failed with null genesis block",
+	)
 }
 
 type PackageProviderWrapper struct {
@@ -208,48 +193,19 @@ func (p *PackageProviderWrapper) GetChaincodeCodePackage(ccci *ccprovider.Chainc
 }
 
 func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
-	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
-
 	viper.Set("chaincode.executetimeout", "3s")
 
-	cleanup, err := peer.MockInitialize()
-	if err != nil {
-		t.Fatalf("Failed to initialize peer: %s", err)
-	}
-	defer cleanup()
+	testDir, err := ioutil.TempDir("", "cscc_test")
+	require.NoError(t, err, "error in creating test dir")
+	defer os.Remove(testDir)
 
-	e := New(mp, mockAclProvider, nil, nil, nil)
-	stub := shim.NewMockStub("PeerConfiger", e)
+	ledgerMgr := ledgermgmt.NewLedgerMgr(ledgermgmttest.NewInitializer(testDir))
+	defer ledgerMgr.Close()
 
 	peerEndpoint := "127.0.0.1:13611"
 
 	config := chaincode.GlobalConfig()
 	config.StartupTimeout = 30 * time.Second
-
-	
-	policyManagerGetter := &policymocks.MockChannelPolicyManagerGetter{
-		Managers: map[string]policies.Manager{
-			"mytestchainid": &policymocks.MockChannelPolicyManager{
-				MockPolicy: &policymocks.MockPolicy{
-					Deserializer: &policymocks.MockIdentityDeserializer{
-						Identity: []byte("Alice"),
-						Msg:      []byte("msg1"),
-					},
-				},
-			},
-		},
-	}
-
-	identityDeserializer := &policymocks.MockIdentityDeserializer{
-		Identity: []byte("Alice"),
-		Msg:      []byte("msg1"),
-	}
-
-	e.policyChecker = policy.NewPolicyChecker(
-		policyManagerGetter,
-		identityDeserializer,
-		&policymocks.MockMSPPrincipalGetter{Principal: []byte("Alice")},
-	)
 
 	grpcServer := grpc.NewServer()
 	socket, err := net.Listen("tcp", peerEndpoint)
@@ -263,12 +219,53 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 		dialOpts = append(dialOpts, grpc.WithInsecure())
 		return dialOpts
 	}
-	err = service.InitGossipServiceCustomDeliveryFactory(signer, &disabled.Provider{}, peerEndpoint, grpcServer, nil,
-		&mockDeliveryClientFactory{}, messageCryptoService, secAdv, defaultSecureDialOpts)
+	defaultDeliverClientDialOpts := []grpc.DialOption{grpc.WithBlock()}
+	defaultDeliverClientDialOpts = append(
+		defaultDeliverClientDialOpts,
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(comm.MaxRecvMsgSize),
+			grpc.MaxCallSendMsgSize(comm.MaxSendMsgSize)))
+	defaultDeliverClientDialOpts = append(
+		defaultDeliverClientDialOpts,
+		comm.ClientKeepaliveOptions(comm.DefaultKeepaliveOptions)...,
+	)
+	gossipConfig, err := gossip.GlobalConfig(peerEndpoint, nil)
+	assert.NoError(t, err)
+
+	gossipService, err := service.New(
+		signer,
+		gossipmetrics.NewGossipMetrics(&disabled.Provider{}),
+		peerEndpoint,
+		grpcServer,
+		messageCryptoService,
+		secAdv,
+		defaultSecureDialOpts,
+		nil,
+		defaultDeliverClientDialOpts,
+		gossipConfig,
+		&service.ServiceConfig{},
+		&deliverservice.DeliverServiceConfig{
+			ReConnectBackoffThreshold:   deliverservice.DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: deliverservice.DefaultReConnectTotalTimeThreshold,
+		},
+	)
 	assert.NoError(t, err)
 
 	go grpcServer.Serve(socket)
 	defer grpcServer.Stop()
+
+	
+	mockACLProvider := &mocks.ACLProvider{}
+	cscc := &PeerConfiger{
+		policyChecker: &mocks.PolicyChecker{},
+		aclProvider:   mockACLProvider,
+		peer: &peer.Peer{
+			StoreProvider: &mocks.StoreProvider{},
+			GossipService: gossipService,
+			LedgerMgr:     ledgerMgr,
+		},
+	}
+	mockStub := &mocks.ChaincodeStub{}
 
 	
 	blockBytes := mockConfigBlock()
@@ -277,14 +274,13 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	}
 	args := [][]byte{[]byte("JoinChain"), blockBytes}
 	sProp, _ := protoutil.MockSignedEndorserProposalOrPanic("", &pb.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
-	identityDeserializer.Msg = sProp.ProposalBytes
 	sProp.Signature = sProp.ProposalBytes
 
 	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_JoinChain, "", sProp).Return(nil)
-	res := stub.MockInvokeWithSignedProposal("2", [][]byte{[]byte("JoinChain"), nil}, sProp)
-	assert.Equal(t, res.Status, int32(shim.ERROR))
+	mockStub.GetArgsReturns([][]byte{[]byte("JoinChain"), nil})
+	res := cscc.Invoke(mockStub)
+	
+	assert.Equal(t, int32(shim.ERROR), res.Status)
 
 	
 	payload, _ := proto.Marshal(&cb.Payload{})
@@ -296,25 +292,26 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 			Data: [][]byte{env},
 		},
 	}
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_JoinChain, "", sProp).Return(nil)
 	badBlockBytes := protoutil.MarshalOrPanic(badBlock)
-	res = stub.MockInvokeWithSignedProposal("2", [][]byte{[]byte("JoinChain"), badBlockBytes}, sProp)
-	assert.Equal(t, res.Status, int32(shim.ERROR))
+	mockStub.GetArgsReturns([][]byte{[]byte("JoinChain"), badBlockBytes})
+	res = cscc.Invoke(mockStub)
+	
+	assert.Equal(t, int32(shim.ERROR), res.Status)
 
 	
-	if res := stub.MockInvokeWithSignedProposal("2", args, sProp); res.Status != shim.OK {
-		t.Fatalf("cscc invoke JoinChain failed with: %v", res.Message)
-	}
+	mockStub.GetArgsReturns(args)
+	mockStub.GetSignedProposalReturns(sProp, nil)
+	res = cscc.Invoke(mockStub)
+	assert.Equal(t, int32(shim.OK), res.Status, "invoke JoinChain failed with: %v", res.Message)
 
 	
 	sProp.Signature = nil
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_JoinChain, "", sProp).Return(errors.New("Failed authorization"))
-	res = stub.MockInvokeWithSignedProposal("3", args, sProp)
-	if res.Status == shim.OK {
-		t.Fatalf("cscc invoke JoinChain must fail : %v", res.Message)
-	}
+	mockACLProvider.CheckACLReturns(errors.New("Failed authorization"))
+	mockStub.GetArgsReturns(args)
+	mockStub.GetSignedProposalReturns(sProp, nil)
+
+	res = cscc.Invoke(mockStub)
+	assert.Equal(t, int32(shim.ERROR), res.Status)
 	assert.Contains(t, res.Message, "access denied for [JoinChain][mytestchainid]")
 	sProp.Signature = sProp.ProposalBytes
 
@@ -326,28 +323,24 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	}
 
 	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_GetConfigBlock, "mytestchainid", sProp).Return(errors.New("Failed authorization"))
+	mockACLProvider.CheckACLReturns(errors.New("Failed authorization"))
 	args = [][]byte{[]byte("GetConfigBlock"), []byte(chainID)}
-	res = stub.MockInvokeWithSignedProposal("2", args, sProp)
-	if res.Status == shim.OK {
-		t.Fatalf("cscc invoke GetConfigBlock should have failed: %v", res.Message)
-	}
+	mockStub.GetArgsReturns(args)
+	mockStub.GetSignedProposalReturns(sProp, nil)
+	res = cscc.Invoke(mockStub)
+	assert.Equal(t, int32(shim.ERROR), res.Status, "invoke GetConfigBlock should have failed: %v", res.Message)
 	assert.Contains(t, res.Message, "Failed authorization")
-	mockAclProvider.AssertExpectations(t)
 
 	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_GetConfigBlock, "mytestchainid", sProp).Return(nil)
-	if res := stub.MockInvokeWithSignedProposal("2", args, sProp); res.Status != shim.OK {
-		t.Fatalf("cscc invoke GetConfigBlock failed with: %v", res.Message)
-	}
+	mockACLProvider.CheckACLReturns(nil)
+	res = cscc.Invoke(mockStub)
+	assert.Equal(t, int32(shim.OK), res.Status, "invoke GetConfigBlock failed with: %v", res.Message)
 
 	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_GetChannels, "", sProp).Return(nil)
+	mockACLProvider.CheckACLReturns(nil)
 	args = [][]byte{[]byte(GetChannels)}
-	res = stub.MockInvokeWithSignedProposal("2", args, sProp)
+	mockStub.GetArgsReturns(args)
+	res = cscc.Invoke(mockStub)
 	if res.Status != shim.OK {
 		t.FailNow()
 	}
@@ -364,155 +357,7 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	}
 }
 
-func TestGetConfigTree(t *testing.T) {
-	aclProvider := &mock.ACLProvider{}
-	configMgr := &mock.ConfigManager{}
-	pc := &PeerConfiger{
-		aclProvider: aclProvider,
-		configMgr:   configMgr,
-	}
-
-	args := [][]byte{[]byte("GetConfigTree"), []byte("testchan")}
-
-	t.Run("Success", func(t *testing.T) {
-		ctxv := &mock.ConfigtxValidator{}
-		configMgr.GetChannelConfigReturns(ctxv)
-		testConfig := &cb.Config{
-			ChannelGroup: &cb.ConfigGroup{
-				Values: map[string]*cb.ConfigValue{
-					"foo": {
-						Value: []byte("bar"),
-					},
-				},
-			},
-		}
-		ctxv.ConfigProtoReturns(testConfig)
-		res := pc.InvokeNoShim(args, nil)
-		assert.Equal(t, int32(shim.OK), res.Status)
-		checkConfig := &pb.ConfigTree{}
-		err := proto.Unmarshal(res.Payload, checkConfig)
-		assert.NoError(t, err)
-		assert.True(t, proto.Equal(testConfig, checkConfig.ChannelConfig))
-	})
-
-	t.Run("MissingConfig", func(t *testing.T) {
-		ctxv := &mock.ConfigtxValidator{}
-		configMgr.GetChannelConfigReturns(ctxv)
-		res := pc.InvokeNoShim(args, nil)
-		assert.NotEqual(t, int32(shim.OK), res.Status)
-		assert.Equal(t, "Unknown chain ID, testchan", res.Message)
-	})
-
-	t.Run("NilChannel", func(t *testing.T) {
-		ctxv := &mock.ConfigtxValidator{}
-		configMgr.GetChannelConfigReturns(ctxv)
-		res := pc.InvokeNoShim([][]byte{[]byte("GetConfigTree"), nil}, nil)
-		assert.NotEqual(t, int32(shim.OK), res.Status)
-		assert.Equal(t, "Chain ID must not be nil", res.Message)
-	})
-
-	t.Run("BadACL", func(t *testing.T) {
-		aclProvider.CheckACLReturns(fmt.Errorf("fake-error"))
-		res := pc.InvokeNoShim(args, nil)
-		assert.NotEqual(t, int32(shim.OK), res.Status)
-		assert.Equal(t, "access denied for [GetConfigTree][testchan]: fake-error", res.Message)
-	})
-}
-
-func TestSimulateConfigTreeUpdate(t *testing.T) {
-	aclProvider := &mock.ACLProvider{}
-	configMgr := &mock.ConfigManager{}
-	pc := &PeerConfiger{
-		aclProvider: aclProvider,
-		configMgr:   configMgr,
-	}
-
-	testUpdate := &cb.Envelope{
-		Payload: protoutil.MarshalOrPanic(&cb.Payload{
-			Header: &cb.Header{
-				ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
-					Type: int32(cb.HeaderType_CONFIG_UPDATE),
-				}),
-			},
-		}),
-	}
-
-	args := [][]byte{[]byte("SimulateConfigTreeUpdate"), []byte("testchan"), protoutil.MarshalOrPanic(testUpdate)}
-
-	t.Run("Success", func(t *testing.T) {
-		ctxv := &mock.ConfigtxValidator{}
-		configMgr.GetChannelConfigReturns(ctxv)
-		res := pc.InvokeNoShim(args, nil)
-		assert.Equal(t, int32(shim.OK), res.Status, res.Message)
-	})
-
-	t.Run("BadUpdate", func(t *testing.T) {
-		ctxv := &mock.ConfigtxValidator{}
-		configMgr.GetChannelConfigReturns(ctxv)
-		ctxv.ProposeConfigUpdateReturns(nil, fmt.Errorf("fake-error"))
-		res := pc.InvokeNoShim(args, nil)
-		assert.NotEqual(t, int32(shim.OK), res.Status)
-		assert.Equal(t, "fake-error", res.Message)
-	})
-
-	t.Run("BadType", func(t *testing.T) {
-		res := pc.InvokeNoShim([][]byte{
-			args[0],
-			args[1],
-			protoutil.MarshalOrPanic(&cb.Envelope{
-				Payload: protoutil.MarshalOrPanic(&cb.Payload{
-					Header: &cb.Header{
-						ChannelHeader: protoutil.MarshalOrPanic(&cb.ChannelHeader{
-							Type: int32(cb.HeaderType_ENDORSER_TRANSACTION),
-						}),
-					},
-				}),
-			}),
-		}, nil)
-		assert.NotEqual(t, int32(shim.OK), res.Status)
-		assert.Equal(t, "invalid payload header type: 3", res.Message)
-	})
-
-	t.Run("BadEnvelope", func(t *testing.T) {
-		res := pc.InvokeNoShim([][]byte{
-			args[0],
-			args[1],
-			[]byte("garbage"),
-		}, nil)
-		assert.NotEqual(t, int32(shim.OK), res.Status)
-		assert.Contains(t, res.Message, "proto:")
-	})
-
-	t.Run("NilChainID", func(t *testing.T) {
-		res := pc.InvokeNoShim([][]byte{
-			args[0],
-			nil,
-			args[2],
-		}, nil)
-		assert.NotEqual(t, int32(shim.OK), res.Status)
-		assert.Equal(t, "Chain ID must not be nil", res.Message)
-	})
-
-	t.Run("BadACL", func(t *testing.T) {
-		aclProvider.CheckACLReturns(fmt.Errorf("fake-error"))
-		res := pc.InvokeNoShim(args, nil)
-		assert.NotEqual(t, int32(shim.OK), res.Status)
-		assert.Equal(t, "access denied for [SimulateConfigTreeUpdate][testchan]: fake-error", res.Message)
-	})
-}
-
 func TestPeerConfiger_SubmittingOrdererGenesis(t *testing.T) {
-	viper.Set("peer.fileSystemPath", "/tmp/mcc-githubtest/")
-	os.Mkdir("/tmp/mcc-githubtest", 0755)
-	defer os.RemoveAll("/tmp/mcc-githubtest/")
-
-	e := New(nil, nil, nil, nil, nil)
-	stub := shim.NewMockStub("PeerConfiger", e)
-
-	if res := stub.MockInit("1", nil); res.Status != shim.OK {
-		fmt.Println("Init failed", string(res.Message))
-		t.FailNow()
-	}
 	conf := configtxgentest.Load(genesisconfig.SampleSingleMSPSoloProfile)
 	conf.Application = nil
 	cg, err := encoder.NewChannelGroup(conf)
@@ -520,15 +365,23 @@ func TestPeerConfiger_SubmittingOrdererGenesis(t *testing.T) {
 	block := genesis.NewFactoryImpl(cg).Block("mytestchainid")
 	blockBytes := protoutil.MarshalOrPanic(block)
 
-	
-	mockAclProvider.Reset()
-	mockAclProvider.On("CheckACL", resources.Cscc_JoinChain, "", (*pb.SignedProposal)(nil)).Return(nil)
-	args := [][]byte{[]byte("JoinChain"), []byte(blockBytes)}
-	if res := stub.MockInvoke("2", args); res.Status == shim.OK {
-		t.Fatalf("cscc invoke JoinChain should have failed with wrong genesis block.  args: %v", args)
-	} else {
-		assert.Contains(t, res.Message, "missing Application configuration group")
+	mockACLProvider := &mocks.ACLProvider{}
+	cscc := &PeerConfiger{
+		aclProvider: mockACLProvider,
 	}
+	mockStub := &mocks.ChaincodeStub{}
+	
+	args := [][]byte{[]byte("JoinChain"), []byte(blockBytes)}
+	mockStub.GetArgsReturns(args)
+	res := cscc.Invoke(mockStub)
+
+	assert.NotEqual(
+		t,
+		int32(shim.OK),
+		res.Status,
+		"invoke JoinChain should have failed with wrong genesis block",
+	)
+	assert.Contains(t, res.Message, "missing Application configuration group")
 }
 
 func mockConfigBlock() []byte {

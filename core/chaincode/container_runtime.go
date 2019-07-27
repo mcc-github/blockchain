@@ -12,9 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
@@ -36,13 +34,11 @@ type CertGenerator interface {
 
 
 type ContainerRuntime struct {
-	CertGenerator    CertGenerator
-	Processor        Processor
-	CACert           []byte
-	CommonEnv        []string
-	PeerAddress      string
-	PlatformRegistry *platforms.Registry
-	DockerClient     *docker.Client
+	CertGenerator CertGenerator
+	Processor     Processor
+	CACert        []byte
+	CommonEnv     []string
+	PeerAddress   string
 }
 
 
@@ -54,20 +50,24 @@ func (c *ContainerRuntime) Start(ccci *ccprovider.ChaincodeContainerInfo, codePa
 		return err
 	}
 
+	
+	bcr := container.BuildReq{
+		CCID:        ccintf.New(ccci.PackageID),
+		Type:        ccci.Type,
+		Name:        ccci.Name,
+		Version:     ccci.Version,
+		Path:        ccci.Path,
+		CodePackage: codePackage,
+	}
+	if err := c.Processor.Process(ccci.ContainerType, bcr); err != nil {
+		return errors.WithMessage(err, "error building image")
+	}
+
 	chaincodeLogger.Debugf("start container: %s", packageID)
 	chaincodeLogger.Debugf("start container with args: %s", strings.Join(lc.Args, " "))
 	chaincodeLogger.Debugf("start container with env:\n\t%s", strings.Join(lc.Envs, "\n\t"))
 
 	scr := container.StartContainerReq{
-		Builder: &container.PlatformBuilder{
-			Type:             ccci.Type,
-			Name:             ccci.Name,
-			Version:          ccci.Version,
-			Path:             ccci.Path,
-			CodePackage:      codePackage,
-			PlatformRegistry: c.PlatformRegistry,
-			Client:           c.DockerClient,
-		},
 		Args:          lc.Args,
 		Env:           lc.Envs,
 		FilesToUpload: lc.Files,

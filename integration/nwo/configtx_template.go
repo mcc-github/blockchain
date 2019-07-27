@@ -54,7 +54,7 @@ Organizations:{{ range .PeerOrgs }}
 Channel: &ChannelDefaults
   Capabilities:
     V2_0: true
-  Policies:
+  Policies: &DefaultPolicies
     Readers:
       Type: ImplicitMeta
       Rule: ANY Readers
@@ -67,7 +67,15 @@ Channel: &ChannelDefaults
 
 Profiles:{{ range .Profiles }}
   {{ .Name }}:
+    {{- if .ChannelCapabilities}}
+    Capabilities:{{ range .ChannelCapabilities}}
+      {{ . }}: true
+    {{- end}}
+    Policies:
+      <<: *DefaultPolicies
+    {{- else }}
     <<: *ChannelDefaults
+    {{- end}}
     {{- if .Orderers }}
     Orderer:
       OrdererType: {{ $w.Consensus.Type }}
@@ -153,6 +161,34 @@ Profiles:{{ range .Profiles }}
         {{- end }}
     {{- end }}
     {{- end }}
+{{- end }}
+{{ end }}
+`
+
+const OrgUpdateConfigTxTemplate = `---
+{{ with $w := . -}}
+Organizations:{{ range .PeerOrgs }}
+- &{{ .MSPID }}
+  Name: {{ .Name }}
+  ID: {{ .MSPID }}
+  MSPDir: {{ $w.PeerOrgMSPDir . }}
+  Policies:
+    Readers:
+      Type: Signature
+      Rule: OR('{{.MSPID}}.admin', '{{.MSPID}}.peer', '{{.MSPID}}.client')
+    Writers:
+      Type: Signature
+      Rule: OR('{{.MSPID}}.admin', '{{.MSPID}}.client')
+    Endorsement:
+      Type: Signature
+      Rule: OR('{{.MSPID}}.peer')
+    Admins:
+      Type: Signature
+      Rule: OR('{{.MSPID}}.admin')
+  AnchorPeers:{{ range $w.AnchorsInOrg .Name }}
+  - Host: 127.0.0.1
+    Port: {{ $w.PeerPort . "Listen" }}
+  {{- end }}
 {{- end }}
 {{ end }}
 `

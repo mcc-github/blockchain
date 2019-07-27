@@ -26,7 +26,7 @@ type SecurityAdvisor interface {
 
 
 type ChannelNotifier interface {
-	JoinChannel(joinMsg JoinChannelMessage, chainID common.ChainID)
+	JoinChannel(joinMsg JoinChannelMessage, channelID common.ChannelID)
 }
 
 

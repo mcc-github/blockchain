@@ -17,7 +17,10 @@ import (
 	"github.com/mcc-github/blockchain/core/aclmgmt/mocks"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain/core/chaincode/shim/shimtest"
 	ledger2 "github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt/ledgermgmttest"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/protos/common"
 	peer2 "github.com/mcc-github/blockchain/protos/peer"
@@ -28,24 +31,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestLedger(chainid string, path string) (*shim.MockStub, func(), error) {
+func setupTestLedger(chainid string, path string) (*shimtest.MockStub, *peer.Peer, func(), error) {
 	mockAclProvider.Reset()
 
 	viper.Set("peer.fileSystemPath", path)
-	cleanup, err := peer.MockInitialize()
+	testDir, err := ioutil.TempDir("", "qscc_test")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	peer.MockCreateChain(chainid)
+	ledgerMgr := ledgermgmt.NewLedgerMgr(ledgermgmttest.NewInitializer(testDir))
+
+	cleanup := func() {
+		ledgerMgr.Close()
+		os.RemoveAll(testDir)
+	}
+	peerInstance := &peer.Peer{
+		LedgerMgr: ledgerMgr,
+	}
+	peer.CreateMockChannel(peerInstance, chainid)
 
 	lq := &LedgerQuerier{
 		aclProvider: mockAclProvider,
+		ledgers:     peerInstance,
 	}
-	stub := shim.NewMockStub("LedgerQuerier", lq)
+	stub := shimtest.NewMockStub("LedgerQuerier", lq)
 	if res := stub.MockInit("1", nil); res.Status != shim.OK {
-		return nil, cleanup, fmt.Errorf("Init failed for test ledger [%s] with message: %s", chainid, string(res.Message))
+		return nil, peerInstance, cleanup, fmt.Errorf("Init failed for test ledger [%s] with message: %s", chainid, string(res.Message))
 	}
-	return stub, cleanup, nil
+	return stub, peerInstance, cleanup, nil
 }
 
 
@@ -66,7 +79,7 @@ func TestQueryGetChainInfo(t *testing.T) {
 	path := tempDir(t, "test1")
 	defer os.RemoveAll(path)
 
-	stub, cleanup, err := setupTestLedger(chainid, path)
+	stub, _, cleanup, err := setupTestLedger(chainid, path)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -91,7 +104,7 @@ func TestQueryGetTransactionByID(t *testing.T) {
 	path := tempDir(t, "test2")
 	defer os.RemoveAll(path)
 
-	stub, cleanup, err := setupTestLedger(chainid, path)
+	stub, _, cleanup, err := setupTestLedger(chainid, path)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -117,7 +130,7 @@ func TestQueryGetBlockByNumber(t *testing.T) {
 	path := tempDir(t, "test3")
 	defer os.RemoveAll(path)
 
-	stub, cleanup, err := setupTestLedger(chainid, path)
+	stub, _, cleanup, err := setupTestLedger(chainid, path)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -145,7 +158,7 @@ func TestQueryGetBlockByHash(t *testing.T) {
 	path := tempDir(t, "test4")
 	defer os.RemoveAll(path)
 
-	stub, cleanup, err := setupTestLedger(chainid, path)
+	stub, _, cleanup, err := setupTestLedger(chainid, path)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -166,7 +179,7 @@ func TestQueryGetBlockByTxID(t *testing.T) {
 	path := tempDir(t, "test5")
 	defer os.RemoveAll(path)
 
-	stub, cleanup, err := setupTestLedger(chainid, path)
+	stub, _, cleanup, err := setupTestLedger(chainid, path)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -183,15 +196,16 @@ func TestFailingAccessControl(t *testing.T) {
 	path := tempDir(t, "test6")
 	defer os.RemoveAll(path)
 
-	_, cleanup, err := setupTestLedger(chainid, path)
+	_, p, cleanup, err := setupTestLedger(chainid, path)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	defer cleanup()
 	e := &LedgerQuerier{
 		aclProvider: mockAclProvider,
+		ledgers:     p,
 	}
-	stub := shim.NewMockStub("LedgerQuerier", e)
+	stub := shimtest.NewMockStub("LedgerQuerier", e)
 
 	
 	args := [][]byte{[]byte(GetChainInfo), []byte(chainid)}
@@ -259,7 +273,7 @@ func TestQueryNonexistentFunction(t *testing.T) {
 	path := tempDir(t, "test7")
 	defer os.RemoveAll(path)
 
-	stub, cleanup, err := setupTestLedger(chainid, path)
+	stub, _, cleanup, err := setupTestLedger(chainid, path)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -278,13 +292,13 @@ func TestQueryGeneratedBlock(t *testing.T) {
 	path := tempDir(t, "test8")
 	defer os.RemoveAll(path)
 
-	stub, cleanup, err := setupTestLedger(chainid, path)
+	stub, p, cleanup, err := setupTestLedger(chainid, path)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	defer cleanup()
 
-	block1 := addBlockForTesting(t, chainid)
+	block1 := addBlockForTesting(t, chainid, p)
 
 	
 	args := [][]byte{[]byte(GetBlockByNumber), []byte(chainid), []byte("1")}
@@ -330,8 +344,8 @@ func TestQueryGeneratedBlock(t *testing.T) {
 	}
 }
 
-func addBlockForTesting(t *testing.T, chainid string) *common.Block {
-	ledger := peer.GetLedger(chainid)
+func addBlockForTesting(t *testing.T, chainid string, p *peer.Peer) *common.Block {
+	ledger := p.GetLedger(chainid)
 	defer ledger.Close()
 
 	txid1 := util.GenerateUUID()

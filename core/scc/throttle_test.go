@@ -4,12 +4,13 @@ Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package scc
+package scc_test
 
 import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/core/scc/mock"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	. "github.com/onsi/gomega"
@@ -19,7 +20,7 @@ import (
 
 
 type chaincode interface{ shim.Chaincode }
-type selfDescribingSysCC interface{ SelfDescribingSysCC } 
+type selfDescribingSysCC interface{ scc.SelfDescribingSysCC } 
 
 func TestThrottle(t *testing.T) {
 	gt := NewGomegaWithT(t)
@@ -37,7 +38,7 @@ func TestThrottle(t *testing.T) {
 	sysCC.ChaincodeReturns(chaincode)
 
 	
-	throttled := Throttle(5, sysCC).Chaincode()
+	throttled := scc.Throttle(5, sysCC).Chaincode()
 	for i := 0; i < 5; i++ {
 		go throttled.Invoke(nil)
 		gt.Eventually(runningCh).Should(Receive())
@@ -64,7 +65,7 @@ func TestThrottledChaincode(t *testing.T) {
 
 	sysCC := &mock.SelfDescribingSysCC{}
 	sysCC.ChaincodeReturns(chaincode)
-	throttled := Throttle(5, sysCC).Chaincode()
+	throttled := scc.Throttle(5, sysCC).Chaincode()
 
 	initResp := throttled.Init(nil)
 	gt.Expect(initResp.Message).To(Equal("init-returns"))

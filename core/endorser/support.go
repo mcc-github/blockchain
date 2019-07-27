@@ -18,7 +18,6 @@ import (
 	. "github.com/mcc-github/blockchain/core/handlers/endorsement/api/identities"
 	"github.com/mcc-github/blockchain/core/handlers/library"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -28,11 +27,17 @@ import (
 
 
 
+type PeerOperations interface {
+	GetApplicationConfig(cid string) (channelconfig.Application, bool)
+	GetLedger(cid string) ledger.PeerLedger
+}
+
+
+
 type SupportImpl struct {
 	*PluginEndorser
 	identity.SignerSerializer
-	Peer             peer.Operations
-	PeerSupport      peer.Support
+	Peer             PeerOperations
 	ChaincodeSupport *chaincode.ChaincodeSupport
 	SysCCProvider    *scc.Provider
 	ACLProvider      aclmgmt.ACLProvider
@@ -184,7 +189,7 @@ func (s *SupportImpl) CheckInstantiationPolicy(name, version string, cd ccprovid
 
 
 func (s *SupportImpl) GetApplicationConfig(cid string) (channelconfig.Application, bool) {
-	return s.PeerSupport.GetApplicationConfig(cid)
+	return s.Peer.GetApplicationConfig(cid)
 }
 
 

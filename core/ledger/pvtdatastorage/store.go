@@ -87,6 +87,16 @@ type Store interface {
 }
 
 
+type PrivateDataConfig struct {
+	
+	*ledger.PrivateDataConfig
+	
+	
+	
+	StorePath string
+}
+
+
 type ErrIllegalCall struct {
 	msg string
 }

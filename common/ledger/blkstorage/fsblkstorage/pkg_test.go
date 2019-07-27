@@ -24,6 +24,8 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
+	"github.com/mcc-github/blockchain/common/metrics"
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
@@ -48,6 +50,10 @@ type testEnv struct {
 }
 
 func newTestEnv(t testing.TB, conf *Conf) *testEnv {
+	return newTestEnvWithMetricsProvider(t, conf, &disabled.Provider{})
+}
+
+func newTestEnvWithMetricsProvider(t testing.TB, conf *Conf, metricsProvider metrics.Provider) *testEnv {
 	attrsToIndex := []blkstorage.IndexableAttr{
 		blkstorage.IndexableAttrBlockHash,
 		blkstorage.IndexableAttrBlockNum,
@@ -56,12 +62,12 @@ func newTestEnv(t testing.TB, conf *Conf) *testEnv {
 		blkstorage.IndexableAttrBlockTxID,
 		blkstorage.IndexableAttrTxValidationCode,
 	}
-	return newTestEnvSelectiveIndexing(t, conf, attrsToIndex)
+	return newTestEnvSelectiveIndexing(t, conf, attrsToIndex, metricsProvider)
 }
 
-func newTestEnvSelectiveIndexing(t testing.TB, conf *Conf, attrsToIndex []blkstorage.IndexableAttr) *testEnv {
+func newTestEnvSelectiveIndexing(t testing.TB, conf *Conf, attrsToIndex []blkstorage.IndexableAttr, metricsProvider metrics.Provider) *testEnv {
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
-	return &testEnv{t, NewProvider(conf, indexConfig).(*FsBlockstoreProvider)}
+	return &testEnv{t, NewProvider(conf, indexConfig, metricsProvider).(*FsBlockstoreProvider)}
 }
 
 func (env *testEnv) Cleanup() {
@@ -105,7 +111,7 @@ func (w *testBlockfileMgrWrapper) testGetBlockByNumber(blocks []*common.Block, s
 	for i := 0; i < len(blocks); i++ {
 		b, err := w.blockfileMgr.retrieveBlockByNumber(startingNum + uint64(i))
 		assert.NoError(w.t, err, "Error while retrieving [%d]th block from blockfileMgr", i)
-		assert.Equal(w.t, blocks[i].Header, b.Header)
+		assert.Equal(w.t, blocks[i], b)
 	}
 	
 	b, err := w.blockfileMgr.retrieveBlockByNumber(math.MaxUint64)

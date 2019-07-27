@@ -20,7 +20,7 @@ import (
 var logger = flogging.MustGetLogger("ConnProducer")
 
 
-type ConnectionFactory func(endpoint string) (*grpc.ClientConn, error)
+type ConnectionFactory func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error)
 
 
 
@@ -72,18 +72,33 @@ type ConnectionProducer interface {
 
 type connProducer struct {
 	sync.RWMutex
-	endpoints         []string
-	connect           ConnectionFactory
-	nextEndpointIndex int
+	endpoints             []string
+	connect               ConnectionFactory
+	nextEndpointIndex     int
+	deliverClientDialOpts []grpc.DialOption
+	peerTLSEnabled        bool
+	connectionTimeout     time.Duration
 }
 
 
 
-func NewConnectionProducer(factory ConnectionFactory, endpoints []string) ConnectionProducer {
+func NewConnectionProducer(
+	factory ConnectionFactory,
+	endpoints []string,
+	deliverClientDialOpts []grpc.DialOption,
+	peerTLSEnabled bool,
+	connectionTimeout time.Duration,
+) ConnectionProducer {
 	if len(endpoints) == 0 {
 		return nil
 	}
-	return &connProducer{endpoints: shuffle(endpoints), connect: factory}
+	return &connProducer{
+		endpoints:             shuffle(endpoints),
+		connect:               factory,
+		deliverClientDialOpts: deliverClientDialOpts,
+		peerTLSEnabled:        peerTLSEnabled,
+		connectionTimeout:     connectionTimeout,
+	}
 }
 
 
@@ -97,7 +112,7 @@ func (cp *connProducer) NewConnection() (*grpc.ClientConn, string, error) {
 
 	for i := 0; i < len(cp.endpoints); i++ {
 		currentEndpoint := cp.endpoints[cp.nextEndpointIndex]
-		conn, err := cp.connect(currentEndpoint)
+		conn, err := cp.connect(currentEndpoint, cp.connectionTimeout)
 		cp.nextEndpointIndex = (cp.nextEndpointIndex + 1) % len(cp.endpoints)
 		if err != nil {
 			logger.Error("Failed connecting to", currentEndpoint, ", error:", err)

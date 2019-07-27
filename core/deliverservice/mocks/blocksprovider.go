@@ -41,7 +41,7 @@ func (mabc *MockAtomicBroadcastClient) Deliver(ctx context.Context, opts ...grpc
 }
 
 
-func (*MockGossipServiceAdapter) PeersOfChannel(gossip_common.ChainID) []discovery.NetworkMember {
+func (*MockGossipServiceAdapter) PeersOfChannel(gossip_common.ChannelID) []discovery.NetworkMember {
 	return []discovery.NetworkMember{}
 }
 

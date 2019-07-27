@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 
@@ -52,11 +53,22 @@ func EncodeOrderPreservingVarUint64(number uint64) []byte {
 
 
 
-func DecodeOrderPreservingVarUint64(bytes []byte) (uint64, int) {
-	s, _ := proto.DecodeVarint(bytes)
-	size := int(s)
-	decodedBytes := make([]byte, 8)
-	copy(decodedBytes[8-size:], bytes[1:size+1])
-	numBytesConsumed := size + 1
-	return binary.BigEndian.Uint64(decodedBytes), numBytesConsumed
+func DecodeOrderPreservingVarUint64(bytes []byte) (uint64, int, error) {
+	s, numBytes := proto.DecodeVarint(bytes)
+
+	switch {
+	case numBytes != 1:
+		return 0, 0, errors.Errorf("number of consumed bytes from DecodeVarint is invalid, expected 1, but got %d", numBytes)
+	case s > 8:
+		return 0, 0, errors.Errorf("decoded size from DecodeVarint is invalid, expected <=8, but got %d", s)
+	case int(s) > len(bytes)-1:
+		return 0, 0, errors.Errorf("decoded size (%d) from DecodeVarint is more than available bytes (%d)", s, len(bytes)-1)
+	default:
+		
+		size := int(s)
+		decodedBytes := make([]byte, 8)
+		copy(decodedBytes[8-size:], bytes[1:size+1])
+		numBytesConsumed := size + 1
+		return binary.BigEndian.Uint64(decodedBytes), numBytesConsumed, nil
+	}
 }

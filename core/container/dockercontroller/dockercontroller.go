@@ -70,41 +70,62 @@ type dockerClient interface {
 	
 	
 	WaitContainer(containerID string) (int, error)
+	
+	InspectImage(imageName string) (*docker.Image, error)
+}
+
+type PlatformBuilder interface {
+	GenerateDockerBuild(ccType, path, name, version string, codePackage []byte) (io.Reader, error)
 }
 
 
 type Provider struct {
-	PeerID        string
-	NetworkID     string
-	BuildMetrics  *BuildMetrics
-	HostConfig    *docker.HostConfig
-	Client        dockerClient
-	AttachStdOut  bool
-	ChaincodePull bool
+	PeerID          string
+	NetworkID       string
+	BuildMetrics    *BuildMetrics
+	HostConfig      *docker.HostConfig
+	Client          dockerClient
+	AttachStdOut    bool
+	ChaincodePull   bool
+	NetworkMode     string
+	PlatformBuilder PlatformBuilder
 }
 
 
 type DockerVM struct {
-	PeerID        string
-	NetworkID     string
-	BuildMetrics  *BuildMetrics
-	HostConfig    *docker.HostConfig
-	Client        dockerClient
-	AttachStdOut  bool
-	ChaincodePull bool
+	PeerID          string
+	NetworkID       string
+	BuildMetrics    *BuildMetrics
+	HostConfig      *docker.HostConfig
+	Client          dockerClient
+	AttachStdOut    bool
+	ChaincodePull   bool
+	NetworkMode     string
+	PlatformBuilder PlatformBuilder
 }
 
 
 func (p *Provider) NewVM() container.VM {
 	return &DockerVM{
-		PeerID:        p.PeerID,
-		NetworkID:     p.NetworkID,
-		Client:        p.Client,
-		BuildMetrics:  p.BuildMetrics,
-		AttachStdOut:  p.AttachStdOut,
-		HostConfig:    p.HostConfig,
-		ChaincodePull: p.ChaincodePull,
+		PeerID:          p.PeerID,
+		NetworkID:       p.NetworkID,
+		Client:          p.Client,
+		BuildMetrics:    p.BuildMetrics,
+		AttachStdOut:    p.AttachStdOut,
+		HostConfig:      p.HostConfig,
+		ChaincodePull:   p.ChaincodePull,
+		NetworkMode:     p.NetworkMode,
+		PlatformBuilder: p.PlatformBuilder,
 	}
+}
+
+
+
+func (p *Provider) HealthCheck(ctx context.Context) error {
+	if err := p.Client.PingWithContext(ctx); err != nil {
+		return errors.Wrap(err, "failed to ping to Docker daemon")
+	}
+	return nil
 }
 
 func (vm *DockerVM) createContainer(imageID, containerID string, args, env []string) error {
@@ -128,7 +149,7 @@ func (vm *DockerVM) createContainer(imageID, containerID string, args, env []str
 	return nil
 }
 
-func (vm *DockerVM) deployImage(ccid ccintf.CCID, reader io.Reader) error {
+func (vm *DockerVM) buildImage(ccid ccintf.CCID, reader io.Reader) error {
 	id, err := vm.GetVMNameForDocker(ccid)
 	if err != nil {
 		return err
@@ -138,6 +159,7 @@ func (vm *DockerVM) deployImage(ccid ccintf.CCID, reader io.Reader) error {
 	opts := docker.BuildImageOptions{
 		Name:         id,
 		Pull:         vm.ChaincodePull,
+		NetworkMode:  vm.NetworkMode,
 		InputStream:  reader,
 		OutputStream: outputbuf,
 	}
@@ -161,7 +183,31 @@ func (vm *DockerVM) deployImage(ccid ccintf.CCID, reader io.Reader) error {
 }
 
 
-func (vm *DockerVM) Start(ccid ccintf.CCID, args, env []string, filesToUpload map[string][]byte, builder container.Builder) error {
+func (vm *DockerVM) Build(ccid ccintf.CCID, ccType, path, name, version string, codePackage []byte) error {
+	imageName, err := vm.GetVMNameForDocker(ccid)
+	if err != nil {
+		return err
+	}
+
+	_, err = vm.Client.InspectImage(imageName)
+	if err != docker.ErrNoSuchImage {
+		return errors.Wrap(err, "docker image inspection failed")
+	}
+
+	dockerfileReader, err := vm.PlatformBuilder.GenerateDockerBuild(ccType, path, name, version, codePackage)
+	if err != nil {
+		return errors.Wrap(err, "platform builder failed")
+	}
+	err = vm.buildImage(ccid, dockerfileReader)
+	if err != nil {
+		return errors.Wrap(err, "docker image build failed")
+	}
+
+	return nil
+}
+
+
+func (vm *DockerVM) Start(ccid ccintf.CCID, args, env []string, filesToUpload map[string][]byte) error {
 	imageName, err := vm.GetVMNameForDocker(ccid)
 	if err != nil {
 		return err
@@ -173,23 +219,7 @@ func (vm *DockerVM) Start(ccid ccintf.CCID, args, env []string, filesToUpload ma
 	vm.stopInternal(containerName, 0, false, false)
 
 	err = vm.createContainer(imageName, containerName, args, env)
-	if err == docker.ErrNoSuchImage {
-		reader, err := builder.Build()
-		if err != nil {
-			return errors.Wrapf(err, "failed to generate Dockerfile to build %s", containerName)
-		}
-
-		err = vm.deployImage(ccid, reader)
-		if err != nil {
-			return err
-		}
-
-		err = vm.createContainer(imageName, containerName, args, env)
-		if err != nil {
-			logger.Errorf("failed to create container: %s", err)
-			return err
-		}
-	} else if err != nil {
+	if err != nil {
 		logger.Errorf("create container failed: %s", err)
 		return err
 	}
@@ -315,15 +345,6 @@ func (vm *DockerVM) Wait(ccid ccintf.CCID) (int, error) {
 
 func (vm *DockerVM) ccidToContainerID(ccid ccintf.CCID) string {
 	return strings.Replace(vm.GetVMName(ccid), ":", "_", -1)
-}
-
-
-
-func (vm *DockerVM) HealthCheck(ctx context.Context) error {
-	if err := vm.Client.PingWithContext(ctx); err != nil {
-		return errors.Wrap(err, "failed to ping to Docker daemon")
-	}
-	return nil
 }
 
 func (vm *DockerVM) stopInternal(id string, timeout uint, dontkill, dontremove bool) error {

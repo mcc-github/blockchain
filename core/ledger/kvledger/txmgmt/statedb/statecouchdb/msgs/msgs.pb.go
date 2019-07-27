@@ -1,11 +1,13 @@
 
 
 
-package msgs 
+package msgs
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	math "math"
+)
 
 
 var _ = proto.Marshal
@@ -16,7 +18,7 @@ var _ = math.Inf
 
 
 
-const _ = proto.ProtoPackageIsVersion2 
+const _ = proto.ProtoPackageIsVersion3 
 
 type VersionFieldProto struct {
 	VersionBytes         []byte   `protobuf:"bytes,1,opt,name=version_bytes,json=versionBytes,proto3" json:"version_bytes,omitempty"`
@@ -30,16 +32,17 @@ func (m *VersionFieldProto) Reset()         { *m = VersionFieldProto{} }
 func (m *VersionFieldProto) String() string { return proto.CompactTextString(m) }
 func (*VersionFieldProto) ProtoMessage()    {}
 func (*VersionFieldProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_msgs_81836a47a7ca9ced, []int{0}
+	return fileDescriptor_952909143bb80d72, []int{0}
 }
+
 func (m *VersionFieldProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_VersionFieldProto.Unmarshal(m, b)
 }
 func (m *VersionFieldProto) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_VersionFieldProto.Marshal(b, m, deterministic)
 }
-func (dst *VersionFieldProto) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_VersionFieldProto.Merge(dst, src)
+func (m *VersionFieldProto) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_VersionFieldProto.Merge(m, src)
 }
 func (m *VersionFieldProto) XXX_Size() int {
 	return xxx_messageInfo_VersionFieldProto.Size(m)
@@ -68,9 +71,9 @@ func init() {
 	proto.RegisterType((*VersionFieldProto)(nil), "msgs.VersionFieldProto")
 }
 
-func init() { proto.RegisterFile("msgs.proto", fileDescriptor_msgs_81836a47a7ca9ced) }
+func init() { proto.RegisterFile("msgs.proto", fileDescriptor_952909143bb80d72) }
 
-var fileDescriptor_msgs_81836a47a7ca9ced = []byte{
+var fileDescriptor_952909143bb80d72 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0xca, 0x2d, 0x4e, 0x2f,
 	0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x01, 0xb1, 0x95, 0x42, 0xb8, 0x04, 0xc3, 0x52,

@@ -73,11 +73,10 @@ func (ps *PubSub) Publish(topic string, item interface{}) error {
 	}
 	for _, sub := range s.ToArray() {
 		c := sub.(*subscription).c
-		
-		if len(c) == subscriptionBuffSize {
-			continue
+		select {
+		case c <- item:
+		default: 
 		}
-		c <- item
 	}
 	return nil
 }
@@ -120,5 +119,4 @@ func (ps *PubSub) unSubscribe(sub *subscription) {
 	
 	
 	delete(ps.subscriptions, sub.top)
-
 }

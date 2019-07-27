@@ -103,8 +103,13 @@ type Tree struct {
 
 
 
-func (t *Tree) Permute() []*Tree {
-	return newTreePermutation(t.Root).permute()
+
+
+
+
+
+func (t *Tree) Permute(combinationUpperBound int) []*Tree {
+	return newTreePermutation(t.Root, combinationUpperBound).permute()
 }
 
 

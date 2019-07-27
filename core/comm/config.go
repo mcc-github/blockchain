@@ -23,7 +23,7 @@ var (
 	MaxRecvMsgSize = 100 * 1024 * 1024
 	MaxSendMsgSize = 100 * 1024 * 1024
 	
-	DefaultKeepaliveOptions = &KeepaliveOptions{
+	DefaultKeepaliveOptions = KeepaliveOptions{
 		ClientInterval:    time.Duration(1) * time.Minute,  
 		ClientTimeout:     time.Duration(20) * time.Second, 
 		ServerInterval:    time.Duration(2) * time.Hour,    
@@ -49,9 +49,9 @@ type ServerConfig struct {
 	
 	ConnectionTimeout time.Duration
 	
-	SecOpts *SecureOptions
+	SecOpts SecureOptions
 	
-	KaOpts *KeepaliveOptions
+	KaOpts KeepaliveOptions
 	
 	
 	StreamInterceptors []grpc.StreamServerInterceptor
@@ -69,9 +69,9 @@ type ServerConfig struct {
 
 type ClientConfig struct {
 	
-	SecOpts *SecureOptions
+	SecOpts SecureOptions
 	
-	KaOpts *KeepaliveOptions
+	KaOpts KeepaliveOptions
 	
 	
 	Timeout time.Duration
@@ -82,14 +82,6 @@ type ClientConfig struct {
 
 func (cc ClientConfig) Clone() ClientConfig {
 	shallowClone := cc
-	if shallowClone.SecOpts != nil {
-		secOptsClone := *cc.SecOpts
-		shallowClone.SecOpts = &secOptsClone
-	}
-	if shallowClone.KaOpts != nil {
-		kaOptsClone := *cc.KaOpts
-		shallowClone.KaOpts = &kaOptsClone
-	}
 	return shallowClone
 }
 
@@ -146,12 +138,7 @@ type Metrics struct {
 }
 
 
-
-func ServerKeepaliveOptions(ka *KeepaliveOptions) []grpc.ServerOption {
-	
-	if ka == nil {
-		ka = DefaultKeepaliveOptions
-	}
+func ServerKeepaliveOptions(ka KeepaliveOptions) []grpc.ServerOption {
 	var serverOpts []grpc.ServerOption
 	kap := keepalive.ServerParameters{
 		Time:    ka.ServerInterval,
@@ -168,13 +155,7 @@ func ServerKeepaliveOptions(ka *KeepaliveOptions) []grpc.ServerOption {
 }
 
 
-
-func ClientKeepaliveOptions(ka *KeepaliveOptions) []grpc.DialOption {
-	
-	if ka == nil {
-		ka = DefaultKeepaliveOptions
-	}
-
+func ClientKeepaliveOptions(ka KeepaliveOptions) []grpc.DialOption {
 	var dialOpts []grpc.DialOption
 	kap := keepalive.ClientParameters{
 		Time:                ka.ClientInterval,

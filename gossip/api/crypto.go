@@ -27,7 +27,7 @@ type MessageCryptoService interface {
 	
 	
 	
-	VerifyBlock(chainID common.ChainID, seqNum uint64, signedBlock []byte) error
+	VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock []byte) error
 
 	
 	
@@ -42,7 +42,7 @@ type MessageCryptoService interface {
 	
 	
 	
-	VerifyByChannel(chainID common.ChainID, peerIdentity PeerIdentityType, signature, message []byte) error
+	VerifyByChannel(channelID common.ChannelID, peerIdentity PeerIdentityType, signature, message []byte) error
 
 	
 	

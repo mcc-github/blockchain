@@ -26,7 +26,7 @@ type SCCFunctions struct {
 	approveChaincodeDefinitionForOrgReturnsOnCall map[int]struct {
 		result1 error
 	}
-	CommitChaincodeDefinitionStub        func(string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) ([]bool, error)
+	CommitChaincodeDefinitionStub        func(string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) (map[string]bool, error)
 	commitChaincodeDefinitionMutex       sync.RWMutex
 	commitChaincodeDefinitionArgsForCall []struct {
 		arg1 string
@@ -36,11 +36,11 @@ type SCCFunctions struct {
 		arg5 []lifecycle.OpaqueState
 	}
 	commitChaincodeDefinitionReturns struct {
-		result1 []bool
+		result1 map[string]bool
 		result2 error
 	}
 	commitChaincodeDefinitionReturnsOnCall map[int]struct {
-		result1 []bool
+		result1 map[string]bool
 		result2 error
 	}
 	InstallChaincodeStub        func([]byte) (*chaincode.InstalledChaincode, error)
@@ -54,23 +54,6 @@ type SCCFunctions struct {
 	}
 	installChaincodeReturnsOnCall map[int]struct {
 		result1 *chaincode.InstalledChaincode
-		result2 error
-	}
-	QueryApprovalStatusStub        func(string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) ([]bool, error)
-	queryApprovalStatusMutex       sync.RWMutex
-	queryApprovalStatusArgsForCall []struct {
-		arg1 string
-		arg2 string
-		arg3 *lifecycle.ChaincodeDefinition
-		arg4 lifecycle.ReadWritableState
-		arg5 []lifecycle.OpaqueState
-	}
-	queryApprovalStatusReturns struct {
-		result1 []bool
-		result2 error
-	}
-	queryApprovalStatusReturnsOnCall map[int]struct {
-		result1 []bool
 		result2 error
 	}
 	QueryChaincodeDefinitionStub        func(string, lifecycle.ReadableState) (*lifecycle.ChaincodeDefinition, error)
@@ -100,17 +83,15 @@ type SCCFunctions struct {
 		result1 *chaincode.InstalledChaincode
 		result2 error
 	}
-	QueryInstalledChaincodesStub        func() ([]chaincode.InstalledChaincode, error)
+	QueryInstalledChaincodesStub        func() []*chaincode.InstalledChaincode
 	queryInstalledChaincodesMutex       sync.RWMutex
 	queryInstalledChaincodesArgsForCall []struct {
 	}
 	queryInstalledChaincodesReturns struct {
-		result1 []chaincode.InstalledChaincode
-		result2 error
+		result1 []*chaincode.InstalledChaincode
 	}
 	queryInstalledChaincodesReturnsOnCall map[int]struct {
-		result1 []chaincode.InstalledChaincode
-		result2 error
+		result1 []*chaincode.InstalledChaincode
 	}
 	QueryNamespaceDefinitionsStub        func(lifecycle.RangeableState) (map[string]string, error)
 	queryNamespaceDefinitionsMutex       sync.RWMutex
@@ -123,6 +104,38 @@ type SCCFunctions struct {
 	}
 	queryNamespaceDefinitionsReturnsOnCall map[int]struct {
 		result1 map[string]string
+		result2 error
+	}
+	QueryOrgApprovalsStub        func(string, *lifecycle.ChaincodeDefinition, []lifecycle.OpaqueState) (map[string]bool, error)
+	queryOrgApprovalsMutex       sync.RWMutex
+	queryOrgApprovalsArgsForCall []struct {
+		arg1 string
+		arg2 *lifecycle.ChaincodeDefinition
+		arg3 []lifecycle.OpaqueState
+	}
+	queryOrgApprovalsReturns struct {
+		result1 map[string]bool
+		result2 error
+	}
+	queryOrgApprovalsReturnsOnCall map[int]struct {
+		result1 map[string]bool
+		result2 error
+	}
+	SimulateCommitChaincodeDefinitionStub        func(string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) (map[string]bool, error)
+	simulateCommitChaincodeDefinitionMutex       sync.RWMutex
+	simulateCommitChaincodeDefinitionArgsForCall []struct {
+		arg1 string
+		arg2 string
+		arg3 *lifecycle.ChaincodeDefinition
+		arg4 lifecycle.ReadWritableState
+		arg5 []lifecycle.OpaqueState
+	}
+	simulateCommitChaincodeDefinitionReturns struct {
+		result1 map[string]bool
+		result2 error
+	}
+	simulateCommitChaincodeDefinitionReturnsOnCall map[int]struct {
+		result1 map[string]bool
 		result2 error
 	}
 	invocations      map[string][][]interface{}
@@ -194,7 +207,7 @@ func (fake *SCCFunctions) ApproveChaincodeDefinitionForOrgReturnsOnCall(i int, r
 	}{result1}
 }
 
-func (fake *SCCFunctions) CommitChaincodeDefinition(arg1 string, arg2 string, arg3 *lifecycle.ChaincodeDefinition, arg4 lifecycle.ReadWritableState, arg5 []lifecycle.OpaqueState) ([]bool, error) {
+func (fake *SCCFunctions) CommitChaincodeDefinition(arg1 string, arg2 string, arg3 *lifecycle.ChaincodeDefinition, arg4 lifecycle.ReadWritableState, arg5 []lifecycle.OpaqueState) (map[string]bool, error) {
 	var arg5Copy []lifecycle.OpaqueState
 	if arg5 != nil {
 		arg5Copy = make([]lifecycle.OpaqueState, len(arg5))
@@ -227,7 +240,7 @@ func (fake *SCCFunctions) CommitChaincodeDefinitionCallCount() int {
 	return len(fake.commitChaincodeDefinitionArgsForCall)
 }
 
-func (fake *SCCFunctions) CommitChaincodeDefinitionCalls(stub func(string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) ([]bool, error)) {
+func (fake *SCCFunctions) CommitChaincodeDefinitionCalls(stub func(string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) (map[string]bool, error)) {
 	fake.commitChaincodeDefinitionMutex.Lock()
 	defer fake.commitChaincodeDefinitionMutex.Unlock()
 	fake.CommitChaincodeDefinitionStub = stub
@@ -240,28 +253,28 @@ func (fake *SCCFunctions) CommitChaincodeDefinitionArgsForCall(i int) (string, s
 	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4, argsForCall.arg5
 }
 
-func (fake *SCCFunctions) CommitChaincodeDefinitionReturns(result1 []bool, result2 error) {
+func (fake *SCCFunctions) CommitChaincodeDefinitionReturns(result1 map[string]bool, result2 error) {
 	fake.commitChaincodeDefinitionMutex.Lock()
 	defer fake.commitChaincodeDefinitionMutex.Unlock()
 	fake.CommitChaincodeDefinitionStub = nil
 	fake.commitChaincodeDefinitionReturns = struct {
-		result1 []bool
+		result1 map[string]bool
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *SCCFunctions) CommitChaincodeDefinitionReturnsOnCall(i int, result1 []bool, result2 error) {
+func (fake *SCCFunctions) CommitChaincodeDefinitionReturnsOnCall(i int, result1 map[string]bool, result2 error) {
 	fake.commitChaincodeDefinitionMutex.Lock()
 	defer fake.commitChaincodeDefinitionMutex.Unlock()
 	fake.CommitChaincodeDefinitionStub = nil
 	if fake.commitChaincodeDefinitionReturnsOnCall == nil {
 		fake.commitChaincodeDefinitionReturnsOnCall = make(map[int]struct {
-			result1 []bool
+			result1 map[string]bool
 			result2 error
 		})
 	}
 	fake.commitChaincodeDefinitionReturnsOnCall[i] = struct {
-		result1 []bool
+		result1 map[string]bool
 		result2 error
 	}{result1, result2}
 }
@@ -330,78 +343,6 @@ func (fake *SCCFunctions) InstallChaincodeReturnsOnCall(i int, result1 *chaincod
 	}
 	fake.installChaincodeReturnsOnCall[i] = struct {
 		result1 *chaincode.InstalledChaincode
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *SCCFunctions) QueryApprovalStatus(arg1 string, arg2 string, arg3 *lifecycle.ChaincodeDefinition, arg4 lifecycle.ReadWritableState, arg5 []lifecycle.OpaqueState) ([]bool, error) {
-	var arg5Copy []lifecycle.OpaqueState
-	if arg5 != nil {
-		arg5Copy = make([]lifecycle.OpaqueState, len(arg5))
-		copy(arg5Copy, arg5)
-	}
-	fake.queryApprovalStatusMutex.Lock()
-	ret, specificReturn := fake.queryApprovalStatusReturnsOnCall[len(fake.queryApprovalStatusArgsForCall)]
-	fake.queryApprovalStatusArgsForCall = append(fake.queryApprovalStatusArgsForCall, struct {
-		arg1 string
-		arg2 string
-		arg3 *lifecycle.ChaincodeDefinition
-		arg4 lifecycle.ReadWritableState
-		arg5 []lifecycle.OpaqueState
-	}{arg1, arg2, arg3, arg4, arg5Copy})
-	fake.recordInvocation("QueryApprovalStatus", []interface{}{arg1, arg2, arg3, arg4, arg5Copy})
-	fake.queryApprovalStatusMutex.Unlock()
-	if fake.QueryApprovalStatusStub != nil {
-		return fake.QueryApprovalStatusStub(arg1, arg2, arg3, arg4, arg5)
-	}
-	if specificReturn {
-		return ret.result1, ret.result2
-	}
-	fakeReturns := fake.queryApprovalStatusReturns
-	return fakeReturns.result1, fakeReturns.result2
-}
-
-func (fake *SCCFunctions) QueryApprovalStatusCallCount() int {
-	fake.queryApprovalStatusMutex.RLock()
-	defer fake.queryApprovalStatusMutex.RUnlock()
-	return len(fake.queryApprovalStatusArgsForCall)
-}
-
-func (fake *SCCFunctions) QueryApprovalStatusCalls(stub func(string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) ([]bool, error)) {
-	fake.queryApprovalStatusMutex.Lock()
-	defer fake.queryApprovalStatusMutex.Unlock()
-	fake.QueryApprovalStatusStub = stub
-}
-
-func (fake *SCCFunctions) QueryApprovalStatusArgsForCall(i int) (string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) {
-	fake.queryApprovalStatusMutex.RLock()
-	defer fake.queryApprovalStatusMutex.RUnlock()
-	argsForCall := fake.queryApprovalStatusArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4, argsForCall.arg5
-}
-
-func (fake *SCCFunctions) QueryApprovalStatusReturns(result1 []bool, result2 error) {
-	fake.queryApprovalStatusMutex.Lock()
-	defer fake.queryApprovalStatusMutex.Unlock()
-	fake.QueryApprovalStatusStub = nil
-	fake.queryApprovalStatusReturns = struct {
-		result1 []bool
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *SCCFunctions) QueryApprovalStatusReturnsOnCall(i int, result1 []bool, result2 error) {
-	fake.queryApprovalStatusMutex.Lock()
-	defer fake.queryApprovalStatusMutex.Unlock()
-	fake.QueryApprovalStatusStub = nil
-	if fake.queryApprovalStatusReturnsOnCall == nil {
-		fake.queryApprovalStatusReturnsOnCall = make(map[int]struct {
-			result1 []bool
-			result2 error
-		})
-	}
-	fake.queryApprovalStatusReturnsOnCall[i] = struct {
-		result1 []bool
 		result2 error
 	}{result1, result2}
 }
@@ -533,7 +474,7 @@ func (fake *SCCFunctions) QueryInstalledChaincodeReturnsOnCall(i int, result1 *c
 	}{result1, result2}
 }
 
-func (fake *SCCFunctions) QueryInstalledChaincodes() ([]chaincode.InstalledChaincode, error) {
+func (fake *SCCFunctions) QueryInstalledChaincodes() []*chaincode.InstalledChaincode {
 	fake.queryInstalledChaincodesMutex.Lock()
 	ret, specificReturn := fake.queryInstalledChaincodesReturnsOnCall[len(fake.queryInstalledChaincodesArgsForCall)]
 	fake.queryInstalledChaincodesArgsForCall = append(fake.queryInstalledChaincodesArgsForCall, struct {
@@ -544,10 +485,10 @@ func (fake *SCCFunctions) QueryInstalledChaincodes() ([]chaincode.InstalledChain
 		return fake.QueryInstalledChaincodesStub()
 	}
 	if specificReturn {
-		return ret.result1, ret.result2
+		return ret.result1
 	}
 	fakeReturns := fake.queryInstalledChaincodesReturns
-	return fakeReturns.result1, fakeReturns.result2
+	return fakeReturns.result1
 }
 
 func (fake *SCCFunctions) QueryInstalledChaincodesCallCount() int {
@@ -556,36 +497,33 @@ func (fake *SCCFunctions) QueryInstalledChaincodesCallCount() int {
 	return len(fake.queryInstalledChaincodesArgsForCall)
 }
 
-func (fake *SCCFunctions) QueryInstalledChaincodesCalls(stub func() ([]chaincode.InstalledChaincode, error)) {
+func (fake *SCCFunctions) QueryInstalledChaincodesCalls(stub func() []*chaincode.InstalledChaincode) {
 	fake.queryInstalledChaincodesMutex.Lock()
 	defer fake.queryInstalledChaincodesMutex.Unlock()
 	fake.QueryInstalledChaincodesStub = stub
 }
 
-func (fake *SCCFunctions) QueryInstalledChaincodesReturns(result1 []chaincode.InstalledChaincode, result2 error) {
+func (fake *SCCFunctions) QueryInstalledChaincodesReturns(result1 []*chaincode.InstalledChaincode) {
 	fake.queryInstalledChaincodesMutex.Lock()
 	defer fake.queryInstalledChaincodesMutex.Unlock()
 	fake.QueryInstalledChaincodesStub = nil
 	fake.queryInstalledChaincodesReturns = struct {
-		result1 []chaincode.InstalledChaincode
-		result2 error
-	}{result1, result2}
+		result1 []*chaincode.InstalledChaincode
+	}{result1}
 }
 
-func (fake *SCCFunctions) QueryInstalledChaincodesReturnsOnCall(i int, result1 []chaincode.InstalledChaincode, result2 error) {
+func (fake *SCCFunctions) QueryInstalledChaincodesReturnsOnCall(i int, result1 []*chaincode.InstalledChaincode) {
 	fake.queryInstalledChaincodesMutex.Lock()
 	defer fake.queryInstalledChaincodesMutex.Unlock()
 	fake.QueryInstalledChaincodesStub = nil
 	if fake.queryInstalledChaincodesReturnsOnCall == nil {
 		fake.queryInstalledChaincodesReturnsOnCall = make(map[int]struct {
-			result1 []chaincode.InstalledChaincode
-			result2 error
+			result1 []*chaincode.InstalledChaincode
 		})
 	}
 	fake.queryInstalledChaincodesReturnsOnCall[i] = struct {
-		result1 []chaincode.InstalledChaincode
-		result2 error
-	}{result1, result2}
+		result1 []*chaincode.InstalledChaincode
+	}{result1}
 }
 
 func (fake *SCCFunctions) QueryNamespaceDefinitions(arg1 lifecycle.RangeableState) (map[string]string, error) {
@@ -651,6 +589,148 @@ func (fake *SCCFunctions) QueryNamespaceDefinitionsReturnsOnCall(i int, result1 
 	}{result1, result2}
 }
 
+func (fake *SCCFunctions) QueryOrgApprovals(arg1 string, arg2 *lifecycle.ChaincodeDefinition, arg3 []lifecycle.OpaqueState) (map[string]bool, error) {
+	var arg3Copy []lifecycle.OpaqueState
+	if arg3 != nil {
+		arg3Copy = make([]lifecycle.OpaqueState, len(arg3))
+		copy(arg3Copy, arg3)
+	}
+	fake.queryOrgApprovalsMutex.Lock()
+	ret, specificReturn := fake.queryOrgApprovalsReturnsOnCall[len(fake.queryOrgApprovalsArgsForCall)]
+	fake.queryOrgApprovalsArgsForCall = append(fake.queryOrgApprovalsArgsForCall, struct {
+		arg1 string
+		arg2 *lifecycle.ChaincodeDefinition
+		arg3 []lifecycle.OpaqueState
+	}{arg1, arg2, arg3Copy})
+	fake.recordInvocation("QueryOrgApprovals", []interface{}{arg1, arg2, arg3Copy})
+	fake.queryOrgApprovalsMutex.Unlock()
+	if fake.QueryOrgApprovalsStub != nil {
+		return fake.QueryOrgApprovalsStub(arg1, arg2, arg3)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	fakeReturns := fake.queryOrgApprovalsReturns
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *SCCFunctions) QueryOrgApprovalsCallCount() int {
+	fake.queryOrgApprovalsMutex.RLock()
+	defer fake.queryOrgApprovalsMutex.RUnlock()
+	return len(fake.queryOrgApprovalsArgsForCall)
+}
+
+func (fake *SCCFunctions) QueryOrgApprovalsCalls(stub func(string, *lifecycle.ChaincodeDefinition, []lifecycle.OpaqueState) (map[string]bool, error)) {
+	fake.queryOrgApprovalsMutex.Lock()
+	defer fake.queryOrgApprovalsMutex.Unlock()
+	fake.QueryOrgApprovalsStub = stub
+}
+
+func (fake *SCCFunctions) QueryOrgApprovalsArgsForCall(i int) (string, *lifecycle.ChaincodeDefinition, []lifecycle.OpaqueState) {
+	fake.queryOrgApprovalsMutex.RLock()
+	defer fake.queryOrgApprovalsMutex.RUnlock()
+	argsForCall := fake.queryOrgApprovalsArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+}
+
+func (fake *SCCFunctions) QueryOrgApprovalsReturns(result1 map[string]bool, result2 error) {
+	fake.queryOrgApprovalsMutex.Lock()
+	defer fake.queryOrgApprovalsMutex.Unlock()
+	fake.QueryOrgApprovalsStub = nil
+	fake.queryOrgApprovalsReturns = struct {
+		result1 map[string]bool
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *SCCFunctions) QueryOrgApprovalsReturnsOnCall(i int, result1 map[string]bool, result2 error) {
+	fake.queryOrgApprovalsMutex.Lock()
+	defer fake.queryOrgApprovalsMutex.Unlock()
+	fake.QueryOrgApprovalsStub = nil
+	if fake.queryOrgApprovalsReturnsOnCall == nil {
+		fake.queryOrgApprovalsReturnsOnCall = make(map[int]struct {
+			result1 map[string]bool
+			result2 error
+		})
+	}
+	fake.queryOrgApprovalsReturnsOnCall[i] = struct {
+		result1 map[string]bool
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *SCCFunctions) SimulateCommitChaincodeDefinition(arg1 string, arg2 string, arg3 *lifecycle.ChaincodeDefinition, arg4 lifecycle.ReadWritableState, arg5 []lifecycle.OpaqueState) (map[string]bool, error) {
+	var arg5Copy []lifecycle.OpaqueState
+	if arg5 != nil {
+		arg5Copy = make([]lifecycle.OpaqueState, len(arg5))
+		copy(arg5Copy, arg5)
+	}
+	fake.simulateCommitChaincodeDefinitionMutex.Lock()
+	ret, specificReturn := fake.simulateCommitChaincodeDefinitionReturnsOnCall[len(fake.simulateCommitChaincodeDefinitionArgsForCall)]
+	fake.simulateCommitChaincodeDefinitionArgsForCall = append(fake.simulateCommitChaincodeDefinitionArgsForCall, struct {
+		arg1 string
+		arg2 string
+		arg3 *lifecycle.ChaincodeDefinition
+		arg4 lifecycle.ReadWritableState
+		arg5 []lifecycle.OpaqueState
+	}{arg1, arg2, arg3, arg4, arg5Copy})
+	fake.recordInvocation("SimulateCommitChaincodeDefinition", []interface{}{arg1, arg2, arg3, arg4, arg5Copy})
+	fake.simulateCommitChaincodeDefinitionMutex.Unlock()
+	if fake.SimulateCommitChaincodeDefinitionStub != nil {
+		return fake.SimulateCommitChaincodeDefinitionStub(arg1, arg2, arg3, arg4, arg5)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	fakeReturns := fake.simulateCommitChaincodeDefinitionReturns
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *SCCFunctions) SimulateCommitChaincodeDefinitionCallCount() int {
+	fake.simulateCommitChaincodeDefinitionMutex.RLock()
+	defer fake.simulateCommitChaincodeDefinitionMutex.RUnlock()
+	return len(fake.simulateCommitChaincodeDefinitionArgsForCall)
+}
+
+func (fake *SCCFunctions) SimulateCommitChaincodeDefinitionCalls(stub func(string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) (map[string]bool, error)) {
+	fake.simulateCommitChaincodeDefinitionMutex.Lock()
+	defer fake.simulateCommitChaincodeDefinitionMutex.Unlock()
+	fake.SimulateCommitChaincodeDefinitionStub = stub
+}
+
+func (fake *SCCFunctions) SimulateCommitChaincodeDefinitionArgsForCall(i int) (string, string, *lifecycle.ChaincodeDefinition, lifecycle.ReadWritableState, []lifecycle.OpaqueState) {
+	fake.simulateCommitChaincodeDefinitionMutex.RLock()
+	defer fake.simulateCommitChaincodeDefinitionMutex.RUnlock()
+	argsForCall := fake.simulateCommitChaincodeDefinitionArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4, argsForCall.arg5
+}
+
+func (fake *SCCFunctions) SimulateCommitChaincodeDefinitionReturns(result1 map[string]bool, result2 error) {
+	fake.simulateCommitChaincodeDefinitionMutex.Lock()
+	defer fake.simulateCommitChaincodeDefinitionMutex.Unlock()
+	fake.SimulateCommitChaincodeDefinitionStub = nil
+	fake.simulateCommitChaincodeDefinitionReturns = struct {
+		result1 map[string]bool
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *SCCFunctions) SimulateCommitChaincodeDefinitionReturnsOnCall(i int, result1 map[string]bool, result2 error) {
+	fake.simulateCommitChaincodeDefinitionMutex.Lock()
+	defer fake.simulateCommitChaincodeDefinitionMutex.Unlock()
+	fake.SimulateCommitChaincodeDefinitionStub = nil
+	if fake.simulateCommitChaincodeDefinitionReturnsOnCall == nil {
+		fake.simulateCommitChaincodeDefinitionReturnsOnCall = make(map[int]struct {
+			result1 map[string]bool
+			result2 error
+		})
+	}
+	fake.simulateCommitChaincodeDefinitionReturnsOnCall[i] = struct {
+		result1 map[string]bool
+		result2 error
+	}{result1, result2}
+}
+
 func (fake *SCCFunctions) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
@@ -660,8 +740,6 @@ func (fake *SCCFunctions) Invocations() map[string][][]interface{} {
 	defer fake.commitChaincodeDefinitionMutex.RUnlock()
 	fake.installChaincodeMutex.RLock()
 	defer fake.installChaincodeMutex.RUnlock()
-	fake.queryApprovalStatusMutex.RLock()
-	defer fake.queryApprovalStatusMutex.RUnlock()
 	fake.queryChaincodeDefinitionMutex.RLock()
 	defer fake.queryChaincodeDefinitionMutex.RUnlock()
 	fake.queryInstalledChaincodeMutex.RLock()
@@ -670,6 +748,10 @@ func (fake *SCCFunctions) Invocations() map[string][][]interface{} {
 	defer fake.queryInstalledChaincodesMutex.RUnlock()
 	fake.queryNamespaceDefinitionsMutex.RLock()
 	defer fake.queryNamespaceDefinitionsMutex.RUnlock()
+	fake.queryOrgApprovalsMutex.RLock()
+	defer fake.queryOrgApprovalsMutex.RUnlock()
+	fake.simulateCommitChaincodeDefinitionMutex.RLock()
+	defer fake.simulateCommitChaincodeDefinitionMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

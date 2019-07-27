@@ -15,6 +15,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/consensus"
@@ -75,7 +76,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestHandleChain(t *testing.T) {
-	consenter, _ := New(mockLocalConfig.Kafka, &mock.MetricsProvider{}, &mock.HealthChecker{})
+	consenter, _ := New(mockLocalConfig.Kafka, &disabled.Provider{}, &mock.HealthChecker{})
 
 	oldestOffset := int64(0)
 	newestOffset := int64(5)
@@ -146,6 +147,7 @@ func newMockConsenter(brokerConfig *sarama.Config, tlsConfig localconfig.TLS, re
 		tlsConfigVal:    tlsConfig,
 		retryOptionsVal: retryOptions,
 		kafkaVersionVal: kafkaVersion,
+		metrics:         NewMetrics(&disabled.Provider{}, nil),
 	}
 }
 

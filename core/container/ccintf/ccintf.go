@@ -22,12 +22,6 @@ type ChaincodeStream interface {
 }
 
 
-
-type CCSupport interface {
-	HandleChaincodeStream(ChaincodeStream) error
-}
-
-
 type CCID string
 
 

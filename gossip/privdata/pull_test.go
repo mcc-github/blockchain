@@ -217,7 +217,7 @@ func newMockGossip(id *comm.RemotePeer) *mockGossip {
 	}
 }
 
-func (g *mockGossip) PeerFilter(channel common.ChainID, messagePredicate api.SubChannelSelectionCriteria) (filter.RoutingFilter, error) {
+func (g *mockGossip) PeerFilter(channel common.ChannelID, messagePredicate api.SubChannelSelectionCriteria) (filter.RoutingFilter, error) {
 	for _, call := range g.Mock.ExpectedCalls {
 		if call.Method == "PeerFilter" {
 			args := g.Called(channel, messagePredicate)
@@ -248,7 +248,7 @@ func (g *mockGossip) Send(msg *proto.GossipMessage, peers ...*comm.RemotePeer) {
 	}
 }
 
-func (g *mockGossip) PeersOfChannel(common.ChainID) []discovery.NetworkMember {
+func (g *mockGossip) PeersOfChannel(common.ChannelID) []discovery.NetworkMember {
 	return g.Called().Get(0).([]discovery.NetworkMember)
 }
 
@@ -285,7 +285,7 @@ func (gn *gossipNetwork) newPullerWithMetrics(metrics *metrics.PrivdataMetrics, 
 	g.network = gn
 	g.On("PeersOfChannel", mock.Anything).Return(knownMembers)
 
-	p := NewPuller(metrics, ps, g, &dataRetrieverMock{}, factory, "A", btlPullMarginDefault)
+	p := NewPuller(metrics, ps, g, &dataRetrieverMock{}, factory, "A", 10)
 	gn.peers = append(gn.peers, g)
 	return p
 }

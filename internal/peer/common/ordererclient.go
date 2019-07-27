@@ -17,7 +17,7 @@ import (
 
 
 type OrdererClient struct {
-	commonClient
+	CommonClient
 }
 
 
@@ -32,18 +32,18 @@ func NewOrdererClientFromEnv() (*OrdererClient, error) {
 		return nil, errors.WithMessage(err, "failed to create OrdererClient from config")
 	}
 	oClient := &OrdererClient{
-		commonClient: commonClient{
+		CommonClient: CommonClient{
 			GRPCClient: gClient,
-			address:    address,
+			Address:    address,
 			sn:         override}}
 	return oClient, nil
 }
 
 
 func (oc *OrdererClient) Broadcast() (ab.AtomicBroadcast_BroadcastClient, error) {
-	conn, err := oc.commonClient.NewConnection(oc.address, oc.sn)
+	conn, err := oc.CommonClient.NewConnection(oc.Address, oc.sn)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "orderer client failed to connect to %s", oc.address)
+		return nil, errors.WithMessagef(err, "orderer client failed to connect to %s", oc.Address)
 	}
 	
 	return ab.NewAtomicBroadcastClient(conn).Broadcast(context.TODO())
@@ -51,9 +51,9 @@ func (oc *OrdererClient) Broadcast() (ab.AtomicBroadcast_BroadcastClient, error)
 
 
 func (oc *OrdererClient) Deliver() (ab.AtomicBroadcast_DeliverClient, error) {
-	conn, err := oc.commonClient.NewConnection(oc.address, oc.sn)
+	conn, err := oc.CommonClient.NewConnection(oc.Address, oc.sn)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "orderer client failed to connect to %s", oc.address)
+		return nil, errors.WithMessagef(err, "orderer client failed to connect to %s", oc.Address)
 	}
 	
 	return ab.NewAtomicBroadcastClient(conn).Deliver(context.TODO())
@@ -62,5 +62,5 @@ func (oc *OrdererClient) Deliver() (ab.AtomicBroadcast_DeliverClient, error) {
 
 
 func (oc *OrdererClient) Certificate() tls.Certificate {
-	return oc.commonClient.Certificate()
+	return oc.CommonClient.Certificate()
 }

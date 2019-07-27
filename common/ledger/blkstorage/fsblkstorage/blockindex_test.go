@@ -12,6 +12,7 @@ import (
 
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
@@ -123,7 +124,7 @@ func testBlockIndexSelectiveIndexingWrongConfig(t *testing.T, indexItems []blkst
 		testName = testName + string(s)
 	}
 	t.Run(testName, func(t *testing.T) {
-		env := newTestEnvSelectiveIndexing(t, NewConf(testPath(), 0), indexItems)
+		env := newTestEnvSelectiveIndexing(t, NewConf(testPath(), 0), indexItems, &disabled.Provider{})
 		defer env.Cleanup()
 
 		assert.Panics(t, func() {
@@ -150,7 +151,7 @@ func testBlockIndexSelectiveIndexing(t *testing.T, indexItems []blkstorage.Index
 		testName = testName + string(s)
 	}
 	t.Run(testName, func(t *testing.T) {
-		env := newTestEnvSelectiveIndexing(t, NewConf(testPath(), 0), indexItems)
+		env := newTestEnvSelectiveIndexing(t, NewConf(testPath(), 0), indexItems, &disabled.Provider{})
 		defer env.Cleanup()
 		blkfileMgrWrapper := newTestBlockfileWrapper(env, "testledger")
 		defer blkfileMgrWrapper.close()
@@ -180,7 +181,7 @@ func testBlockIndexSelectiveIndexing(t *testing.T, indexItems []blkstorage.Index
 		}
 
 		
-		txid, err := extractTxID(blocks[0].Data.Data[0])
+		txid, err := protoutil.GetOrComputeTxIDFromEnvelope(blocks[0].Data.Data[0])
 		assert.NoError(t, err)
 		txEnvelope, err := blockfileMgr.retrieveTransactionByID(txid)
 		if containsAttr(indexItems, blkstorage.IndexableAttrTxID) {
@@ -206,7 +207,7 @@ func testBlockIndexSelectiveIndexing(t *testing.T, indexItems []blkstorage.Index
 		}
 
 		
-		txid, err = extractTxID(blocks[0].Data.Data[0])
+		txid, err = protoutil.GetOrComputeTxIDFromEnvelope(blocks[0].Data.Data[0])
 		assert.NoError(t, err)
 		block, err = blockfileMgr.retrieveBlockByTxID(txid)
 		if containsAttr(indexItems, blkstorage.IndexableAttrBlockTxID) {
@@ -220,7 +221,7 @@ func testBlockIndexSelectiveIndexing(t *testing.T, indexItems []blkstorage.Index
 			flags := util.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 
 			for idx, d := range block.Data.Data {
-				txid, err = extractTxID(d)
+				txid, err = protoutil.GetOrComputeTxIDFromEnvelope(d)
 				assert.NoError(t, err)
 
 				reason, err := blockfileMgr.retrieveTxValidationCodeByTxID(txid)

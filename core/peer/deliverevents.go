@@ -9,7 +9,6 @@ package peer
 import (
 	"runtime/debug"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/deliver"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
@@ -122,17 +121,6 @@ func (s *DeliverServer) Deliver(srv peer.Deliver_DeliverServer) (err error) {
 		},
 	}
 	return s.DeliverHandler.Handle(srv.Context(), deliverServer)
-}
-
-func (s *DeliverServer) sendProducer(srv peer.Deliver_DeliverFilteredServer) func(msg proto.Message) error {
-	return func(msg proto.Message) error {
-		response, ok := msg.(*peer.DeliverResponse)
-		if !ok {
-			logger.Errorf("received wrong response type, expected response type peer.DeliverResponse")
-			return errors.New("expected response type peer.DeliverResponse")
-		}
-		return srv.Send(response)
-	}
 }
 
 func (block *blockEvent) toFilteredBlock() (*peer.FilteredBlock, error) {

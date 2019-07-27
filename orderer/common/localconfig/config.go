@@ -40,21 +40,22 @@ type TopLevel struct {
 
 
 type General struct {
-	LedgerType     string
-	ListenAddress  string
-	ListenPort     uint16
-	TLS            TLS
-	Cluster        Cluster
-	Keepalive      Keepalive
-	GenesisMethod  string
-	GenesisProfile string
-	SystemChannel  string
-	GenesisFile    string
-	Profile        Profile
-	LocalMSPDir    string
-	LocalMSPID     string
-	BCCSP          *bccsp.FactoryOpts
-	Authentication Authentication
+	LedgerType        string
+	ListenAddress     string
+	ListenPort        uint16
+	TLS               TLS
+	Cluster           Cluster
+	Keepalive         Keepalive
+	ConnectionTimeout time.Duration
+	GenesisMethod     string
+	GenesisProfile    string
+	SystemChannel     string
+	GenesisFile       string
+	Profile           Profile
+	LocalMSPDir       string
+	LocalMSPID        string
+	BCCSP             *bccsp.FactoryOpts
+	Authentication    Authentication
 }
 
 type Cluster struct {
@@ -330,6 +331,8 @@ func (c *TopLevel) completeInitialization(configDir string) {
 		coreconfig.TranslatePathInPlace(configDir, &c.General.TLS.Certificate)
 		coreconfig.TranslatePathInPlace(configDir, &c.General.GenesisFile)
 		coreconfig.TranslatePathInPlace(configDir, &c.General.LocalMSPDir)
+		
+		coreconfig.TranslatePathInPlace(configDir, &c.FileLedger.Location)
 	}()
 
 	for {

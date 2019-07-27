@@ -339,7 +339,7 @@ func (v *VsccValidatorImpl) GetInfoForValidate(chdr *common.ChannelHeader, ccID 
 		
 		
 		
-		p := cauthdsl.SignedByAnyMember(v.cr.GetMSPIDs(chdr.ChannelId))
+		p := cauthdsl.SignedByAnyMember(v.cr.GetMSPIDs())
 		policy, err = protoutil.Marshal(p)
 		if err != nil {
 			return nil, nil, nil, err

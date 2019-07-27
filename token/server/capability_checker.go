@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package server
 
 import (
-	"github.com/mcc-github/blockchain/core/peer"
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/pkg/errors"
 )
 
@@ -18,12 +18,19 @@ type CapabilityChecker interface {
 }
 
 
+
+
+type ChannelConfigGetter interface {
+	GetChannelConfig(cid string) channelconfig.Resources
+}
+
+
 type TokenCapabilityChecker struct {
-	PeerOps peer.Operations
+	ChannelConfigGetter ChannelConfigGetter
 }
 
 func (c *TokenCapabilityChecker) FabToken(channelId string) (bool, error) {
-	channelConfig := c.PeerOps.GetChannelConfig(channelId)
+	channelConfig := c.ChannelConfigGetter.GetChannelConfig(channelId)
 	if channelConfig == nil {
 		
 		return false, errors.Errorf("no channel config found for channel %s", channelId)

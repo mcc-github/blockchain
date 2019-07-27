@@ -182,7 +182,7 @@ func (c *commImpl) createConnection(endpoint string, expectedPKIID common.PKIidT
 				RecvBuffSize: c.recvBuffSize,
 				SendBuffSize: c.sendBuffSize,
 			}
-			conn := newConnection(cl, cc, stream, nil, c.metrics, connConfig)
+			conn := newConnection(cl, cc, stream, c.metrics, connConfig)
 			conn.pkiID = pkiID
 			conn.info = connInfo
 			conn.logger = c.logger
@@ -192,7 +192,6 @@ func (c *commImpl) createConnection(endpoint string, expectedPKIID common.PKIidT
 				c.logger.Debug("Got message:", m)
 				c.msgPublisher.DeMultiplex(&ReceivedMessageImpl{
 					conn:                conn,
-					lock:                conn,
 					SignedGossipMessage: m,
 					connInfo:            connInfo,
 				})
@@ -332,8 +331,8 @@ func (c *commImpl) Accept(acceptor common.MessageAcceptor) <-chan protoext.Recei
 
 		for {
 			select {
-			case msg := <-genericChan:
-				if msg == nil {
+			case msg, channelOpen := <-genericChan:
+				if !channelOpen {
 					return
 				}
 				select {
@@ -559,7 +558,6 @@ func (c *commImpl) GossipStream(stream proto.Gossip_GossipStreamServer) error {
 	h := func(m *protoext.SignedGossipMessage) {
 		c.msgPublisher.DeMultiplex(&ReceivedMessageImpl{
 			conn:                conn,
-			lock:                conn,
 			SignedGossipMessage: m,
 			connInfo:            connInfo,
 		})
@@ -570,7 +568,6 @@ func (c *commImpl) GossipStream(stream proto.Gossip_GossipStreamServer) error {
 	defer func() {
 		c.logger.Debug("Client", extractRemoteAddress(stream), " disconnected")
 		c.connStore.closeConnByPKIid(connInfo.ID)
-		conn.close()
 	}()
 
 	return conn.serviceConnection()
@@ -588,30 +585,17 @@ func (c *commImpl) disconnect(pkiID common.PKIidType) {
 	c.connStore.closeConnByPKIid(pkiID)
 }
 
-func readWithTimeout(stream interface{}, timeout time.Duration, address string) (*protoext.SignedGossipMessage, error) {
+func readWithTimeout(stream stream, timeout time.Duration, address string) (*protoext.SignedGossipMessage, error) {
 	incChan := make(chan *protoext.SignedGossipMessage, 1)
 	errChan := make(chan error, 1)
 	go func() {
-		if srvStr, isServerStr := stream.(proto.Gossip_GossipStreamServer); isServerStr {
-			if m, err := srvStr.Recv(); err == nil {
-				msg, err := protoext.EnvelopeToGossipMessage(m)
-				if err != nil {
-					errChan <- err
-					return
-				}
-				incChan <- msg
+		if m, err := stream.Recv(); err == nil {
+			msg, err := protoext.EnvelopeToGossipMessage(m)
+			if err != nil {
+				errChan <- err
+				return
 			}
-		} else if clStr, isClientStr := stream.(proto.Gossip_GossipStreamClient); isClientStr {
-			if m, err := clStr.Recv(); err == nil {
-				msg, err := protoext.EnvelopeToGossipMessage(m)
-				if err != nil {
-					errChan <- err
-					return
-				}
-				incChan <- msg
-			}
-		} else {
-			panic(errors.Errorf("Stream isn't a GossipStreamServer or a GossipStreamClient, but %v. Aborting", reflect.TypeOf(stream)))
+			incChan <- msg
 		}
 	}()
 	select {
@@ -646,7 +630,7 @@ func (c *commImpl) createConnectionMsg(pkiID common.PKIidType, certHash []byte, 
 type stream interface {
 	Send(envelope *proto.Envelope) error
 	Recv() (*proto.Envelope, error)
-	grpc.Stream
+	Context() context.Context
 }
 
 func topicForAck(nonce uint64, pkiID common.PKIidType) string {

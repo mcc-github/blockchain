@@ -15,14 +15,14 @@ import (
 	"github.com/mcc-github/blockchain/cmd/common"
 	"github.com/mcc-github/blockchain/cmd/common/comm"
 	"github.com/mcc-github/blockchain/cmd/common/signer"
-	c "github.com/mcc-github/blockchain/core/comm"
+	corecomm "github.com/mcc-github/blockchain/core/comm"
 	discovery "github.com/mcc-github/blockchain/discovery/client"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestClientStub(t *testing.T) {
-	srv, err := c.NewGRPCServer("127.0.0.1:", c.ServerConfig{
-		SecOpts: &c.SecureOptions{},
+	srv, err := corecomm.NewGRPCServer("127.0.0.1:", corecomm.ServerConfig{
+		SecOpts: corecomm.SecureOptions{},
 	})
 	assert.NoError(t, err)
 	go srv.Start()
@@ -46,8 +46,8 @@ func TestClientStub(t *testing.T) {
 }
 
 func TestRawStub(t *testing.T) {
-	srv, err := c.NewGRPCServer("127.0.0.1:", c.ServerConfig{
-		SecOpts: &c.SecureOptions{},
+	srv, err := corecomm.NewGRPCServer("127.0.0.1:", corecomm.ServerConfig{
+		SecOpts: corecomm.SecureOptions{},
 	})
 	assert.NoError(t, err)
 	go srv.Start()

@@ -72,5 +72,5 @@ func GetLogger(name string, peerID string) Logger {
 
 func SetupTestLogging() {
 	testMode = true
-	flogging.InitFromSpec(defaultTestSpec)
+	flogging.ActivateSpec(defaultTestSpec)
 }

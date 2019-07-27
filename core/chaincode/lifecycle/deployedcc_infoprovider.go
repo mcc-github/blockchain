@@ -9,6 +9,7 @@ package lifecycle
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/util"
@@ -101,6 +102,7 @@ func (vc *ValidatorCommitter) ChaincodeInfo(channelName, chaincodeName string, q
 		Hash:                        util.ComputeSHA256([]byte(chaincodeName + ":" + definedChaincode.EndorsementInfo.Version)),
 		ExplicitCollectionConfigPkg: definedChaincode.Collections,
 		ImplicitCollections:         ic,
+		IsLegacy:                    false,
 	}, nil
 }
 
@@ -189,6 +191,10 @@ func GenerateImplicitCollectionForOrg(mspid string) *cb.StaticCollectionConfig {
 
 func ImplicitCollectionNameForOrg(mspid string) string {
 	return fmt.Sprintf("_implicit_org_%s", mspid)
+}
+
+func OrgFromImplicitCollectionName(name string) string {
+	return strings.TrimPrefix(name, "_implicit_org_")
 }
 
 func (vc *ValidatorCommitter) ImplicitCollectionEndorsementPolicyAsBytes(channelID, orgMSPID string) (policy []byte, unexpectedErr, validationErr error) {

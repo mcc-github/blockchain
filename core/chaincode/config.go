@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/op/go-logging"
 	"github.com/spf13/viper"
 )
 
@@ -78,13 +77,12 @@ func toSeconds(s string, def int) time.Duration {
 
 func getLogLevelFromViper(key string) string {
 	levelString := viper.GetString(key)
-	_, err := logging.LogLevel(levelString)
-	if err != nil {
+	if !flogging.IsValidLevel(levelString) {
 		chaincodeLogger.Warningf("%s has invalid log level %s. defaulting to %s", key, levelString, flogging.DefaultLevel())
 		levelString = flogging.DefaultLevel()
 	}
 
-	return levelString
+	return flogging.NameToLevel(levelString).String()
 }
 
 

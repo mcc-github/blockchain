@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"regexp"
 
 	"github.com/pkg/errors"
 )
@@ -26,6 +27,8 @@ import (
 
 
 const (
+	
+	
 	ChaincodePackageMetadataFile = "Chaincode-Package-Metadata.json"
 )
 
@@ -53,6 +56,20 @@ type MetadataProvider interface {
 
 type ChaincodePackageParser struct {
 	MetadataProvider MetadataProvider
+}
+
+var (
+	
+	
+	LabelRegexp = regexp.MustCompile("^[a-zA-Z0-9]+([.+-_][a-zA-Z0-9]+)*$")
+)
+
+func validateLabel(label string) error {
+	if !LabelRegexp.MatchString(label) {
+		return errors.Errorf("invalid label '%s'. Label must be non-empty, can only consist of alphanumerics, symbols from '.+-_', and can only begin with alphanumerics", label)
+	}
+
+	return nil
 }
 
 
@@ -111,8 +128,8 @@ func (ccpp ChaincodePackageParser) Parse(source []byte) (*ChaincodePackage, erro
 		return nil, errors.Errorf("did not find any package metadata (missing %s)", ChaincodePackageMetadataFile)
 	}
 
-	if ccPackageMetadata.Label == "" {
-		return nil, errors.New("empty label in package metadata")
+	if err := validateLabel(ccPackageMetadata.Label); err != nil {
+		return nil, err
 	}
 
 	dbArtifacts, err := ccpp.MetadataProvider.GetDBArtifacts(codePackage)

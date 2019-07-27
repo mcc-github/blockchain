@@ -24,7 +24,6 @@ import (
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
@@ -479,7 +478,7 @@ func (h *Handler) notifyRegistry(err error) {
 
 	if err != nil {
 		h.Registry.Failed(ccintf.CCID(h.chaincodeID.Name), err)
-		chaincodeLogger.Errorf("failed to start %s", h.chaincodeID)
+		chaincodeLogger.Errorf("failed to start %s -- %s", h.chaincodeID, err)
 		return
 	}
 
@@ -1295,12 +1294,10 @@ func (h *Handler) setChaincodeProposal(signedProp *pb.SignedProposal, prop *pb.P
 }
 
 func (h *Handler) getCollectionStore(channelID string) privdata.CollectionStore {
-	csStoreSupport := &peer.CollectionSupport{
-		PeerLedger:             h.LedgerGetter.GetLedger(channelID),
-		DeployedCCInfoProvider: h.DeployedCCInfoProvider,
-	}
-	return privdata.NewSimpleCollectionStore(csStoreSupport)
-
+	return privdata.NewSimpleCollectionStore(
+		h.LedgerGetter.GetLedger(channelID),
+		h.DeployedCCInfoProvider,
+	)
 }
 
 func (h *Handler) State() State { return h.state }

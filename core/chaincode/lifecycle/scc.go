@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
@@ -17,7 +18,11 @@ import (
 	persistenceintf "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/dispatcher"
+	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/msp"
+	"github.com/mcc-github/blockchain/protos/common"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	mspprotos "github.com/mcc-github/blockchain/protos/msp"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 
@@ -61,6 +66,10 @@ const (
 
 	
 	
+	QueryChaincodeDefinitionsFuncName = "QueryChaincodeDefinitions"
+
+	
+	
 	
 	QueryNamespaceDefinitionsFuncName = "QueryNamespaceDefinitions"
 )
@@ -75,20 +84,29 @@ type SCCFunctions interface {
 	QueryInstalledChaincode(packageID persistenceintf.PackageID) (*chaincode.InstalledChaincode, error)
 
 	
-	QueryInstalledChaincodes() (chaincodes []chaincode.InstalledChaincode, err error)
+	QueryInstalledChaincodes() []*chaincode.InstalledChaincode
 
 	
 	ApproveChaincodeDefinitionForOrg(chname, ccname string, cd *ChaincodeDefinition, packageID persistenceintf.PackageID, publicState ReadableState, orgState ReadWritableState) error
 
 	
 	
-	QueryApprovalStatus(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) ([]bool, error)
+	
+	SimulateCommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error)
 
 	
-	CommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) ([]bool, error)
+	
+	
+	CommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error)
 
+	
 	
 	QueryChaincodeDefinition(name string, publicState ReadableState) (*ChaincodeDefinition, error)
+
+	
+	
+	
+	QueryOrgApprovals(name string, cd *ChaincodeDefinition, orgStates []OpaqueState) (map[string]bool, error)
 
 	
 	QueryNamespaceDefinitions(publicState RangeableState) (map[string]string, error)
@@ -107,12 +125,22 @@ type ChannelConfigSource interface {
 
 
 
+
+type QueryExecutorProvider interface {
+	TxQueryExecutor(channelID, txID string) ledger.SimpleQueryExecutor
+}
+
+
+
 type SCC struct {
 	OrgMSPID string
 
 	ACLProvider aclmgmt.ACLProvider
 
 	ChannelConfigSource ChannelConfigSource
+
+	DeployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
+	QueryExecutorProvider  QueryExecutorProvider
 
 	
 	Functions SCCFunctions
@@ -176,7 +204,8 @@ func (scc *SCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 	}
 
 	var ac channelconfig.Application
-	if channelID := stub.GetChannelID(); channelID != "" {
+	var channelID string
+	if channelID = stub.GetChannelID(); channelID != "" {
 		channelConfig := scc.ChannelConfigSource.GetStableChannelConfig(channelID)
 		if channelConfig == nil {
 			return shim.Error(fmt.Sprintf("could not get channelconfig for channel '%s'", channelID))
@@ -206,6 +235,7 @@ func (scc *SCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 		args[1],
 		string(args[0]),
 		&Invocation{
+			ChannelID:         channelID,
 			ApplicationConfig: ac,
 			SCC:               scc,
 			Stub:              stub,
@@ -227,6 +257,7 @@ func (scc *SCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 }
 
 type Invocation struct {
+	ChannelID         string
 	ApplicationConfig channelconfig.Application 
 	Stub              shim.ChaincodeStubInterface
 	SCC               *SCC
@@ -235,7 +266,6 @@ type Invocation struct {
 
 
 func (i *Invocation) InstallChaincode(input *lb.InstallChaincodeArgs) (proto.Message, error) {
-
 	if logger.IsEnabledFor(zapcore.DebugLevel) {
 		end := 35
 		if len(input.ChaincodeInstallPackage) < end {
@@ -266,7 +296,6 @@ func (i *Invocation) InstallChaincode(input *lb.InstallChaincodeArgs) (proto.Mes
 
 
 func (i *Invocation) QueryInstalledChaincode(input *lb.QueryInstalledChaincodeArgs) (proto.Message, error) {
-
 	logger.Debugf("received invocation of QueryInstalledChaincode for install package ID '%s'",
 		input.PackageId,
 	)
@@ -285,33 +314,44 @@ func (i *Invocation) QueryInstalledChaincode(input *lb.QueryInstalledChaincodeAr
 
 
 func (i *Invocation) QueryInstalledChaincodes(input *lb.QueryInstalledChaincodesArgs) (proto.Message, error) {
-
 	logger.Debugf("received invocation of QueryInstalledChaincodes")
 
-	chaincodes, err := i.SCC.Functions.QueryInstalledChaincodes()
-	if err != nil {
-		return nil, err
-	}
+	chaincodes := i.SCC.Functions.QueryInstalledChaincodes()
 
 	result := &lb.QueryInstalledChaincodesResult{}
 	for _, chaincode := range chaincodes {
-		result.InstalledChaincodes = append(
-			result.InstalledChaincodes,
+		references := map[string]*lb.QueryInstalledChaincodesResult_References{}
+		for channel, chaincodeMetadata := range chaincode.References {
+			chaincodes := make([]*lb.QueryInstalledChaincodesResult_Chaincode, len(chaincodeMetadata))
+			for i, metadata := range chaincodeMetadata {
+				chaincodes[i] = &lb.QueryInstalledChaincodesResult_Chaincode{
+					Name:    metadata.Name,
+					Version: metadata.Version,
+				}
+			}
+
+			references[channel] = &lb.QueryInstalledChaincodesResult_References{
+				Chaincodes: chaincodes,
+			}
+		}
+
+		result.InstalledChaincodes = append(result.InstalledChaincodes,
 			&lb.QueryInstalledChaincodesResult_InstalledChaincode{
-				Label:     chaincode.Label,
-				PackageId: chaincode.PackageID.String(),
+				Label:      chaincode.Label,
+				PackageId:  chaincode.PackageID.String(),
+				References: references,
 			})
 	}
+
 	return result, nil
 }
 
 
 
 func (i *Invocation) ApproveChaincodeDefinitionForMyOrg(input *lb.ApproveChaincodeDefinitionForMyOrgArgs) (proto.Message, error) {
-	if err := validateInput(input.Name, input.Version, input.Collections); err != nil {
+	if err := i.validateInput(input.Name, input.Version, input.Collections); err != nil {
 		return nil, err
 	}
-
 	collectionName := ImplicitCollectionNameForOrg(i.SCC.OrgMSPID)
 	var collectionConfig []*cb.CollectionConfig
 	if input.Collections != nil {
@@ -367,20 +407,10 @@ func (i *Invocation) ApproveChaincodeDefinitionForMyOrg(input *lb.ApproveChainco
 
 
 
-func (i *Invocation) QueryApprovalStatus(input *lb.QueryApprovalStatusArgs) (proto.Message, error) {
-	if i.ApplicationConfig == nil {
-		return nil, errors.Errorf("no application config for channel '%s'", i.Stub.GetChannelID())
-	}
-
-	orgs := i.ApplicationConfig.Organizations()
-	opaqueStates := make([]OpaqueState, 0, len(orgs))
-	orgNames := make([]string, 0, len(orgs))
-	for _, org := range orgs {
-		orgNames = append(orgNames, org.MSPID())
-		opaqueStates = append(opaqueStates, &ChaincodePrivateLedgerShim{
-			Collection: ImplicitCollectionNameForOrg(org.MSPID()),
-			Stub:       i.Stub,
-		})
+func (i *Invocation) SimulateCommitChaincodeDefinition(input *lb.SimulateCommitChaincodeDefinitionArgs) (proto.Message, error) {
+	opaqueStates, err := i.createOpaqueStates()
+	if err != nil {
+		return nil, err
 	}
 
 	cd := &ChaincodeDefinition{
@@ -397,12 +427,12 @@ func (i *Invocation) QueryApprovalStatus(input *lb.QueryApprovalStatusArgs) (pro
 		Collections: input.Collections,
 	}
 
-	logger.Debugf("received invocation of QueryApprovalStatus on channel '%s' for definition '%s'",
+	logger.Debugf("received invocation of SimulateCommitChaincodeDefinition on channel '%s' for definition '%s'",
 		i.Stub.GetChannelID(),
 		cd,
 	)
 
-	approved, err := i.SCC.Functions.QueryApprovalStatus(
+	approvals, err := i.SCC.Functions.SimulateCommitChaincodeDefinition(
 		i.Stub.GetChannelID(),
 		input.Name,
 		cd,
@@ -413,20 +443,15 @@ func (i *Invocation) QueryApprovalStatus(input *lb.QueryApprovalStatusArgs) (pro
 		return nil, err
 	}
 
-	orgApproval := make(map[string]bool)
-	for i, org := range orgNames {
-		orgApproval[org] = approved[i]
-	}
-
-	return &lb.QueryApprovalStatusResults{
-		Approved: orgApproval,
+	return &lb.SimulateCommitChaincodeDefinitionResult{
+		Approved: approvals,
 	}, nil
 }
 
 
 
 func (i *Invocation) CommitChaincodeDefinition(input *lb.CommitChaincodeDefinitionArgs) (proto.Message, error) {
-	if err := validateInput(input.Name, input.Version, input.Collections); err != nil {
+	if err := i.validateInput(input.Name, input.Version, input.Collections); err != nil {
 		return nil, err
 	}
 
@@ -436,18 +461,18 @@ func (i *Invocation) CommitChaincodeDefinition(input *lb.CommitChaincodeDefiniti
 
 	orgs := i.ApplicationConfig.Organizations()
 	opaqueStates := make([]OpaqueState, 0, len(orgs))
-	myOrgIndex := -1
+	var myOrg string
 	for _, org := range orgs {
 		opaqueStates = append(opaqueStates, &ChaincodePrivateLedgerShim{
 			Collection: ImplicitCollectionNameForOrg(org.MSPID()),
 			Stub:       i.Stub,
 		})
 		if org.MSPID() == i.SCC.OrgMSPID {
-			myOrgIndex = len(opaqueStates) - 1
+			myOrg = i.SCC.OrgMSPID
 		}
 	}
 
-	if myOrgIndex == -1 {
+	if myOrg == "" {
 		return nil, errors.Errorf("impossibly, this peer's org is processing requests for a channel it is not a member of")
 	}
 
@@ -470,19 +495,18 @@ func (i *Invocation) CommitChaincodeDefinition(input *lb.CommitChaincodeDefiniti
 		cd,
 	)
 
-	agreement, err := i.SCC.Functions.CommitChaincodeDefinition(
+	approvals, err := i.SCC.Functions.CommitChaincodeDefinition(
 		i.Stub.GetChannelID(),
 		input.Name,
 		cd,
 		i.Stub,
 		opaqueStates,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
-	if !agreement[myOrgIndex] {
+	if !approvals[myOrg] {
 		return nil, errors.Errorf("chaincode definition not agreed to by this org (%s)", i.SCC.OrgMSPID)
 	}
 
@@ -502,6 +526,16 @@ func (i *Invocation) QueryChaincodeDefinition(input *lb.QueryChaincodeDefinition
 		return nil, err
 	}
 
+	opaqueStates, err := i.createOpaqueStates()
+	if err != nil {
+		return nil, err
+	}
+
+	var approvals map[string]bool
+	if approvals, err = i.SCC.Functions.QueryOrgApprovals(input.Name, definedChaincode, opaqueStates); err != nil {
+		return nil, err
+	}
+
 	return &lb.QueryChaincodeDefinitionResult{
 		Sequence:            definedChaincode.Sequence,
 		Version:             definedChaincode.EndorsementInfo.Version,
@@ -510,13 +544,51 @@ func (i *Invocation) QueryChaincodeDefinition(input *lb.QueryChaincodeDefinition
 		ValidationParameter: definedChaincode.ValidationInfo.ValidationParameter,
 		InitRequired:        definedChaincode.EndorsementInfo.InitRequired,
 		Collections:         definedChaincode.Collections,
+		Approved:            approvals,
+	}, nil
+}
+
+
+
+func (i *Invocation) QueryChaincodeDefinitions(input *lb.QueryChaincodeDefinitionsArgs) (proto.Message, error) {
+	logger.Debugf("received invocation of QueryChaincodeDefinitions on channel '%s'",
+		i.Stub.GetChannelID(),
+	)
+
+	namespaces, err := i.SCC.Functions.QueryNamespaceDefinitions(&ChaincodePublicLedgerShim{ChaincodeStubInterface: i.Stub})
+	if err != nil {
+		return nil, err
+	}
+
+	chaincodeDefinitions := []*lb.QueryChaincodeDefinitionsResult_ChaincodeDefinition{}
+	for namespace, nType := range namespaces {
+		if nType == FriendlyChaincodeDefinitionType {
+			definedChaincode, err := i.SCC.Functions.QueryChaincodeDefinition(namespace, i.Stub)
+			if err != nil {
+				return nil, err
+			}
+
+			chaincodeDefinitions = append(chaincodeDefinitions, &lb.QueryChaincodeDefinitionsResult_ChaincodeDefinition{
+				Name:                namespace,
+				Sequence:            definedChaincode.Sequence,
+				Version:             definedChaincode.EndorsementInfo.Version,
+				EndorsementPlugin:   definedChaincode.EndorsementInfo.EndorsementPlugin,
+				ValidationPlugin:    definedChaincode.ValidationInfo.ValidationPlugin,
+				ValidationParameter: definedChaincode.ValidationInfo.ValidationParameter,
+				InitRequired:        definedChaincode.EndorsementInfo.InitRequired,
+				Collections:         definedChaincode.Collections,
+			})
+		}
+	}
+
+	return &lb.QueryChaincodeDefinitionsResult{
+		ChaincodeDefinitions: chaincodeDefinitions,
 	}, nil
 }
 
 
 
 func (i *Invocation) QueryNamespaceDefinitions(input *lb.QueryNamespaceDefinitionsArgs) (proto.Message, error) {
-
 	logger.Debugf("received invocation of QueryNamespaceDefinitions on channel '%s'",
 		i.Stub.GetChannelID(),
 	)
@@ -555,9 +627,9 @@ var (
 	}
 )
 
-func validateInput(name, version string, collections *cb.CollectionConfigPackage) error {
+func (i *Invocation) validateInput(name, version string, collections *cb.CollectionConfigPackage) error {
 	if !ChaincodeNameRegExp.MatchString(name) {
-		return errors.Errorf("invalid chaincode name '%s'. Names can only consist of alphanumerics, '_', and '-' and cannot begin with '_'", name)
+		return errors.Errorf("invalid chaincode name '%s'. Names can only consist of alphanumerics, '_', and '-' and can only begin with alphanumerics", name)
 	}
 	if _, ok := systemChaincodeNames[name]; ok {
 		return errors.Errorf("chaincode name '%s' is the name of a system chaincode", name)
@@ -567,22 +639,238 @@ func validateInput(name, version string, collections *cb.CollectionConfigPackage
 		return errors.Errorf("invalid chaincode version '%s'. Versions can only consist of alphanumerics, '_', '-', '+', and '.'", version)
 	}
 
-	if collections == nil {
-		return nil
+	collConfigs, err := extractStaticCollectionConfigs(collections)
+	if err != nil {
+		return err
+	}
+	
+	
+	
+	
+	
+	
+	channelConfig := i.SCC.ChannelConfigSource.GetStableChannelConfig(i.ChannelID)
+	if channelConfig == nil {
+		return errors.Errorf("could not get channelconfig for channel '%s'", i.ChannelID)
+	}
+	mspMgr := channelConfig.MSPManager()
+	if mspMgr == nil {
+		return errors.Errorf("could not get MSP manager for channel '%s'", i.ChannelID)
 	}
 
-	for _, c := range collections.Config {
+	if err := validateCollectionConfigs(collConfigs, mspMgr); err != nil {
+		return err
+	}
+
+	
+	qe := i.SCC.QueryExecutorProvider.TxQueryExecutor(i.Stub.GetChannelID(), i.Stub.GetTxID())
+	committedCCDef, err := i.SCC.DeployedCCInfoProvider.ChaincodeInfo(i.ChannelID, name, qe)
+	if err != nil {
+		return errors.Wrapf(err, "could not retrieve committed definition for chaincode '%s'", name)
+	}
+	if committedCCDef == nil {
+		return nil
+	}
+	if err := validateCollConfigsAgainstCommittedDef(collConfigs, committedCCDef.ExplicitCollectionConfigPkg); err != nil {
+		return err
+	}
+	return nil
+}
+
+func extractStaticCollectionConfigs(collConfigPkg *common.CollectionConfigPackage) ([]*common.StaticCollectionConfig, error) {
+	if collConfigPkg == nil || len(collConfigPkg.Config) == 0 {
+		return nil, nil
+	}
+	collConfigs := make([]*common.StaticCollectionConfig, len(collConfigPkg.Config))
+	for i, c := range collConfigPkg.Config {
 		switch t := c.Payload.(type) {
 		case *cb.CollectionConfig_StaticCollectionConfig:
-			if !collectionNameRegExp.MatchString(t.StaticCollectionConfig.Name) {
-				return errors.Errorf("invalid collection name '%s'. Names can only consist of alphanumerics, '_', and '-' and cannot begin with '_'", t.StaticCollectionConfig.Name)
+			collConfig := t.StaticCollectionConfig
+			if collConfig == nil {
+				return nil, errors.Errorf("collection configuration is empty")
 			}
+			collConfigs[i] = collConfig
 		default:
 			
 			
-			return errors.Errorf("collection config contains unexpected payload type: %T", t)
+			return nil, errors.Errorf("collection config contains unexpected payload type: %T", t)
 		}
 	}
+	return collConfigs, nil
+}
 
+func validateCollectionConfigs(collConfigs []*common.StaticCollectionConfig, mspMgr msp.MSPManager) error {
+	if len(collConfigs) == 0 {
+		return nil
+	}
+	collNamesMap := map[string]struct{}{}
+	
+	for _, c := range collConfigs {
+		if !collectionNameRegExp.MatchString(c.Name) {
+			return errors.Errorf("invalid collection name '%s'. Names can only consist of alphanumerics, '_', and '-' and cannot begin with '_'",
+				c.Name)
+		}
+		
+		if _, ok := collNamesMap[c.Name]; ok {
+			return errors.Errorf("collection-name: %s -- found duplicate in collection configuration",
+				c.Name)
+		}
+		collNamesMap[c.Name] = struct{}{}
+		
+		if c.MaximumPeerCount < c.RequiredPeerCount {
+			return errors.Errorf("collection-name: %s -- maximum peer count (%d) cannot be greater than the required peer count (%d)",
+				c.Name, c.MaximumPeerCount, c.RequiredPeerCount)
+		}
+		if c.RequiredPeerCount < 0 {
+			return errors.Errorf("collection-name: %s -- requiredPeerCount (%d) cannot be less than zero",
+				c.Name, c.RequiredPeerCount)
+		}
+		if err := validateCollectionConfigMemberOrgsPolicy(c, mspMgr); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+
+
+func validateCollectionConfigMemberOrgsPolicy(coll *common.StaticCollectionConfig, mspMgr msp.MSPManager) error {
+	if coll.MemberOrgsPolicy == nil {
+		return errors.Errorf("collection member policy is not set for collection '%s'", coll.Name)
+	}
+	if coll.MemberOrgsPolicy.GetSignaturePolicy() == nil {
+		return errors.Errorf("collection member org policy is empty for collection '%s'", coll.Name)
+	}
+
+	
+	pp := &cauthdsl.EnvelopeBasedPolicyProvider{Deserializer: mspMgr}
+	if _, err := pp.NewPolicy(coll.MemberOrgsPolicy.GetSignaturePolicy()); err != nil {
+		return errors.WithMessagef(err, "invalid member org policy for collection '%s'", coll.Name)
+	}
+
+	
+	if err := validateSpOrConcat(coll.MemberOrgsPolicy.GetSignaturePolicy().Rule); err != nil {
+		return errors.WithMessagef(err, "collection-name: %s -- error in member org policy", coll.Name)
+	}
+
+	msps, err := mspMgr.GetMSPs()
+	if err != nil {
+		return errors.Wrapf(err, "could not get MSPs")
+	}
+
+	
+	
+	for _, principal := range coll.MemberOrgsPolicy.GetSignaturePolicy().Identities {
+		var orgID string
+		
+		switch principal.PrincipalClassification {
+
+		case mspprotos.MSPPrincipal_ROLE:
+			msprole := &mspprotos.MSPRole{}
+			err := proto.Unmarshal(principal.Principal, msprole)
+			if err != nil {
+				return errors.Wrapf(err, "collection-name: %s -- cannot unmarshal identity bytes into MSPRole", coll.GetName())
+			}
+			orgID = msprole.MspIdentifier
+			
+			_, ok := msps[orgID]
+			if !ok {
+				return errors.Errorf("collection-name: %s -- collection member '%s' is not part of the channel", coll.GetName(), orgID)
+			}
+
+		case mspprotos.MSPPrincipal_ORGANIZATION_UNIT:
+			mspou := &mspprotos.OrganizationUnit{}
+			err := proto.Unmarshal(principal.Principal, mspou)
+			if err != nil {
+				return errors.Wrapf(err, "collection-name: %s -- cannot unmarshal identity bytes into OrganizationUnit", coll.GetName())
+			}
+			orgID = mspou.MspIdentifier
+			
+			_, ok := msps[orgID]
+			if !ok {
+				return errors.Errorf("collection-name: %s -- collection member '%s' is not part of the channel", coll.GetName(), orgID)
+			}
+
+		case mspprotos.MSPPrincipal_IDENTITY:
+			if _, err := mspMgr.DeserializeIdentity(principal.Principal); err != nil {
+				return errors.Errorf("collection-name: %s -- contains an identity that is not part of the channel", coll.GetName())
+			}
+
+		default:
+			return errors.Errorf("collection-name: %s -- principal type %v is not supported", coll.GetName(), principal.PrincipalClassification)
+		}
+	}
+	return nil
+}
+
+
+func validateSpOrConcat(sp *common.SignaturePolicy) error {
+	if sp.GetNOutOf() == nil {
+		return nil
+	}
+	
+	if sp.GetNOutOf().N != 1 {
+		return errors.Errorf("signature policy is not an OR concatenation, NOutOf %d", sp.GetNOutOf().N)
+	}
+	
+	for _, rule := range sp.GetNOutOf().Rules {
+		err := validateSpOrConcat(rule)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCollConfigsAgainstCommittedDef(
+	proposedCollConfs []*common.StaticCollectionConfig,
+	committedCollConfPkg *common.CollectionConfigPackage,
+) error {
+	if committedCollConfPkg == nil || len(committedCollConfPkg.Config) == 0 {
+		return nil
+	}
+
+	if len(proposedCollConfs) == 0 {
+		return errors.Errorf("the proposed collection config does not contain previously defined collections")
+	}
+
+	proposedCollsMap := map[string]*common.StaticCollectionConfig{}
+	for _, c := range proposedCollConfs {
+		proposedCollsMap[c.Name] = c
+	}
+
+	
+	
+	for _, committedCollConfig := range committedCollConfPkg.Config {
+		committedColl := committedCollConfig.GetStaticCollectionConfig()
+		
+		if committedColl == nil {
+			return errors.Errorf("unknown collection configuration type")
+		}
+
+		newCollection, ok := proposedCollsMap[committedColl.Name]
+		if !ok {
+			return errors.Errorf("existing collection [%s] missing in the proposed collection configuration", committedColl.Name)
+		}
+
+		if newCollection.BlockToLive != committedColl.BlockToLive {
+			return errors.Errorf("the BlockToLive in an existing collection [%s] modified. Existing value [%d]", committedColl.Name, committedColl.BlockToLive)
+		}
+	}
+	return nil
+}
+
+func (i *Invocation) createOpaqueStates() ([]OpaqueState, error) {
+	if i.ApplicationConfig == nil {
+		return nil, errors.Errorf("no application config for channel '%s'", i.Stub.GetChannelID())
+	}
+	orgs := i.ApplicationConfig.Organizations()
+	opaqueStates := make([]OpaqueState, 0, len(orgs))
+	for _, org := range orgs {
+		opaqueStates = append(opaqueStates, &ChaincodePrivateLedgerShim{
+			Collection: ImplicitCollectionNameForOrg(org.MSPID()),
+			Stub:       i.Stub,
+		})
+	}
+	return opaqueStates, nil
 }

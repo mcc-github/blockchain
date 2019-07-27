@@ -9,11 +9,11 @@ package kafka
 import (
 	"github.com/Shopify/sarama"
 	"github.com/mcc-github/blockchain-lib-go/healthz"
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/op/go-logging"
 )
 
 
@@ -26,7 +26,7 @@ type healthChecker interface {
 
 func New(config localconfig.Kafka, metricsProvider metrics.Provider, healthChecker healthChecker) (consensus.Consenter, *Metrics) {
 	if config.Verbose {
-		logging.SetLevel(logging.DEBUG, "orderer.consensus.kafka.sarama")
+		flogging.ActivateSpec(flogging.Global.Spec() + ":orderer.consensus.kafka.sarama=debug")
 	}
 
 	brokerConfig := newBrokerConfig(
@@ -35,6 +35,8 @@ func New(config localconfig.Kafka, metricsProvider metrics.Provider, healthCheck
 		config.Retry,
 		config.Version,
 		defaultPartition)
+
+	metrics := NewMetrics(metricsProvider, brokerConfig.MetricRegistry)
 
 	return &consenterImpl{
 		brokerConfigVal: brokerConfig,
@@ -46,7 +48,8 @@ func New(config localconfig.Kafka, metricsProvider metrics.Provider, healthCheck
 			ReplicationFactor: config.Topic.ReplicationFactor,
 		},
 		healthChecker: healthChecker,
-	}, NewMetrics(metricsProvider, brokerConfig.MetricRegistry)
+		metrics:       metrics,
+	}, metrics
 }
 
 
@@ -59,6 +62,7 @@ type consenterImpl struct {
 	kafkaVersionVal sarama.KafkaVersion
 	topicDetailVal  *sarama.TopicDetail
 	healthChecker   healthChecker
+	metrics         *Metrics
 }
 
 
@@ -84,6 +88,11 @@ type commonConsenter interface {
 	brokerConfig() *sarama.Config
 	retryOptions() localconfig.Retry
 	topicDetail() *sarama.TopicDetail
+	Metrics() *Metrics
+}
+
+func (consenter *consenterImpl) Metrics() *Metrics {
+	return consenter.metrics
 }
 
 func (consenter *consenterImpl) brokerConfig() *sarama.Config {

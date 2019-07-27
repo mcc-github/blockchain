@@ -23,6 +23,7 @@ import (
 
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
@@ -60,7 +61,16 @@ func newTestHistoryEnv(t *testing.T) *levelDBLockBasedHistoryEnv {
 		t.Fatalf("Failed to create history database directory: %s", err)
 	}
 
-	txMgr, err := lockbasedtxmgr.NewLockBasedTxMgr(testLedgerID, testDB, nil, nil, testBookkeepingEnv.TestProvider, &mock.DeployedChaincodeInfoProvider{})
+	txMgr, err := lockbasedtxmgr.NewLockBasedTxMgr(
+		testLedgerID,
+		testDB,
+		nil,
+		nil,
+		testBookkeepingEnv.TestProvider,
+		&mock.DeployedChaincodeInfoProvider{},
+		nil,
+	)
+
 	assert.NoError(t, err)
 	testHistoryDBProvider := NewHistoryDBProvider(testHistoryDBPath)
 	testHistoryDB, err := testHistoryDBProvider.GetDBHandle("TestHistoryDB")
@@ -112,7 +122,7 @@ func newBlockStorageTestEnv(t testing.TB) *testBlockStoreEnv {
 	}
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
 
-	blockStorageProvider := fsblkstorage.NewProvider(conf, indexConfig).(*fsblkstorage.FsBlockstoreProvider)
+	blockStorageProvider := fsblkstorage.NewProvider(conf, indexConfig, &disabled.Provider{}).(*fsblkstorage.FsBlockstoreProvider)
 
 	return &testBlockStoreEnv{t, blockStorageProvider, testPath}
 }

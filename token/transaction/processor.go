@@ -8,7 +8,6 @@ package transaction
 
 import (
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
@@ -39,7 +38,7 @@ func (p *Processor) GenerateSimulationResults(txEnv *common.Envelope, simulator 
 		
 		
 		
-		if _, ok := err.(*customtx.InvalidTxError); ok {
+		if _, ok := err.(*ledger.InvalidTxError); ok {
 			return err
 		}
 		return errors.WithMessagef(err, "failed committing transaction for channel %s", ch.ChannelId)

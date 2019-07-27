@@ -12,12 +12,12 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	mockpeer "github.com/mcc-github/blockchain/common/mocks/peer"
 	"github.com/mcc-github/blockchain/common/util"
 	lproto "github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protoutil"
-	"github.com/stretchr/testify/assert"
 )
 
 
@@ -431,7 +431,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_READY, Txid: "1", ChannelId: channelId})
 
 	ci := &pb.ChaincodeInput{Args: [][]byte{[]byte("init"), []byte("A"), []byte("100"), []byte("B"), []byte("200")}, Decorations: nil}
-	payload := protoutil.MarshalOrPanic(ci)
+	payload := marshalOrPanic(ci)
 	respSet := &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
@@ -464,7 +464,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("invoke"), []byte("A"), []byte("B"), []byte("10")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "3", ChannelId: channelId})
 
 	
@@ -484,7 +484,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("invoke"), []byte("A"), []byte("B"), []byte("10")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "3a", ChannelId: channelId})
 
 	
@@ -502,7 +502,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("invoke"), []byte("A"), []byte("B"), []byte("10")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "3b", ChannelId: channelId})
 
 	
@@ -520,7 +520,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("delete"), []byte("A")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "4", ChannelId: channelId})
 
 	
@@ -538,7 +538,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("delete"), []byte("A")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "4a", ChannelId: channelId})
 
 	
@@ -555,7 +555,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("badinvoke")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "5", ChannelId: channelId})
 
 	
@@ -565,10 +565,10 @@ func TestInvoke(t *testing.T) {
 
 	
 	rangeQueryResponse := &pb.QueryResponse{Results: []*pb.QueryResultBytes{
-		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "A", Value: []byte("100")})},
-		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "B", Value: []byte("200")})}},
+		{ResultBytes: marshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "A", Value: []byte("100")})},
+		{ResultBytes: marshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "B", Value: []byte("200")})}},
 		HasMore: true}
-	rangeQPayload := protoutil.MarshalOrPanic(rangeQueryResponse)
+	rangeQPayload := marshalOrPanic(rangeQueryResponse)
 
 	
 	rangeQueryNext := &pb.QueryResponse{Results: nil, HasMore: false}
@@ -578,7 +578,7 @@ func TestInvoke(t *testing.T) {
 		ErrorFunc: errorFunc,
 		Responses: []*mockpeer.MockResponse{
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_GET_STATE_BY_RANGE, Txid: "6", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: rangeQPayload, Txid: "6", ChannelId: channelId}},
-			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "6", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: protoutil.MarshalOrPanic(rangeQueryNext), Txid: "6", ChannelId: channelId}},
+			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "6", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: marshalOrPanic(rangeQueryNext), Txid: "6", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_CLOSE, Txid: "6", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Txid: "6", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Txid: "6", ChannelId: channelId}, RespMsg: nil},
 		},
@@ -586,7 +586,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("rangeq"), []byte("A"), []byte("B")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "6", ChannelId: channelId})
 
 	
@@ -606,7 +606,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("rangeq"), []byte("A"), []byte("B")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "6a", ChannelId: channelId})
 
 	
@@ -628,7 +628,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("rangeq"), []byte("A"), []byte("B")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "6b", ChannelId: channelId})
 
 	
@@ -650,7 +650,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("rangeq"), []byte("A"), []byte("B")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "6c", ChannelId: channelId})
 
 	
@@ -660,16 +660,16 @@ func TestInvoke(t *testing.T) {
 
 	
 	historyQueryResponse := &pb.QueryResponse{Results: []*pb.QueryResultBytes{
-		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KeyModification{TxId: "6", Value: []byte("100")})}},
+		{ResultBytes: marshalOrPanic(&lproto.KeyModification{TxId: "6", Value: []byte("100")})}},
 		HasMore: true}
-	payload = protoutil.MarshalOrPanic(historyQueryResponse)
+	payload = marshalOrPanic(historyQueryResponse)
 
 	respSet = &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
 		Responses: []*mockpeer.MockResponse{
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_GET_HISTORY_FOR_KEY, Txid: "7", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: payload, Txid: "7", ChannelId: channelId}},
-			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "7", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: protoutil.MarshalOrPanic(rangeQueryNext), Txid: "7", ChannelId: channelId}},
+			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "7", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: marshalOrPanic(rangeQueryNext), Txid: "7", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_CLOSE, Txid: "7", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Txid: "7", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Txid: "7", ChannelId: channelId}, RespMsg: nil},
 		},
@@ -677,7 +677,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("historyq"), []byte("A")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "7", ChannelId: channelId})
 
 	
@@ -697,7 +697,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("historyq"), []byte("A")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "7a", ChannelId: channelId})
 
 	
@@ -707,10 +707,10 @@ func TestInvoke(t *testing.T) {
 
 	
 	getQRResp := &pb.QueryResponse{Results: []*pb.QueryResultBytes{
-		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "A", Value: []byte("100")})},
-		{ResultBytes: protoutil.MarshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "B", Value: []byte("200")})}},
+		{ResultBytes: marshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "A", Value: []byte("100")})},
+		{ResultBytes: marshalOrPanic(&lproto.KV{Namespace: "getputcc", Key: "B", Value: []byte("200")})}},
 		HasMore: true}
-	getQRRespPayload := protoutil.MarshalOrPanic(getQRResp)
+	getQRRespPayload := marshalOrPanic(getQRResp)
 
 	
 	rangeQueryNext = &pb.QueryResponse{Results: nil, HasMore: false}
@@ -720,7 +720,7 @@ func TestInvoke(t *testing.T) {
 		ErrorFunc: errorFunc,
 		Responses: []*mockpeer.MockResponse{
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_GET_QUERY_RESULT, Txid: "8", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: getQRRespPayload, Txid: "8", ChannelId: channelId}},
-			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "8", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: protoutil.MarshalOrPanic(rangeQueryNext), Txid: "8", ChannelId: channelId}},
+			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_NEXT, Txid: "8", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: marshalOrPanic(rangeQueryNext), Txid: "8", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_QUERY_STATE_CLOSE, Txid: "8", ChannelId: channelId}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Txid: "8", ChannelId: channelId}},
 			{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Txid: "8", ChannelId: channelId}, RespMsg: nil},
 		},
@@ -728,7 +728,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("richq"), []byte("A")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "8", ChannelId: channelId})
 
 	
@@ -747,7 +747,7 @@ func TestInvoke(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("richq"), []byte("A")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "8a", ChannelId: channelId})
 
 	
@@ -795,7 +795,7 @@ func TestSetKeyEP(t *testing.T) {
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_READY, Txid: "1", ChannelId: channelID})
 
 	ci := &pb.ChaincodeInput{Args: [][]byte{[]byte("init"), []byte("A"), []byte("100"), []byte("B"), []byte("200")}, Decorations: nil}
-	payload := protoutil.MarshalOrPanic(ci)
+	payload := marshalOrPanic(ci)
 	respSet := &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
@@ -824,7 +824,7 @@ func TestSetKeyEP(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("putep"), []byte("A"), []byte("epA")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "4", ChannelId: channelID})
 
@@ -843,54 +843,13 @@ func TestSetKeyEP(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("getep"), []byte("A")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "5", ChannelId: channelID})
 
 	
 	processDone(t, done, false)
 
-}
-
-func TestStartInProc(t *testing.T) {
-	streamGetter = mockChaincodeStreamGetter
-	cc := &shimTestCC{}
-	ccname := "shimTestCC"
-	peerSide := setupcc(ccname)
-	defer mockPeerCCSupport.RemoveCC(ccname)
-
-	done := setuperror()
-
-	doneFunc := func(ind int, err error) {
-		done <- err
-	}
-
-	peerDone := make(chan struct{})
-	defer close(peerDone)
-
-	
-	go func() {
-		respSet := &mockpeer.MockResponseSet{
-			DoneFunc:  doneFunc,
-			ErrorFunc: nil,
-			Responses: []*mockpeer.MockResponse{
-				{RecvMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_REGISTER}, RespMsg: &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_REGISTERED}},
-			},
-		}
-		peerSide.SetResponses(respSet)
-		peerSide.SetKeepAlive(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_KEEPALIVE})
-		err := peerSide.Run(peerDone)
-		assert.NoError(t, err, "peer side run failed")
-	}()
-
-	
-	go StartInProc([]string{"CORE_CHAINCODE_ID_NAME=shimTestCC"}, nil, cc, peerSide.GetSendStream(), peerSide.GetRecvStream())
-
-	
-	processDone(t, done, false)
-
-	channelId := "testchannel"
-	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_READY, Txid: "1", ChannelId: channelId})
 }
 
 func TestCC2CC(t *testing.T) {
@@ -934,7 +893,7 @@ func TestCC2CC(t *testing.T) {
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_READY, Txid: "1", ChannelId: channelId})
 
 	ci := &pb.ChaincodeInput{Args: [][]byte{[]byte("init"), []byte("A"), []byte("100"), []byte("B"), []byte("200")}, Decorations: nil}
-	payload := protoutil.MarshalOrPanic(ci)
+	payload := marshalOrPanic(ci)
 	respSet := &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
@@ -953,8 +912,8 @@ func TestCC2CC(t *testing.T) {
 	processDone(t, done, false)
 
 	
-	innerResp := protoutil.MarshalOrPanic(&pb.Response{Status: OK, Payload: []byte("CC2CC rocks")})
-	cc2ccresp := protoutil.MarshalOrPanic(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Payload: innerResp})
+	innerResp := marshalOrPanic(&pb.Response{Status: OK, Payload: []byte("CC2CC rocks")})
+	cc2ccresp := marshalOrPanic(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_COMPLETED, Payload: innerResp})
 	respSet = &mockpeer.MockResponseSet{
 		DoneFunc:  errorFunc,
 		ErrorFunc: errorFunc,
@@ -966,7 +925,7 @@ func TestCC2CC(t *testing.T) {
 	peerSide.SetResponses(respSet)
 
 	ci = &pb.ChaincodeInput{Args: [][]byte{[]byte("cc2cc"), []byte("othercc"), []byte("arg1"), []byte("arg2")}, Decorations: nil}
-	payload = protoutil.MarshalOrPanic(ci)
+	payload = marshalOrPanic(ci)
 	peerSide.Send(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_TRANSACTION, Payload: payload, Txid: "3", ChannelId: channelId})
 
 	
@@ -993,23 +952,4 @@ func TestRealPeerStream(t *testing.T) {
 	os.Args = []string{"chaincode", "peer.address", "127.0.0.1:12345"}
 	_, err := userChaincodeStreamGetter("fake")
 	assert.Error(t, err)
-}
-
-func TestSend(t *testing.T) {
-	ch := make(chan *pb.ChaincodeMessage)
-
-	stream := newInProcStream(ch, ch)
-
-	
-	msg := &pb.ChaincodeMessage{}
-	go stream.Send(msg)
-	msg2, _ := stream.Recv()
-	assert.Equal(t, msg, msg2, "send != recv")
-
-	
-	close(ch)
-
-	
-	err := stream.Send(msg)
-	assert.NotNil(t, err, "should have errored on panic")
 }

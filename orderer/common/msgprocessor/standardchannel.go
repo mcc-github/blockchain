@@ -43,15 +43,17 @@ type StandardChannelSupport interface {
 
 
 type StandardChannel struct {
-	support StandardChannelSupport
-	filters *RuleSet
+	support           StandardChannelSupport
+	filters           *RuleSet 
+	maintenanceFilter Rule     
 }
 
 
 func NewStandardChannel(support StandardChannelSupport, filters *RuleSet) *StandardChannel {
 	return &StandardChannel{
-		filters: filters,
-		support: support,
+		filters:           filters,
+		support:           support,
+		maintenanceFilter: NewMaintenanceFilter(support),
 	}
 }
 
@@ -60,14 +62,10 @@ func NewStandardChannel(support StandardChannelSupport, filters *RuleSet) *Stand
 
 
 func CreateStandardChannelFilters(filterSupport channelconfig.Resources) *RuleSet {
-	ordererConfig, ok := filterSupport.OrdererConfig()
-	if !ok {
-		logger.Panicf("Missing orderer config")
-	}
 	return NewRuleSet([]Rule{
 		EmptyRejectRule,
 		NewExpirationRejectRule(filterSupport),
-		NewSizeFilter(ordererConfig),
+		NewSizeFilter(filterSupport),
 		NewSigFilter(policies.ChannelWriters, policies.ChannelOrdererWriters, filterSupport),
 	})
 }
@@ -137,6 +135,11 @@ func (s *StandardChannel) ProcessConfigUpdateMsg(env *cb.Envelope) (config *cb.E
 	
 	
 	err = s.filters.Apply(config)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	err = s.maintenanceFilter.Apply(config)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -89,7 +89,7 @@ func (*naiveSecProvider) GetPKIidOfCert(peerIdentity api.PeerIdentityType) commo
 
 
 
-func (*naiveSecProvider) VerifyBlock(chainID common.ChainID, seqNum uint64, signedBlock []byte) error {
+func (*naiveSecProvider) VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock []byte) error {
 	return nil
 }
 
@@ -116,7 +116,7 @@ func (*naiveSecProvider) Verify(peerIdentity api.PeerIdentityType, signature, me
 
 
 
-func (*naiveSecProvider) VerifyByChannel(_ common.ChainID, _ api.PeerIdentityType, _, _ []byte) error {
+func (*naiveSecProvider) VerifyByChannel(_ common.ChannelID, _ api.PeerIdentityType, _, _ []byte) error {
 	return nil
 }
 
@@ -441,27 +441,6 @@ func TestHandshake(t *testing.T) {
 	tempL.Close()
 }
 
-func TestBasic(t *testing.T) {
-	t.Parallel()
-	comm1, port1 := newCommInstance(t, naiveSec)
-	comm2, port2 := newCommInstance(t, naiveSec)
-	defer comm1.Stop()
-	defer comm2.Stop()
-	m1 := comm1.Accept(acceptAll)
-	m2 := comm2.Accept(acceptAll)
-	out := make(chan uint64, 2)
-	reader := func(ch <-chan protoext.ReceivedMessage) {
-		m := <-ch
-		out <- m.GetGossipMessage().Nonce
-	}
-	go reader(m1)
-	go reader(m2)
-	comm1.Send(createGossipMsg(), remotePeer(port2))
-	time.Sleep(time.Second)
-	comm2.Send(createGossipMsg(), remotePeer(port1))
-	waitForMessages(t, out, 2, "Didn't receive 2 messages")
-}
-
 func TestConnectUnexpectedPeer(t *testing.T) {
 	t.Parallel()
 	
@@ -529,27 +508,6 @@ func TestConnectUnexpectedPeer(t *testing.T) {
 		case <-time.After(time.Second * 5):
 		}
 	})
-}
-
-func TestProdConstructor(t *testing.T) {
-	t.Parallel()
-	comm1, port1 := newCommInstance(t, naiveSec)
-	comm2, port2 := newCommInstance(t, naiveSec)
-	defer comm1.Stop()
-	defer comm2.Stop()
-	m1 := comm1.Accept(acceptAll)
-	m2 := comm2.Accept(acceptAll)
-	out := make(chan uint64, 2)
-	reader := func(ch <-chan protoext.ReceivedMessage) {
-		m := <-ch
-		out <- m.GetGossipMessage().Nonce
-	}
-	go reader(m1)
-	go reader(m2)
-	comm1.Send(createGossipMsg(), remotePeer(port2))
-	time.Sleep(time.Second)
-	comm2.Send(createGossipMsg(), remotePeer(port1))
-	waitForMessages(t, out, 2, "Didn't receive 2 messages")
 }
 
 func TestGetConnectionInfo(t *testing.T) {
@@ -622,46 +580,78 @@ func TestCloseConn(t *testing.T) {
 	assert.True(t, gotErr, "Should have failed because connection is closed")
 }
 
-func TestParallelSend(t *testing.T) {
+
+
+
+
+func TestCommSend(t *testing.T) {
 	t.Parallel()
-	comm1, _ := newCommInstance(t, naiveSec)
+	comm1, port1 := newCommInstance(t, naiveSec)
 	comm2, port2 := newCommInstance(t, naiveSec)
 	defer comm1.Stop()
 	defer comm2.Stop()
 
-	messages2Send := DefRecvBuffSize
+	
+	ch1 := comm1.Accept(acceptAll)
+	ch2 := comm2.Accept(acceptAll)
 
-	wg := sync.WaitGroup{}
-	wg.Add(messages2Send)
+	
+	stopch1 := make(chan struct{})
+	stopch2 := make(chan struct{})
+
 	go func() {
-		for i := 0; i < messages2Send; i++ {
+		for {
 			emptyMsg := createGossipMsg()
-			go func() {
-				defer wg.Done()
+			select {
+			case <-stopch1:
+				return
+			default:
 				comm1.Send(emptyMsg, remotePeer(port2))
-			}()
+			}
 		}
 	}()
 
-	
-	wg.Wait()
-
-	c := 0
-	waiting := true
-	ticker := time.NewTicker(30 * time.Second)
-	ch := comm2.Accept(acceptAll)
-	for waiting {
-		select {
-		case <-ch:
-			c++
-			if c == messages2Send {
-				waiting = false
+	go func() {
+		for {
+			emptyMsg := createGossipMsg()
+			select {
+			case <-stopch2:
+				return
+			default:
+				comm2.Send(emptyMsg, remotePeer(port1))
 			}
-		case <-ticker.C:
-			waiting = false
+		}
+	}()
+
+	c1recieved := 0
+	c2recieved := 0
+	
+	
+	
+	
+	totalMessagesRecieved := (DefSendBuffSize + DefRecvBuffSize) * 2
+RECV:
+	for {
+		select {
+		case <-ch1:
+			c1recieved++
+			if c1recieved == totalMessagesRecieved {
+				close(stopch2)
+			}
+		case <-ch2:
+			c2recieved++
+			if c2recieved == totalMessagesRecieved {
+				close(stopch1)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatalf("timed out waiting for messages to be recieved.\nc1 got %d messages\nc2 got %d messages", c1recieved, c2recieved)
+		default:
+			if c1recieved > totalMessagesRecieved && c2recieved > totalMessagesRecieved {
+				break RECV
+			}
 		}
 	}
-	assert.Equal(t, messages2Send, c)
+	t.Logf("c1 got %d messages\nc2 got %d messages", c1recieved, c2recieved)
 }
 
 type nonResponsivePeer struct {
@@ -750,6 +740,8 @@ func TestResponses(t *testing.T) {
 	}
 }
 
+
+
 func TestAccept(t *testing.T) {
 	t.Parallel()
 	comm1, port1 := newCommInstance(t, naiveSec)
@@ -769,13 +761,16 @@ func TestAccept(t *testing.T) {
 	var evenResults []uint64
 	var oddResults []uint64
 
-	out := make(chan uint64, DefRecvBuffSize)
-	sem := make(chan struct{}, 0)
+	out := make(chan uint64)
+	sem := make(chan struct{})
 
 	readIntoSlice := func(a *[]uint64, ch <-chan protoext.ReceivedMessage) {
 		for m := range ch {
 			*a = append(*a, m.GetGossipMessage().Nonce)
-			out <- m.GetGossipMessage().Nonce
+			select {
+			case out <- m.GetGossipMessage().Nonce:
+			default: 
+			}
 		}
 		sem <- struct{}{}
 	}
@@ -783,17 +778,29 @@ func TestAccept(t *testing.T) {
 	go readIntoSlice(&evenResults, evenNONCES)
 	go readIntoSlice(&oddResults, oddNONCES)
 
-	for i := 0; i < DefRecvBuffSize; i++ {
-		comm2.Send(createGossipMsg(), remotePeer(port1))
-	}
+	stopSend := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stopSend:
+				return
+			default:
+				comm2.Send(createGossipMsg(), remotePeer(port1))
+			}
+		}
+	}()
 
-	waitForMessages(t, out, DefRecvBuffSize, "Didn't receive all messages sent")
+	waitForMessages(t, out, (DefSendBuffSize+DefRecvBuffSize)*2, "Didn't receive all messages sent")
+	close(stopSend)
 
 	comm1.Stop()
 	comm2.Stop()
 
 	<-sem
 	<-sem
+
+	t.Logf("%d even nonces received", len(evenResults))
+	t.Logf("%d  odd nonces received", len(oddResults))
 
 	assert.NotEmpty(t, evenResults)
 	assert.NotEmpty(t, oddResults)

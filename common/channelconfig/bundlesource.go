@@ -61,12 +61,12 @@ func (bs *BundleSource) StableBundle() *Bundle {
 
 
 func (bs *BundleSource) PolicyManager() policies.Manager {
-	return bs.StableBundle().policyManager
+	return bs.StableBundle().PolicyManager()
 }
 
 
 func (bs *BundleSource) MSPManager() msp.MSPManager {
-	return bs.StableBundle().mspManager
+	return bs.StableBundle().MSPManager()
 }
 
 

@@ -14,16 +14,21 @@ import (
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/peer"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 
 
+type LedgerGetter interface {
+	GetLedger(cid string) ledger.PeerLedger
+}
 
-func New(aclProvider aclmgmt.ACLProvider) *LedgerQuerier {
+
+
+func New(aclProvider aclmgmt.ACLProvider, ledgers LedgerGetter) *LedgerQuerier {
 	return &LedgerQuerier{
 		aclProvider: aclProvider,
+		ledgers:     ledgers,
 	}
 }
 
@@ -42,6 +47,7 @@ func (e *LedgerQuerier) Enabled() bool             { return true }
 
 type LedgerQuerier struct {
 	aclProvider aclmgmt.ACLProvider
+	ledgers     LedgerGetter
 }
 
 var qscclogger = flogging.MustGetLogger("qscc")
@@ -84,7 +90,7 @@ func (e *LedgerQuerier) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 		return shim.Error(fmt.Sprintf("missing 3rd argument for %s", fname))
 	}
 
-	targetLedger := peer.GetLedger(cid)
+	targetLedger := e.ledgers.GetLedger(cid)
 	if targetLedger == nil {
 		return shim.Error(fmt.Sprintf("Invalid chain ID, %s", cid))
 	}

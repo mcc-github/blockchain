@@ -56,11 +56,11 @@ type gossip interface {
 
 	
 	
-	PeersOfChannel(common.ChainID) []discovery.NetworkMember
+	PeersOfChannel(common.ChannelID) []discovery.NetworkMember
 
 	
 	
-	PeerFilter(channel common.ChainID, messagePredicate api.SubChannelSelectionCriteria) (filter.RoutingFilter, error)
+	PeerFilter(channel common.ChannelID, messagePredicate api.SubChannelSelectionCriteria) (filter.RoutingFilter, error)
 
 	
 	
@@ -210,7 +210,7 @@ func hashDigest(dig *protosgossip.PvtDataDigest) (string, error) {
 func (p *puller) waitForMembership() []discovery.NetworkMember {
 	polIteration := 0
 	for {
-		members := p.PeersOfChannel(common.ChainID(p.channel))
+		members := p.PeersOfChannel(common.ChannelID(p.channel))
 		if len(members) != 0 {
 			return members
 		}
@@ -465,7 +465,7 @@ func (p *puller) computeFilters(dig2src dig2sources) (digestToFilterMapping, err
 		}
 
 		sources := sources
-		endorserPeer, err := p.PeerFilter(common.ChainID(p.channel), func(peerSignature api.PeerSignature) bool {
+		endorserPeer, err := p.PeerFilter(common.ChannelID(p.channel), func(peerSignature api.PeerSignature) bool {
 			for _, endorsement := range sources {
 				if bytes.Equal(endorsement.Endorser, []byte(peerSignature.PeerIdentity)) {
 					return true
@@ -547,7 +547,7 @@ func (p *puller) getLatestCollectionConfigRoutingFilter(chaincode string, collec
 }
 
 func (p *puller) getMatchAllRoutingFilter(filt privdata.Filter) (filter.RoutingFilter, error) {
-	routingFilter, err := p.PeerFilter(common.ChainID(p.channel), func(peerSignature api.PeerSignature) bool {
+	routingFilter, err := p.PeerFilter(common.ChannelID(p.channel), func(peerSignature api.PeerSignature) bool {
 		return filt(protoutil.SignedData{
 			Signature: peerSignature.Signature,
 			Identity:  peerSignature.PeerIdentity,

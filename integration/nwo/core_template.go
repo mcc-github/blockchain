@@ -102,7 +102,6 @@ peer:
   profile:
     enabled:     false
     listenAddress: 127.0.0.1:{{ .PeerPort Peer "ProfilePort" }}
-  adminService:
   handlers:
     authFilters:
     - name: DefaultAuth
@@ -173,6 +172,7 @@ chaincode:
     level:  info
     shim:   warning
     format: '%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}'
+  externalBuilders:
 
 ledger:
   blockchain:

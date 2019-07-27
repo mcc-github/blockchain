@@ -19,10 +19,20 @@ import (
 	protoutil "github.com/mcc-github/blockchain/protoutil"
 )
 
-var logger = flogging.MustGetLogger("historyleveldb")
+var logger historydbLogger = flogging.MustGetLogger("historyleveldb")
 
 var savePointKey = []byte{0x00}
 var emptyValue = []byte{}
+
+
+
+
+type historydbLogger interface {
+	Debugf(template string, args ...interface{})
+	Errorf(template string, args ...interface{})
+	Infof(template string, args ...interface{})
+	Warnf(template string, args ...interface{})
+}
 
 
 type HistoryDBProvider struct {

@@ -10,8 +10,6 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protoutil"
-	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("committer")
@@ -48,47 +46,16 @@ type PeerLedgerSupport interface {
 
 type LedgerCommitter struct {
 	PeerLedgerSupport
-	eventer ConfigBlockEventer
 }
-
-
-
-type ConfigBlockEventer func(block *common.Block) error
 
 
 
 func NewLedgerCommitter(ledger PeerLedgerSupport) *LedgerCommitter {
-	return NewLedgerCommitterReactive(ledger, func(_ *common.Block) error { return nil })
-}
-
-
-
-
-func NewLedgerCommitterReactive(ledger PeerLedgerSupport, eventer ConfigBlockEventer) *LedgerCommitter {
-	return &LedgerCommitter{PeerLedgerSupport: ledger, eventer: eventer}
-}
-
-
-
-func (lc *LedgerCommitter) preCommit(block *common.Block) error {
-	
-	if protoutil.IsConfigBlock(block) {
-		logger.Debug("Received configuration update, calling CSCC ConfigUpdate")
-		if err := lc.eventer(block); err != nil {
-			return errors.WithMessage(err, "could not update CSCC with new configuration update")
-		}
-	}
-	return nil
+	return &LedgerCommitter{PeerLedgerSupport: ledger}
 }
 
 
 func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error {
-	
-	
-	if err := lc.preCommit(blockAndPvtData.Block); err != nil {
-		return err
-	}
-
 	
 	if err := lc.PeerLedgerSupport.CommitWithPvtData(blockAndPvtData); err != nil {
 		return err
@@ -104,11 +71,10 @@ func (lc *LedgerCommitter) GetPvtDataAndBlockByNum(seqNum uint64) (*ledger.Block
 
 
 func (lc *LedgerCommitter) LedgerHeight() (uint64, error) {
-	var info *common.BlockchainInfo
-	var err error
-	if info, err = lc.GetBlockchainInfo(); err != nil {
+	info, err := lc.GetBlockchainInfo()
+	if err != nil {
 		logger.Errorf("Cannot get blockchain info, %s", info)
-		return uint64(0), err
+		return 0, err
 	}
 
 	return info.Height, nil

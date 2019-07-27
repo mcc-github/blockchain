@@ -43,6 +43,8 @@ type node struct {
 
 	metadata *etcdraft.BlockMetadata
 
+	subscriberC chan chan uint64
+
 	raft.Node
 }
 
@@ -71,6 +73,8 @@ func (n *node) start(fresh, join bool) {
 		n.logger.Info("Restarting raft node")
 		n.Node = raft.RestartNode(n.config)
 	}
+
+	n.subscriberC = make(chan chan uint64)
 
 	go n.run(campaign)
 }
@@ -110,6 +114,8 @@ func (n *node) run(campaign bool) {
 		}()
 	}
 
+	var notifyLeaderChangeC chan uint64
+
 	for {
 		select {
 		case <-raftTicker.C():
@@ -125,6 +131,17 @@ func (n *node) run(campaign bool) {
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				n.chain.snapC <- &rd.Snapshot
+			}
+
+			if notifyLeaderChangeC != nil && rd.SoftState != nil {
+				if l := atomic.LoadUint64(&rd.SoftState.Lead); l != raft.None {
+					select {
+					case notifyLeaderChangeC <- l:
+					default:
+					}
+
+					notifyLeaderChangeC = nil
+				}
 			}
 
 			
@@ -146,6 +163,8 @@ func (n *node) run(campaign bool) {
 			
 			
 			n.send(rd.Messages)
+
+		case notifyLeaderChangeC = <-n.subscriberC:
 
 		case <-n.chain.haltC:
 			raftTicker.Stop()
@@ -199,8 +218,13 @@ func (n *node) abdicateLeader(currentLead uint64) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Duration(n.config.ElectionTick)*n.tickInterval)
-	defer cancel()
+	
+	notifyc := make(chan uint64, 1)
+	select {
+	case n.subscriberC <- notifyc:
+	case <-n.chain.doneC:
+		return
+	}
 
 	
 	if status.RaftState == raft.StateLeader {
@@ -224,23 +248,19 @@ func (n *node) abdicateLeader(currentLead uint64) {
 		}
 
 		n.logger.Infof("Transferring leadership to %d", transferee)
-		n.TransferLeadership(ctx, status.ID, transferee)
+		n.TransferLeadership(context.TODO(), status.ID, transferee)
 	}
 
-	
-	var newLeader uint64
-	for newLeader = n.Status().Lead; newLeader == status.Lead || newLeader == raft.None; newLeader = n.Status().Lead {
-		select {
-		case <-ctx.Done():
-			n.logger.Warn("Leader transfer timeout")
-			return
-		case <-time.After(n.tickInterval):
-		case <-n.chain.doneC:
-			return
-		}
-	}
+	timer := n.clock.NewTimer(time.Duration(n.config.ElectionTick) * n.tickInterval)
+	defer timer.Stop() 
 
-	n.logger.Infof("Leader has been transferred from %d to %d", currentLead, newLeader)
+	select {
+	case <-timer.C():
+		n.logger.Warn("Leader transfer timeout")
+	case l := <-notifyc:
+		n.logger.Infof("Leader has been transferred from %d to %d", currentLead, l)
+	case <-n.chain.doneC:
+	}
 }
 
 func (n *node) logSendFailure(dest uint64, err error) {

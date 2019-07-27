@@ -115,7 +115,7 @@ func (s *MSPMessageCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityTy
 
 
 
-func (s *MSPMessageCryptoService) VerifyBlock(chainID common.ChainID, seqNum uint64, signedBlock []byte) error {
+func (s *MSPMessageCryptoService) VerifyBlock(chainID common.ChannelID, seqNum uint64, signedBlock []byte) error {
 	
 	block, err := protoutil.GetBlockFromBlockBytes(signedBlock)
 	if err != nil {
@@ -160,12 +160,11 @@ func (s *MSPMessageCryptoService) VerifyBlock(chainID common.ChainID, seqNum uin
 	
 
 	
-	cpm, ok := s.channelPolicyManagerGetter.Manager(channelID)
+	cpm := s.channelPolicyManagerGetter.Manager(channelID)
 	if cpm == nil {
 		return fmt.Errorf("Could not acquire policy manager for channel %s", channelID)
 	}
-	
-	mcsLogger.Debugf("Got policy manager for channel [%s] with flag [%t]", channelID, ok)
+	mcsLogger.Debugf("Got policy manager for channel [%s]", channelID)
 
 	
 	policy, ok := cpm.GetPolicy(policies.BlockValidation)
@@ -228,18 +227,18 @@ func (s *MSPMessageCryptoService) Verify(peerIdentity api.PeerIdentityType, sign
 
 
 
-func (s *MSPMessageCryptoService) VerifyByChannel(chainID common.ChainID, peerIdentity api.PeerIdentityType, signature, message []byte) error {
+func (s *MSPMessageCryptoService) VerifyByChannel(chainID common.ChannelID, peerIdentity api.PeerIdentityType, signature, message []byte) error {
 	
 	if len(peerIdentity) == 0 {
 		return errors.New("Invalid Peer Identity. It must be different from nil.")
 	}
 
 	
-	cpm, flag := s.channelPolicyManagerGetter.Manager(string(chainID))
+	cpm := s.channelPolicyManagerGetter.Manager(string(chainID))
 	if cpm == nil {
 		return fmt.Errorf("Could not acquire policy manager for channel %s", string(chainID))
 	}
-	mcsLogger.Debugf("Got policy manager for channel [%s] with flag [%t]", string(chainID), flag)
+	mcsLogger.Debugf("Got policy manager for channel [%s]", string(chainID))
 
 	
 	policy, flag := cpm.GetPolicy(policies.ChannelApplicationReaders)
@@ -263,7 +262,7 @@ func (s *MSPMessageCryptoService) Expiration(peerIdentity api.PeerIdentityType) 
 
 }
 
-func (s *MSPMessageCryptoService) getValidatedIdentity(peerIdentity api.PeerIdentityType) (msp.Identity, common.ChainID, error) {
+func (s *MSPMessageCryptoService) getValidatedIdentity(peerIdentity api.PeerIdentityType) (msp.Identity, common.ChannelID, error) {
 	
 	if len(peerIdentity) == 0 {
 		return nil, nil, errors.New("Invalid Peer Identity. It must be different from nil.")
@@ -334,7 +333,7 @@ func (s *MSPMessageCryptoService) getValidatedIdentity(peerIdentity api.PeerIden
 
 		mcsLogger.Debugf("Validation succeeded [% x] on [%s]", peerIdentity, chainID)
 
-		return identity, common.ChainID(chainID), nil
+		return identity, common.ChannelID(chainID), nil
 	}
 
 	return nil, nil, fmt.Errorf("Peer Identity [% x] cannot be validated. No MSP found able to do that.", peerIdentity)

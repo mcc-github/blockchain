@@ -52,6 +52,7 @@ type TxDetails struct {
 	TxID                            string
 	ChaincodeName, ChaincodeVersion string
 	SimulationResults               []byte
+	Type                            common.HeaderType
 }
 
 type BlockDetails struct {
@@ -110,13 +111,36 @@ func (bg *BlockGenerator) NextTestBlocks(numBlocks int) []*common.Block {
 }
 
 
-func ConstructTransaction(_ *testing.T, simulationResults []byte, txid string, sign bool) (*common.Envelope, string, error) {
+func ConstructTransaction(
+	t *testing.T,
+	simulationResults []byte,
+	txid string,
+	sign bool,
+) (*common.Envelope, string, error) {
+	return ConstructTransactionWithHeaderType(
+		t,
+		simulationResults,
+		txid,
+		sign,
+		common.HeaderType_ENDORSER_TRANSACTION,
+	)
+}
+
+
+func ConstructTransactionWithHeaderType(
+	t *testing.T,
+	simulationResults []byte,
+	txid string,
+	sign bool,
+	headerType common.HeaderType,
+) (*common.Envelope, string, error) {
 	return ConstructTransactionFromTxDetails(
 		&TxDetails{
 			ChaincodeName:     "foo",
 			ChaincodeVersion:  "v1",
 			TxID:              txid,
 			SimulationResults: simulationResults,
+			Type:              headerType,
 		},
 		sign,
 	)
@@ -131,9 +155,27 @@ func ConstructTransactionFromTxDetails(txDetails *TxDetails, sign bool) (*common
 	var err error
 	var txID string
 	if sign {
-		txEnv, txID, err = ConstructSignedTxEnvWithDefaultSigner(util.GetTestChainID(), ccid, nil, txDetails.SimulationResults, txDetails.TxID, nil, nil)
+		txEnv, txID, err = ConstructSignedTxEnvWithDefaultSigner(
+			util.GetTestChainID(),
+			ccid,
+			nil,
+			txDetails.SimulationResults,
+			txDetails.TxID,
+			nil,
+			nil,
+			txDetails.Type,
+		)
 	} else {
-		txEnv, txID, err = ConstructUnsignedTxEnv(util.GetTestChainID(), ccid, nil, txDetails.SimulationResults, txDetails.TxID, nil, nil)
+		txEnv, txID, err = ConstructUnsignedTxEnv(
+			util.GetTestChainID(),
+			ccid,
+			nil,
+			txDetails.SimulationResults,
+			txDetails.TxID,
+			nil,
+			nil,
+			txDetails.Type,
+		)
 	}
 	return txEnv, txID, err
 }
@@ -150,10 +192,43 @@ func ConstructBlockFromBlockDetails(t *testing.T, blockDetails *BlockDetails, si
 	return NewBlock(envs, blockDetails.BlockNum, blockDetails.PreviousHash)
 }
 
-func ConstructBlockWithTxid(t *testing.T, blockNum uint64, previousHash []byte, simulationResults [][]byte, txids []string, sign bool) *common.Block {
+func ConstructBlockWithTxid(
+	t *testing.T,
+	blockNum uint64,
+	previousHash []byte,
+	simulationResults [][]byte,
+	txids []string,
+	sign bool,
+) *common.Block {
+	return ConstructBlockWithTxidHeaderType(
+		t,
+		blockNum,
+		previousHash,
+		simulationResults,
+		txids,
+		sign,
+		common.HeaderType_ENDORSER_TRANSACTION,
+	)
+}
+
+func ConstructBlockWithTxidHeaderType(
+	t *testing.T,
+	blockNum uint64,
+	previousHash []byte,
+	simulationResults [][]byte,
+	txids []string,
+	sign bool,
+	headerType common.HeaderType,
+) *common.Block {
 	envs := []*common.Envelope{}
 	for i := 0; i < len(simulationResults); i++ {
-		env, _, err := ConstructTransaction(t, simulationResults[i], txids[i], sign)
+		env, _, err := ConstructTransactionWithHeaderType(
+			t,
+			simulationResults[i],
+			txids[i],
+			sign,
+			headerType,
+		)
 		if err != nil {
 			t.Fatalf("ConstructTestTransaction failed, err %s", err)
 		}
@@ -163,7 +238,13 @@ func ConstructBlockWithTxid(t *testing.T, blockNum uint64, previousHash []byte, 
 }
 
 
-func ConstructBlock(t *testing.T, blockNum uint64, previousHash []byte, simulationResults [][]byte, sign bool) *common.Block {
+func ConstructBlock(
+	t *testing.T,
+	blockNum uint64,
+	previousHash []byte,
+	simulationResults [][]byte,
+	sign bool,
+) *common.Block {
 	envs := []*common.Envelope{}
 	for i := 0; i < len(simulationResults); i++ {
 		env, _, err := ConstructTransaction(t, simulationResults[i], "", sign)
@@ -240,20 +321,69 @@ func constructBytesProposalResponsePayload(chainID string, ccid *pb.ChaincodeID,
 
 
 
-func ConstructSignedTxEnvWithDefaultSigner(chainID string, ccid *pb.ChaincodeID, response *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte) (*common.Envelope, string, error) {
-	return ConstructSignedTxEnv(chainID, ccid, response, simulationResults, txid, events, visibility, signer)
+func ConstructSignedTxEnvWithDefaultSigner(
+	chainID string,
+	ccid *pb.ChaincodeID,
+	response *pb.Response,
+	simulationResults []byte,
+	txid string,
+	events []byte,
+	visibility []byte,
+	headerType common.HeaderType,
+) (*common.Envelope, string, error) {
+
+	return ConstructSignedTxEnv(
+		chainID,
+		ccid,
+		response,
+		simulationResults,
+		txid,
+		events,
+		visibility,
+		signer,
+		headerType,
+	)
 }
 
 
-func ConstructUnsignedTxEnv(chainID string, ccid *pb.ChaincodeID, response *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte) (*common.Envelope, string, error) {
+func ConstructUnsignedTxEnv(
+	chainID string,
+	ccid *pb.ChaincodeID,
+	response *pb.Response,
+	simulationResults []byte,
+	txid string,
+	events []byte,
+	visibility []byte,
+	headerType common.HeaderType,
+) (*common.Envelope, string, error) {
 	mspLcl := mmsp.NewNoopMsp()
 	sigId, _ := mspLcl.GetDefaultSigningIdentity()
 
-	return ConstructSignedTxEnv(chainID, ccid, response, simulationResults, txid, events, visibility, sigId)
+	return ConstructSignedTxEnv(
+		chainID,
+		ccid,
+		response,
+		simulationResults,
+		txid,
+		events,
+		visibility,
+		sigId,
+		headerType,
+	)
 }
 
 
-func ConstructSignedTxEnv(chainID string, ccid *pb.ChaincodeID, pResponse *pb.Response, simulationResults []byte, txid string, events []byte, visibility []byte, signer msp.SigningIdentity) (*common.Envelope, string, error) {
+func ConstructSignedTxEnv(
+	chainID string,
+	ccid *pb.ChaincodeID,
+	pResponse *pb.Response,
+	simulationResults []byte,
+	txid string,
+	events []byte,
+	visibility []byte,
+	signer msp.SigningIdentity,
+	headerType common.HeaderType,
+) (*common.Envelope, string, error) {
 	ss, err := signer.Serialize()
 	if err != nil {
 		return nil, "", err
@@ -262,7 +392,16 @@ func ConstructSignedTxEnv(chainID string, ccid *pb.ChaincodeID, pResponse *pb.Re
 	var prop *pb.Proposal
 	if txid == "" {
 		
-		prop, txid, err = protoutil.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, chainID, &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: ccid}}, ss)
+		prop, txid, err = protoutil.CreateChaincodeProposal(
+			common.HeaderType_ENDORSER_TRANSACTION,
+			chainID,
+			&pb.ChaincodeInvocationSpec{
+				ChaincodeSpec: &pb.ChaincodeSpec{
+					ChaincodeId: ccid,
+				},
+			},
+			ss,
+		)
 
 	} else {
 		
@@ -270,13 +409,34 @@ func ConstructSignedTxEnv(chainID string, ccid *pb.ChaincodeID, pResponse *pb.Re
 		if err != nil {
 			return nil, "", err
 		}
-		prop, txid, err = protoutil.CreateChaincodeProposalWithTxIDNonceAndTransient(txid, common.HeaderType_ENDORSER_TRANSACTION, chainID, &pb.ChaincodeInvocationSpec{ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: ccid}}, nonce, ss, nil)
+		prop, txid, err = protoutil.CreateChaincodeProposalWithTxIDNonceAndTransient(
+			txid,
+			headerType,
+			chainID,
+			&pb.ChaincodeInvocationSpec{
+				ChaincodeSpec: &pb.ChaincodeSpec{
+					ChaincodeId: ccid,
+				},
+			},
+			nonce,
+			ss,
+			nil,
+		)
 	}
 	if err != nil {
 		return nil, "", err
 	}
 
-	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, pResponse, simulationResults, nil, ccid, nil, signer)
+	presp, err := protoutil.CreateProposalResponse(
+		prop.Header,
+		prop.Payload,
+		pResponse,
+		simulationResults,
+		nil,
+		ccid,
+		nil,
+		signer,
+	)
 	if err != nil {
 		return nil, "", err
 	}

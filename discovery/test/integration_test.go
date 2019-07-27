@@ -418,7 +418,7 @@ func createSupport(t *testing.T, dir string, lsccMetadataManager *lsccMetadataMa
 
 	gSup := &mocks.GossipSupport{}
 	gSup.On("ChannelExists", "mychannel").Return(true)
-	gSup.On("PeersOfChannel", gcommon.ChainID("mychannel")).Return(testPeers.toStateInfoSet())
+	gSup.On("PeersOfChannel", gcommon.ChannelID("mychannel")).Return(testPeers.toStateInfoSet())
 	gSup.On("Peers").Return(testPeers.toMembershipSet())
 	gSup.On("IdentityInfo").Return(testPeers.toIdentitySet())
 
@@ -451,7 +451,7 @@ func createClientAndService(t *testing.T, testdir string) (*client, *service) {
 
 	
 	gRPCServer, err := comm.NewGRPCServer("127.0.0.1:", comm.ServerConfig{
-		SecOpts: &comm.SecureOptions{
+		SecOpts: comm.SecureOptions{
 			Key:         serverKeyPair.Key,
 			Certificate: serverKeyPair.Cert,
 			UseTLS:      true,
@@ -484,7 +484,7 @@ func createClientAndService(t *testing.T, testdir string) (*client, *service) {
 
 	dialer, err := comm.NewGRPCClient(comm.ClientConfig{
 		Timeout: time.Second * 3,
-		SecOpts: &comm.SecureOptions{
+		SecOpts: comm.SecureOptions{
 			UseTLS:        true,
 			Certificate:   clientKeyPair.Cert,
 			Key:           clientKeyPair.Key,

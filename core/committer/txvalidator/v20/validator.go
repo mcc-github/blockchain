@@ -50,7 +50,7 @@ type ChannelResources interface {
 
 	
 	
-	GetMSPIDs(cid string) []string
+	GetMSPIDs() []string
 
 	
 	Capabilities() channelconfig.ApplicationCapabilities
@@ -91,6 +91,12 @@ type QueryExecutor interface {
 
 type ChannelPolicyManagerGetter interface {
 	policies.ChannelPolicyManagerGetter
+}
+
+
+
+type PolicyManager interface {
+	policies.Manager
 }
 
 

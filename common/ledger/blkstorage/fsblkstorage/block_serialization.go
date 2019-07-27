@@ -1,6 +1,5 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
-
+Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
@@ -35,7 +34,7 @@ func serializeBlock(block *common.Block) ([]byte, *serializedBlockInfo, error) {
 	if err = addHeaderBytes(block.Header, buf); err != nil {
 		return nil, nil, err
 	}
-	if info.txOffsets, err = addDataBytes(block.Data, buf); err != nil {
+	if info.txOffsets, err = addDataBytesAndConstructTxIndexInfo(block.Data, buf); err != nil {
 		return nil, nil, err
 	}
 	if err = addMetadataBytes(block.Metadata, buf); err != nil {
@@ -94,7 +93,7 @@ func addHeaderBytes(blockHeader *common.BlockHeader, buf *proto.Buffer) error {
 	return nil
 }
 
-func addDataBytes(blockData *common.BlockData, buf *proto.Buffer) ([]*txindexInfo, error) {
+func addDataBytesAndConstructTxIndexInfo(blockData *common.BlockData, buf *proto.Buffer) ([]*txindexInfo, error) {
 	var txOffsets []*txindexInfo
 
 	if err := buf.EncodeVarint(uint64(len(blockData.Data))); err != nil {
@@ -102,9 +101,10 @@ func addDataBytes(blockData *common.BlockData, buf *proto.Buffer) ([]*txindexInf
 	}
 	for _, txEnvelopeBytes := range blockData.Data {
 		offset := len(buf.Bytes())
-		txid, err := extractTxID(txEnvelopeBytes)
+		txid, err := protoutil.GetOrComputeTxIDFromEnvelope(txEnvelopeBytes)
 		if err != nil {
-			return nil, err
+			logger.Warningf("error while extracting txid from tx envelope bytes during serialization of block. Ignoring this error as this is caused by a malformed transaction. Error:%s",
+				err)
 		}
 		if err := buf.EncodeRawBytes(txEnvelopeBytes); err != nil {
 			return nil, err
@@ -165,8 +165,10 @@ func extractData(buf *ledgerutil.Buffer) (*common.BlockData, []*txindexInfo, err
 		if txEnvBytes, err = buf.DecodeRawBytes(false); err != nil {
 			return nil, nil, err
 		}
-		if txid, err = extractTxID(txEnvBytes); err != nil {
-			return nil, nil, err
+		if txid, err = protoutil.GetOrComputeTxIDFromEnvelope(txEnvBytes); err != nil {
+			logger.Warningf("error while extracting txid from tx envelope bytes during deserialization of block. Ignoring this error as this is caused by a malformed transaction. Error:%s",
+				err)
+
 		}
 		data.Data = append(data.Data, txEnvBytes)
 		idxInfo := &txindexInfo{txID: txid, loc: &locPointer{txOffset, buf.GetBytesConsumed() - txOffset}}
@@ -190,20 +192,4 @@ func extractMetadata(buf *ledgerutil.Buffer) (*common.BlockMetadata, error) {
 		metadata.Metadata = append(metadata.Metadata, metadataEntry)
 	}
 	return metadata, nil
-}
-
-func extractTxID(txEnvelopBytes []byte) (string, error) {
-	txEnvelope, err := protoutil.GetEnvelopeFromBlock(txEnvelopBytes)
-	if err != nil {
-		return "", err
-	}
-	txPayload, err := protoutil.GetPayload(txEnvelope)
-	if err != nil {
-		return "", nil
-	}
-	chdr, err := protoutil.UnmarshalChannelHeader(txPayload.Header.ChannelHeader)
-	if err != nil {
-		return "", err
-	}
-	return chdr.TxId, nil
 }

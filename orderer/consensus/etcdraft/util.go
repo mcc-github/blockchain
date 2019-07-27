@@ -411,6 +411,9 @@ func CheckConfigMetadata(metadata *etcdraft.ConfigMetadata) error {
 
 	
 	for _, consenter := range metadata.Consenters {
+		if consenter == nil {
+			return errors.Errorf("metadata has nil consenter")
+		}
 		if err := validateCert(consenter.ServerTlsCert, "server"); err != nil {
 			return err
 		}
@@ -601,7 +604,7 @@ func (es *evictionSuspector) confirmSuspicion(cumulativeSuspicion time.Duration)
 	es.logger.Infof("Suspecting our own eviction from the channel for %v", cumulativeSuspicion)
 	puller, err := es.createPuller()
 	if err != nil {
-		es.logger.Panicf("Failed creating a block puller")
+		es.logger.Panicf("Failed creating a block puller: %v", err)
 	}
 
 	lastConfigBlock, err := cluster.PullLastConfigBlock(puller)
@@ -650,4 +653,13 @@ func (es *evictionSuspector) confirmSuspicion(cumulativeSuspicion time.Duration)
 	}
 
 	es.logger.Infof("Pulled all blocks up to eviction block.")
+}
+
+
+func CreateConsentersMap(blockMetadata *etcdraft.BlockMetadata, configMetadata *etcdraft.ConfigMetadata) map[uint64]*etcdraft.Consenter {
+	consenters := map[uint64]*etcdraft.Consenter{}
+	for i, consenter := range configMetadata.Consenters {
+		consenters[blockMetadata.ConsenterIds[i]] = consenter
+	}
+	return consenters
 }

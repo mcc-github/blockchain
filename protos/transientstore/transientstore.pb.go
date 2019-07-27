@@ -1,13 +1,15 @@
 
 
 
-package transientstore 
+package transientstore
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import common "github.com/mcc-github/blockchain/protos/common"
-import rwset "github.com/mcc-github/blockchain/protos/ledger/rwset"
+import (
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	common "github.com/mcc-github/blockchain/protos/common"
+	rwset "github.com/mcc-github/blockchain/protos/ledger/rwset"
+	math "math"
+)
 
 
 var _ = proto.Marshal
@@ -18,7 +20,7 @@ var _ = math.Inf
 
 
 
-const _ = proto.ProtoPackageIsVersion2 
+const _ = proto.ProtoPackageIsVersion3 
 
 
 
@@ -36,16 +38,17 @@ func (m *TxPvtReadWriteSetWithConfigInfo) Reset()         { *m = TxPvtReadWriteS
 func (m *TxPvtReadWriteSetWithConfigInfo) String() string { return proto.CompactTextString(m) }
 func (*TxPvtReadWriteSetWithConfigInfo) ProtoMessage()    {}
 func (*TxPvtReadWriteSetWithConfigInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_transientstore_a7d5b38a69543271, []int{0}
+	return fileDescriptor_fca243668b157b9e, []int{0}
 }
+
 func (m *TxPvtReadWriteSetWithConfigInfo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TxPvtReadWriteSetWithConfigInfo.Unmarshal(m, b)
 }
 func (m *TxPvtReadWriteSetWithConfigInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TxPvtReadWriteSetWithConfigInfo.Marshal(b, m, deterministic)
 }
-func (dst *TxPvtReadWriteSetWithConfigInfo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TxPvtReadWriteSetWithConfigInfo.Merge(dst, src)
+func (m *TxPvtReadWriteSetWithConfigInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TxPvtReadWriteSetWithConfigInfo.Merge(m, src)
 }
 func (m *TxPvtReadWriteSetWithConfigInfo) XXX_Size() int {
 	return xxx_messageInfo_TxPvtReadWriteSetWithConfigInfo.Size(m)
@@ -83,10 +86,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("transientstore/transientstore.proto", fileDescriptor_transientstore_a7d5b38a69543271)
+	proto.RegisterFile("transientstore/transientstore.proto", fileDescriptor_fca243668b157b9e)
 }
 
-var fileDescriptor_transientstore_a7d5b38a69543271 = []byte{
+var fileDescriptor_fca243668b157b9e = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x52, 0x4f, 0x4b, 0x3b, 0x31,
 	0x10, 0x65, 0xdb, 0xdf, 0x4f, 0x6c, 0x0a, 0xa2, 0x39, 0xe8, 0xd2, 0x4b, 0x8b, 0x5e, 0x7a, 0x90,

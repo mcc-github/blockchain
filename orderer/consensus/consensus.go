@@ -29,6 +29,17 @@ type Consenter interface {
 
 
 
+type MetadataValidator interface {
+	
+	
+	
+	
+	ValidateConsensusMetadata(oldMetadata, newMetadata []byte, newChannel bool) error
+}
+
+
+
+
 
 
 
@@ -114,7 +125,14 @@ type ConsenterSupport interface {
 	
 	
 	Append(block *cb.Block) error
+}
 
-	
-	DetectConsensusMigration() bool
+
+type NoOpMetadataValidator struct {
+}
+
+
+
+func (n NoOpMetadataValidator) ValidateConsensusMetadata(oldMetadataBytes, newMetadataBytes []byte, newChannel bool) error {
+	return nil
 }

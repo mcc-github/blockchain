@@ -23,9 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
-	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
-	"github.com/mcc-github/blockchain/core/policyprovider"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -123,6 +121,9 @@ type FilesystemSupport interface {
 }
 
 
+type MSPIDsGetter func(string) []string
+
+
 
 
 type LifeCycleSysCC struct {
@@ -142,17 +143,26 @@ type LifeCycleSysCC struct {
 	Support FilesystemSupport
 
 	PlatformRegistry *platforms.Registry
+
+	GetMSPIDs MSPIDsGetter
 }
 
 
 
-func New(sccp sysccprovider.SystemChaincodeProvider, ACLProvider aclmgmt.ACLProvider, platformRegistry *platforms.Registry) *LifeCycleSysCC {
+func New(
+	sccp sysccprovider.SystemChaincodeProvider,
+	ACLProvider aclmgmt.ACLProvider,
+	platformRegistry *platforms.Registry,
+	getMSPIDs MSPIDsGetter,
+	policyChecker policy.PolicyChecker,
+) *LifeCycleSysCC {
 	return &LifeCycleSysCC{
-		Support:          &supportImpl{},
-		PolicyChecker:    policyprovider.GetPolicyChecker(),
+		Support:          &supportImpl{GetMSPIDs: getMSPIDs},
+		PolicyChecker:    policyChecker,
 		SCCProvider:      sccp,
 		ACLProvider:      ACLProvider,
 		PlatformRegistry: platformRegistry,
+		GetMSPIDs:        getMSPIDs,
 	}
 }
 
@@ -182,7 +192,7 @@ func (lscc *LifeCycleSysCC) ChaincodeContainerInfo(channelID, chaincodeName stri
 		return nil, errors.Wrapf(err, "could not get chaincode code")
 	}
 
-	return ccprovider.DeploymentSpecToChaincodeContainerInfo(cds), nil
+	return ccprovider.DeploymentSpecToChaincodeContainerInfo(cds, false), nil
 }
 
 func (lscc *LifeCycleSysCC) ChaincodeDefinition(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error) {
@@ -255,6 +265,10 @@ func (lscc *LifeCycleSysCC) putChaincodeData(stub shim.ChaincodeStubInterface, c
 
 	return err
 }
+
+
+
+
 
 
 
@@ -332,6 +346,14 @@ func checkCollectionMemberPolicy(collectionConfig *common.CollectionConfig, mspm
 		if !found {
 			logger.Warningf("collection-name: %s collection member %s is not part of the channel", coll.GetName(), orgID)
 		}
+	}
+
+	
+	
+	policyProvider := &cauthdsl.EnvelopeBasedPolicyProvider{Deserializer: mspmgr}
+	if _, err := policyProvider.NewPolicy(coll.MemberOrgsPolicy.GetSignaturePolicy()); err != nil {
+		logger.Errorf("Invalid member org policy for collection '%s', error: %s", coll.Name, err)
+		return errors.WithMessage(err, fmt.Sprintf("invalid member org policy for collection '%s'", coll.Name))
 	}
 
 	return nil
@@ -587,7 +609,7 @@ func (lscc *LifeCycleSysCC) executeInstall(stub shim.ChaincodeStubInterface, ccb
 	cds := ccpack.GetDepSpec()
 
 	if cds == nil {
-		return fmt.Errorf("nil deployment spec from from the CC package")
+		return fmt.Errorf("nil deployment spec from the CC package")
 	}
 
 	if err = lscc.isValidChaincodeName(cds.ChaincodeSpec.ChaincodeId.Name); err != nil {
@@ -904,7 +926,8 @@ func (lscc *LifeCycleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		if len(args) > 3 && len(args[3]) > 0 {
 			EP = args[3]
 		} else {
-			p := cauthdsl.SignedByAnyMember(peer.GetMSPIDs(channel))
+			mspIDs := lscc.GetMSPIDs(channel)
+			p := cauthdsl.SignedByAnyMember(mspIDs)
 			EP, err = protoutil.Marshal(p)
 			if err != nil {
 				return shim.Error(err.Error())

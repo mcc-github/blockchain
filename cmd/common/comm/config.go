@@ -28,33 +28,33 @@ type Config struct {
 
 
 
-func (conf Config) ToSecureOptions(newSelfSignedTLSCert genTLSCertFunc) (*comm.SecureOptions, error) {
+func (conf Config) ToSecureOptions(newSelfSignedTLSCert genTLSCertFunc) (comm.SecureOptions, error) {
 	if conf.PeerCACertPath == "" {
-		return &comm.SecureOptions{}, nil
+		return comm.SecureOptions{}, nil
 	}
 	caBytes, err := loadFile(conf.PeerCACertPath)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return comm.SecureOptions{}, errors.WithStack(err)
 	}
 	var keyBytes, certBytes []byte
 	
 	if conf.KeyPath == "" && conf.CertPath == "" {
 		tlsCert, err := newSelfSignedTLSCert()
 		if err != nil {
-			return nil, err
+			return comm.SecureOptions{}, err
 		}
 		keyBytes, certBytes = tlsCert.Key, tlsCert.Cert
 	} else {
 		keyBytes, err = loadFile(conf.KeyPath)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return comm.SecureOptions{}, errors.WithStack(err)
 		}
 		certBytes, err = loadFile(conf.CertPath)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return comm.SecureOptions{}, errors.WithStack(err)
 		}
 	}
-	return &comm.SecureOptions{
+	return comm.SecureOptions{
 		Key:               keyBytes,
 		Certificate:       certBytes,
 		UseTLS:            true,

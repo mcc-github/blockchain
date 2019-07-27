@@ -12,7 +12,7 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	newchannelconfig "github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
+	"github.com/mcc-github/blockchain/common/ledger/blockledger/ramledger"
 	mockconfigtx "github.com/mcc-github/blockchain/common/mocks/configtx"
 	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
@@ -23,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockBlockWriterSupport struct {
@@ -110,7 +111,7 @@ func TestBlockLastConfig(t *testing.T) {
 	}
 
 	block := protoutil.NewBlock(newBlockNum, []byte("foo"))
-	bw.addLastConfigSignature(block)
+	bw.addLastConfig(block)
 
 	assert.Equal(t, newBlockNum, bw.lastConfigBlockNum)
 	assert.Equal(t, newConfigSeq, bw.lastConfigSeq)
@@ -218,7 +219,8 @@ func TestGoodWriteConfig(t *testing.T) {
 	assert.Equal(t, block.Header, cBlock.Header)
 	assert.Equal(t, block.Data, cBlock.Data)
 
-	omd := protoutil.GetMetadataFromBlockOrPanic(block, cb.BlockMetadataIndex_ORDERER)
+	omd, err := protoutil.GetConsenterMetadataFromBlock(block)
+	require.NoError(t, err)
 	assert.Equal(t, consenterMetadata, omd.Value)
 }
 
@@ -303,6 +305,7 @@ func TestRaceWriteConfig(t *testing.T) {
 	expectedLastConfigBlockNumber = block2.Header.Number
 	testLastConfigBlockNumber(t, block2, expectedLastConfigBlockNumber)
 
-	omd := protoutil.GetMetadataFromBlockOrPanic(block1, cb.BlockMetadataIndex_ORDERER)
+	omd, err := protoutil.GetConsenterMetadataFromBlock(block1)
+	require.NoError(t, err)
 	assert.Equal(t, consenterMetadata1, omd.Value)
 }

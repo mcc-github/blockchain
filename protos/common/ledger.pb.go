@@ -1,11 +1,13 @@
 
 
 
-package common 
+package common
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	math "math"
+)
 
 
 var _ = proto.Marshal
@@ -16,7 +18,7 @@ var _ = math.Inf
 
 
 
-const _ = proto.ProtoPackageIsVersion2 
+const _ = proto.ProtoPackageIsVersion3 
 
 
 
@@ -33,16 +35,17 @@ func (m *BlockchainInfo) Reset()         { *m = BlockchainInfo{} }
 func (m *BlockchainInfo) String() string { return proto.CompactTextString(m) }
 func (*BlockchainInfo) ProtoMessage()    {}
 func (*BlockchainInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ledger_2eb5a49d77a3d612, []int{0}
+	return fileDescriptor_da3410306adbea27, []int{0}
 }
+
 func (m *BlockchainInfo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BlockchainInfo.Unmarshal(m, b)
 }
 func (m *BlockchainInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_BlockchainInfo.Marshal(b, m, deterministic)
 }
-func (dst *BlockchainInfo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BlockchainInfo.Merge(dst, src)
+func (m *BlockchainInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BlockchainInfo.Merge(m, src)
 }
 func (m *BlockchainInfo) XXX_Size() int {
 	return xxx_messageInfo_BlockchainInfo.Size(m)
@@ -78,9 +81,9 @@ func init() {
 	proto.RegisterType((*BlockchainInfo)(nil), "common.BlockchainInfo")
 }
 
-func init() { proto.RegisterFile("common/ledger.proto", fileDescriptor_ledger_2eb5a49d77a3d612) }
+func init() { proto.RegisterFile("common/ledger.proto", fileDescriptor_da3410306adbea27) }
 
-var fileDescriptor_ledger_2eb5a49d77a3d612 = []byte{
+var fileDescriptor_da3410306adbea27 = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x12, 0x4e, 0xce, 0xcf, 0xcd,
 	0xcd, 0xcf, 0xd3, 0xcf, 0x49, 0x4d, 0x49, 0x4f, 0x2d, 0xd2, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17,

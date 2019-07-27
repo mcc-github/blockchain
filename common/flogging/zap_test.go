@@ -14,6 +14,7 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/flogging/fabenc"
+	"github.com/mcc-github/blockchain/common/flogging/mock"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -307,4 +308,31 @@ func TestGRPCLogger(t *testing.T) {
 
 	callWrapper(gl, "message")
 	assert.Equal(t, "grpc DEBUG TestGRPCLogger message\n", buf.String())
+}
+
+
+
+
+
+
+
+func TestEnabledLevelCheck(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logging, err := flogging.New(flogging.Config{
+		LogSpec: "info",
+		Writer:  buf,
+	})
+	assert.NoError(t, err)
+
+	fakeObserver := &mock.Observer{}
+	logging.SetObserver(fakeObserver)
+
+	logger := logging.ZapLogger("foo")
+	blockchainLogger := flogging.NewFabricLogger(logger)
+
+	blockchainLogger.Debug("debug message")
+	assert.Equal(t, 0, fakeObserver.CheckCallCount(), "Check should not have been called")
+
+	blockchainLogger.Info("info message")
+	assert.Equal(t, 1, fakeObserver.CheckCallCount(), "Check should have been called")
 }

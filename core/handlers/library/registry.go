@@ -60,23 +60,6 @@ var reg registry
 
 
 
-type Config struct {
-	AuthFilters []*HandlerConfig `mapstructure:"authFilters" yaml:"authFilters"`
-	Decorators  []*HandlerConfig `mapstructure:"decorators" yaml:"decorators"`
-	Endorsers   PluginMapping    `mapstructure:"endorsers" yaml:"endorsers"`
-	Validators  PluginMapping    `mapstructure:"validators" yaml:"validators"`
-}
-
-type PluginMapping map[string]*HandlerConfig
-
-
-type HandlerConfig struct {
-	Name    string `mapstructure:"name" yaml:"name"`
-	Library string `mapstructure:"library" yaml:"library"`
-}
-
-
-
 func InitRegistry(c Config) Registry {
 	once.Do(func() {
 		reg = registry{

@@ -1,11 +1,13 @@
 
 
 
-package peer 
+package peer
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	math "math"
+)
 
 
 var _ = proto.Marshal
@@ -16,7 +18,7 @@ var _ = math.Inf
 
 
 
-const _ = proto.ProtoPackageIsVersion2 
+const _ = proto.ProtoPackageIsVersion3 
 
 
 type SignedChaincodeDeploymentSpec struct {
@@ -40,16 +42,17 @@ func (m *SignedChaincodeDeploymentSpec) Reset()         { *m = SignedChaincodeDe
 func (m *SignedChaincodeDeploymentSpec) String() string { return proto.CompactTextString(m) }
 func (*SignedChaincodeDeploymentSpec) ProtoMessage()    {}
 func (*SignedChaincodeDeploymentSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_signed_cc_dep_spec_ac9383ae12091d27, []int{0}
+	return fileDescriptor_e007a7c0644e7e6f, []int{0}
 }
+
 func (m *SignedChaincodeDeploymentSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SignedChaincodeDeploymentSpec.Unmarshal(m, b)
 }
 func (m *SignedChaincodeDeploymentSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_SignedChaincodeDeploymentSpec.Marshal(b, m, deterministic)
 }
-func (dst *SignedChaincodeDeploymentSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SignedChaincodeDeploymentSpec.Merge(dst, src)
+func (m *SignedChaincodeDeploymentSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SignedChaincodeDeploymentSpec.Merge(m, src)
 }
 func (m *SignedChaincodeDeploymentSpec) XXX_Size() int {
 	return xxx_messageInfo_SignedChaincodeDeploymentSpec.Size(m)
@@ -85,11 +88,9 @@ func init() {
 	proto.RegisterType((*SignedChaincodeDeploymentSpec)(nil), "protos.SignedChaincodeDeploymentSpec")
 }
 
-func init() {
-	proto.RegisterFile("peer/signed_cc_dep_spec.proto", fileDescriptor_signed_cc_dep_spec_ac9383ae12091d27)
-}
+func init() { proto.RegisterFile("peer/signed_cc_dep_spec.proto", fileDescriptor_e007a7c0644e7e6f) }
 
-var fileDescriptor_signed_cc_dep_spec_ac9383ae12091d27 = []byte{
+var fileDescriptor_e007a7c0644e7e6f = []byte{
 	
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x90, 0xc1, 0x4a, 0xc3, 0x40,
 	0x10, 0x86, 0xa9, 0x05, 0x0f, 0xab, 0x17, 0x53, 0xc1, 0x28, 0x16, 0x4a, 0x4f, 0xf5, 0x92, 0xa0,

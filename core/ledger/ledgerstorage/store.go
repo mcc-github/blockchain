@@ -13,6 +13,7 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
+	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
@@ -39,7 +40,7 @@ type Store struct {
 }
 
 
-func NewProvider(storeDir string, conf *ledger.PrivateData) *Provider {
+func NewProvider(storeDir string, conf *pvtdatastorage.PrivateDataConfig, metricsProvider metrics.Provider) *Provider {
 	
 	attrsToIndex := []blkstorage.IndexableAttr{
 		blkstorage.IndexableAttrBlockHash,
@@ -56,6 +57,7 @@ func NewProvider(storeDir string, conf *ledger.PrivateData) *Provider {
 			maxBlockFileSize,
 		),
 		indexConfig,
+		metricsProvider,
 	)
 
 	pvtStoreProvider := pvtdatastorage.NewProvider(conf)

@@ -163,6 +163,10 @@ func (msp *bccspmsp) setupCAs(conf *m.FabricMSPConfig) error {
 }
 
 func (msp *bccspmsp) setupAdmins(conf *m.FabricMSPConfig) error {
+	return msp.internalSetupAdmin(conf)
+}
+
+func (msp *bccspmsp) setupAdminsPreV142(conf *m.FabricMSPConfig) error {
 	
 	msp.admins = make([]Identity, len(conf.Admins))
 	for i, admCert := range conf.Admins {
@@ -172,6 +176,19 @@ func (msp *bccspmsp) setupAdmins(conf *m.FabricMSPConfig) error {
 		}
 
 		msp.admins[i] = id
+	}
+
+	return nil
+}
+
+func (msp *bccspmsp) setupAdminsV142(conf *m.FabricMSPConfig) error {
+	
+	if err := msp.setupAdminsPreV142(conf); err != nil {
+		return err
+	}
+
+	if len(msp.admins) == 0 && (!msp.ouEnforcement || msp.adminOU == nil) {
+		return errors.New("administrators must be declared when no admin ou classification is set")
 	}
 
 	return nil
@@ -235,6 +252,14 @@ func (msp *bccspmsp) setupNodeOUs(config *m.FabricMSPConfig) error {
 
 		msp.ouEnforcement = config.FabricNodeOus.Enable
 
+		if config.FabricNodeOus.ClientOuIdentifier == nil || len(config.FabricNodeOus.ClientOuIdentifier.OrganizationalUnitIdentifier) == 0 {
+			return errors.New("Failed setting up NodeOUs. ClientOU must be different from nil.")
+		}
+
+		if config.FabricNodeOus.PeerOuIdentifier == nil || len(config.FabricNodeOus.PeerOuIdentifier.OrganizationalUnitIdentifier) == 0 {
+			return errors.New("Failed setting up NodeOUs. PeerOU must be different from nil.")
+		}
+
 		
 		msp.clientOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOus.ClientOuIdentifier.OrganizationalUnitIdentifier}
 		if len(config.FabricNodeOus.ClientOuIdentifier.Certificate) != 0 {
@@ -256,6 +281,83 @@ func (msp *bccspmsp) setupNodeOUs(config *m.FabricMSPConfig) error {
 		}
 
 	} else {
+		msp.ouEnforcement = false
+	}
+
+	return nil
+}
+
+func (msp *bccspmsp) setupNodeOUsV142(config *m.FabricMSPConfig) error {
+	if config.FabricNodeOus == nil {
+		msp.ouEnforcement = false
+		return nil
+	}
+
+	msp.ouEnforcement = config.FabricNodeOus.Enable
+
+	counter := 0
+	
+	if config.FabricNodeOus.ClientOuIdentifier != nil {
+		msp.clientOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOus.ClientOuIdentifier.OrganizationalUnitIdentifier}
+		if len(config.FabricNodeOus.ClientOuIdentifier.Certificate) != 0 {
+			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOus.ClientOuIdentifier.Certificate)
+			if err != nil {
+				return err
+			}
+			msp.clientOU.CertifiersIdentifier = certifiersIdentifier
+		}
+		counter++
+	} else {
+		msp.clientOU = nil
+	}
+
+	
+	if config.FabricNodeOus.PeerOuIdentifier != nil {
+		msp.peerOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOus.PeerOuIdentifier.OrganizationalUnitIdentifier}
+		if len(config.FabricNodeOus.PeerOuIdentifier.Certificate) != 0 {
+			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOus.PeerOuIdentifier.Certificate)
+			if err != nil {
+				return err
+			}
+			msp.peerOU.CertifiersIdentifier = certifiersIdentifier
+		}
+		counter++
+	} else {
+		msp.peerOU = nil
+	}
+
+	
+	if config.FabricNodeOus.AdminOuIdentifier != nil {
+		msp.adminOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOus.AdminOuIdentifier.OrganizationalUnitIdentifier}
+		if len(config.FabricNodeOus.AdminOuIdentifier.Certificate) != 0 {
+			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOus.AdminOuIdentifier.Certificate)
+			if err != nil {
+				return err
+			}
+			msp.adminOU.CertifiersIdentifier = certifiersIdentifier
+		}
+		counter++
+	} else {
+		msp.adminOU = nil
+	}
+
+	
+	if config.FabricNodeOus.OrdererOuIdentifier != nil {
+		msp.ordererOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOus.OrdererOuIdentifier.OrganizationalUnitIdentifier}
+		if len(config.FabricNodeOus.OrdererOuIdentifier.Certificate) != 0 {
+			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOus.OrdererOuIdentifier.Certificate)
+			if err != nil {
+				return err
+			}
+			msp.ordererOU.CertifiersIdentifier = certifiersIdentifier
+		}
+		counter++
+	} else {
+		msp.ordererOU = nil
+	}
+
+	if counter == 0 {
+		
 		msp.ouEnforcement = false
 	}
 
@@ -427,6 +529,55 @@ func (msp *bccspmsp) preSetupV1(conf *m.FabricMSPConfig) error {
 	return nil
 }
 
+func (msp *bccspmsp) preSetupV142(conf *m.FabricMSPConfig) error {
+	
+	if err := msp.setupCrypto(conf); err != nil {
+		return err
+	}
+
+	
+	if err := msp.setupCAs(conf); err != nil {
+		return err
+	}
+
+	
+	if err := msp.setupCRLs(conf); err != nil {
+		return err
+	}
+
+	
+	if err := msp.finalizeSetupCAs(); err != nil {
+		return err
+	}
+
+	
+	if err := msp.setupSigningIdentity(conf); err != nil {
+		return err
+	}
+
+	
+	if err := msp.setupTLSCAs(conf); err != nil {
+		return err
+	}
+
+	
+	if err := msp.setupOUs(conf); err != nil {
+		return err
+	}
+
+	
+	if err := msp.setupNodeOUsV142(conf); err != nil {
+		return err
+	}
+
+	
+	if err := msp.setupAdmins(conf); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (msp *bccspmsp) postSetupV1(conf *m.FabricMSPConfig) error {
 	
 	
@@ -460,6 +611,20 @@ func (msp *bccspmsp) setupV11(conf *m.FabricMSPConfig) error {
 	return nil
 }
 
+func (msp *bccspmsp) setupV142(conf *m.FabricMSPConfig) error {
+	err := msp.preSetupV142(conf)
+	if err != nil {
+		return err
+	}
+
+	err = msp.postSetupV142(conf)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (msp *bccspmsp) postSetupV11(conf *m.FabricMSPConfig) error {
 	
 	if !msp.ouEnforcement {
@@ -479,6 +644,25 @@ func (msp *bccspmsp) postSetupV11(conf *m.FabricMSPConfig) error {
 		err = admin.SatisfiesPrincipal(principal)
 		if err != nil {
 			return errors.WithMessagef(err, "admin %d is invalid", i)
+		}
+	}
+
+	return nil
+}
+
+func (msp *bccspmsp) postSetupV142(conf *m.FabricMSPConfig) error {
+	
+	if !msp.ouEnforcement {
+		
+		return msp.postSetupV1(conf)
+	}
+
+	
+	for i, admin := range msp.admins {
+		err1 := msp.hasOURole(admin, m.MSPRole_CLIENT)
+		err2 := msp.hasOURole(admin, m.MSPRole_ADMIN)
+		if err1 != nil && err2 != nil {
+			return errors.Errorf("admin %d is invalid [%s,%s]", i, err1, err2)
 		}
 	}
 

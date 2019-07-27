@@ -16,60 +16,91 @@ import (
 
 
 type ChannelDeMultiplexer struct {
-	channels []*channel
-	lock     *sync.RWMutex
-	closed   bool
+	
+	lock   sync.Mutex
+	closed bool 
+	stopCh chan struct{}
+	
+	
+	
+	deMuxInProgress sync.WaitGroup
+	channels        []*channel
 }
 
 
 func NewChannelDemultiplexer() *ChannelDeMultiplexer {
-	return &ChannelDeMultiplexer{
-		channels: make([]*channel, 0),
-		lock:     &sync.RWMutex{},
-	}
+	return &ChannelDeMultiplexer{stopCh: make(chan struct{})}
 }
 
 type channel struct {
 	pred common.MessageAcceptor
-	ch   chan interface{}
-}
-
-func (m *ChannelDeMultiplexer) isClosed() bool {
-	return m.closed
+	ch   chan<- interface{}
 }
 
 
 
 func (m *ChannelDeMultiplexer) Close() {
 	m.lock.Lock()
-	defer m.lock.Unlock()
+	if m.closed {
+		m.lock.Unlock()
+		return
+	}
 	m.closed = true
+	close(m.stopCh)
+	m.deMuxInProgress.Wait()
 	for _, ch := range m.channels {
 		close(ch.ch)
 	}
 	m.channels = nil
+	m.lock.Unlock()
 }
 
 
-func (m *ChannelDeMultiplexer) AddChannel(predicate common.MessageAcceptor) chan interface{} {
+
+
+
+
+
+func (m *ChannelDeMultiplexer) AddChannel(predicate common.MessageAcceptor) <-chan interface{} {
 	m.lock.Lock()
-	defer m.lock.Unlock()
-	ch := &channel{ch: make(chan interface{}, 10), pred: predicate}
+	if m.closed { 
+		m.lock.Unlock()
+		ch := make(chan interface{})
+		close(ch)
+		return ch
+	}
+	bidirectionalCh := make(chan interface{}, 10)
+	
+	
+	ch := &channel{ch: bidirectionalCh, pred: predicate}
 	m.channels = append(m.channels, ch)
-	return ch.ch
+	m.lock.Unlock()
+	return bidirectionalCh
 }
+
+
 
 
 
 func (m *ChannelDeMultiplexer) DeMultiplex(msg interface{}) {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	if m.isClosed() {
+	m.lock.Lock()
+	if m.closed {
+		m.lock.Unlock()
 		return
 	}
-	for _, ch := range m.channels {
+	channels := m.channels
+	m.deMuxInProgress.Add(1)
+	m.lock.Unlock()
+
+	for _, ch := range channels {
 		if ch.pred(msg) {
-			ch.ch <- msg
+			select {
+			case <-m.stopCh:
+				m.deMuxInProgress.Done()
+				return 
+			case ch.ch <- msg:
+			}
 		}
 	}
+	m.deMuxInProgress.Done()
 }

@@ -23,11 +23,8 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/metrics/metricsfakes"
 	"github.com/mcc-github/blockchain/common/util"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/container/dockercontroller/mock"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/stretchr/testify/assert"
@@ -38,23 +35,31 @@ import (
 func TestIntegrationPath(t *testing.T) {
 	client, err := docker.NewClientFromEnv()
 	assert.NoError(t, err)
+
+	fakePlatformBuilder := &mock.PlatformBuilder{}
+	fakePlatformBuilder.GenerateDockerBuildReturns(InMemBuilder{}.Build())
+
 	provider := Provider{
-		PeerID:       "",
-		NetworkID:    util.GenerateUUID(),
-		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
-		Client:       client,
+		PeerID:          "",
+		NetworkID:       util.GenerateUUID(),
+		BuildMetrics:    NewBuildMetrics(&disabled.Provider{}),
+		Client:          client,
+		PlatformBuilder: fakePlatformBuilder,
 	}
-	dc := provider.NewVM()
+	dc := provider.NewVM().(*DockerVM)
 	ccid := ccintf.CCID("simple")
 
-	err = dc.Start(ccid, nil, nil, nil, InMemBuilder{})
+	err = dc.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+	require.NoError(t, err)
+
+	err = dc.Start(ccid, nil, nil, nil)
 	require.NoError(t, err)
 
 	
 	err = dc.Stop(ccid, 0, true, true)
 	require.NoError(t, err)
 
-	err = dc.Start(ccid, nil, nil, nil, nil)
+	err = dc.Start(ccid, nil, nil, nil)
 	require.NoError(t, err)
 
 	
@@ -78,78 +83,43 @@ func Test_Start(t *testing.T) {
 	
 	testError1 := errors.New("junk1")
 	dockerClient.CreateContainerReturns(nil, testError1)
-	err := dvm.Start(ccid, args, env, files, nil)
+	err := dvm.Start(ccid, args, env, files)
 	gt.Expect(err).To(MatchError(testError1))
 	dockerClient.CreateContainerReturns(&docker.Container{}, nil)
 
 	
 	testError2 := errors.New("junk2")
 	dockerClient.UploadToContainerReturns(testError2)
-	err = dvm.Start(ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files)
 	gt.Expect(err.Error()).To(ContainSubstring("junk2"))
 	dockerClient.UploadToContainerReturns(nil)
 
 	
+	
 	testError3 := errors.New("junk3")
-	dockerClient.CreateContainerReturns(nil, docker.ErrNoSuchImage)
-	dockerClient.BuildImageReturns(testError3)
-	err = dvm.Start(ccid, args, env, files, &mockBuilder{buildFunc: func() (io.Reader, error) { return &bytes.Buffer{}, nil }})
+	dvm.AttachStdOut = true
+	dockerClient.CreateContainerReturns(nil, testError3)
+	err = dvm.Start(ccid, args, env, files)
 	gt.Expect(err).To(MatchError(testError3))
 	dockerClient.CreateContainerReturns(&docker.Container{}, nil)
-	dockerClient.BuildImageReturns(nil)
-
-	chaincodePath := "github.com/mcc-github/blockchain/core/container/dockercontroller/testdata/src/chaincodes/noop"
-	spec := &pb.ChaincodeSpec{
-		Type:        pb.ChaincodeSpec_GOLANG,
-		ChaincodeId: &pb.ChaincodeID{Name: "ex01", Path: chaincodePath},
-		Input:       &pb.ChaincodeInput{Args: util.ToChaincodeArgs("f")},
-	}
-	codePackage, err := platforms.NewRegistry(&golang.Platform{}).GetDeploymentPayload(spec.Type.String(), spec.ChaincodeId.Path)
-	if err != nil {
-		t.Fatal()
-	}
-	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec, CodePackage: codePackage}
-	client, err := docker.NewClientFromEnv()
-	assert.NoError(t, err)
-	bldr := &mockBuilder{
-		buildFunc: func() (io.Reader, error) {
-			return platforms.NewRegistry(&golang.Platform{}).GenerateDockerBuild(
-				cds.ChaincodeSpec.Type.String(),
-				cds.ChaincodeSpec.ChaincodeId.Path,
-				cds.ChaincodeSpec.ChaincodeId.Name,
-				cds.ChaincodeSpec.ChaincodeId.Version,
-				cds.CodePackage,
-				client,
-			)
-		},
-	}
 
 	
-	
-	testError4 := errors.New("junk4")
-	dvm.AttachStdOut = true
-	dockerClient.CreateContainerReturns(nil, testError4)
-	err = dvm.Start(ccid, args, env, files, bldr)
-	gt.Expect(err).To(MatchError(testError4))
-	dockerClient.CreateContainerReturns(&docker.Container{}, nil)
-
-	
-	err = dvm.Start(ccid, args, env, files, bldr)
+	err = dvm.Start(ccid, args, env, files)
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	err = dvm.Start(ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files)
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	err = dvm.Start(ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files)
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	err = dvm.Start(ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files)
 	gt.Expect(err).NotTo(HaveOccurred())
 
-	err = dvm.Start(ccid, args, env, files, nil)
+	err = dvm.Start(ccid, args, env, files)
 	gt.Expect(err).NotTo(HaveOccurred())
 }
 
@@ -212,7 +182,7 @@ func Test_BuildMetric(t *testing.T) {
 			if tt.buildErr {
 				client.BuildImageReturns(errors.New("Error building image"))
 			}
-			dvm.deployImage(ccid, &bytes.Buffer{})
+			dvm.buildImage(ccid, &bytes.Buffer{})
 
 			gt.Expect(fakeChaincodeImageBuildDuration.WithCallCount()).To(Equal(1))
 			gt.Expect(fakeChaincodeImageBuildDuration.WithArgsForCall(0)).To(Equal(tt.expectedLabels))
@@ -250,15 +220,15 @@ func Test_Wait(t *testing.T) {
 	assert.EqualError(t, err, "no-wait-for-you")
 }
 
-func Test_HealthCheck(t *testing.T) {
-	dvm := DockerVM{}
-	client := mock.DockerClient{}
-	dvm.Client = &client
-	err := dvm.HealthCheck(context.Background())
+func TestHealthCheck(t *testing.T) {
+	client := &mock.DockerClient{}
+	provider := &Provider{Client: client}
+
+	err := provider.HealthCheck(context.Background())
 	assert.NoError(t, err)
 
 	client.PingWithContextReturns(errors.New("Error pinging daemon"))
-	err = dvm.HealthCheck(context.Background())
+	err = provider.HealthCheck(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Error pinging daemon")
 }
@@ -333,6 +303,141 @@ func TestGetVMName(t *testing.T) {
 		assert.Equal(t, test.expectedOutput, name, "Unexpected output for test case name: %s", test.name)
 	}
 
+}
+
+func TestCreateNewVM(t *testing.T) {
+	networkID := util.GenerateUUID()
+	client := &mock.DockerClient{}
+
+	provider := Provider{
+		PeerID:       "peerID",
+		NetworkID:    networkID,
+		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
+		Client:       client,
+		NetworkMode:  "bridge",
+	}
+	dvm := provider.NewVM()
+
+	expectedClient := &DockerVM{
+		PeerID:       "peerID",
+		NetworkID:    networkID,
+		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
+		Client:       client,
+		NetworkMode:  "bridge",
+	}
+	assert.Equal(t, expectedClient, dvm)
+}
+
+func Test_buildImage(t *testing.T) {
+	client := &mock.DockerClient{}
+	dvm := DockerVM{
+		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
+		Client:       client,
+		NetworkMode:  "network-mode",
+	}
+
+	err := dvm.buildImage(ccintf.CCID("simple"), &bytes.Buffer{})
+	assert.NoError(t, err)
+	assert.Equal(t, 1, client.BuildImageCallCount())
+
+	opts := client.BuildImageArgsForCall(0)
+	assert.Equal(t, "simple-a7a39b72f29718e653e73503210fbb597057b7a1c77d1fe321a1afcff041d4e1", opts.Name)
+	assert.False(t, opts.Pull)
+	assert.Equal(t, "network-mode", opts.NetworkMode)
+	assert.Equal(t, &bytes.Buffer{}, opts.InputStream)
+	assert.NotNil(t, opts.OutputStream)
+}
+
+func Test_buildImageFailure(t *testing.T) {
+	client := &mock.DockerClient{}
+	client.BuildImageReturns(errors.New("oh-bother-we-failed-badly"))
+	dvm := DockerVM{
+		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
+		Client:       client,
+		NetworkMode:  "network-mode",
+	}
+
+	err := dvm.buildImage(ccintf.CCID("simple"), &bytes.Buffer{})
+	assert.EqualError(t, err, "oh-bother-we-failed-badly")
+}
+
+func TestBuild(t *testing.T) {
+	buildMetrics := NewBuildMetrics(&disabled.Provider{})
+	ccid := ccintf.CCID("chaincode-name:chaincode-version")
+
+	t.Run("when the image does not exist", func(t *testing.T) {
+		client := &mock.DockerClient{}
+		client.InspectImageReturns(nil, docker.ErrNoSuchImage)
+
+		fakePlatformBuilder := &mock.PlatformBuilder{}
+		fakePlatformBuilder.GenerateDockerBuildReturns(&bytes.Buffer{}, nil)
+
+		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics, PlatformBuilder: fakePlatformBuilder}
+		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		assert.NoError(t, err, "should have built successfully")
+
+		assert.Equal(t, 1, client.BuildImageCallCount())
+
+		require.Equal(t, 1, fakePlatformBuilder.GenerateDockerBuildCallCount())
+		ccType, path, name, version, codePackage := fakePlatformBuilder.GenerateDockerBuildArgsForCall(0)
+		assert.Equal(t, "type", ccType)
+		assert.Equal(t, "path", path)
+		assert.Equal(t, "name", name)
+		assert.Equal(t, "version", version)
+		assert.Equal(t, []byte("code-package"), codePackage)
+
+	})
+
+	t.Run("when inspecting the image fails", func(t *testing.T) {
+		client := &mock.DockerClient{}
+		client.InspectImageReturns(nil, errors.New("inspecting-image-fails"))
+
+		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics}
+		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		assert.EqualError(t, err, "docker image inspection failed: inspecting-image-fails")
+
+		assert.Equal(t, 0, client.BuildImageCallCount())
+	})
+
+	t.Run("when the image exists", func(t *testing.T) {
+		client := &mock.DockerClient{}
+
+		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics}
+		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		assert.NoError(t, err)
+
+		assert.Equal(t, 0, client.BuildImageCallCount())
+	})
+
+	t.Run("when the platform builder fails", func(t *testing.T) {
+		client := &mock.DockerClient{}
+		client.InspectImageReturns(nil, docker.ErrNoSuchImage)
+		client.BuildImageReturns(errors.New("no-build-for-you"))
+
+		fakePlatformBuilder := &mock.PlatformBuilder{}
+		fakePlatformBuilder.GenerateDockerBuildReturns(nil, errors.New("fake-builder-error"))
+
+		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics, PlatformBuilder: fakePlatformBuilder}
+		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		assert.Equal(t, 1, client.InspectImageCallCount())
+		assert.Equal(t, 1, fakePlatformBuilder.GenerateDockerBuildCallCount())
+		assert.Equal(t, 0, client.BuildImageCallCount())
+		assert.EqualError(t, err, "platform builder failed: fake-builder-error")
+	})
+
+	t.Run("when building the image fails", func(t *testing.T) {
+		client := &mock.DockerClient{}
+		client.InspectImageReturns(nil, docker.ErrNoSuchImage)
+		client.BuildImageReturns(errors.New("no-build-for-you"))
+
+		fakePlatformBuilder := &mock.PlatformBuilder{}
+
+		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics, PlatformBuilder: fakePlatformBuilder}
+		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		assert.Equal(t, 1, client.InspectImageCallCount())
+		assert.Equal(t, 1, client.BuildImageCallCount())
+		assert.EqualError(t, err, "docker image build failed: no-build-for-you")
+	})
 }
 
 type InMemBuilder struct{}

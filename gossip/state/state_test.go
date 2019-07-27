@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -21,7 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/configtx/test"
 	errors2 "github.com/mcc-github/blockchain/common/errors"
-	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/util"
 	corecomm "github.com/mcc-github/blockchain/core/comm"
@@ -48,6 +49,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protoutil"
+	"github.com/onsi/gomega/gbytes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -116,7 +118,7 @@ func (*cryptoServiceMock) GetPKIidOfCert(peerIdentity api.PeerIdentityType) comm
 
 
 
-func (*cryptoServiceMock) VerifyBlock(chainID common.ChainID, seqNum uint64, signedBlock []byte) error {
+func (*cryptoServiceMock) VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock []byte) error {
 	return nil
 }
 
@@ -143,7 +145,7 @@ func (*cryptoServiceMock) Verify(peerIdentity api.PeerIdentityType, signature, m
 
 
 
-func (cs *cryptoServiceMock) VerifyByChannel(chainID common.ChainID, peerIdentity api.PeerIdentityType, signature, message []byte) error {
+func (cs *cryptoServiceMock) VerifyByChannel(channelID common.ChannelID, peerIdentity api.PeerIdentityType, signature, message []byte) error {
 	return cs.acceptor(peerIdentity)
 }
 
@@ -159,11 +161,17 @@ func bootPeersWithPorts(ports ...int) []string {
 	return peers
 }
 
+type peerNodeGossipSupport interface {
+	GossipAdapter
+	Stop()
+	JoinChan(joinMsg api.JoinChannelMessage, channelID common.ChannelID)
+}
+
 
 
 type peerNode struct {
 	port   int
-	g      gossip.Gossip
+	g      peerNodeGossipSupport
 	s      *GossipStateProviderImpl
 	cs     *cryptoServiceMock
 	commit committer.Committer
@@ -340,19 +348,18 @@ func newCommitter() committer.Committer {
 }
 
 func newPeerNodeWithGossip(id int, committer committer.Committer,
-	acceptor peerIdentityAcceptor, g gossip.Gossip, bootPorts ...int) *peerNode {
+	acceptor peerIdentityAcceptor, g peerNodeGossipSupport, bootPorts ...int) *peerNode {
 	return newPeerNodeWithGossipWithValidator(id, committer, acceptor, g, &validator.MockValidator{}, bootPorts...)
 }
 
 
 func newPeerNodeWithGossipWithValidatorWithMetrics(id int, committer committer.Committer,
-	acceptor peerIdentityAcceptor, g gossip.Gossip, v txvalidator.Validator,
+	acceptor peerIdentityAcceptor, g peerNodeGossipSupport, v txvalidator.Validator,
 	gossipMetrics *metrics.GossipMetrics, bootPorts ...int) (node *peerNode, port int) {
 	cs := &cryptoServiceMock{acceptor: acceptor}
 	port, gRPCServer, certs, secureDialOpts, _ := gossiputil.CreateGRPCLayer()
 
 	if g == nil {
-
 		config := &gossip.Config{
 			BindPort:                     port,
 			BootstrapPeers:               bootPeersWithPorts(bootPorts...),
@@ -386,11 +393,10 @@ func newPeerNodeWithGossipWithValidatorWithMetrics(id int, committer committer.C
 
 		selfID := api.PeerIdentityType(config.InternalEndpoint)
 		mcs := &cryptoServiceMock{acceptor: noopPeerIdentityAcceptor}
-		g = gossip.NewGossipService(config, gRPCServer.Server(), &orgCryptoService{}, mcs, selfID, secureDialOpts, gossipMetrics)
-
+		g = gossip.New(config, gRPCServer.Server(), &orgCryptoService{}, mcs, selfID, secureDialOpts, gossipMetrics)
 	}
 
-	g.JoinChan(&joinChanMsg{}, common.ChainID(util.GetTestChainID()))
+	g.JoinChan(&joinChanMsg{}, common.ChannelID(util.GetTestChainID()))
 
 	go func() {
 		gRPCServer.Start()
@@ -402,14 +408,23 @@ func newPeerNodeWithGossipWithValidatorWithMetrics(id int, committer committer.C
 	servicesAdapater := &ServicesMediator{GossipAdapter: g, MCSAdapter: cs}
 	coordConfig := privdata.CoordinatorConfig{
 		PullRetryThreshold:      0,
-		TransientBlockRetention: privdata.TransientBlockRetentionDefault,
+		TransientBlockRetention: 1000,
 	}
 	coord := privdata.NewCoordinator(privdata.Support{
 		Validator:      v,
 		TransientStore: &mockTransientStore{},
 		Committer:      committer,
 	}, protoutil.SignedData{}, gossipMetrics.PrivdataMetrics, coordConfig)
-	sp := NewGossipStateProvider(util.GetTestChainID(), servicesAdapater, coord, gossipMetrics.StateMetrics, blocking)
+	stateConfig := &StateConfig{
+		StateCheckInterval:   DefStateCheckInterval,
+		StateResponseTimeout: DefStateResponseTimeout,
+		StateBatchSize:       DefStateBatchSize,
+		StateMaxRetries:      DefStateMaxRetries,
+		StateBlockBufferSize: DefStateBlockBufferSize,
+		StateChannelSize:     DefStateChannelSize,
+		StateEnabled:         DefStateEnabled,
+	}
+	sp := NewGossipStateProvider(util.GetTestChainID(), servicesAdapater, coord, gossipMetrics.StateMetrics, blocking, stateConfig)
 	if sp == nil {
 		gRPCServer.Stop()
 		return nil, port
@@ -428,7 +443,7 @@ func newPeerNodeWithGossipWithValidatorWithMetrics(id int, committer committer.C
 
 
 func newPeerNodeWithGossipWithMetrics(id int, committer committer.Committer,
-	acceptor peerIdentityAcceptor, g gossip.Gossip, gossipMetrics *metrics.GossipMetrics) *peerNode {
+	acceptor peerIdentityAcceptor, g peerNodeGossipSupport, gossipMetrics *metrics.GossipMetrics) *peerNode {
 	node, _ := newPeerNodeWithGossipWithValidatorWithMetrics(id, committer, acceptor, g,
 		&validator.MockValidator{}, gossipMetrics)
 	return node
@@ -436,7 +451,7 @@ func newPeerNodeWithGossipWithMetrics(id int, committer committer.Committer,
 
 
 func newPeerNodeWithGossipWithValidator(id int, committer committer.Committer,
-	acceptor peerIdentityAcceptor, g gossip.Gossip, v txvalidator.Validator, bootPorts ...int) *peerNode {
+	acceptor peerIdentityAcceptor, g peerNodeGossipSupport, v txvalidator.Validator, bootPorts ...int) *peerNode {
 	gossipMetrics := metrics.NewGossipMetrics(&disabled.Provider{})
 	node, _ := newPeerNodeWithGossipWithValidatorWithMetrics(id, committer, acceptor, g, v, gossipMetrics, bootPorts...)
 	return node
@@ -751,7 +766,15 @@ func TestHaltChainProcessing(t *testing.T) {
 		}
 	}
 
-	l, recorder := floggingtest.NewTestLogger(t)
+	buf := gbytes.NewBuffer()
+	logging, err := flogging.New(flogging.Config{
+		LogSpec: "debug",
+		Writer:  buf,
+	})
+	assert.NoError(t, err, "failed to create logging")
+
+	defer func(l gossiputil.Logger) { logger = l }(logger)
+	l := logging.Logger("state_test")
 	logger = l
 
 	mc := &mockCommitter{Mock: &mock.Mock{}}
@@ -771,9 +794,10 @@ func TestHaltChainProcessing(t *testing.T) {
 	peerNode := newPeerNodeWithGossipWithValidator(0, mc, noopPeerIdentityAcceptor, g, v)
 	defer peerNode.shutdown()
 	gossipMsgs <- newBlockMsg(1)
-	assertLogged(t, recorder, "Got error while committing")
-	assertLogged(t, recorder, "Aborting chain processing")
-	assertLogged(t, recorder, "foobar")
+
+	assertLogged(t, buf, "Got error while committing")
+	assertLogged(t, buf, "Aborting chain processing")
+	assertLogged(t, buf, "foobar")
 }
 
 func TestFailures(t *testing.T) {
@@ -1026,7 +1050,7 @@ func TestAccessControl(t *testing.T) {
 
 	waitUntilTrueOrTimeout(t, func() bool {
 		for _, p := range peersSet {
-			if len(p.g.PeersOfChannel(common.ChainID(util.GetTestChainID()))) != bootstrapSetSize+standardPeerSetSize-1 {
+			if len(p.g.PeersOfChannel(common.ChannelID(util.GetTestChainID()))) != bootstrapSetSize+standardPeerSetSize-1 {
 				t.Log("Peer discovery has not finished yet")
 				return false
 			}
@@ -1107,7 +1131,7 @@ func TestNewGossipStateProvider_SendingManyMessages(t *testing.T) {
 
 	waitUntilTrueOrTimeout(t, func() bool {
 		for _, p := range peersSet {
-			if len(p.g.PeersOfChannel(common.ChainID(util.GetTestChainID()))) != bootstrapSetSize+standartPeersSize-1 {
+			if len(p.g.PeersOfChannel(common.ChannelID(util.GetTestChainID()))) != bootstrapSetSize+standartPeersSize-1 {
 				t.Log("Peer discovery has not finished yet")
 				return false
 			}
@@ -1180,7 +1204,7 @@ func TestNewGossipStateProvider_BatchingOfStateRequest(t *testing.T) {
 	
 	
 	waitUntilTrueOrTimeout(t, func() bool {
-		if len(peer.g.PeersOfChannel(common.ChainID(util.GetTestChainID()))) != 1 {
+		if len(peer.g.PeersOfChannel(common.ChannelID(util.GetTestChainID()))) != 1 {
 			t.Log("Peer discovery has not finished yet")
 			return false
 		}
@@ -1371,7 +1395,16 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
 
 	servicesAdapater := &ServicesMediator{GossipAdapter: g, MCSAdapter: &cryptoServiceMock{acceptor: noopPeerIdentityAcceptor}}
 	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
-	st := NewGossipStateProvider(chainID, servicesAdapater, coord1, stateMetrics, blocking)
+	stateConfig := &StateConfig{
+		StateCheckInterval:   DefStateCheckInterval,
+		StateResponseTimeout: DefStateResponseTimeout,
+		StateBatchSize:       DefStateBatchSize,
+		StateMaxRetries:      DefStateMaxRetries,
+		StateBlockBufferSize: DefStateBlockBufferSize,
+		StateChannelSize:     DefStateChannelSize,
+		StateEnabled:         DefStateEnabled,
+	}
+	st := NewGossipStateProvider(chainID, servicesAdapater, coord1, stateMetrics, blocking, stateConfig)
 	defer st.Stop()
 
 	
@@ -1598,11 +1631,20 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
 	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
 
 	mediator := &ServicesMediator{GossipAdapter: peers["peer1"], MCSAdapter: cryptoService}
-	peer1State := NewGossipStateProvider(chainID, mediator, peers["peer1"].coord, stateMetrics, blocking)
+	stateConfig := &StateConfig{
+		StateCheckInterval:   DefStateCheckInterval,
+		StateResponseTimeout: DefStateResponseTimeout,
+		StateBatchSize:       DefStateBatchSize,
+		StateMaxRetries:      DefStateMaxRetries,
+		StateBlockBufferSize: DefStateBlockBufferSize,
+		StateChannelSize:     DefStateChannelSize,
+		StateEnabled:         DefStateEnabled,
+	}
+	peer1State := NewGossipStateProvider(chainID, mediator, peers["peer1"].coord, stateMetrics, blocking, stateConfig)
 	defer peer1State.Stop()
 
 	mediator = &ServicesMediator{GossipAdapter: peers["peer2"], MCSAdapter: cryptoService}
-	peer2State := NewGossipStateProvider(chainID, mediator, peers["peer2"].coord, stateMetrics, blocking)
+	peer2State := NewGossipStateProvider(chainID, mediator, peers["peer2"].coord, stateMetrics, blocking, stateConfig)
 	defer peer2State.Stop()
 
 	
@@ -1645,26 +1687,35 @@ func TestStateRequestValidator(t *testing.T) {
 
 func waitUntilTrueOrTimeout(t *testing.T, predicate func() bool, timeout time.Duration) {
 	ch := make(chan struct{})
+	t.Log("Started to spin off, until predicate will be satisfied.")
+
 	go func() {
-		t.Log("Started to spin off, until predicate will be satisfied.")
+		t := time.NewTicker(time.Second)
 		for !predicate() {
-			time.Sleep(1 * time.Second)
+			select {
+			case <-ch:
+				t.Stop()
+				return
+			case <-t.C:
+			}
 		}
-		ch <- struct{}{}
-		t.Log("Done.")
+		t.Stop()
+		close(ch)
 	}()
 
 	select {
 	case <-ch:
+		t.Log("Done.")
 		break
 	case <-time.After(timeout):
 		t.Fatal("Timeout has expired")
+		close(ch)
 		break
 	}
 	t.Log("Stop waiting until timeout or true")
 }
 
-func assertLogged(t *testing.T, r *floggingtest.Recorder, msg string) {
-	observed := func() bool { return len(r.MessagesContaining(msg)) > 0 }
+func assertLogged(t *testing.T, buf *gbytes.Buffer, msg string) {
+	observed := func() bool { return strings.Contains(string(buf.Contents()), msg) }
 	waitUntilTrueOrTimeout(t, observed, 30*time.Second)
 }

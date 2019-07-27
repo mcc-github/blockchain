@@ -125,6 +125,35 @@ func GetMetadataFromBlockOrPanic(block *cb.Block, index cb.BlockMetadataIndex) *
 
 
 
+
+func GetConsenterMetadataFromBlock(block *cb.Block) (*cb.Metadata, error) {
+	m, err := GetMetadataFromBlock(block, cb.BlockMetadataIndex_SIGNATURES)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to retrieve metadata at index: %d", cb.BlockMetadataIndex_SIGNATURES)
+	}
+
+	
+	if len(m.Value) == 0 {
+		return GetMetadataFromBlock(block, cb.BlockMetadataIndex_ORDERER)
+	}
+
+	obm := &cb.OrdererBlockMetadata{}
+	err = proto.Unmarshal(m.Value, obm)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal orderer block metadata")
+	}
+
+	res := &cb.Metadata{}
+	err = proto.Unmarshal(obm.ConsenterMetadata, res)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal consenter metadata")
+	}
+
+	return res, nil
+}
+
+
+
 func GetLastConfigIndexFromBlock(block *cb.Block) (uint64, error) {
 	md, err := GetMetadataFromBlock(block, cb.BlockMetadataIndex_LAST_CONFIG)
 	if err != nil {

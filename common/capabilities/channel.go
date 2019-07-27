@@ -88,5 +88,5 @@ func (cp *ChannelProvider) ConsensusTypeMigration() bool {
 
 
 func (cp *ChannelProvider) OrgSpecificOrdererEndpoints() bool {
-	return cp.v20
+	return cp.v142 || cp.v20
 }

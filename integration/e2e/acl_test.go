@@ -79,7 +79,7 @@ var _ = Describe("EndToEndACL", func() {
 			Policy:  `OR ('Org1MSP.member','Org2MSP.member')`,
 		}
 		network.CreateAndJoinChannel(orderer, "testchannel")
-		nwo.DeployChaincode(network, "testchannel", orderer, chaincode)
+		nwo.DeployChaincodeLegacy(network, "testchannel", orderer, chaincode)
 	})
 
 	AfterEach(func() {
@@ -163,7 +163,7 @@ var _ = Describe("EndToEndACL", func() {
 		SetACLPolicy(network, "testchannel", policyName, policy, "orderer")
 
 		By("listing the instantiated chaincodes as a permitted Org1 Admin identity")
-		sess, err = network.PeerAdminSession(org1Peer0, commands.ChaincodeListInstantiated{
+		sess, err = network.PeerAdminSession(org1Peer0, commands.ChaincodeListInstantiatedLegacy{
 			ChannelID: "testchannel",
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -174,7 +174,7 @@ var _ = Describe("EndToEndACL", func() {
 		
 		
 		By("listing the instantiated chaincodes as a forbidden org2 Admin identity")
-		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeListInstantiated{
+		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeListInstantiatedLegacy{
 			ChannelID: "testchannel",
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -236,7 +236,6 @@ var _ = Describe("EndToEndACL", func() {
 		
 		
 		ItEnforcesPolicy("cscc", "GetConfigBlock", "testchannel")
-		ItEnforcesPolicy("cscc", "GetConfigTree", "testchannel")
 
 		
 		
@@ -255,7 +254,7 @@ var _ = Describe("EndToEndACL", func() {
 			Label:               "my_simple_chaincode",
 		}
 
-		nwo.PackageChaincodeNewLifecycle(network, chaincode, org1Peer0)
+		nwo.PackageChaincode(network, chaincode, org1Peer0)
 
 		
 		filebytes, err := ioutil.ReadFile(chaincode.PackageFile)
@@ -267,7 +266,7 @@ var _ = Describe("EndToEndACL", func() {
 		
 		
 		By("installing the chaincode to an org1 peer as an org2 admin")
-		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeInstallLifecycle{
+		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeInstall{
 			PackageFile:   chaincode.PackageFile,
 			PeerAddresses: []string{network.PeerAddress(org1Peer0, nwo.ListenPort)},
 		})
@@ -276,7 +275,7 @@ var _ = Describe("EndToEndACL", func() {
 		Expect(sess.Err).To(gbytes.Say(`access denied: channel \[\] creator org \[Org2MSP\]`))
 
 		By("installing the chaincode to an org1 peer as a non-admin org1 identity")
-		sess, err = network.PeerUserSession(org1Peer0, "User1", commands.ChaincodeInstallLifecycle{
+		sess, err = network.PeerUserSession(org1Peer0, "User1", commands.ChaincodeInstall{
 			PackageFile: chaincode.PackageFile,
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -286,13 +285,13 @@ var _ = Describe("EndToEndACL", func() {
 		
 		
 		
-		nwo.InstallChaincodeNewLifecycle(network, chaincode, org1Peer0, org2Peer0)
+		nwo.InstallChaincode(network, chaincode, org1Peer0, org2Peer0)
 
 		
 		
 		
 		By("approving a chaincode definition on a channel without V2_0 capabilities enabled")
-		sess, err = network.PeerAdminSession(org1Peer0, commands.ChaincodeApproveForMyOrgLifecycle{
+		sess, err = network.PeerAdminSession(org1Peer0, commands.ChaincodeApproveForMyOrg{
 			ChannelID:           "testchannel",
 			Orderer:             network.OrdererAddress(orderer, nwo.ListenPort),
 			Name:                chaincode.Name,
@@ -310,7 +309,7 @@ var _ = Describe("EndToEndACL", func() {
 		Expect(sess.Err).To(gbytes.Say("Error: proposal failed with status: 500 - cannot use new lifecycle for channel 'testchannel' as it does not have the required capabilities enabled"))
 
 		By("committing a chaincode definition on a channel without V2_0 capabilities enabled")
-		sess, err = network.PeerAdminSession(org1Peer0, commands.ChaincodeCommitLifecycle{
+		sess, err = network.PeerAdminSession(org1Peer0, commands.ChaincodeCommit{
 			ChannelID:           "testchannel",
 			Orderer:             network.OrdererAddress(orderer, nwo.ListenPort),
 			Name:                chaincode.Name,
@@ -326,6 +325,124 @@ var _ = Describe("EndToEndACL", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
 		Expect(sess.Err).To(gbytes.Say("Error: proposal failed with status: 500 - cannot use new lifecycle for channel 'testchannel' as it does not have the required capabilities enabled"))
+
+		
+		By("enabling V2_0 application capabilities on the channel")
+		nwo.EnableCapabilities(network, "testchannel", "Application", "V2_0", orderer, org1Peer0, org2Peer0)
+
+		
+		
+		
+		By("approving a chaincode definition for org1 as an org2 admin")
+		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeApproveForMyOrg{
+			ChannelID:           "testchannel",
+			Orderer:             network.OrdererAddress(orderer, nwo.ListenPort),
+			Name:                chaincode.Name,
+			Version:             chaincode.Version,
+			Sequence:            chaincode.Sequence,
+			EndorsementPlugin:   chaincode.EndorsementPlugin,
+			ValidationPlugin:    chaincode.ValidationPlugin,
+			SignaturePolicy:     chaincode.SignaturePolicy,
+			ChannelConfigPolicy: chaincode.ChannelConfigPolicy,
+			InitRequired:        chaincode.InitRequired,
+			CollectionsConfig:   chaincode.CollectionsConfig,
+			PeerAddresses:       []string{network.PeerAddress(org1Peer0, nwo.ListenPort)},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
+		Expect(sess.Err).To(gbytes.Say(`Error: proposal failed with status: 500 - Failed to authorize invocation due to failed ACL check: Failed deserializing proposal creator during channelless check policy with policy \[Admins\]: \[expected MSP ID Org1MSP, received Org2MSP\]`))
+
+		
+		
+		
+		By("approving a chaincode definition for org1 and org2")
+		nwo.ApproveChaincodeForMyOrg(network, "testchannel", orderer, chaincode, org1Peer0, org2Peer0)
+
+		
+		
+		
+		By("setting the simulate commit chaincode definition ACL policy to Org1/Admins")
+		policyName = resources.Lifecycle_SimulateCommitChaincodeDefinition
+		policy = "/Channel/Application/Org1/Admins"
+		SetACLPolicy(network, "testchannel", policyName, policy, "orderer")
+
+		By("simulating the commit of a chaincode dwefinition as a forbidden Org2 Admin identity")
+		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeSimulateCommit{
+			ChannelID:           "testchannel",
+			Name:                chaincode.Name,
+			Version:             chaincode.Version,
+			Sequence:            chaincode.Sequence,
+			EndorsementPlugin:   chaincode.EndorsementPlugin,
+			ValidationPlugin:    chaincode.ValidationPlugin,
+			SignaturePolicy:     chaincode.SignaturePolicy,
+			ChannelConfigPolicy: chaincode.ChannelConfigPolicy,
+			InitRequired:        chaincode.InitRequired,
+			CollectionsConfig:   chaincode.CollectionsConfig,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
+		Expect(sess.Err).To(gbytes.Say(`\QError: query failed with status: 500 - Failed to authorize invocation due to failed ACL check: failed evaluating policy on signed data during check policy [/Channel/Application/Org1/Admins]: [signature set did not satisfy policy]\E`))
+
+		
+		
+		
+		nwo.SimulateCommitUntilSuccess(network, "testchannel", chaincode, network.PeerOrgs(), org1Peer0)
+
+		
+		
+		
+		By("setting the commit chaincode definition ACL policy to Org1/Admins")
+		policyName = resources.Lifecycle_CommitChaincodeDefinition
+		policy = "/Channel/Application/Org1/Admins"
+		SetACLPolicy(network, "testchannel", policyName, policy, "orderer")
+
+		By("committing the chaincode definition as a forbidden Org2 Admin identity")
+		peerAddresses := []string{
+			network.PeerAddress(org1Peer0, nwo.ListenPort),
+			network.PeerAddress(org2Peer0, nwo.ListenPort),
+		}
+		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeCommit{
+			ChannelID:           "testchannel",
+			Orderer:             network.OrdererAddress(orderer, nwo.ListenPort),
+			Name:                chaincode.Name,
+			Version:             chaincode.Version,
+			Sequence:            chaincode.Sequence,
+			EndorsementPlugin:   chaincode.EndorsementPlugin,
+			ValidationPlugin:    chaincode.ValidationPlugin,
+			SignaturePolicy:     chaincode.SignaturePolicy,
+			ChannelConfigPolicy: chaincode.ChannelConfigPolicy,
+			InitRequired:        chaincode.InitRequired,
+			CollectionsConfig:   chaincode.CollectionsConfig,
+			PeerAddresses:       peerAddresses,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
+		Expect(sess.Err).To(gbytes.Say(`\QError: proposal failed with status: 500 - Failed to authorize invocation due to failed ACL check: failed evaluating policy on signed data during check policy [/Channel/Application/Org1/Admins]: [signature set did not satisfy policy]\E`))
+
+		
+		
+		
+		nwo.CommitChaincode(network, "testchannel", orderer, chaincode, org1Peer0, org1Peer0, org2Peer0)
+
+		
+		
+		
+		By("setting the query chaincode definition ACL policy to Org1/Admins")
+		policyName = resources.Lifecycle_QueryChaincodeDefinition
+		policy = "/Channel/Application/Org1/Admins"
+		SetACLPolicy(network, "testchannel", policyName, policy, "orderer")
+
+		By("querying the chaincode definition as a permitted Org1 Admin identity")
+		nwo.EnsureChaincodeCommitted(network, "testchannel", "mycc", "0.0", "1", []*nwo.Organization{network.Organization("Org1"), network.Organization("Org2")}, org1Peer0)
+
+		By("querying the chaincode definition as a forbidden Org2 Admin identity")
+		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeListCommitted{
+			ChannelID: "testchannel",
+			Name:      "mycc",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
+		Expect(sess.Err).To(gbytes.Say(`\QError: query failed with status: 500 - Failed to authorize invocation due to failed ACL check: failed evaluating policy on signed data during check policy [/Channel/Application/Org1/Admins]: [signature set did not satisfy policy]\E`))
 	})
 })
 
@@ -359,16 +476,10 @@ func SetACLPolicy(network *nwo.Network, channel, policyName, policy string, orde
 func GetTxIDFromBlockFile(blockFile string) string {
 	block := nwo.UnmarshalBlockFromFile(blockFile)
 
-	envelope, err := protoutil.GetEnvelopeFromBlock(block.Data.Data[0])
+	txID, err := protoutil.GetOrComputeTxIDFromEnvelope(block.Data.Data[0])
 	Expect(err).NotTo(HaveOccurred())
 
-	payload, err := protoutil.GetPayload(envelope)
-	Expect(err).NotTo(HaveOccurred())
-
-	chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
-	Expect(err).NotTo(HaveOccurred())
-
-	return chdr.TxId
+	return txID
 }
 
 

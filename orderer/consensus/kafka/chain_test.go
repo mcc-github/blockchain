@@ -17,6 +17,7 @@ import (
 	"github.com/Shopify/sarama/mocks"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/channelconfig"
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
@@ -79,6 +80,9 @@ func TestChain(t *testing.T) {
 	t.Run("New", func(t *testing.T) {
 		_, mockBroker, mockSupport := newMocks(t)
 		defer func() { mockBroker.Close() }()
+		fakeLastOffsetPersisted := &mockkafka.MetricsGauge{}
+		fakeLastOffsetPersisted.WithReturns(fakeLastOffsetPersisted)
+		mockConsenter.(*consenterImpl).metrics.LastOffsetPersisted = fakeLastOffsetPersisted
 		chain, err := newChain(mockConsenter, mockSupport, newestOffset-1, lastOriginalOffsetProcessed, lastResubmittedConfigOffset)
 
 		assert.NoError(t, err, "Expected newChain to return without errors")
@@ -102,6 +106,11 @@ func TestChain(t *testing.T) {
 		default:
 			logger.Debug("startChan is open as it should be")
 		}
+
+		require.Equal(t, fakeLastOffsetPersisted.WithCallCount(), 1)
+		assert.Equal(t, fakeLastOffsetPersisted.WithArgsForCall(0), []string{"channel", channelNameForTest(t)})
+		require.Equal(t, fakeLastOffsetPersisted.SetCallCount(), 1)
+		assert.Equal(t, fakeLastOffsetPersisted.SetArgsForCall(0), float64(newestOffset-1))
 	})
 
 	t.Run("Start", func(t *testing.T) {
@@ -993,6 +1002,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				parentConsumer:  mockParentConsumer,
 				channelConsumer: mockChannelConsumer,
 
+				consenter:          mockConsenter,
 				channel:            mockChannel,
 				ConsenterSupport:   mockSupport,
 				lastCutBlockNumber: lastCutBlockNumber,
@@ -1065,6 +1075,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				parentConsumer:  mockParentConsumer,
 				channelConsumer: mockChannelConsumer,
 
+				consenter:          mockConsenter,
 				channel:            mockChannel,
 				ConsenterSupport:   mockSupport,
 				lastCutBlockNumber: lastCutBlockNumber,
@@ -1420,10 +1431,15 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				}
 				defer close(mockSupport.BlockCutterVal.Block)
 
+				fakeLastOffsetPersisted := &mockkafka.MetricsGauge{}
+				fakeLastOffsetPersisted.WithReturns(fakeLastOffsetPersisted)
+				mockConsenter.(*consenterImpl).metrics.LastOffsetPersisted = fakeLastOffsetPersisted
+
 				bareMinimumChain := &chainImpl{
 					parentConsumer:  mockParentConsumer,
 					channelConsumer: mockChannelConsumer,
 
+					consenter:          mockConsenter,
 					channel:            mockChannel,
 					ConsenterSupport:   mockSupport,
 					lastCutBlockNumber: lastCutBlockNumber,
@@ -1458,6 +1474,11 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				assert.Equal(t, uint64(1), counts[indexRecvPass], "Expected 1 message received and unmarshaled")
 				assert.Equal(t, uint64(1), counts[indexProcessRegularPass], "Expected 1 REGULAR message processed")
 				assert.Equal(t, lastCutBlockNumber+1, bareMinimumChain.lastCutBlockNumber, "Expected lastCutBlockNumber to be bumped up by one")
+
+				require.Equal(t, fakeLastOffsetPersisted.WithCallCount(), 1)
+				assert.Equal(t, fakeLastOffsetPersisted.WithArgsForCall(0), []string{"channel", "mockChannelFoo"})
+				require.Equal(t, fakeLastOffsetPersisted.SetCallCount(), 1)
+				assert.Equal(t, fakeLastOffsetPersisted.SetArgsForCall(0), float64(9))
 			})
 
 			
@@ -1487,6 +1508,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 					parentConsumer:  mockParentConsumer,
 					channelConsumer: mockChannelConsumer,
 
+					consenter:          mockConsenter,
 					channel:            mockChannel,
 					ConsenterSupport:   mockSupport,
 					lastCutBlockNumber: lastCutBlockNumber,
@@ -1733,6 +1755,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 					parentConsumer:  mockParentConsumer,
 					channelConsumer: mockChannelConsumer,
 
+					consenter:          mockConsenter,
 					channel:            mockChannel,
 					ConsenterSupport:   mockSupport,
 					lastCutBlockNumber: lastCutBlockNumber,
@@ -2003,6 +2026,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 					parentConsumer:  mockParentConsumer,
 					channelConsumer: mockChannelConsumer,
 
+					consenter:                   mockConsenter,
 					channel:                     mockChannel,
 					ConsenterSupport:            mockSupport,
 					lastCutBlockNumber:          lastCutBlockNumber,
@@ -2091,6 +2115,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 					parentConsumer:  mockParentConsumer,
 					channelConsumer: mockChannelConsumer,
 
+					consenter:                   mockConsenter,
 					channel:                     mockChannel,
 					ConsenterSupport:            mockSupport,
 					lastCutBlockNumber:          lastCutBlockNumber,
@@ -2150,10 +2175,15 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				}
 				defer close(mockSupport.BlockCutterVal.Block)
 
+				fakeLastOffsetPersisted := &mockkafka.MetricsGauge{}
+				fakeLastOffsetPersisted.WithReturns(fakeLastOffsetPersisted)
+				mockConsenter.(*consenterImpl).metrics.LastOffsetPersisted = fakeLastOffsetPersisted
+
 				bareMinimumChain := &chainImpl{
 					parentConsumer:  mockParentConsumer,
 					channelConsumer: mockChannelConsumer,
 
+					consenter:          mockConsenter,
 					channel:            mockChannel,
 					ConsenterSupport:   mockSupport,
 					lastCutBlockNumber: lastCutBlockNumber,
@@ -2204,6 +2234,13 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				assert.Equal(t, lastCutBlockNumber+2, bareMinimumChain.lastCutBlockNumber, "Expected lastCutBlockNumber to be incremented by 2")
 				assert.Equal(t, normalBlkOffset, extractEncodedOffset(normalBlk.GetMetadata().Metadata[cb.BlockMetadataIndex_ORDERER]), "Expected encoded offset in first block to be %d", normalBlkOffset)
 				assert.Equal(t, configBlkOffset, extractEncodedOffset(configBlk.GetMetadata().Metadata[cb.BlockMetadataIndex_ORDERER]), "Expected encoded offset in second block to be %d", configBlkOffset)
+
+				require.Equal(t, fakeLastOffsetPersisted.WithCallCount(), 2)
+				assert.Equal(t, fakeLastOffsetPersisted.WithArgsForCall(0), []string{"channel", "mockChannelFoo"})
+				assert.Equal(t, fakeLastOffsetPersisted.WithArgsForCall(1), []string{"channel", "mockChannelFoo"})
+				require.Equal(t, fakeLastOffsetPersisted.SetCallCount(), 2)
+				assert.Equal(t, fakeLastOffsetPersisted.SetArgsForCall(0), float64(normalBlkOffset))
+				assert.Equal(t, fakeLastOffsetPersisted.SetArgsForCall(1), float64(configBlkOffset))
 			})
 
 			
@@ -2570,6 +2607,7 @@ func TestResubmission(t *testing.T) {
 				parentConsumer:  mockParentConsumer,
 				channelConsumer: mockChannelConsumer,
 
+				consenter:                   mockConsenter,
 				channel:                     mockChannel,
 				ConsenterSupport:            mockSupport,
 				lastCutBlockNumber:          lastCutBlockNumber,
@@ -2758,6 +2796,7 @@ func TestResubmission(t *testing.T) {
 				parentConsumer:  mockParentConsumer,
 				channelConsumer: mockChannelConsumer,
 
+				consenter:          mockConsenter,
 				channel:            mockChannel,
 				ConsenterSupport:   mockSupport,
 				lastCutBlockNumber: lastCutBlockNumber,
@@ -2934,6 +2973,7 @@ func TestResubmission(t *testing.T) {
 				parentConsumer:  mockParentConsumer,
 				channelConsumer: mockChannelConsumer,
 
+				consenter:          mockConsenter,
 				channel:            mockChannel,
 				ConsenterSupport:   mockSupport,
 				lastCutBlockNumber: lastCutBlockNumber,
@@ -3234,6 +3274,7 @@ func TestResubmission(t *testing.T) {
 				parentConsumer:  mockParentConsumer,
 				channelConsumer: mockChannelConsumer,
 
+				consenter:          mockConsenter,
 				channel:            mockChannel,
 				ConsenterSupport:   mockSupport,
 				lastCutBlockNumber: lastCutBlockNumber,
@@ -3443,7 +3484,7 @@ func TestDeliverSession(t *testing.T) {
 		defer env.broker2.Close()
 
 		
-		consenter, _ := New(mockLocalConfig.Kafka, &mockkafka.MetricsProvider{}, &mockkafka.HealthChecker{})
+		consenter, _ := New(mockLocalConfig.Kafka, &disabled.Provider{}, &mockkafka.HealthChecker{})
 
 		
 		metadata := &cb.Metadata{Value: protoutil.MarshalOrPanic(&ab.KafkaMetadata{LastOffsetPersisted: env.height})}
@@ -3532,7 +3573,7 @@ func TestDeliverSession(t *testing.T) {
 		defer env.broker0.Close()
 
 		
-		consenter, _ := New(mockLocalConfig.Kafka, &mockkafka.MetricsProvider{}, &mockkafka.HealthChecker{})
+		consenter, _ := New(mockLocalConfig.Kafka, &disabled.Provider{}, &mockkafka.HealthChecker{})
 
 		
 		metadata := &cb.Metadata{Value: protoutil.MarshalOrPanic(&ab.KafkaMetadata{LastOffsetPersisted: env.height})}
@@ -3594,7 +3635,7 @@ func TestDeliverSession(t *testing.T) {
 		defer env.broker0.Close()
 
 		
-		consenter, _ := New(mockLocalConfig.Kafka, &mockkafka.MetricsProvider{}, &mockkafka.HealthChecker{})
+		consenter, _ := New(mockLocalConfig.Kafka, &disabled.Provider{}, &mockkafka.HealthChecker{})
 
 		
 		metadata := &cb.Metadata{Value: protoutil.MarshalOrPanic(&ab.KafkaMetadata{LastOffsetPersisted: env.height})}
@@ -3800,8 +3841,4 @@ func (c *mockConsenterSupport) Height() uint64 {
 func (c *mockConsenterSupport) Append(block *cb.Block) error {
 	c.Called(block)
 	return nil
-}
-
-func (c *mockConsenterSupport) DetectConsensusMigration() bool {
-	return false
 }

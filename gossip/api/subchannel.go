@@ -21,5 +21,5 @@ type SubChannelSelectionCriteria func(signature PeerSignature) bool
 
 type RoutingFilterFactory interface {
 	
-	Peers(common.ChainID, SubChannelSelectionCriteria) RoutingFilter
+	Peers(common.ChannelID, SubChannelSelectionCriteria) RoutingFilter
 }

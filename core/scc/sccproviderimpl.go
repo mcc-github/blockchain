@@ -13,24 +13,25 @@ import (
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/peer"
+	"github.com/pkg/errors"
 )
 
 
 type Provider struct {
-	Peer        peer.Operations
-	PeerSupport peer.Support
-	Registrar   Registrar
-	SysCCs      []SelfDescribingSysCC
-	Whitelist   Whitelist
+	Peer      *peer.Peer
+	SysCCs    []SelfDescribingSysCC
+	Whitelist Whitelist
 }
 
 
-func (p *Provider) RegisterSysCC(scc SelfDescribingSysCC) {
-	p.SysCCs = append(p.SysCCs, scc)
-	_, err := p.registerSysCC(scc)
-	if err != nil {
-		sysccLogger.Panicf("Could not register system chaincode: %s", err)
+func (p *Provider) RegisterSysCC(scc SelfDescribingSysCC) error {
+	for _, registeredSCC := range p.SysCCs {
+		if scc.Name() == registeredSCC.Name() {
+			return errors.Errorf("chaincode with name '%s' already registered", scc.Name())
+		}
 	}
+	p.SysCCs = append(p.SysCCs, scc)
+	return nil
 }
 
 
@@ -93,7 +94,7 @@ func (p *Provider) IsSysCCAndNotInvokableExternal(name string) bool {
 
 
 func (p *Provider) GetApplicationConfig(cid string) (channelconfig.Application, bool) {
-	return p.PeerSupport.GetApplicationConfig(cid)
+	return p.Peer.GetApplicationConfig(cid)
 }
 
 
@@ -105,4 +106,9 @@ func (p *Provider) PolicyManager(channelID string) (policies.Manager, bool) {
 
 func isDeprecatedSysCC(name string) bool {
 	return name == "vscc" || name == "escc"
+}
+
+func (p *Provider) isWhitelisted(syscc SelfDescribingSysCC) bool {
+	enabled, ok := p.Whitelist[syscc.Name()]
+	return ok && enabled
 }

@@ -10,24 +10,27 @@ import (
 	"testing"
 
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/customtx"
-	"github.com/mcc-github/blockchain/core/ledger/customtx/mock"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	"github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/protos/common"
 	protopeer "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestReadWriteCustomTxProcessor(t *testing.T) {
-	fakeTxProcessor := &mock.Processor{}
-	env := newEnv(t)
-	defer env.cleanup()
-	env.initLedgerMgmt()
-	customtx.InitializeTestEnv(
-		customtx.Processors{
-			100: fakeTxProcessor,
+	fakeTxProcessor := &mock.CustomTxProcessor{}
+	env := newEnvWithInitializer(
+		t,
+		&ledgermgmt.Initializer{
+			CustomTxProcessors: map[common.HeaderType]ledger.CustomTxProcessor{
+				100: fakeTxProcessor,
+			},
 		},
 	)
-	h := newTestHelperCreateLgr("ledger1", t)
+	defer env.cleanup()
+	env.initLedgerMgmt()
+
+	h := env.newTestHelperCreateLgr("ledger1", t)
 	h.simulateDataTx("tx0", func(s *simulator) {
 		s.setState("ns", "key1", "value1")
 		s.setState("ns", "key2", "value2")
@@ -59,20 +62,23 @@ func TestReadWriteCustomTxProcessor(t *testing.T) {
 }
 
 func TestRangeReadAndWriteCustomTxProcessor(t *testing.T) {
-	fakeTxProcessor1 := &mock.Processor{}
-	fakeTxProcessor2 := &mock.Processor{}
-	fakeTxProcessor3 := &mock.Processor{}
-	env := newEnv(t)
-	defer env.cleanup()
-	env.initLedgerMgmt()
-	customtx.InitializeTestEnv(
-		customtx.Processors{
-			101: fakeTxProcessor1,
-			102: fakeTxProcessor2,
-			103: fakeTxProcessor3,
+	fakeTxProcessor1 := &mock.CustomTxProcessor{}
+	fakeTxProcessor2 := &mock.CustomTxProcessor{}
+	fakeTxProcessor3 := &mock.CustomTxProcessor{}
+	env := newEnvWithInitializer(
+		t,
+		&ledgermgmt.Initializer{
+			CustomTxProcessors: map[common.HeaderType]ledger.CustomTxProcessor{
+				101: fakeTxProcessor1,
+				102: fakeTxProcessor2,
+				103: fakeTxProcessor3,
+			},
 		},
 	)
-	h := newTestHelperCreateLgr("ledger1", t)
+	defer env.cleanup()
+	env.initLedgerMgmt()
+
+	h := env.newTestHelperCreateLgr("ledger1", t)
 	h.simulateDataTx("tx0", func(s *simulator) {
 		s.setState("ns", "key1", "value1")
 		s.setState("ns", "key2", "value2")

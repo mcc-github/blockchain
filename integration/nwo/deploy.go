@@ -11,12 +11,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/peer/lifecycle"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
@@ -50,56 +52,6 @@ type Chaincode struct {
 
 
 
-func DeployChaincodeNewLifecycle(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
-	if len(peers) == 0 {
-		peers = n.PeersWithChannel(channel)
-	}
-	if len(peers) == 0 {
-		return
-	}
-
-	
-	if chaincode.PackageFile == "" {
-		tempFile, err := ioutil.TempFile("", "chaincode-package")
-		Expect(err).NotTo(HaveOccurred())
-		tempFile.Close()
-		defer os.Remove(tempFile.Name())
-		chaincode.PackageFile = tempFile.Name()
-	}
-
-	
-	PackageChaincodeNewLifecycle(n, chaincode, peers[0])
-
-	
-	filebytes, err := ioutil.ReadFile(chaincode.PackageFile)
-	Expect(err).NotTo(HaveOccurred())
-	hashStr := fmt.Sprintf("%x", util.ComputeSHA256(filebytes))
-	chaincode.PackageID = chaincode.Label + ":" + hashStr
-
-	
-	InstallChaincodeNewLifecycle(n, chaincode, peers...)
-
-	
-	ApproveChaincodeForMyOrgNewLifecycle(n, channel, orderer, chaincode, peers...)
-	EnsureApproved(n, channel, chaincode, n.PeerOrgs(), peers...)
-
-	
-	CommitChaincodeNewLifecycle(n, channel, orderer, chaincode, peers[0], peers...)
-
-	
-	if chaincode.InitRequired {
-		InitChaincodeNewLifecycle(n, channel, orderer, chaincode, peers...)
-	}
-}
-
-
-
-
-
-
-
-
-
 func DeployChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
 	if len(peers) == 0 {
 		peers = n.PeersWithChannel(channel)
@@ -108,6 +60,37 @@ func DeployChaincode(n *Network, channel string, orderer *Orderer, chaincode Cha
 		return
 	}
 
+	PackageAndInstallChaincode(n, chaincode, peers...)
+
+	
+	ApproveChaincodeForMyOrg(n, channel, orderer, chaincode, peers...)
+
+	
+	SimulateCommitUntilSuccess(n, channel, chaincode, n.PeerOrgs(), peers...)
+	CommitChaincode(n, channel, orderer, chaincode, peers[0], peers...)
+
+	
+	if chaincode.InitRequired {
+		InitChaincode(n, channel, orderer, chaincode, peers...)
+	}
+}
+
+
+
+
+
+
+
+
+
+func DeployChaincodeLegacy(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
+	if len(peers) == 0 {
+		peers = n.PeersWithChannel(channel)
+	}
+	if len(peers) == 0 {
+		return
+	}
+
 	
 	if chaincode.PackageFile == "" {
 		tempFile, err := ioutil.TempFile("", "chaincode-package")
@@ -118,17 +101,43 @@ func DeployChaincode(n *Network, channel string, orderer *Orderer, chaincode Cha
 	}
 
 	
-	PackageChaincode(n, chaincode, peers[0])
+	PackageChaincodeLegacy(n, chaincode, peers[0])
+
+	
+	InstallChaincodeLegacy(n, chaincode, peers...)
+
+	
+	InstantiateChaincodeLegacy(n, channel, orderer, chaincode, peers[0], peers...)
+}
+
+func PackageAndInstallChaincode(n *Network, chaincode Chaincode, peers ...*Peer) {
+	
+	if chaincode.PackageFile == "" {
+		tempFile, err := ioutil.TempFile("", "chaincode-package")
+		Expect(err).NotTo(HaveOccurred())
+		tempFile.Close()
+		defer os.Remove(tempFile.Name())
+		chaincode.PackageFile = tempFile.Name()
+	}
+
+	
+	if _, err := os.Stat(chaincode.PackageFile); os.IsNotExist(err) {
+		
+		PackageChaincode(n, chaincode, peers[0])
+	}
+
+	
+	filebytes, err := ioutil.ReadFile(chaincode.PackageFile)
+	Expect(err).NotTo(HaveOccurred())
+	hashStr := fmt.Sprintf("%x", util.ComputeSHA256(filebytes))
+	chaincode.PackageID = chaincode.Label + ":" + hashStr
 
 	
 	InstallChaincode(n, chaincode, peers...)
-
-	
-	InstantiateChaincode(n, channel, orderer, chaincode, peers[0], peers...)
 }
 
-func PackageChaincodeNewLifecycle(n *Network, chaincode Chaincode, peer *Peer) {
-	sess, err := n.PeerAdminSession(peer, commands.ChaincodePackageLifecycle{
+func PackageChaincode(n *Network, chaincode Chaincode, peer *Peer) {
+	sess, err := n.PeerAdminSession(peer, commands.ChaincodePackage{
 		Path:       chaincode.Path,
 		Lang:       chaincode.Lang,
 		Label:      chaincode.Label,
@@ -138,8 +147,8 @@ func PackageChaincodeNewLifecycle(n *Network, chaincode Chaincode, peer *Peer) {
 	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 }
 
-func PackageChaincode(n *Network, chaincode Chaincode, peer *Peer) {
-	sess, err := n.PeerAdminSession(peer, commands.ChaincodePackage{
+func PackageChaincodeLegacy(n *Network, chaincode Chaincode, peer *Peer) {
+	sess, err := n.PeerAdminSession(peer, commands.ChaincodePackageLegacy{
 		Name:       chaincode.Name,
 		Version:    chaincode.Version,
 		Path:       chaincode.Path,
@@ -150,24 +159,21 @@ func PackageChaincode(n *Network, chaincode Chaincode, peer *Peer) {
 	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 }
 
-func InstallChaincodeNewLifecycle(n *Network, chaincode Chaincode, peers ...*Peer) {
+func InstallChaincode(n *Network, chaincode Chaincode, peers ...*Peer) {
 	for _, p := range peers {
-		sess, err := n.PeerAdminSession(p, commands.ChaincodeInstallLifecycle{
+		sess, err := n.PeerAdminSession(p, commands.ChaincodeInstall{
 			PackageFile: chaincode.PackageFile,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
-		sess, err = n.PeerAdminSession(p, commands.ChaincodeQueryInstalledLifecycle{})
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-		Expect(sess).To(gbytes.Say(fmt.Sprintf("Package ID: %s, Label: %s", chaincode.PackageID, chaincode.Label)))
+		EnsureInstalled(n, chaincode.Label, chaincode.PackageID, p)
 	}
 }
 
-func InstallChaincode(n *Network, chaincode Chaincode, peers ...*Peer) {
+func InstallChaincodeLegacy(n *Network, chaincode Chaincode, peers ...*Peer) {
 	for _, p := range peers {
-		sess, err := n.PeerAdminSession(p, commands.ChaincodeInstall{
+		sess, err := n.PeerAdminSession(p, commands.ChaincodeInstallLegacy{
 			Name:        chaincode.Name,
 			Version:     chaincode.Version,
 			Path:        chaincode.Path,
@@ -177,14 +183,14 @@ func InstallChaincode(n *Network, chaincode Chaincode, peers ...*Peer) {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
-		sess, err = n.PeerAdminSession(p, commands.ChaincodeListInstalled{})
+		sess, err = n.PeerAdminSession(p, commands.ChaincodeListInstalledLegacy{})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 		Expect(sess).To(gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", chaincode.Name, chaincode.Version)))
 	}
 }
 
-func ApproveChaincodeForMyOrgNewLifecycle(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
+func ApproveChaincodeForMyOrg(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
 	if chaincode.PackageID == "" {
 		pkgBytes, err := ioutil.ReadFile(chaincode.PackageFile)
 		Expect(err).NotTo(HaveOccurred())
@@ -196,7 +202,7 @@ func ApproveChaincodeForMyOrgNewLifecycle(n *Network, channel string, orderer *O
 	approvedOrgs := map[string]bool{}
 	for _, p := range peers {
 		if _, ok := approvedOrgs[p.Organization]; !ok {
-			sess, err := n.PeerAdminSession(p, commands.ChaincodeApproveForMyOrgLifecycle{
+			sess, err := n.PeerAdminSession(p, commands.ChaincodeApproveForMyOrg{
 				ChannelID:           channel,
 				Orderer:             n.OrdererAddress(orderer, ListenPort),
 				Name:                chaincode.Name,
@@ -218,19 +224,19 @@ func ApproveChaincodeForMyOrgNewLifecycle(n *Network, channel string, orderer *O
 	}
 }
 
-func EnsureApproved(n *Network, channel string, chaincode Chaincode, checkOrgs []*Organization, peers ...*Peer) {
+func SimulateCommitUntilSuccess(n *Network, channel string, chaincode Chaincode, checkOrgs []*Organization, peers ...*Peer) {
 	for _, p := range peers {
 		keys := Keys{}
 		for _, org := range checkOrgs {
 			keys[org.MSPID] = BeTrue()
 		}
-		Eventually(queryApprovalStatus(n, p, channel, chaincode), n.EventuallyTimeout).Should(
+		Eventually(simulateCommit(n, p, channel, chaincode), n.EventuallyTimeout).Should(
 			MatchKeys(IgnoreExtras, keys),
 		)
 	}
 }
 
-func CommitChaincodeNewLifecycle(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peer *Peer, checkPeers ...*Peer) {
+func CommitChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peer *Peer, checkPeers ...*Peer) {
 	
 	commitOrgs := map[string]bool{}
 	var peerAddresses []string
@@ -241,7 +247,7 @@ func CommitChaincodeNewLifecycle(n *Network, channel string, orderer *Orderer, c
 		}
 	}
 
-	sess, err := n.PeerAdminSession(peer, commands.ChaincodeCommitLifecycle{
+	sess, err := n.PeerAdminSession(peer, commands.ChaincodeCommit{
 		ChannelID:           channel,
 		Orderer:             n.OrdererAddress(orderer, ListenPort),
 		Name:                chaincode.Name,
@@ -260,18 +266,34 @@ func CommitChaincodeNewLifecycle(n *Network, channel string, orderer *Orderer, c
 	for i := 0; i < len(peerAddresses); i++ {
 		Eventually(sess.Err, n.EventuallyTimeout).Should(gbytes.Say(`\Qcommitted with status (VALID)\E`))
 	}
-	EnsureCommitted(n, channel, chaincode.Name, chaincode.Version, chaincode.Sequence, checkPeers...)
+	checkOrgs := []*Organization{}
+	for org := range commitOrgs {
+		checkOrgs = append(checkOrgs, n.Organization(org))
+	}
+	EnsureChaincodeCommitted(n, channel, chaincode.Name, chaincode.Version, chaincode.Sequence, checkOrgs, checkPeers...)
 }
 
-func EnsureCommitted(n *Network, channel, name, version, sequence string, peers ...*Peer) {
+
+
+func EnsureChaincodeCommitted(n *Network, channel, name, version, sequence string, checkOrgs []*Organization, peers ...*Peer) {
 	for _, p := range peers {
+		sequenceInt, err := strconv.ParseInt(sequence, 10, 64)
+		Expect(err).NotTo(HaveOccurred())
+		approvedKeys := Keys{}
+		for _, org := range checkOrgs {
+			approvedKeys[org.MSPID] = BeTrue()
+		}
 		Eventually(listCommitted(n, p, channel, name), n.EventuallyTimeout).Should(
-			gbytes.Say(fmt.Sprintf("Committed chaincode definition for chaincode '%s' on channel '%s':\nVersion: %s, Sequence: %s", name, channel, version, sequence)),
+			MatchFields(IgnoreExtras, Fields{
+				"Version":  Equal(version),
+				"Sequence": Equal(sequenceInt),
+				"Approved": MatchKeys(IgnoreExtras, approvedKeys),
+			}),
 		)
 	}
 }
 
-func InitChaincodeNewLifecycle(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
+func InitChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
 	
 	initOrgs := map[string]bool{}
 	var peerAddresses []string
@@ -299,8 +321,8 @@ func InitChaincodeNewLifecycle(n *Network, channel string, orderer *Orderer, cha
 	Expect(sess.Err).To(gbytes.Say("Chaincode invoke successful. result: status:200"))
 }
 
-func InstantiateChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peer *Peer, checkPeers ...*Peer) {
-	sess, err := n.PeerAdminSession(peer, commands.ChaincodeInstantiate{
+func InstantiateChaincodeLegacy(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peer *Peer, checkPeers ...*Peer) {
+	sess, err := n.PeerAdminSession(peer, commands.ChaincodeInstantiateLegacy{
 		ChannelID:         channel,
 		Orderer:           n.OrdererAddress(orderer, ListenPort),
 		Name:              chaincode.Name,
@@ -313,18 +335,18 @@ func InstantiateChaincode(n *Network, channel string, orderer *Orderer, chaincod
 	Expect(err).NotTo(HaveOccurred())
 	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
-	EnsureInstantiated(n, channel, chaincode.Name, chaincode.Version, checkPeers...)
+	EnsureInstantiatedLegacy(n, channel, chaincode.Name, chaincode.Version, checkPeers...)
 }
 
-func EnsureInstantiated(n *Network, channel, name, version string, peers ...*Peer) {
+func EnsureInstantiatedLegacy(n *Network, channel, name, version string, peers ...*Peer) {
 	for _, p := range peers {
-		Eventually(listInstantiated(n, p, channel), n.EventuallyTimeout).Should(
+		Eventually(listInstantiatedLegacy(n, p, channel), n.EventuallyTimeout).Should(
 			gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", name, version)),
 		)
 	}
 }
 
-func UpgradeChaincode(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
+func UpgradeChaincodeLegacy(n *Network, channel string, orderer *Orderer, chaincode Chaincode, peers ...*Peer) {
 	if len(peers) == 0 {
 		peers = n.PeersWithChannel(channel)
 	}
@@ -333,10 +355,10 @@ func UpgradeChaincode(n *Network, channel string, orderer *Orderer, chaincode Ch
 	}
 
 	
-	InstallChaincode(n, chaincode, peers...)
+	InstallChaincodeLegacy(n, chaincode, peers...)
 
 	
-	sess, err := n.PeerAdminSession(peers[0], commands.ChaincodeUpgrade{
+	sess, err := n.PeerAdminSession(peers[0], commands.ChaincodeUpgradeLegacy{
 		ChannelID:         channel,
 		Orderer:           n.OrdererAddress(orderer, ListenPort),
 		Name:              chaincode.Name,
@@ -348,16 +370,69 @@ func UpgradeChaincode(n *Network, channel string, orderer *Orderer, chaincode Ch
 	Expect(err).NotTo(HaveOccurred())
 	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
-	EnsureInstantiated(n, channel, chaincode.Name, chaincode.Version, peers...)
+	EnsureInstantiatedLegacy(n, channel, chaincode.Name, chaincode.Version, peers...)
 }
 
-type queryApprovalOutput struct {
+func EnsureInstalled(n *Network, label, packageID string, peers ...*Peer) {
+	for _, p := range peers {
+		Eventually(queryInstalled(n, p), n.EventuallyTimeout).Should(
+			ContainElement(MatchFields(IgnoreExtras,
+				Fields{
+					"Label":     Equal(label),
+					"PackageId": Equal(packageID),
+				},
+			)),
+		)
+	}
+}
+
+func QueryInstalledReferences(n *Network, channel, label, packageID string, checkPeer *Peer, nameVersions ...[]string) {
+	chaincodes := make([]*lifecycle.QueryInstalledChaincodesResult_Chaincode, len(nameVersions))
+	for i, nameVersion := range nameVersions {
+		chaincodes[i] = &lifecycle.QueryInstalledChaincodesResult_Chaincode{
+			Name:    nameVersion[0],
+			Version: nameVersion[1],
+		}
+	}
+
+	Expect(queryInstalled(n, checkPeer)()).To(
+		ContainElement(MatchFields(IgnoreExtras,
+			Fields{
+				"Label":     Equal(label),
+				"PackageId": Equal(packageID),
+				"References": HaveKeyWithValue(channel, PointTo(MatchFields(IgnoreExtras,
+					Fields{
+						"Chaincodes": ConsistOf(chaincodes),
+					},
+				))),
+			},
+		)),
+	)
+}
+
+type queryInstalledOutput struct {
+	InstalledChaincodes []lifecycle.QueryInstalledChaincodesResult_InstalledChaincode `json:"installed_chaincodes"`
+}
+
+func queryInstalled(n *Network, peer *Peer) func() []lifecycle.QueryInstalledChaincodesResult_InstalledChaincode {
+	return func() []lifecycle.QueryInstalledChaincodesResult_InstalledChaincode {
+		sess, err := n.PeerAdminSession(peer, commands.ChaincodeQueryInstalled{})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+		output := &queryInstalledOutput{}
+		err = json.Unmarshal(sess.Out.Contents(), output)
+		Expect(err).NotTo(HaveOccurred())
+		return output.InstalledChaincodes
+	}
+}
+
+type simulateCommitOutput struct {
 	Approved map[string]bool
 }
 
-func queryApprovalStatus(n *Network, peer *Peer, channel string, chaincode Chaincode) func() map[string]bool {
+func simulateCommit(n *Network, peer *Peer, channel string, chaincode Chaincode) func() map[string]bool {
 	return func() map[string]bool {
-		sess, err := n.PeerAdminSession(peer, commands.ChaincodeQueryApprovalStatusLifecycle{
+		sess, err := n.PeerAdminSession(peer, commands.ChaincodeSimulateCommit{
 			ChannelID:           channel,
 			Name:                chaincode.Name,
 			Version:             chaincode.Version,
@@ -371,28 +446,44 @@ func queryApprovalStatus(n *Network, peer *Peer, channel string, chaincode Chain
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-		output := &queryApprovalOutput{}
+		output := &simulateCommitOutput{}
 		err = json.Unmarshal(sess.Out.Contents(), output)
 		Expect(err).NotTo(HaveOccurred())
 		return output.Approved
 	}
 }
 
-func listCommitted(n *Network, peer *Peer, channel, name string) func() *gbytes.Buffer {
-	return func() *gbytes.Buffer {
-		sess, err := n.PeerAdminSession(peer, commands.ChaincodeListCommittedLifecycle{
+type queryCommittedOutput struct {
+	Sequence int64           `json:"sequence"`
+	Version  string          `json:"version"`
+	Approved map[string]bool `json:"approved"`
+}
+
+
+
+
+func listCommitted(n *Network, peer *Peer, channel, name string) func() queryCommittedOutput {
+	return func() queryCommittedOutput {
+		sess, err := n.PeerAdminSession(peer, commands.ChaincodeListCommitted{
 			ChannelID: channel,
 			Name:      name,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-		return sess.Buffer()
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit())
+		output := &queryCommittedOutput{}
+		if sess.ExitCode() == 1 {
+			
+			return *output
+		}
+		err = json.Unmarshal(sess.Out.Contents(), output)
+		Expect(err).NotTo(HaveOccurred())
+		return *output
 	}
 }
 
-func listInstantiated(n *Network, peer *Peer, channel string) func() *gbytes.Buffer {
+func listInstantiatedLegacy(n *Network, peer *Peer, channel string) func() *gbytes.Buffer {
 	return func() *gbytes.Buffer {
-		sess, err := n.PeerAdminSession(peer, commands.ChaincodeListInstantiated{
+		sess, err := n.PeerAdminSession(peer, commands.ChaincodeListInstantiatedLegacy{
 			ChannelID: channel,
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -405,7 +496,7 @@ func listInstantiated(n *Network, peer *Peer, channel string) func() *gbytes.Buf
 
 
 
-func EnableV2_0Capabilities(network *Network, channel string, orderer *Orderer, peers ...*Peer) {
+func EnableCapabilities(network *Network, channel, capabilitiesGroup, capabilitiesVersion string, orderer *Orderer, peers ...*Peer) {
 	if len(peers) == 0 {
 		return
 	}
@@ -413,13 +504,12 @@ func EnableV2_0Capabilities(network *Network, channel string, orderer *Orderer, 
 	config := GetConfig(network, peers[0], orderer, channel)
 	updatedConfig := proto.Clone(config).(*common.Config)
 
-	
-	updatedConfig.ChannelGroup.Groups["Application"].Values["Capabilities"] = &common.ConfigValue{
+	updatedConfig.ChannelGroup.Groups[capabilitiesGroup].Values["Capabilities"] = &common.ConfigValue{
 		ModPolicy: "Admins",
 		Value: protoutil.MarshalOrPanic(
 			&common.Capabilities{
 				Capabilities: map[string]*common.Capability{
-					"V2_0": {},
+					capabilitiesVersion: {},
 				},
 			},
 		),
@@ -445,7 +535,12 @@ func GetLedgerHeight(n *Network, peer *Peer, channel string) int {
 		ChannelID: channel,
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit())
+
+	if sess.ExitCode() == 1 {
+		
+		return -1
+	}
 
 	channelInfoStr := strings.TrimPrefix(string(sess.Buffer().Contents()[:]), "Blockchain info:")
 	var channelInfo = common.BlockchainInfo{}

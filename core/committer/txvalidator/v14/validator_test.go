@@ -9,6 +9,7 @@ package txvalidator_test
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -35,6 +36,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt/ledgermgmttest"
 	lutils "github.com/mcc-github/blockchain/core/ledger/util"
 	mocktxvalidator "github.com/mcc-github/blockchain/core/mocks/txvalidator"
 	mocks2 "github.com/mcc-github/blockchain/discovery/support/mocks"
@@ -103,10 +105,10 @@ func setupLedgerAndValidatorWithCapabilities(t *testing.T, c *mockconfig.MockApp
 }
 
 func setupLedgerAndValidatorExplicitWithMSP(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin validation.Plugin, mspMgr msp.MSPManager) (ledger.PeerLedger, txvalidator.Validator, func()) {
-	cleanup := ledgermgmt.InitializeTestEnv(t)
+	ledgerMgr, cleanup := constructLedgerMgrWithTestDefaults(t, "txvalidator")
 	gb, err := ctxt.MakeGenesisBlock("TestLedger")
 	assert.NoError(t, err)
-	theLedger, err := ledgermgmt.CreateLedger(gb)
+	theLedger, err := ledgerMgr.CreateLedger(gb)
 	assert.NoError(t, err)
 	mp := (&scc.MocksccProviderFactory{}).NewSystemChaincodeProvider()
 	pm := &mocks.Mapper{}
@@ -1642,10 +1644,10 @@ func (exec *mockQueryExecutor) GetPrivateDataMetadata(namespace, collection, key
 }
 
 func createCustomSupportAndLedger(t *testing.T) (*mocktxvalidator.Support, ledger.PeerLedger, func()) {
-	cleanup := ledgermgmt.InitializeTestEnv(t)
+	ledgerMgr, cleanup := constructLedgerMgrWithTestDefaults(t, "txvalidator")
 	gb, err := ctxt.MakeGenesisBlock("TestLedger")
 	assert.NoError(t, err)
-	l, err := ledgermgmt.CreateLedger(gb)
+	l, err := ledgerMgr.CreateLedger(gb)
 	assert.NoError(t, err)
 
 	identity := &mocks2.Identity{}
@@ -1950,4 +1952,17 @@ func TestMain(m *testing.M) {
 
 func ToHex(q uint64) string {
 	return "0x" + strconv.FormatUint(q, 16)
+}
+
+func constructLedgerMgrWithTestDefaults(t *testing.T, testDir string) (*ledgermgmt.LedgerMgr, func()) {
+	testDir, err := ioutil.TempDir("", testDir)
+	if err != nil {
+		t.Fatalf("Failed to create ledger directory: %s", err)
+	}
+	ledgerMgr := ledgermgmt.NewLedgerMgr(ledgermgmttest.NewInitializer(testDir))
+	cleanup := func() {
+		ledgerMgr.Close()
+		os.RemoveAll(testDir)
+	}
+	return ledgerMgr, cleanup
 }

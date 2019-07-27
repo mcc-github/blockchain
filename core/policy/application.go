@@ -99,8 +99,8 @@ type dynamicPolicyManager struct {
 }
 
 func (d *dynamicPolicyManager) GetPolicy(id string) (policies.Policy, bool) {
-	mgr, ok := d.channelPolicyManagerGetter.Manager(d.channelID)
-	if !ok {
+	mgr := d.channelPolicyManagerGetter.Manager(d.channelID)
+	if mgr == nil {
 		
 		
 		
@@ -113,13 +113,13 @@ func (d *dynamicPolicyManager) GetPolicy(id string) (policies.Policy, bool) {
 
 
 func New(deserializer msp.IdentityDeserializer, channel string, channelPolicyManagerGetter policies.ChannelPolicyManagerGetter) (*ApplicationPolicyEvaluator, error) {
-	_, ok := channelPolicyManagerGetter.Manager(channel)
-	if !ok {
+	mgr := channelPolicyManagerGetter.Manager(channel)
+	if mgr == nil {
 		return nil, errors.Errorf("failed to retrieve policy manager for channel %s", channel)
 	}
 
 	return &ApplicationPolicyEvaluator{
-		signaturePolicyProvider: &cauthdsl.ProviderFromStruct{Deserializer: deserializer},
+		signaturePolicyProvider: &cauthdsl.EnvelopeBasedPolicyProvider{Deserializer: deserializer},
 		channelPolicyReferenceProvider: &ChannelPolicyReferenceProviderImpl{Manager: &dynamicPolicyManager{
 			channelID:                  channel,
 			channelPolicyManagerGetter: channelPolicyManagerGetter,

@@ -88,36 +88,40 @@ func (pr *provider) NewPolicy(data []byte) (policies.Policy, proto.Message, erro
 	}
 
 	return &policy{
-		evaluator:    compiled,
-		deserializer: pr.deserializer,
+		evaluator:               compiled,
+		deserializer:            pr.deserializer,
+		signaturePolicyEnvelope: sigPolicy,
 	}, sigPolicy, nil
 
 }
 
-type ProviderFromStruct struct {
+
+type EnvelopeBasedPolicyProvider struct {
 	Deserializer msp.IdentityDeserializer
 }
 
 
-func (pr *ProviderFromStruct) NewPolicy(sigPolicy *cb.SignaturePolicyEnvelope) (policies.Policy, error) {
+func (pp *EnvelopeBasedPolicyProvider) NewPolicy(sigPolicy *cb.SignaturePolicyEnvelope) (policies.Policy, error) {
 	if sigPolicy == nil {
 		return nil, errors.New("invalid arguments")
 	}
 
-	compiled, err := compile(sigPolicy.Rule, sigPolicy.Identities, pr.Deserializer)
+	compiled, err := compile(sigPolicy.Rule, sigPolicy.Identities, pp.Deserializer)
 	if err != nil {
 		return nil, err
 	}
 
 	return &policy{
-		evaluator:    compiled,
-		deserializer: pr.Deserializer,
+		evaluator:               compiled,
+		deserializer:            pp.Deserializer,
+		signaturePolicyEnvelope: sigPolicy,
 	}, nil
 }
 
 type policy struct {
-	evaluator    func([]IdentityAndSignature, []bool) bool
-	deserializer msp.IdentityDeserializer
+	signaturePolicyEnvelope *cb.SignaturePolicyEnvelope
+	evaluator               func([]IdentityAndSignature, []bool) bool
+	deserializer            msp.IdentityDeserializer
 }
 
 
@@ -138,4 +142,12 @@ func (p *policy) Evaluate(signatureSet []*protoutil.SignedData) error {
 		return errors.New("signature set did not satisfy policy")
 	}
 	return nil
+}
+
+func (p *policy) Convert() (*cb.SignaturePolicyEnvelope, error) {
+	if p.signaturePolicyEnvelope == nil {
+		return nil, errors.New("nil policy field")
+	}
+
+	return p.signaturePolicyEnvelope, nil
 }

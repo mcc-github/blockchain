@@ -106,6 +106,12 @@ type ChannelPolicyManagerGetter interface {
 }
 
 
+
+type PolicyManager interface {
+	policies.Manager
+}
+
+
 func NewPluginValidator(pm txvalidatorplugin.Mapper, qec QueryExecutorCreator, deserializer msp.IdentityDeserializer, capabilities vc.Capabilities, cpmg policies.ChannelPolicyManagerGetter, cor CollectionResources) *PluginValidator {
 	return &PluginValidator{
 		capabilities:               capabilities,

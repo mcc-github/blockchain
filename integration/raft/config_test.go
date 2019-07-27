@@ -19,7 +19,6 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/integration/nwo"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
@@ -43,13 +42,9 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 		testDir string
 		client  *docker.Client
 		network *nwo.Network
-		mycc    nwo.Chaincode
-		mycc2   nwo.Chaincode
-		mycc3   nwo.Chaincode
 		peer    *nwo.Peer
 
 		networkProcess   ifrit.Process
-		peerProcesses    ifrit.Process
 		ordererProcesses []ifrit.Process
 		ordererRunners   []*ginkgomon.Runner
 	)
@@ -57,7 +52,6 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 	BeforeEach(func() {
 		ordererRunners = nil
 		ordererProcesses = nil
-		peerProcesses = nil
 
 		var err error
 		testDir, err = ioutil.TempDir("", "e2e-etcfraft_reconfig")
@@ -65,38 +59,12 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 
 		client, err = docker.NewClientFromEnv()
 		Expect(err).NotTo(HaveOccurred())
-
-		mycc = nwo.Chaincode{
-			Name:    "mycc",
-			Version: "0.0",
-			Path:    "github.com/mcc-github/blockchain/integration/chaincode/simple/cmd",
-			Ctor:    `{"Args":["init","a","100","b","200"]}`,
-			Policy:  `OR ('Org1MSP.member','Org2MSP.member')`,
-		}
-		mycc2 = nwo.Chaincode{
-			Name:    "mycc2",
-			Version: "0.0",
-			Path:    "github.com/mcc-github/blockchain/integration/chaincode/simple/cmd",
-			Ctor:    `{"Args":["init","a","100","b","200"]}`,
-			Policy:  `OR ('Org1MSP.member','Org2MSP.member')`,
-		}
-		mycc3 = nwo.Chaincode{
-			Name:    "mycc3",
-			Version: "0.0",
-			Path:    "github.com/mcc-github/blockchain/integration/chaincode/simple/cmd",
-			Ctor:    `{"Args":["init","a","100","b","200"]}`,
-			Policy:  `OR ('Org1MSP.member','Org2MSP.member')`,
-		}
 	})
 
 	AfterEach(func() {
 		if networkProcess != nil {
 			networkProcess.Signal(syscall.SIGTERM)
 			Eventually(networkProcess.Wait(), network.EventuallyTimeout).Should(Receive())
-		}
-		if peerProcesses != nil {
-			peerProcesses.Signal(syscall.SIGTERM)
-			Eventually(peerProcesses.Wait(), network.EventuallyTimeout).Should(Receive())
 		}
 		if network != nil {
 			network.Cleanup()
@@ -154,15 +122,13 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 				Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit(0))
 			}
 
-			By("creating a new chain and having the peers join it to test for channel creation")
-			network.CreateAndJoinChannel(orderer1, "testchannel")
-			nwo.DeployChaincode(network, "testchannel", orderer1, mycc)
-			RunQueryInvokeQuery(network, orderer1, peer, "testchannel")
+			By("Creating a new channel")
+			network.CreateChannel("testchannel", orderer1, peer)
 
 			
 			
 			
-			By("fetching the latest blocks from all the orderer nodes and testing them for equality")
+			By("Fetching the latest blocks from all the orderer nodes and testing them for equality")
 			fetchLatestBlock(orderer1, blockFile1)
 			fetchLatestBlock(orderer2, blockFile2)
 			fetchLatestBlock(orderer3, blockFile3)
@@ -171,23 +137,6 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 			b3 := nwo.UnmarshalBlockFromFile(blockFile3)
 			Expect(protoutil.BlockHeaderBytes(b1.Header)).To(Equal(protoutil.BlockHeaderBytes(b2.Header)))
 			Expect(protoutil.BlockHeaderBytes(b2.Header)).To(Equal(protoutil.BlockHeaderBytes(b3.Header)))
-
-			By("updating ACL policies to test for type A configuration updates")
-			invokeChaincode := commands.ChaincodeInvoke{
-				ChannelID:    "testchannel",
-				Orderer:      network.OrdererAddress(orderer1, nwo.ListenPort),
-				Name:         mycc.Name,
-				Ctor:         `{"Args":["invoke","a","b","10"]}`,
-				WaitForEvent: true,
-			}
-			
-			policyName := resources.Event_FilteredBlock
-			policy := "/Channel/Application/org2/Admins"
-			SetACLPolicy(network, "testchannel", policyName, policy, "orderer1")
-			
-			sess, err := network.PeerAdminSession(org1Peer0, invokeChaincode)
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(sess.Err, network.EventuallyTimeout).Should(gbytes.Say(`\Qdeliver completed with status (FORBIDDEN)\E`))
 		})
 	})
 
@@ -252,9 +201,10 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 			peer1org1 := network.Peer("Org1", "peer1")
 			peer1org2 := network.Peer("Org2", "peer1")
 
-			network.CreateChannelFail(channel, orderer, peer1org1, peer1org1, peer1org2, orderer)
+			exitCode := network.CreateChannelExitCode(channel, orderer, peer1org1, peer1org1, peer1org2, orderer)
+			Expect(exitCode).NotTo(Equal(0))
 			Consistently(process.Wait).ShouldNot(Receive()) 
-			Expect(runner.Err()).To(gbytes.Say(`rejected by Configure: ElectionTick \(10\) must be greater than HeartbeatTick \(10\)`))
+			Expect(runner.Err()).To(gbytes.Say(`invalid new config metdadata: ElectionTick \(10\) must be greater than HeartbeatTick \(10\)`))
 
 			By("Submitting channel config update with illegal value")
 			channel = network.SystemChannel.Name
@@ -280,7 +230,9 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 				Value:     protoutil.MarshalOrPanic(consensusTypeValue),
 			}
 
-			nwo.UpdateOrdererConfigFail(network, orderer, channel, config, updatedConfig, peer1org1, orderer)
+			sess := nwo.UpdateOrdererConfigSession(network, orderer, channel, config, updatedConfig, peer1org1, orderer)
+			Expect(sess.ExitCode()).NotTo(Equal(0))
+			Expect(sess.Err).To(gbytes.Say(`invalid new config metdadata: ElectionTick \(10\) must be greater than HeartbeatTick \(10\)`))
 		})
 	})
 
@@ -516,8 +468,6 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 			
 			
 			
-			
-			
 
 			layout := nwo.MultiNodeEtcdRaft()
 			layout.Channels = append(layout.Channels, &nwo.Channel{
@@ -548,11 +498,6 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 			for _, ordererProc := range ordererProcesses {
 				Eventually(ordererProc.Ready()).Should(BeClosed())
 			}
-
-			By("Launching the peers")
-			peerGroup := network.PeerGroupRunner()
-			peerProcesses = ifrit.Invoke(peerGroup)
-			Eventually(peerProcesses.Ready()).Should(BeClosed())
 
 			By("Checking that all orderers are online")
 			assertBlockReception(map[string]int{
@@ -665,26 +610,14 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 				"testchannel":   7,
 			}, orderers, peer, network)
 
-			By("Joining the peer to testchannel")
-			network.JoinChannel("testchannel", o1, peer)
-			By("Joining the peer to testchannel2")
-			network.JoinChannel("testchannel2", o1, peer)
-			By("Joining the peer to testchannel3")
-			network.JoinChannel("testchannel3", o1, peer)
+			By("Broadcasting envelope to testchannel")
+			env := CreateBroadcastEnvelope(network, peer, "testchannel", []byte("hello"))
+			resp, err := Broadcast(network, o1, env)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Status).To(Equal(common.Status_SUCCESS))
 
-			By("Deploying mycc and mycc2 and mycc3 to testchannel and testchannel2 and testchannel3")
-			deployChaincodes(network, peer, o2, mycc, mycc2, mycc3)
-
-			By("Waiting for orderers to sync")
 			assertBlockReception(map[string]int{
 				"testchannel": 8,
-			}, orderers, peer, network)
-
-			By("Transacting on testchannel once more")
-			assertInvoke(network, peer, o1, mycc.Name, "testchannel", "Chaincode invoke successful. result: status:200", 0)
-
-			assertBlockReception(map[string]int{
-				"testchannel": 9,
 			}, orderers, peer, network)
 
 			By("Corrupting the readers policy of testchannel3")
@@ -708,12 +641,20 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 			By("And waiting for it to sync with the rest of the orderers")
 			assertBlockReception(map[string]int{
 				"systemchannel": 10,
-				"testchannel":   9,
+				"testchannel":   8,
 			}, orderers, peer, network)
 
 			By("Ensuring orderer4 doesn't serve testchannel2 and testchannel3")
-			assertInvoke(network, peer, o4, mycc2.Name, "testchannel2", "channel testchannel2 is not serviced by me", 1)
-			assertInvoke(network, peer, o4, mycc3.Name, "testchannel3", "channel testchannel3 is not serviced by me", 1)
+			env = CreateBroadcastEnvelope(network, peer, "testchannel2", []byte("hello"))
+			resp, err = Broadcast(network, o4, env)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Status).To(Equal(common.Status_SERVICE_UNAVAILABLE))
+
+			env = CreateBroadcastEnvelope(network, peer, "testchannel3", []byte("hello"))
+			resp, err = Broadcast(network, o4, env)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Status).To(Equal(common.Status_SERVICE_UNAVAILABLE))
+
 			Expect(string(orderer4Runner.Err().Contents())).To(ContainSubstring("I do not belong to channel testchannel2 or am forbidden pulling it (not in the channel), skipping chain retrieval"))
 			Expect(string(orderer4Runner.Err().Contents())).To(ContainSubstring("I do not belong to channel testchannel3 or am forbidden pulling it (forbidden pulling the channel), skipping chain retrieval"))
 
@@ -727,7 +668,7 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 
 			By("Waiting for orderer4 and to replicate testchannel2")
 			assertBlockReception(map[string]int{
-				"testchannel2": 2,
+				"testchannel2": 1,
 			}, []*nwo.Orderer{o4}, peer, network)
 
 			By("Ensuring orderer4 doesn't have any errors in the logs")
@@ -737,11 +678,14 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 			assertNoErrorsAreLogged(ordererRunners)
 
 			By("Submitting a transaction through orderer4")
-			assertInvoke(network, peer, o4, mycc2.Name, "testchannel2", "Chaincode invoke successful. result: status:200", 0)
+			env = CreateBroadcastEnvelope(network, peer, "testchannel2", []byte("hello"))
+			resp, err = Broadcast(network, o4, env)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Status).To(Equal(common.Status_SUCCESS))
 
 			By("And ensuring it is propagated amongst all orderers")
 			assertBlockReception(map[string]int{
-				"testchannel2": 3,
+				"testchannel2": 2,
 			}, orderers, peer, network)
 		})
 	})
@@ -878,16 +822,6 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 			Expect(err).To(Not(HaveOccurred()))
 
 			nwo.RemoveConsenter(network, peer, network.Orderers[(firstEvictedNode+1)%3], "systemchannel", serverCertBytes)
-			fmt.Fprintln(GinkgoWriter, "Ensuring the other orderers detect the eviction of the node on channel", "systemchannel")
-			Eventually(ordererRunners[(firstEvictedNode+1)%3].Err(), network.EventuallyTimeout, time.Second).Should(gbytes.Say("Deactivated node"))
-			Eventually(ordererRunners[(firstEvictedNode+2)%3].Err(), network.EventuallyTimeout, time.Second).Should(gbytes.Say("Deactivated node"))
-
-			fmt.Fprintln(GinkgoWriter, "Ensuring the evicted orderer stops rafting on channel", "systemchannel")
-			stopMSg := fmt.Sprintf("Raft node stopped channel=%s", "systemchannel")
-			Eventually(ordererRunners[firstEvictedNode].Err(), network.EventuallyTimeout, time.Second).Should(gbytes.Say(stopMSg))
-
-			By("Ensuring the evicted orderer now doesn't serve clients")
-			ensureEvicted(orderers[firstEvictedNode], peer, network, "systemchannel")
 
 			var survivedOrdererRunners []*ginkgomon.Runner
 			for i := range orderers {
@@ -908,19 +842,25 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 				}
 			}
 
+			fmt.Fprintln(GinkgoWriter, "Ensuring the evicted orderer stops rafting on channel", "systemchannel")
+			stopMSg := fmt.Sprintf("Raft node stopped channel=%s", "systemchannel")
+			Eventually(ordererRunners[firstEvictedNode].Err(), network.EventuallyTimeout, time.Second).Should(gbytes.Say(stopMSg))
+
+			By("Ensuring the evicted orderer now doesn't serve clients")
+			ensureEvicted(orderers[firstEvictedNode], peer, network, "systemchannel")
+
 			By("Removing the leader from 2-node channel")
 			serverCertBytes, err = ioutil.ReadFile(filepath.Join(network.OrdererLocalTLSDir(orderers[secondEvictedNode]), "server.crt"))
 			Expect(err).To(Not(HaveOccurred()))
 
 			nwo.RemoveConsenter(network, peer, orderers[surviver], "systemchannel", serverCertBytes)
+			findLeader([]*ginkgomon.Runner{ordererRunners[surviver]})
+
 			fmt.Fprintln(GinkgoWriter, "Ensuring the other orderer detect the eviction of the node on channel", "systemchannel")
 			Eventually(ordererRunners[secondEvictedNode].Err(), network.EventuallyTimeout, time.Second).Should(gbytes.Say(stopMSg))
 
 			By("Ensuring the evicted orderer now doesn't serve clients")
 			ensureEvicted(orderers[secondEvictedNode], peer, network, "systemchannel")
-
-			By("Asserting the only remaining node elects itself")
-			findLeader([]*ginkgomon.Runner{ordererRunners[surviver]})
 		})
 
 		It("notices it even if it is down at the time of its eviction", func() {
@@ -1064,6 +1004,8 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 				launch(i)
 			}
 
+			leader := findLeader(ordererRunners[:3])
+
 			By("Checking that all orderers are online")
 			assertBlockReception(map[string]int{
 				"systemchannel": 0,
@@ -1121,6 +1063,8 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 				}, []*nwo.Orderer{orderers[i]}, peer, network)
 			}
 
+			Expect(findLeader(ordererRunners[4:])).To(Equal(leader))
+
 			
 			
 			
@@ -1133,18 +1077,15 @@ var _ = Describe("EndToEnd reconfiguration and onboarding", func() {
 			Eventually(ordererProcesses[0].Wait(), network.EventuallyTimeout).Should(Receive())
 
 			By("Submitting another tx to increment Raft index on alive orderers")
-			nwo.UpdateConsensusMetadata(network, peer, orderers[4], network.SystemChannel.Name, func(originalMetadata []byte) []byte {
-				metadata := &etcdraft.ConfigMetadata{}
-				err := proto.Unmarshal(originalMetadata, metadata)
-				Expect(err).NotTo(HaveOccurred())
-
-				metadata.Options.SnapshotIntervalSize = 2 * 1024 
-
+			if leader == 1 {
 				
-				newMetadata, err := proto.Marshal(metadata)
-				Expect(err).NotTo(HaveOccurred())
-				return newMetadata
-			})
+				findLeader([]*ginkgomon.Runner{ordererRunners[4]})
+			}
+
+			env := CreateBroadcastEnvelope(network, orderers[4], network.SystemChannel.Name, []byte("hello"))
+			resp, err := Broadcast(network, orderers[4], env)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Status).To(Equal(common.Status_SUCCESS))
 			blockSeq++
 
 			assertBlockReception(map[string]int{
@@ -1514,40 +1455,6 @@ func assertNoErrorsAreLogged(ordererRunners []*ginkgomon.Runner) {
 		}(runner)
 	}
 	wg.Wait()
-}
-
-func deployChaincodes(n *nwo.Network, p *nwo.Peer, o *nwo.Orderer, mycc nwo.Chaincode, mycc2 nwo.Chaincode, mycc3 nwo.Chaincode) {
-	var wg sync.WaitGroup
-	wg.Add(3)
-	for channel, chaincode := range map[string]nwo.Chaincode{
-		"testchannel":  mycc,
-		"testchannel2": mycc2,
-		"testchannel3": mycc3,
-	} {
-		go func(channel string, cc nwo.Chaincode) {
-			defer GinkgoRecover()
-			defer wg.Done()
-			nwo.DeployChaincode(n, channel, o, cc, p)
-		}(channel, chaincode)
-	}
-
-	wg.Wait()
-}
-
-func assertInvoke(network *nwo.Network, peer *nwo.Peer, o *nwo.Orderer, cc string, channel string, expectedOutput string, expectedStatus int) {
-	sess, err := network.PeerUserSession(peer, "User1", commands.ChaincodeInvoke{
-		ChannelID: channel,
-		Orderer:   network.OrdererAddress(o, nwo.ListenPort),
-		Name:      cc,
-		Ctor:      `{"Args":["invoke","a","b","10"]}`,
-		PeerAddresses: []string{
-			network.PeerAddress(peer, nwo.ListenPort),
-		},
-		WaitForEvent: true,
-	})
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit(expectedStatus))
-	Expect(sess.Err).To(gbytes.Say(expectedOutput))
 }
 
 func revokeReaderAccess(network *nwo.Network, channel string, orderer *nwo.Orderer, peer *nwo.Peer) {

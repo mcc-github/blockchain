@@ -68,11 +68,7 @@ func NewGRPCServerFromListener(listener net.Listener, serverConfig ServerConfig)
 	
 	var serverOpts []grpc.ServerOption
 
-	
-	var secureConfig SecureOptions
-	if serverConfig.SecOpts != nil {
-		secureConfig = *serverConfig.SecOpts
-	}
+	secureConfig := serverConfig.SecOpts
 	if secureConfig.UseTLS {
 		
 		if secureConfig.Key != nil && secureConfig.Certificate != nil {
@@ -263,52 +259,6 @@ func (gServer *GRPCServer) appendClientRootCA(clientRoot []byte) error {
 
 
 
-func (gServer *GRPCServer) RemoveClientRootCAs(clientRoots [][]byte) error {
-	gServer.lock.Lock()
-	defer gServer.lock.Unlock()
-	
-	for _, clientRoot := range clientRoots {
-		err := gServer.removeClientRootCA(clientRoot)
-		if err != nil {
-			return err
-		}
-	}
-
-	
-	certPool := x509.NewCertPool()
-	for _, clientRoot := range gServer.clientRootCAs {
-		certPool.AddCert(clientRoot)
-	}
-
-	
-	gServer.tlsConfig.ClientCAs = certPool
-	return nil
-}
-
-
-func (gServer *GRPCServer) removeClientRootCA(clientRoot []byte) error {
-
-	certs, subjects, err := pemToX509Certs(clientRoot)
-	if err != nil {
-		return errors.WithMessage(err, "failed to remove client root certificate(s)")
-	}
-
-	if len(certs) < 1 {
-		return errors.New("No client root certificates found")
-	}
-
-	for i, subject := range subjects {
-		
-		
-		if certs[i].Equal(gServer.clientRootCAs[subject]) {
-			delete(gServer.clientRootCAs, subject)
-		}
-	}
-	return nil
-}
-
-
-
 func (gServer *GRPCServer) SetClientRootCAs(clientRoots [][]byte) error {
 	gServer.lock.Lock()
 	defer gServer.lock.Unlock()
@@ -320,11 +270,9 @@ func (gServer *GRPCServer) SetClientRootCAs(clientRoots [][]byte) error {
 		if err != nil {
 			return errors.WithMessage(err, "failed to set client root certificate(s)")
 		}
-		if len(certs) >= 1 {
-			for i, cert := range certs {
-				
-				clientRootCAs[subjects[i]] = cert
-			}
+
+		for i, cert := range certs {
+			clientRootCAs[subjects[i]] = cert
 		}
 	}
 
@@ -333,9 +281,8 @@ func (gServer *GRPCServer) SetClientRootCAs(clientRoots [][]byte) error {
 	for _, clientRoot := range clientRootCAs {
 		certPool.AddCert(clientRoot)
 	}
-	
+
 	gServer.clientRootCAs = clientRootCAs
-	
 	gServer.tlsConfig.ClientCAs = certPool
 	return nil
 }

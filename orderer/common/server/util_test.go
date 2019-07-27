@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	config "github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +52,7 @@ func TestCreateLedgerFactory(t *testing.T) {
 			conf.General.LedgerType = tc.ledgerType
 			conf.FileLedger.Location = tc.ledgerDir
 			conf.FileLedger.Prefix = tc.ledgerDirPrefix
-			lf, ld := createLedgerFactory(conf)
+			lf, ld := createLedgerFactory(conf, &disabled.Provider{})
 
 			defer func() {
 				if ld != "" {

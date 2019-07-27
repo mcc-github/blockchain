@@ -9,17 +9,23 @@ package comm
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
 
+const (
+	peerTLSEnabled           = false
+	defaultConnectionTimeout = time.Second * 3
+)
+
 func TestEmptyEndpoints(t *testing.T) {
 	t.Parallel()
-	noopFactory := func(endpoint string) (*grpc.ClientConn, error) {
+	noopFactory := func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
 		return nil, nil
 	}
-	assert.Nil(t, NewConnectionProducer(noopFactory, []string{}))
+	assert.Nil(t, NewConnectionProducer(noopFactory, []string{}, defDeliverClientDialOpts(), peerTLSEnabled, defaultConnectionTimeout))
 }
 
 func TestConnFailures(t *testing.T) {
@@ -30,7 +36,7 @@ func TestConnFailures(t *testing.T) {
 		"b": false,
 		"c": false,
 	}
-	connFactory := func(endpoint string) (*grpc.ClientConn, error) {
+	connFactory := func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
 		conn := &grpc.ClientConn{}
 		conn2Endpoint[fmt.Sprintf("%p", conn)] = endpoint
 		if !shouldConnFail[endpoint] {
@@ -39,7 +45,7 @@ func TestConnFailures(t *testing.T) {
 		return nil, fmt.Errorf("Failed connecting to %s", endpoint)
 	}
 	
-	producer := NewConnectionProducer(connFactory, []string{"a", "b", "c"})
+	producer := NewConnectionProducer(connFactory, []string{"a", "b", "c"}, defDeliverClientDialOpts(), peerTLSEnabled, defaultConnectionTimeout)
 	conn, _, err := producer.NewConnection()
 	assert.NoError(t, err)
 	
@@ -73,13 +79,13 @@ func TestConnFailures(t *testing.T) {
 func TestUpdateEndpoints(t *testing.T) {
 	t.Parallel()
 	conn2Endpoint := make(map[string]string)
-	connFactory := func(endpoint string) (*grpc.ClientConn, error) {
+	connFactory := func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
 		conn := &grpc.ClientConn{}
 		conn2Endpoint[fmt.Sprintf("%p", conn)] = endpoint
 		return conn, nil
 	}
 	
-	producer := NewConnectionProducer(connFactory, []string{"a"})
+	producer := NewConnectionProducer(connFactory, []string{"a"}, defDeliverClientDialOpts(), peerTLSEnabled, defaultConnectionTimeout)
 	conn, a, err := producer.NewConnection()
 	assert.NoError(t, err)
 	assert.Equal(t, "a", conn2Endpoint[fmt.Sprintf("%p", conn)])
@@ -106,13 +112,13 @@ func TestNewConnectionRoundRobin(t *testing.T) {
 
 	totalEndpoints := []string{"a", "b", "c", "d"}
 	conn2Endpoint := make(map[string]string)
-	connFactory := func(endpoint string) (*grpc.ClientConn, error) {
+	connFactory := func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
 		conn := &grpc.ClientConn{}
 		conn2Endpoint[fmt.Sprintf("%p", conn)] = endpoint
 		return conn, nil
 	}
 
-	producer := NewConnectionProducer(connFactory, totalEndpoints)
+	producer := NewConnectionProducer(connFactory, totalEndpoints, defDeliverClientDialOpts(), peerTLSEnabled, defaultConnectionTimeout)
 	connectedEndpoints := make(map[string]struct{})
 
 	assertAllEndpointsUsed := func() {
@@ -183,4 +189,19 @@ func TestEndpointCriteria(t *testing.T) {
 			assert.Equal(t, testCase.expectedEqual, endpointCriteria.Equals(testCase.otherEndpointCriteria))
 		})
 	}
+}
+
+func defDeliverClientDialOpts() []grpc.DialOption {
+	dialOpts := []grpc.DialOption{grpc.WithBlock()}
+
+	dialOpts = append(
+		dialOpts,
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(MaxRecvMsgSize),
+			grpc.MaxCallSendMsgSize(MaxSendMsgSize)))
+
+	kaOpts := DefaultKeepaliveOptions
+	dialOpts = append(dialOpts, ClientKeepaliveOptions(kaOpts)...)
+
+	return dialOpts
 }

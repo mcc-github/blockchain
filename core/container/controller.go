@@ -7,16 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package container
 
 import (
-	"context"
-	"fmt"
 	"io"
 	"sync"
 
-	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 type VMProvider interface {
@@ -29,10 +24,9 @@ type Builder interface {
 
 
 type VM interface {
-	Start(ccid ccintf.CCID, args []string, env []string, filesToUpload map[string][]byte, builder Builder) error
+	Start(ccid ccintf.CCID, args []string, env []string, filesToUpload map[string][]byte) error
 	Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error
 	Wait(ccid ccintf.CCID) (int, error)
-	HealthCheck(context.Context) error
 }
 
 type refCountedLock struct {
@@ -58,14 +52,6 @@ func NewVMController(vmProviders map[string]VMProvider) *VMController {
 		containerLocks: make(map[ccintf.CCID]*refCountedLock),
 		vmProviders:    vmProviders,
 	}
-}
-
-func (vmc *VMController) newVM(typ string) VM {
-	v, ok := vmc.vmProviders[typ]
-	if !ok {
-		vmLogger.Panicf("Programming error: unsupported VM type: %s", typ)
-	}
-	return v.NewVM()
 }
 
 func (vmc *VMController) lockContainer(id ccintf.CCID) {
@@ -115,43 +101,13 @@ type VMCReq interface {
 
 type StartContainerReq struct {
 	ccintf.CCID
-	Builder       Builder
 	Args          []string
 	Env           []string
 	FilesToUpload map[string][]byte
 }
 
-
-
-
-
-
-
-
-type PlatformBuilder struct {
-	Type             string
-	Path             string
-	Name             string
-	Version          string
-	CodePackage      []byte
-	PlatformRegistry *platforms.Registry
-	Client           *docker.Client
-}
-
-
-func (b *PlatformBuilder) Build() (io.Reader, error) {
-	return b.PlatformRegistry.GenerateDockerBuild(
-		b.Type,
-		b.Path,
-		b.Name,
-		b.Version,
-		b.CodePackage,
-		b.Client,
-	)
-}
-
 func (si StartContainerReq) Do(v VM) error {
-	return v.Start(si.CCID, si.Args, si.Env, si.FilesToUpload, si.Builder)
+	return v.Start(si.CCID, si.Args, si.Env, si.FilesToUpload)
 }
 
 func (si StartContainerReq) GetCCID() ccintf.CCID {
@@ -201,20 +157,41 @@ func (w WaitContainerReq) GetCCID() ccintf.CCID {
 	return w.CCID
 }
 
-func (vmc *VMController) Process(vmtype string, req VMCReq) error {
-	v := vmc.newVM(vmtype)
-	ccid := req.GetCCID()
 
-	vmc.lockContainer(ccid)
-	defer vmc.unlockContainer(ccid)
-	return req.Do(v)
+type BuildReq struct {
+	CCID        ccintf.CCID
+	Type        string
+	Path        string
+	Name        string
+	Version     string
+	CodePackage []byte
 }
 
 
-func GetChaincodePackageBytes(pr *platforms.Registry, spec *pb.ChaincodeSpec) ([]byte, error) {
-	if spec == nil || spec.ChaincodeId == nil {
-		return nil, fmt.Errorf("invalid chaincode spec")
+type ChaincodeBuilder interface {
+	Build(ccid ccintf.CCID, ccType, path, name, version string, codePackage []byte) error
+}
+
+func (b BuildReq) Do(v VM) error {
+	if chaincodeBuilder, ok := v.(ChaincodeBuilder); ok {
+		return chaincodeBuilder.Build(b.CCID, b.Type, b.Path, b.Name, b.Version, b.CodePackage)
+	}
+	return nil
+}
+
+func (w BuildReq) GetCCID() ccintf.CCID {
+	return w.CCID
+}
+
+func (vmc *VMController) Process(vmtype string, req VMCReq) error {
+	ccid := req.GetCCID()
+
+	v, ok := vmc.vmProviders[vmtype]
+	if !ok {
+		vmLogger.Panicf("Programming error: unsupported VM type: %s for ccid='%s'", vmtype, ccid.String())
 	}
 
-	return pr.GetDeploymentPayload(spec.Type.String(), spec.ChaincodeId.Path)
+	vmc.lockContainer(ccid)
+	defer vmc.unlockContainer(ccid)
+	return req.Do(v.NewVM())
 }

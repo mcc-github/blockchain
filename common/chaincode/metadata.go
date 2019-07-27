@@ -19,6 +19,10 @@ type InstalledChaincode struct {
 	PackageID persistence.PackageID
 	Hash      []byte
 	Label     string
+	
+	
+	
+	References map[string][]*Metadata
 
 	
 	

@@ -16,7 +16,6 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
-	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
@@ -31,15 +30,15 @@ var ErrLedgerAlreadyOpened = errors.New("ledger already opened")
 
 var ErrLedgerMgmtNotInitialized = errors.New("ledger mgmt should be initialized before using")
 
-var openedLedgers map[string]ledger.PeerLedger
-var ledgerProvider ledger.PeerLedgerProvider
-var lock sync.Mutex
-var initialized bool
-var once sync.Once
+type LedgerMgr struct {
+	lock           sync.Mutex
+	openedLedgers  map[string]ledger.PeerLedger
+	ledgerProvider ledger.PeerLedgerProvider
+}
 
 
 type Initializer struct {
-	CustomTxProcessors              customtx.Processors
+	CustomTxProcessors              map[common.HeaderType]ledger.CustomTxProcessor
 	StateListeners                  []ledger.StateListener
 	PlatformRegistry                *platforms.Registry
 	DeployedChaincodeInfoProvider   ledger.DeployedChaincodeInfoProvider
@@ -51,24 +50,12 @@ type Initializer struct {
 }
 
 
-func Initialize(initializer *Initializer) {
-	once.Do(func() {
-		initialize(initializer)
-	})
-}
-
-func initialize(initializer *Initializer) {
-	logger.Info("Initializing ledger mgmt")
-	lock.Lock()
-	defer lock.Unlock()
-	initialized = true
-	openedLedgers = make(map[string]ledger.PeerLedger)
-	customtx.Initialize(initializer.CustomTxProcessors)
-	cceventmgmt.Initialize(&chaincodeInfoProviderImpl{
-		initializer.PlatformRegistry,
+func NewLedgerMgr(initializer *Initializer) *LedgerMgr {
+	logger.Info("Initializing LedgerMgr")
+	finalStateListeners := addListenerForCCEventsHandler(
 		initializer.DeployedChaincodeInfoProvider,
-	})
-	finalStateListeners := addListenerForCCEventsHandler(initializer.DeployedChaincodeInfoProvider, initializer.StateListeners)
+		initializer.StateListeners,
+	)
 	provider, err := kvledger.NewProvider(
 		&ledger.Initializer{
 			StateListeners:                  finalStateListeners,
@@ -78,108 +65,122 @@ func initialize(initializer *Initializer) {
 			MetricsProvider:                 initializer.MetricsProvider,
 			HealthCheckRegistry:             initializer.HealthCheckRegistry,
 			Config:                          initializer.Config,
+			CustomTxProcessors:              initializer.CustomTxProcessors,
 		},
 	)
 	if err != nil {
 		panic(errors.WithMessage(err, "Error in instantiating ledger provider"))
 	}
-	ledgerProvider = provider
-	logger.Info("ledger mgmt initialized")
+	ledgerMgr := &LedgerMgr{
+		openedLedgers:  make(map[string]ledger.PeerLedger),
+		ledgerProvider: provider,
+	}
+	
+	cceventmgmt.Initialize(&chaincodeInfoProviderImpl{
+		ledgerMgr,
+		initializer.PlatformRegistry,
+		initializer.DeployedChaincodeInfoProvider,
+	})
+	logger.Info("Initialized LedgerMgr")
+	return ledgerMgr
 }
 
 
 
 
-func CreateLedger(genesisBlock *common.Block) (ledger.PeerLedger, error) {
-	lock.Lock()
-	defer lock.Unlock()
-	if !initialized {
-		return nil, ErrLedgerMgmtNotInitialized
-	}
+func (m *LedgerMgr) CreateLedger(genesisBlock *common.Block) (ledger.PeerLedger, error) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	id, err := protoutil.GetChainIDFromBlock(genesisBlock)
 	if err != nil {
 		return nil, err
 	}
-
 	logger.Infof("Creating ledger [%s] with genesis block", id)
-	l, err := ledgerProvider.Create(genesisBlock)
+	l, err := m.ledgerProvider.Create(genesisBlock)
 	if err != nil {
 		return nil, err
 	}
-	l = wrapLedger(id, l)
-	openedLedgers[id] = l
+	m.openedLedgers[id] = l
 	logger.Infof("Created ledger [%s] with genesis block", id)
-	return l, nil
+	return &closableLedger{
+		ledgerMgr:  m,
+		id:         id,
+		PeerLedger: l,
+	}, nil
 }
 
 
-func OpenLedger(id string) (ledger.PeerLedger, error) {
+func (m *LedgerMgr) OpenLedger(id string) (ledger.PeerLedger, error) {
 	logger.Infof("Opening ledger with id = %s", id)
-	lock.Lock()
-	defer lock.Unlock()
-	if !initialized {
-		return nil, ErrLedgerMgmtNotInitialized
-	}
-	l, ok := openedLedgers[id]
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	l, ok := m.openedLedgers[id]
 	if ok {
 		return nil, ErrLedgerAlreadyOpened
 	}
-	l, err := ledgerProvider.Open(id)
+	l, err := m.ledgerProvider.Open(id)
 	if err != nil {
 		return nil, err
 	}
-	l = wrapLedger(id, l)
-	openedLedgers[id] = l
+	m.openedLedgers[id] = l
 	logger.Infof("Opened ledger with id = %s", id)
-	return l, nil
+	return &closableLedger{
+		ledgerMgr:  m,
+		id:         id,
+		PeerLedger: l,
+	}, nil
 }
 
 
-func GetLedgerIDs() ([]string, error) {
-	lock.Lock()
-	defer lock.Unlock()
-	if !initialized {
-		return nil, ErrLedgerMgmtNotInitialized
-	}
-	return ledgerProvider.List()
+func (m *LedgerMgr) GetLedgerIDs() ([]string, error) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	return m.ledgerProvider.List()
 }
 
 
-func Close() {
+func (m *LedgerMgr) Close() {
 	logger.Infof("Closing ledger mgmt")
-	lock.Lock()
-	defer lock.Unlock()
-	if !initialized {
-		return
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	for _, l := range m.openedLedgers {
+		l.Close()
 	}
-	for _, l := range openedLedgers {
-		l.(*closableLedger).closeWithoutLock()
-	}
-	ledgerProvider.Close()
-	openedLedgers = nil
+	m.ledgerProvider.Close()
+	m.openedLedgers = nil
 	logger.Infof("ledger mgmt closed")
 }
 
-func wrapLedger(id string, l ledger.PeerLedger) ledger.PeerLedger {
-	return &closableLedger{id, l}
+func (m *LedgerMgr) getOpenedLedger(ledgerID string) (ledger.PeerLedger, error) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	l, ok := m.openedLedgers[ledgerID]
+	if !ok {
+		return nil, errors.Errorf("Ledger not opened [%s]", ledgerID)
+	}
+	return l, nil
+}
+
+func (m *LedgerMgr) closeLedger(ledgerID string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	l, ok := m.openedLedgers[ledgerID]
+	if ok {
+		l.Close()
+		delete(m.openedLedgers, ledgerID)
+	}
 }
 
 
 type closableLedger struct {
-	id string
+	ledgerMgr *LedgerMgr
+	id        string
 	ledger.PeerLedger
 }
 
 
 func (l *closableLedger) Close() {
-	lock.Lock()
-	defer lock.Unlock()
-	l.closeWithoutLock()
-}
-
-func (l *closableLedger) closeWithoutLock() {
-	l.PeerLedger.Close()
-	delete(openedLedgers, l.id)
+	l.ledgerMgr.closeLedger(l.id)
 }
 
 
@@ -192,6 +193,7 @@ func addListenerForCCEventsHandler(
 
 
 type chaincodeInfoProviderImpl struct {
+	ledgerMgr              *LedgerMgr
 	pr                     *platforms.Registry
 	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
 }
@@ -199,11 +201,9 @@ type chaincodeInfoProviderImpl struct {
 
 func (p *chaincodeInfoProviderImpl) GetDeployedChaincodeInfo(chainid string,
 	chaincodeDefinition *cceventmgmt.ChaincodeDefinition) (*ledger.DeployedChaincodeInfo, error) {
-	lock.Lock()
-	ledger := openedLedgers[chainid]
-	lock.Unlock()
-	if ledger == nil {
-		return nil, errors.Errorf("Ledger not opened [%s]", chainid)
+	ledger, err := p.ledgerMgr.getOpenedLedger(chainid)
+	if err != nil {
+		return nil, err
 	}
 	qe, err := ledger.NewQueryExecutor()
 	if err != nil {

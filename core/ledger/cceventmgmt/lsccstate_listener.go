@@ -44,6 +44,11 @@ func (listener *KVLedgerLSCCStateListener) HandleStateUpdates(trigger *ledger.St
 		if err != nil {
 			return err
 		}
+		if !deployedCCInfo.IsLegacy {
+			
+			
+			continue
+		}
 		chaincodeDefs = append(chaincodeDefs, &ChaincodeDefinition{
 			Name:              deployedCCInfo.Name,
 			Hash:              deployedCCInfo.Hash,

@@ -7,31 +7,48 @@ SPDX-License-Identifier: Apache-2.0
 package gossip
 
 import (
+	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
-	gossip2 "github.com/mcc-github/blockchain/gossip/gossip"
+	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/protos/gossip"
 )
 
 
 
-type DiscoverySupport struct {
-	gossip2.Gossip
+type Gossip interface {
+	
+	IdentityInfo() api.PeerIdentitySet
+	
+	Peers() []discovery.NetworkMember
+	
+	
+	PeersOfChannel(common.ChannelID) []discovery.NetworkMember
+	
+	SelfChannelInfo(common.ChannelID) *protoext.SignedGossipMessage
+	
+	SelfMembershipInfo() discovery.NetworkMember
 }
 
 
-func NewDiscoverySupport(g gossip2.Gossip) *DiscoverySupport {
+
+type DiscoverySupport struct {
+	Gossip
+}
+
+
+func NewDiscoverySupport(g Gossip) *DiscoverySupport {
 	return &DiscoverySupport{g}
 }
 
 
 func (s *DiscoverySupport) ChannelExists(channel string) bool {
-	return s.SelfChannelInfo(common.ChainID(channel)) != nil
+	return s.SelfChannelInfo(common.ChannelID(channel)) != nil
 }
 
 
 
-func (s *DiscoverySupport) PeersOfChannel(chain common.ChainID) discovery.Members {
+func (s *DiscoverySupport) PeersOfChannel(chain common.ChannelID) discovery.Members {
 	msg := s.SelfChannelInfo(chain)
 	if msg == nil {
 		return nil

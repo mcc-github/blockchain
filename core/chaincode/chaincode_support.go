@@ -64,6 +64,7 @@ type ChaincodeSupport struct {
 	Keepalive              time.Duration
 	Launcher               Launcher
 	Lifecycle              Lifecycle
+	Peer                   *peer.Peer
 	Runtime                Runtime
 	SystemCCProvider       sysccprovider.SystemChaincodeProvider
 	TotalQueryLimit        int
@@ -84,7 +85,7 @@ func (cs *ChaincodeSupport) LaunchInit(ccci *ccprovider.ChaincodeContainerInfo) 
 
 
 
-func (cs *ChaincodeSupport) Launch(chainID string, ccci *ccprovider.ChaincodeContainerInfo) (*Handler, error) {
+func (cs *ChaincodeSupport) Launch(channelID string, ccci *ccprovider.ChaincodeContainerInfo) (*Handler, error) {
 	ccid := ccintf.New(ccci.PackageID)
 
 	if h := cs.HandlerRegistry.Handler(ccid); h != nil {
@@ -92,12 +93,12 @@ func (cs *ChaincodeSupport) Launch(chainID string, ccci *ccprovider.ChaincodeCon
 	}
 
 	if err := cs.Launcher.Launch(ccci); err != nil {
-		return nil, errors.Wrapf(err, "[channel %s] could not launch chaincode %s", chainID, ccci.PackageID)
+		return nil, errors.Wrapf(err, "[channel %s] could not launch chaincode %s", channelID, ccci.PackageID)
 	}
 
 	h := cs.HandlerRegistry.Handler(ccid)
 	if h == nil {
-		return nil, errors.Errorf("[channel %s] claimed to start chaincode container for %s but could not find handler", chainID, ccci.PackageID)
+		return nil, errors.Errorf("[channel %s] claimed to start chaincode container for %s but could not find handler", channelID, ccci.PackageID)
 	}
 
 	return h, nil
@@ -106,6 +107,16 @@ func (cs *ChaincodeSupport) Launch(chainID string, ccci *ccprovider.ChaincodeCon
 
 func (cs *ChaincodeSupport) Stop(ccci *ccprovider.ChaincodeContainerInfo) error {
 	return cs.Runtime.Stop(ccci)
+}
+
+
+func (cs *ChaincodeSupport) LaunchInProc(ccid ccintf.CCID) <-chan struct{} {
+	launchStatus, ok := cs.HandlerRegistry.Launching(ccid)
+	if ok {
+		chaincodeLogger.Panicf("attempted to launch a system chaincode which has already been launched")
+	}
+
+	return launchStatus.Done()
 }
 
 
@@ -123,7 +134,7 @@ func (cs *ChaincodeSupport) HandleChaincodeStream(stream ccintf.ChaincodeStream)
 		InstantiationPolicyChecker: CheckInstantiationPolicyFunc(ccprovider.CheckInstantiationPolicy),
 		QueryResponseBuilder:       &QueryResponseGenerator{MaxResultLimit: 100},
 		UUIDGenerator:              UUIDGeneratorFunc(util.GenerateUUID),
-		LedgerGetter:               peer.Default,
+		LedgerGetter:               cs.Peer,
 		DeployedCCInfoProvider:     cs.DeployedCCInfoProvider,
 		AppConfig:                  cs.AppConfig,
 		Metrics:                    cs.HandlerMetrics,
@@ -139,26 +150,11 @@ func (cs *ChaincodeSupport) Register(stream pb.ChaincodeSupport_RegisterServer) 
 }
 
 
-func createCCMessage(messageType pb.ChaincodeMessage_Type, cid string, txid string, cMsg *pb.ChaincodeInput) (*pb.ChaincodeMessage, error) {
-	payload, err := proto.Marshal(cMsg)
-	if err != nil {
-		return nil, err
-	}
-	ccmsg := &pb.ChaincodeMessage{
-		Type:      messageType,
-		Payload:   payload,
-		Txid:      txid,
-		ChannelId: cid,
-	}
-	return ccmsg, nil
-}
-
-
 
 
 
 func (cs *ChaincodeSupport) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, spec *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error) {
-	ccci := ccprovider.DeploymentSpecToChaincodeContainerInfo(spec)
+	ccci := ccprovider.DeploymentSpecToChaincodeContainerInfo(spec, cccid.SystemCC)
 	ccci.Version = cccid.Version
 	
 	
@@ -219,29 +215,15 @@ func processChaincodeExecutionResult(txid, ccName string, resp *pb.ChaincodeMess
 
 
 func (cs *ChaincodeSupport) Invoke(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput) (*pb.ChaincodeMessage, error) {
+	if cs.SystemCCProvider.IsSysCC(cccid.Name) {
+		return cs.invokeSystem(txParams, cccid, input)
+	}
+
 	
-	var ccci *ccprovider.ChaincodeContainerInfo
-	var err error
-
-	if !cs.SystemCCProvider.IsSysCC(cccid.Name) {
-		ccci, err = cs.Lifecycle.ChaincodeContainerInfo(txParams.ChannelID, cccid.Name, txParams.TXSimulator)
-		if err != nil {
-			
-			if cs.UserRunsCC {
-				chaincodeLogger.Error(
-					"You are attempting to perform an action other than Deploy on Chaincode that is not ready and you are in developer mode. Did you forget to Deploy your chaincode?",
-				)
-			}
-
-			return nil, errors.Wrapf(err, "[channel %s] failed to get chaincode container info for %s", txParams.ChannelID, cccid.Name)
-		}
-	} else {
-		
-		ccci = &ccprovider.ChaincodeContainerInfo{
-			Version:   util.GetSysCCVersion(),
-			Name:      cccid.Name,
-			PackageID: persistence.PackageID(cccid.Name + ":" + util.GetSysCCVersion()),
-		}
+	ccci, err := cs.Lifecycle.ChaincodeContainerInfo(txParams.ChannelID, cccid.Name, txParams.TXSimulator)
+	if err != nil {
+		logDevModeError(cs.UserRunsCC)
+		return nil, errors.Wrapf(err, "[channel %s] failed to get chaincode container info for %s", txParams.ChannelID, cccid.Name)
 	}
 
 	
@@ -264,6 +246,22 @@ func (cs *ChaincodeSupport) Invoke(txParams *ccprovider.TransactionParams, cccid
 	}
 
 	return cs.execute(cctype, txParams, cccid, input, h)
+}
+
+func (cs *ChaincodeSupport) invokeSystem(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput) (*pb.ChaincodeMessage, error) {
+	
+	ccci := &ccprovider.ChaincodeContainerInfo{
+		Version:   util.GetSysCCVersion(),
+		Name:      cccid.Name,
+		PackageID: persistence.PackageID(cccid.Name + ":" + util.GetSysCCVersion()),
+	}
+
+	h, err := cs.Launch(txParams.ChannelID, ccci)
+	if err != nil {
+		return nil, err
+	}
+
+	return cs.execute(pb.ChaincodeMessage_TRANSACTION, txParams, cccid, input, h)
 }
 
 func (cs *ChaincodeSupport) CheckInit(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput) (bool, error) {
@@ -316,9 +314,17 @@ func (cs *ChaincodeSupport) CheckInit(txParams *ccprovider.TransactionParams, cc
 
 func (cs *ChaincodeSupport) execute(cctyp pb.ChaincodeMessage_Type, txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput, h *Handler) (*pb.ChaincodeMessage, error) {
 	input.Decorations = txParams.ProposalDecorations
-	ccMsg, err := createCCMessage(cctyp, txParams.ChannelID, txParams.TxID, input)
+
+	payload, err := proto.Marshal(input)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to create chaincode message")
+	}
+
+	ccMsg := &pb.ChaincodeMessage{
+		Type:      cctyp,
+		Payload:   payload,
+		Txid:      txParams.TxID,
+		ChannelId: txParams.ChannelID,
 	}
 
 	ccresp, err := h.Execute(txParams, cccid, ccMsg, cs.ExecuteTimeout)
@@ -327,4 +333,10 @@ func (cs *ChaincodeSupport) execute(cctyp pb.ChaincodeMessage_Type, txParams *cc
 	}
 
 	return ccresp, nil
+}
+
+func logDevModeError(userRunsCC bool) {
+	if userRunsCC {
+		chaincodeLogger.Error("You are attempting to perform an action other than Deploy on Chaincode that is not ready and you are in developer mode. Did you forget to Deploy your chaincode?")
+	}
 }

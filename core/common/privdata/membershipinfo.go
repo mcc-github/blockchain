@@ -7,10 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package privdata
 
 import (
+	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 )
+
+var logger = flogging.MustGetLogger("common.privdata")
 
 
 type MembershipProvider struct {
@@ -24,11 +27,14 @@ func NewMembershipInfoProvider(selfSignedData protoutil.SignedData, identityDese
 }
 
 
+
 func (m *MembershipProvider) AmMemberOf(channelName string, collectionPolicyConfig *common.CollectionPolicyConfig) (bool, error) {
 	deserializer := m.IdentityDeserializerFactory(channelName)
 	accessPolicy, err := getPolicy(collectionPolicyConfig, deserializer)
 	if err != nil {
-		return false, err
+		
+		logger.Errorf("Reject all due to error getting policy: %s", err)
+		return false, nil
 	}
 	if err := accessPolicy.Evaluate([]*protoutil.SignedData{&m.selfSignedData}); err != nil {
 		return false, nil

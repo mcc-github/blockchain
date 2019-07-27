@@ -45,7 +45,7 @@ func (pi *peerImpl) ID() peerID {
 
 type gossip interface {
 	
-	PeersOfChannel(channel common.ChainID) []discovery.NetworkMember
+	PeersOfChannel(channel common.ChannelID) []discovery.NetworkMember
 
 	
 	
@@ -67,7 +67,7 @@ type adapterImpl struct {
 	incTime uint64
 	seqNum  uint64
 
-	channel common.ChainID
+	channel common.ChannelID
 
 	logger util.Logger
 
@@ -77,7 +77,7 @@ type adapterImpl struct {
 }
 
 
-func NewAdapter(gossip gossip, pkiid common.PKIidType, channel common.ChainID,
+func NewAdapter(gossip gossip, pkiid common.PKIidType, channel common.ChannelID,
 	metrics *metrics.ElectionMetrics) LeaderElectionAdapter {
 	return &adapterImpl{
 		gossip:    gossip,

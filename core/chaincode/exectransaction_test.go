@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt/ledgermgmttest"
+
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/bccsp/factory"
@@ -40,15 +42,15 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/config"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/dockercontroller"
-	"github.com/mcc-github/blockchain/core/container/inproccontroller"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
 	cut "github.com/mcc-github/blockchain/core/ledger/util"
-	cmp "github.com/mcc-github/blockchain/core/mocks/peer"
 	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
 	"github.com/mcc-github/blockchain/core/policy/mocks"
@@ -68,36 +70,11 @@ import (
 
 
 func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSupport, func(), error) {
-	
-	finitPeer(nil, chainIDs...)
-
-	fakeApplicationConfig := &cm.ApplicationConfig{}
-	fakeCapabilites := &cm.ApplicationCapabilities{}
-	fakeApplicationConfig.CapabilitiesReturns(fakeCapabilites)
-
-	msi := &cmp.MockSupportImpl{
-		GetApplicationConfigRv:     fakeApplicationConfig,
-		GetApplicationConfigBoolRv: true,
-	}
-
-	ipRegistry := inproccontroller.NewRegistry()
+	peerInstance := &peer.Peer{}
 	sccp := &scc.Provider{
-		Peer:        peer.Default,
-		PeerSupport: msi,
-		Registrar:   ipRegistry,
-		Whitelist:   scc.GlobalWhitelist(),
+		Peer:      peerInstance,
+		Whitelist: scc.GlobalWhitelist(),
 	}
-
-	ledgerCleanup, err := peer.MockInitialize()
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	mspGetter := func(cid string) []string {
-		return []string{"SampleOrg"}
-	}
-
-	peer.MockSetMSPIDGetter(mspGetter)
 
 	grpcServer := grpc.NewServer()
 
@@ -109,7 +86,7 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to get port: %s", err)
 	}
-	localIP, err := peer.GetLocalIP()
+	localIP, err := comm.GetLocalIP()
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to get local IP: %s", err)
 	}
@@ -121,11 +98,16 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 		panic(fmt.Sprintf("failed to create temporary directory: %s", err))
 	}
 
+	lgrInitializer := ledgermgmttest.NewInitializer(filepath.Join(tempdir, "ledgersData"))
+	lgrInitializer.Config.HistoryDBConfig = &ledger.HistoryDBConfig{
+		Enabled: true,
+	}
+	peerInstance.LedgerMgr = ledgermgmt.NewLedgerMgr(lgrInitializer)
 	ccprovider.SetChaincodesPath(tempdir)
 	ca, _ := tlsgen.NewCA()
 	pr := platforms.NewRegistry(&golang.Platform{})
 	mockAclProvider := &mock.ACLProvider{}
-	lsccImpl := lscc.New(sccp, mockAclProvider, pr)
+	lsccImpl := lscc.New(sccp, mockAclProvider, pr, peerInstance.GetMSPIDs, newPolicyChecker(peerInstance))
 	ml := &cm.Lifecycle{}
 	ml.ChaincodeContainerInfoStub = func(_, name string, _ ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
 		switch name {
@@ -158,10 +140,8 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 		TotalQueryLimit: 10000,
 	}
 	containerRuntime := &ContainerRuntime{
-		CACert:           ca.CertBytes(),
-		DockerClient:     client,
-		PeerAddress:      peerAddress,
-		PlatformRegistry: pr,
+		CACert:      ca.CertBytes(),
+		PeerAddress: peerAddress,
 		Processor: container.NewVMController(
 			map[string]container.VMProvider{
 				dockercontroller.ContainerType: &dockercontroller.Provider{
@@ -169,8 +149,11 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 					NetworkID:    "",
 					BuildMetrics: dockercontroller.NewBuildMetrics(&disabled.Provider{}),
 					Client:       client,
+					PlatformBuilder: &platforms.Builder{
+						Registry: pr,
+						Client:   client,
+					},
 				},
-				inproccontroller.ContainerType: ipRegistry,
 			},
 		),
 		CommonEnv: []string{
@@ -190,8 +173,11 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 		StartupTimeout:  globalConfig.StartupTimeout,
 	}
 	chaincodeSupport := &ChaincodeSupport{
-		ACLProvider:            aclmgmt.NewACLProvider(func(string) channelconfig.Resources { return nil }),
-		AppConfig:              peer.DefaultSupport,
+		ACLProvider: aclmgmt.NewACLProvider(
+			func(string) channelconfig.Resources { return nil },
+			newPolicyChecker(peerInstance),
+		),
+		AppConfig:              peerInstance,
 		DeployedCCInfoProvider: &ledgermock.DeployedChaincodeInfoProvider{},
 		ExecuteTimeout:         globalConfig.ExecuteTimeout,
 		HandlerMetrics:         NewHandlerMetrics(metricsProviders),
@@ -199,27 +185,23 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 		Keepalive:              globalConfig.Keepalive,
 		Launcher:               chaincodeLauncher,
 		Lifecycle:              ml,
+		Peer:                   peerInstance,
 		Runtime:                containerRuntime,
 		SystemCCProvider:       sccp,
 		TotalQueryLimit:        globalConfig.TotalQueryLimit,
 		UserRunsCC:             userRunsCC,
 	}
-	ipRegistry.ChaincodeSupport = chaincodeSupport
 	pb.RegisterChaincodeSupportServer(grpcServer, chaincodeSupport)
 
-	
-	policy.RegisterPolicyCheckerFactory(&mockPolicyCheckerFactory{})
-
-	ccp := &CCProviderImpl{cs: chaincodeSupport}
 	sccp.RegisterSysCC(lsccImpl)
 
+	sccp.DeploySysCCs(chaincodeSupport)
+
 	for _, id := range chainIDs {
-		sccp.DeDeploySysCCs(id, ccp)
-		if err = peer.MockCreateChain(id); err != nil {
+		if err = peer.CreateMockChannel(peerInstance, id); err != nil {
 			closeListenerAndSleep(lis)
 			return nil, nil, nil, nil, err
 		}
-		sccp.DeploySysCCs(id, ccp)
 		
 		if id != util.GetTestChainID() {
 			mspmgmt.XXXSetMSPManager(id, mspmgmt.GetManagerForChain(util.GetTestChainID()))
@@ -228,30 +210,31 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 
 	go grpcServer.Serve(lis)
 
-	
-	return ml, lis, chaincodeSupport, func() {
-		finitPeer(lis, chainIDs...)
+	cleanup := func() {
+		finitPeer(peerInstance, lis, chainIDs...)
 		os.RemoveAll(tempdir)
-		ledgerCleanup()
-	}, nil
+	}
+
+	return ml, lis, chaincodeSupport, cleanup, nil
 }
 
-func finitPeer(lis net.Listener, chainIDs ...string) {
+func finitPeer(peerInstance *peer.Peer, lis net.Listener, chainIDs ...string) {
 	if lis != nil {
-		for _, c := range chainIDs {
-			if lgr := peer.GetLedger(c); lgr != nil {
-				lgr.Close()
-			}
-		}
 		closeListenerAndSleep(lis)
 	}
+	for _, c := range chainIDs {
+		if lgr := peerInstance.GetLedger(c); lgr != nil {
+			lgr.Close()
+		}
+	}
+	peerInstance.LedgerMgr.Close()
 	ledgerPath := config.GetPath("peer.fileSystemPath")
 	os.RemoveAll(ledgerPath)
 	os.RemoveAll(filepath.Join(os.TempDir(), "mcc-github"))
 }
 
-func startTxSimulation(chainID string, txid string) (ledger.TxSimulator, ledger.HistoryQueryExecutor, error) {
-	lgr := peer.GetLedger(chainID)
+func startTxSimulation(peerInstance *peer.Peer, chainID string, txid string) (ledger.TxSimulator, ledger.HistoryQueryExecutor, error) {
+	lgr := peerInstance.GetLedger(chainID)
 	txsim, err := lgr.NewTxSimulator(txid)
 	if err != nil {
 		return nil, nil, err
@@ -264,7 +247,7 @@ func startTxSimulation(chainID string, txid string) (ledger.TxSimulator, ledger.
 	return txsim, historyQueryExecutor, nil
 }
 
-func endTxSimulationCDS(chainID string, txsim ledger.TxSimulator, payload []byte, commit bool, cds *pb.ChaincodeDeploymentSpec, blockNumber uint64) error {
+func endTxSimulationCDS(peerInstance *peer.Peer, chainID string, txsim ledger.TxSimulator, payload []byte, commit bool, cds *pb.ChaincodeDeploymentSpec, blockNumber uint64) error {
 	
 	ss, err := signer.Serialize()
 	if err != nil {
@@ -283,10 +266,10 @@ func endTxSimulationCDS(chainID string, txsim ledger.TxSimulator, payload []byte
 		return err
 	}
 
-	return endTxSimulation(chainID, lsccid, txsim, payload, commit, prop, blockNumber)
+	return endTxSimulation(peerInstance, chainID, lsccid, txsim, payload, commit, prop, blockNumber)
 }
 
-func endTxSimulationCIS(chainID string, ccid *pb.ChaincodeID, txid string, txsim ledger.TxSimulator, payload []byte, commit bool, cis *pb.ChaincodeInvocationSpec, blockNumber uint64) error {
+func endTxSimulationCIS(peerInstance *peer.Peer, chainID string, ccid *pb.ChaincodeID, txid string, txsim ledger.TxSimulator, payload []byte, commit bool, cis *pb.ChaincodeInvocationSpec, blockNumber uint64) error {
 	
 	ss, err := signer.Serialize()
 	if err != nil {
@@ -302,7 +285,7 @@ func endTxSimulationCIS(chainID string, ccid *pb.ChaincodeID, txid string, txsim
 		return errors.New("txids are not same")
 	}
 
-	return endTxSimulation(chainID, ccid, txsim, payload, commit, prop, blockNumber)
+	return endTxSimulation(peerInstance, chainID, ccid, txsim, payload, commit, prop, blockNumber)
 }
 
 
@@ -315,9 +298,9 @@ func endTxSimulationCIS(chainID string, ccid *pb.ChaincodeID, txid string, txsim
 
 var _commitLock_ sync.Mutex
 
-func endTxSimulation(chainID string, ccid *pb.ChaincodeID, txsim ledger.TxSimulator, _ []byte, commit bool, prop *pb.Proposal, blockNumber uint64) error {
+func endTxSimulation(peerInstance *peer.Peer, chainID string, ccid *pb.ChaincodeID, txsim ledger.TxSimulator, _ []byte, commit bool, prop *pb.Proposal, blockNumber uint64) error {
 	txsim.Done()
-	if lgr := peer.GetLedger(chainID); lgr != nil {
+	if lgr := peerInstance.GetLedger(chainID); lgr != nil {
 		if commit {
 			var txSimulationResults *ledger.TxSimulationResults
 			var txSimulationBytes []byte
@@ -399,10 +382,11 @@ func endTxSimulation(chainID string, ccid *pb.ChaincodeID, txsim ledger.TxSimula
 
 func getDeploymentSpec(spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
 	fmt.Printf("getting deployment spec for chaincode spec: %v\n", spec)
-	codePackageBytes, err := container.GetChaincodePackageBytes(platforms.NewRegistry(&golang.Platform{}), spec)
+	codePackageBytes, err := platforms.NewRegistry(&golang.Platform{}).GetDeploymentPayload(spec.Type.String(), spec.ChaincodeId.Path)
 	if err != nil {
 		return nil, err
 	}
+
 	cdDeploymentSpec := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec, CodePackage: codePackageBytes}
 	return cdDeploymentSpec, nil
 }
@@ -472,7 +456,7 @@ func deploy2(chainID string, cccid *ccprovider.CCContext, chaincodeDeploymentSpe
 	}
 
 	uuid := util.GenerateUUID()
-	txsim, hqe, err := startTxSimulation(chainID, uuid)
+	txsim, hqe, err := startTxSimulation(chaincodeSupport.Peer, chainID, uuid)
 	sprop, prop := protoutil.MockSignedEndorserProposal2OrPanic(chainID, cis.ChaincodeSpec, signer)
 	txParams := &ccprovider.TransactionParams{
 		TxID:                 uuid,
@@ -490,10 +474,10 @@ func deploy2(chainID string, cccid *ccprovider.CCContext, chaincodeDeploymentSpe
 		
 		if err == nil {
 			
-			err = endTxSimulationCDS(chainID, txsim, []byte("deployed"), true, chaincodeDeploymentSpec, blockNumber)
+			err = endTxSimulationCDS(chaincodeSupport.Peer, chainID, txsim, []byte("deployed"), true, chaincodeDeploymentSpec, blockNumber)
 		} else {
 			
-			endTxSimulationCDS(chainID, txsim, []byte("deployed"), false, chaincodeDeploymentSpec, blockNumber)
+			endTxSimulationCDS(chaincodeSupport.Peer, chainID, txsim, []byte("deployed"), false, chaincodeDeploymentSpec, blockNumber)
 		}
 	}()
 
@@ -530,7 +514,7 @@ func invokeWithVersion(chainID string, version string, spec *pb.ChaincodeSpec, b
 	
 	uuid = util.GenerateUUID()
 
-	txsim, hqe, err := startTxSimulation(chainID, uuid)
+	txsim, hqe, err := startTxSimulation(chaincodeSupport.Peer, chainID, uuid)
 	if err != nil {
 		return nil, uuid, nil, fmt.Errorf("Failed to get handle to simulator: %s ", err)
 	}
@@ -539,10 +523,10 @@ func invokeWithVersion(chainID string, version string, spec *pb.ChaincodeSpec, b
 		
 		if err == nil {
 			
-			err = endTxSimulationCIS(chainID, spec.ChaincodeId, uuid, txsim, []byte("invoke"), true, cdInvocationSpec, blockNumber)
+			err = endTxSimulationCIS(chaincodeSupport.Peer, chainID, spec.ChaincodeId, uuid, txsim, []byte("invoke"), true, cdInvocationSpec, blockNumber)
 		} else {
 			
-			endTxSimulationCIS(chainID, spec.ChaincodeId, uuid, txsim, []byte("invoke"), false, cdInvocationSpec, blockNumber)
+			endTxSimulationCIS(chaincodeSupport.Peer, chainID, spec.ChaincodeId, uuid, txsim, []byte("invoke"), false, cdInvocationSpec, blockNumber)
 		}
 	}()
 
@@ -583,9 +567,9 @@ func closeListenerAndSleep(l net.Listener) {
 }
 
 
-func checkFinalState(chainID string, cccid *ccprovider.CCContext, a int, b int) error {
+func checkFinalState(peerInstance *peer.Peer, chainID string, cccid *ccprovider.CCContext, a int, b int) error {
 	txid := util.GenerateUUID()
-	txsim, _, err := startTxSimulation(chainID, txid)
+	txsim, _, err := startTxSimulation(peerInstance, chainID, txid)
 	if err != nil {
 		return fmt.Errorf("Failed to get handle to simulator: %s ", err)
 	}
@@ -641,6 +625,8 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 	}
 	defer cleanup()
 	defer closeListenerAndSleep(lis)
+
+	peerInstance := chaincodeSupport.Peer
 
 	var nextBlockNumber1 uint64 = 1
 	var nextBlockNumber2 uint64 = 1
@@ -705,19 +691,19 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 	nextBlockNumber1++
 
 	
-	err = checkFinalState(channel, cccid1, initialA-10, initialB+10)
+	err = checkFinalState(peerInstance, channel, cccid1, initialA-10, initialB+10)
 	require.NoErrorf(t, err, "incorrect final state after transaction for %s: %s", chaincode1Name, err)
 
 	
 	
 	
 	
-	pm := peer.GetPolicyManager(channel)
+	pm := peerInstance.GetPolicyManager(channel)
 	pm.(*mockpolicies.Manager).PolicyMap = map[string]policies.Policy{
 		policies.ChannelApplicationWriters: &CreatorPolicy{Creators: [][]byte{[]byte("Alice")}},
 	}
 
-	pm = peer.GetPolicyManager(channel2)
+	pm = peerInstance.GetPolicyManager(channel2)
 	pm.(*mockpolicies.Manager).PolicyMap = map[string]policies.Policy{
 		policies.ChannelApplicationWriters: &CreatorPolicy{Creators: [][]byte{[]byte("Alice"), []byte("Bob")}},
 	}
@@ -1279,11 +1265,9 @@ func (c *CreatorPolicy) Evaluate(signatureSet []*protoutil.SignedData) error {
 	return fmt.Errorf("Creator not recognized [%s]", string(signatureSet[0].Identity))
 }
 
-type mockPolicyCheckerFactory struct{}
-
-func (f *mockPolicyCheckerFactory) NewPolicyChecker() policy.PolicyChecker {
+func newPolicyChecker(peerInstance *peer.Peer) policy.PolicyChecker {
 	return policy.NewPolicyChecker(
-		peer.NewChannelPolicyManagerGetter(),
+		policies.PolicyManagerGetterFunc(peerInstance.GetPolicyManager),
 		&mocks.MockIdentityDeserializer{
 			Identity: []byte("Admin"),
 			Msg:      []byte("msg1"),

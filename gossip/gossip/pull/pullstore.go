@@ -53,7 +53,7 @@ type MembershipService interface {
 type Config struct {
 	ID                string
 	PullInterval      time.Duration 
-	Channel           common.ChainID
+	Channel           common.ChannelID
 	PeerCountToSelect int 
 	Tag               proto.GossipMessage_Tag
 	MsgType           proto.PullMsgType

@@ -48,6 +48,10 @@ type CounterOpts struct {
 
 	
 	
+	LabelHelp map[string]string
+
+	
+	
 	
 	
 	
@@ -92,6 +96,10 @@ type GaugeOpts struct {
 	
 	
 	LabelNames []string
+
+	
+	
+	LabelHelp map[string]string
 
 	
 	
@@ -140,6 +148,10 @@ type HistogramOpts struct {
 	
 	
 	LabelNames []string
+
+	
+	
+	LabelHelp map[string]string
 
 	
 	

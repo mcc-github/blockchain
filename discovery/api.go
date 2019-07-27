@@ -35,7 +35,7 @@ type GossipSupport interface {
 
 	
 	
-	PeersOfChannel(common.ChainID) discovery.Members
+	PeersOfChannel(common.ChannelID) discovery.Members
 
 	
 	Peers() discovery.Members
@@ -48,13 +48,13 @@ type GossipSupport interface {
 
 type EndorsementSupport interface {
 	
-	PeersForEndorsement(channel common.ChainID, interest *discprotos.ChaincodeInterest) (*discprotos.EndorsementDescriptor, error)
+	PeersForEndorsement(channel common.ChannelID, interest *discprotos.ChaincodeInterest) (*discprotos.EndorsementDescriptor, error)
 
 	
 	
 	
 	
-	PeersAuthorizedByCriteria(chainID common.ChainID, interest *discprotos.ChaincodeInterest) (discovery.Members, error)
+	PeersAuthorizedByCriteria(chainID common.ChannelID, interest *discprotos.ChaincodeInterest) (discovery.Members, error)
 }
 
 

@@ -107,14 +107,6 @@ func TestGenerateLocalMSP(t *testing.T) {
 			"Expected to find file "+file)
 	}
 
-	
-	testMSPConfig, err := blockchainmsp.GetLocalMspConfig(mspDir, nil, testName)
-	assert.NoError(t, err, "Error parsing local MSP config")
-	testMSP, err := blockchainmsp.New(&blockchainmsp.BCCSPNewOpts{NewBaseOpts: blockchainmsp.NewBaseOpts{Version: blockchainmsp.MSPv1_0}})
-	assert.NoError(t, err, "Error creating new BCCSP MSP")
-	err = testMSP.Setup(testMSPConfig)
-	assert.NoError(t, err, "Error setting up local MSP")
-
 	tlsCA.Name = "test/fail"
 	err = msp.GenerateLocalMSP(testDir, testName, nil, signCA, tlsCA, msp.CLIENT, true)
 	assert.Error(t, err, "Should have failed with CA name 'test/fail'")
@@ -153,13 +145,6 @@ func TestGenerateVerifyingMSP(t *testing.T) {
 		assert.Equal(t, true, checkForFile(file),
 			"Expected to find file "+file)
 	}
-	
-	testMSPConfig, err := blockchainmsp.GetVerifyingMspConfig(mspDir, testName, blockchainmsp.ProviderTypeToString(blockchainmsp.FABRIC))
-	assert.NoError(t, err, "Error parsing verifying MSP config")
-	testMSP, err := blockchainmsp.New(&blockchainmsp.BCCSPNewOpts{NewBaseOpts: blockchainmsp.NewBaseOpts{Version: blockchainmsp.MSPv1_0}})
-	assert.NoError(t, err, "Error creating new BCCSP MSP")
-	err = testMSP.Setup(testMSPConfig)
-	assert.NoError(t, err, "Error setting up verifying MSP")
 
 	tlsCA.Name = "test/fail"
 	err = msp.GenerateVerifyingMSP(mspDir, signCA, tlsCA, true)

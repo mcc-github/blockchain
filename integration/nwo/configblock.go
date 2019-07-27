@@ -8,7 +8,6 @@ package nwo
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -134,42 +133,6 @@ func UpdateConfig(n *Network, orderer *Orderer, channel string, current, updated
 
 
 
-func UpdateOrdererConfig(n *Network, orderer *Orderer, channel string, current, updated *common.Config, submitter *Peer, additionalSigners ...*Orderer) {
-	tempDir, err := ioutil.TempDir("", "updateConfig")
-	Expect(err).NotTo(HaveOccurred())
-	updateFile := filepath.Join(tempDir, "update.pb")
-	defer os.RemoveAll(tempDir)
-
-	computeUpdateOrdererConfig(updateFile, n, channel, current, updated, submitter, additionalSigners...)
-
-	currentBlockNumber := CurrentConfigBlockNumber(n, submitter, orderer, channel)
-
-	Eventually(func() string {
-		sess, err := n.OrdererAdminSession(orderer, submitter, commands.ChannelUpdate{
-			ChannelID: channel,
-			Orderer:   n.OrdererAddress(orderer, ListenPort),
-			File:      updateFile,
-		})
-		if err != nil {
-			return err.Error()
-		}
-		sess.Wait(n.EventuallyTimeout)
-		if sess.ExitCode() != 0 {
-			return fmt.Sprintf("exit code is %d", sess.ExitCode())
-		}
-		if strings.Contains(string(sess.Err.Contents()), "Successfully submitted channel update") {
-			return ""
-		}
-		return fmt.Sprintf("channel update output: %s", string(sess.Err.Contents()))
-	}, n.EventuallyTimeout).Should(BeEmpty())
-
-	
-	ccb := func() uint64 { return CurrentConfigBlockNumber(n, submitter, orderer, channel) }
-	Eventually(ccb, n.EventuallyTimeout).Should(BeNumerically(">", currentBlockNumber))
-}
-
-
-
 
 
 func CurrentConfigBlockNumber(n *Network, peer *Peer, orderer *Orderer, channel string) uint64 {
@@ -229,7 +192,40 @@ func FetchConfigBlock(n *Network, peer *Peer, orderer *Orderer, channel string, 
 
 
 
-func UpdateOrdererConfigFail(n *Network, orderer *Orderer, channel string, current, updated *common.Config, submitter *Peer, additionalSigners ...*Orderer) {
+func UpdateOrdererConfig(n *Network, orderer *Orderer, channel string, current, updated *common.Config, submitter *Peer, additionalSigners ...*Orderer) {
+	tempDir, err := ioutil.TempDir("", "updateConfig")
+	Expect(err).NotTo(HaveOccurred())
+	updateFile := filepath.Join(tempDir, "update.pb")
+	defer os.RemoveAll(tempDir)
+
+	currentBlockNumber := CurrentConfigBlockNumber(n, submitter, orderer, channel)
+	computeUpdateOrdererConfig(updateFile, n, channel, current, updated, submitter, additionalSigners...)
+
+	Eventually(func() bool {
+		sess, err := n.OrdererAdminSession(orderer, submitter, commands.ChannelUpdate{
+			ChannelID: channel,
+			Orderer:   n.OrdererAddress(orderer, ListenPort),
+			File:      updateFile,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		sess.Wait(n.EventuallyTimeout)
+		if sess.ExitCode() != 0 {
+			return false
+		}
+
+		return strings.Contains(string(sess.Err.Contents()), "Successfully submitted channel update")
+	}, n.EventuallyTimeout).Should(BeTrue())
+
+	
+	ccb := func() uint64 { return CurrentConfigBlockNumber(n, submitter, orderer, channel) }
+	Eventually(ccb, n.EventuallyTimeout).Should(BeNumerically(">", currentBlockNumber))
+}
+
+
+
+
+func UpdateOrdererConfigSession(n *Network, orderer *Orderer, channel string, current, updated *common.Config, submitter *Peer, additionalSigners ...*Orderer) *gexec.Session {
 	tempDir, err := ioutil.TempDir("", "updateConfig")
 	Expect(err).NotTo(HaveOccurred())
 	updateFile := filepath.Join(tempDir, "update.pb")
@@ -244,8 +240,8 @@ func UpdateOrdererConfigFail(n *Network, orderer *Orderer, channel string, curre
 		File:      updateFile,
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, n.EventuallyTimeout).ShouldNot(gexec.Exit(0))
-	Expect(sess.Err).NotTo(gbytes.Say("Successfully submitted channel update"))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit())
+	return sess
 }
 
 func computeUpdateOrdererConfig(updateFile string, n *Network, channel string, current, updated *common.Config, submitter *Peer, additionalSigners ...*Orderer) {

@@ -8,7 +8,7 @@ package ledgermgmt
 import (
 	"fmt"
 	"io/ioutil"
-	"path/filepath"
+	"os"
 	"testing"
 
 	"github.com/mcc-github/blockchain/common/configtx/test"
@@ -22,87 +22,70 @@ import (
 )
 
 func TestLedgerMgmt(t *testing.T) {
-	
-	gb, _ := test.MakeGenesisBlock(constructTestLedgerID(0))
-	l, err := CreateLedger(gb)
-	assert.Nil(t, l)
-	assert.Equal(t, ErrLedgerMgmtNotInitialized, err)
-
-	ledgerID := constructTestLedgerID(2)
-	l, err = OpenLedger(ledgerID)
-	assert.Nil(t, l)
-	assert.Equal(t, ErrLedgerMgmtNotInitialized, err)
-
-	ids, err := GetLedgerIDs()
-	assert.Nil(t, ids)
-	assert.Equal(t, ErrLedgerMgmtNotInitialized, err)
-
-	Close()
-
-	rootPath, err := ioutil.TempDir("", "lgrmgmt")
+	testDir, err := ioutil.TempDir("", "ledgermgmt")
 	if err != nil {
 		t.Fatalf("Failed to create ledger directory: %s", err)
 	}
-
-	initializer := &Initializer{
-		PlatformRegistry: platforms.NewRegistry(&golang.Platform{}),
-		MetricsProvider:  &disabled.Provider{},
-		Config: &ledger.Config{
-			RootFSPath: rootPath,
-			StateDB: &ledger.StateDB{
-				LevelDBPath: filepath.Join(rootPath, "stateleveldb"),
-			},
-		},
-	}
-
-	cleanup, err := InitializeTestEnvWithInitializer(initializer)
-	if err != nil {
-		t.Fatalf("Failed to initialize test environment: %s", err)
-	}
-	defer cleanup()
+	initializer := constructDefaultInitializer(testDir)
+	ledgerMgr := NewLedgerMgr(initializer)
+	defer func() {
+		os.RemoveAll(testDir)
+	}()
 
 	numLedgers := 10
 	ledgers := make([]ledger.PeerLedger, numLedgers)
 	for i := 0; i < numLedgers; i++ {
 		gb, _ := test.MakeGenesisBlock(constructTestLedgerID(i))
-		l, _ := CreateLedger(gb)
+		l, err := ledgerMgr.CreateLedger(gb)
+		assert.NoError(t, err)
 		ledgers[i] = l
 	}
 
-	ids, _ = GetLedgerIDs()
+	ids, _ := ledgerMgr.GetLedgerIDs()
 	assert.Len(t, ids, numLedgers)
 	for i := 0; i < numLedgers; i++ {
 		assert.Equal(t, constructTestLedgerID(i), ids[i])
 	}
 
-	ledgerID = constructTestLedgerID(2)
+	ledgerID := constructTestLedgerID(2)
 	t.Logf("Ledger selected for test = %s", ledgerID)
-	_, err = OpenLedger(ledgerID)
+	_, err = ledgerMgr.OpenLedger(ledgerID)
 	assert.Equal(t, ErrLedgerAlreadyOpened, err)
 
-	l = ledgers[2]
+	l := ledgers[2]
 	l.Close()
-	l, err = OpenLedger(ledgerID)
+	
+	assert.NotPanics(t, l.Close)
+
+	l, err = ledgerMgr.OpenLedger(ledgerID)
 	assert.NoError(t, err)
 
-	l, err = OpenLedger(ledgerID)
+	l, err = ledgerMgr.OpenLedger(ledgerID)
 	assert.Equal(t, ErrLedgerAlreadyOpened, err)
+	
+	ledgerMgr.Close()
 
 	
-	Close()
-
-	
-	Initialize(initializer)
-	l, err = OpenLedger(ledgerID)
+	ledgerMgr = NewLedgerMgr(initializer)
+	l, err = ledgerMgr.OpenLedger(ledgerID)
 	assert.NoError(t, err)
-	Close()
+	ledgerMgr.Close()
 }
 
 func TestChaincodeInfoProvider(t *testing.T) {
-	cleanup := InitializeTestEnv(t)
-	defer cleanup()
+	testDir, err := ioutil.TempDir("", "ledgermgmt")
+	if err != nil {
+		t.Fatalf("Failed to create ledger directory: %s", err)
+	}
+	initializer := constructDefaultInitializer(testDir)
+	ledgerMgr := NewLedgerMgr(initializer)
+	defer func() {
+		ledgerMgr.Close()
+		os.RemoveAll(testDir)
+	}()
+
 	gb, _ := test.MakeGenesisBlock("ledger1")
-	CreateLedger(gb)
+	ledgerMgr.CreateLedger(gb)
 
 	mockDeployedCCInfoProvider := &mock.DeployedChaincodeInfoProvider{}
 	mockDeployedCCInfoProvider.ChaincodeInfoStub = func(channelName, ccName string, qe ledger.SimpleQueryExecutor) (*ledger.DeployedChaincodeInfo, error) {
@@ -110,10 +93,11 @@ func TestChaincodeInfoProvider(t *testing.T) {
 	}
 
 	ccInfoProvider := &chaincodeInfoProviderImpl{
+		ledgerMgr,
 		platforms.NewRegistry(&golang.Platform{}),
 		mockDeployedCCInfoProvider,
 	}
-	_, err := ccInfoProvider.GetDeployedChaincodeInfo("ledger2", constructTestCCDef("cc2", "1.0", "cc2Hash"))
+	_, err = ccInfoProvider.GetDeployedChaincodeInfo("ledger2", constructTestCCDef("cc2", "1.0", "cc2Hash"))
 	t.Logf("Expected error received = %s", err)
 	assert.Error(t, err)
 
@@ -128,6 +112,27 @@ func TestChaincodeInfoProvider(t *testing.T) {
 	ccInfo, err = ccInfoProvider.GetDeployedChaincodeInfo("ledger1", constructTestCCDef("cc1", "cc1", "cc1"))
 	assert.NoError(t, err)
 	assert.Equal(t, constructTestCCInfo("cc1", "cc1", "cc1"), ccInfo)
+}
+
+func constructDefaultInitializer(testDir string) *Initializer {
+	return &Initializer{
+		Config: &ledger.Config{
+			RootFSPath:    testDir,
+			StateDBConfig: &ledger.StateDBConfig{},
+			PrivateDataConfig: &ledger.PrivateDataConfig{
+				MaxBatchSize:    5000,
+				BatchesInterval: 1000,
+				PurgeInterval:   100,
+			},
+			HistoryDBConfig: &ledger.HistoryDBConfig{
+				Enabled: true,
+			},
+		},
+
+		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
+		MetricsProvider:               &disabled.Provider{},
+		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+	}
 }
 
 func constructTestLedgerID(i int) string {

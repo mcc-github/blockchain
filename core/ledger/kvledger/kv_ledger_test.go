@@ -545,7 +545,7 @@ func TestLedgerWithCouchDbEnabledWithBinaryAndJSONData(t *testing.T) {
 	assert.True(t, proto.Equal(b2, block2), "proto messages are not equal")
 
 	
-	if conf.HistoryDB.Enabled {
+	if conf.HistoryDBConfig.Enabled {
 		logger.Debugf("History is enabled\n")
 		qhistory, err := ledger.NewHistoryQueryExecutor()
 		assert.NoError(t, err, "Error when trying to retrieve history database executor")

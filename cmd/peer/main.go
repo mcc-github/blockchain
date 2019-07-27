@@ -13,7 +13,6 @@ import (
 
 	"github.com/mcc-github/blockchain/internal/peer/chaincode"
 	"github.com/mcc-github/blockchain/internal/peer/channel"
-	"github.com/mcc-github/blockchain/internal/peer/clilogging"
 	"github.com/mcc-github/blockchain/internal/peer/common"
 	"github.com/mcc-github/blockchain/internal/peer/lifecycle"
 	"github.com/mcc-github/blockchain/internal/peer/node"
@@ -44,7 +43,6 @@ func main() {
 	mainCmd.AddCommand(version.Cmd())
 	mainCmd.AddCommand(node.Cmd())
 	mainCmd.AddCommand(chaincode.Cmd(nil))
-	mainCmd.AddCommand(clilogging.Cmd(nil))
 	mainCmd.AddCommand(channel.Cmd(nil))
 	mainCmd.AddCommand(lifecycle.Cmd())
 

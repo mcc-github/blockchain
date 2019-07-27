@@ -9,6 +9,7 @@ package lifecycle
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/chaincode"
@@ -314,6 +315,40 @@ func (c *Cache) ChaincodeInfo(channelID, name string) (*LocalChaincodeInfo, erro
 }
 
 
+
+func (c *Cache) ListInstalledChaincodes() []*chaincode.InstalledChaincode {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	installedChaincodes := []*chaincode.InstalledChaincode{}
+	for _, lc := range c.localChaincodes {
+		if lc.Info == nil {
+			
+			
+			continue
+		}
+		references := map[string][]*chaincode.Metadata{}
+		for channel, chaincodeMap := range lc.References {
+			metadata := []*chaincode.Metadata{}
+			for cc, cachedDefinition := range chaincodeMap {
+				metadata = append(metadata, &chaincode.Metadata{
+					Name:    cc,
+					Version: cachedDefinition.Definition.EndorsementInfo.Version,
+				})
+			}
+			references[channel] = metadata
+		}
+		installedChaincodes = append(installedChaincodes, &chaincode.InstalledChaincode{
+			PackageID:  lc.Info.PackageID,
+			Label:      lc.Info.Label,
+			References: references,
+		})
+	}
+
+	return installedChaincodes
+}
+
+
 func (c *Cache) update(initializing bool, channelID string, dirtyChaincodes map[string]struct{}, qe ledger.SimpleQueryExecutor) error {
 	channelCache, ok := c.definedChaincodes[channelID]
 	if !ok {
@@ -472,10 +507,13 @@ func (c *Cache) retrieveChaincodesMetadataSetWhileLocked(channelID string) (chai
 	for _, name := range keys {
 		def := channelChaincodes.Chaincodes[name]
 
+		
+		
+		
 		metadataSet = append(metadataSet,
 			chaincode.Metadata{
 				Name:              name,
-				Version:           def.Definition.EndorsementInfo.Version,
+				Version:           strconv.FormatInt(def.Definition.Sequence, 10),
 				Policy:            def.Definition.ValidationInfo.ValidationParameter,
 				CollectionsConfig: def.Definition.Collections,
 				Approved:          def.Approved,

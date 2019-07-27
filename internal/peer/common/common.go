@@ -19,7 +19,6 @@ import (
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/common/viperutil"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config"
 	"github.com/mcc-github/blockchain/core/scc/cscc"
@@ -28,6 +27,7 @@ import (
 	pcommon "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -77,9 +77,9 @@ var (
 	GetCertificateFnc func() (tls.Certificate, error)
 )
 
-type commonClient struct {
+type CommonClient struct {
 	*comm.GRPCClient
-	address string
+	Address string
 	sn      string
 }
 
@@ -119,7 +119,6 @@ func InitConfig(cmdRoot string) error {
 
 
 func InitCrypto(mspMgrConfigDir, localMSPID, localMSPType string) error {
-	var err error
 	
 	fi, err := os.Stat(mspMgrConfigDir)
 	if os.IsNotExist(err) || !fi.IsDir() {
@@ -133,10 +132,12 @@ func InitCrypto(mspMgrConfigDir, localMSPID, localMSPType string) error {
 
 	
 	SetBCCSPKeystorePath()
-	var bccspConfig *factory.FactoryOpts
-	err = viperutil.EnhancedExactUnmarshalKey("peer.BCCSP", &bccspConfig)
-	if err != nil {
-		return errors.WithMessage(err, "could not parse YAML config")
+	bccspConfig := factory.GetDefaultOpts()
+	if config := viper.Get("peer.BCCSP"); config != nil {
+		err = mapstructure.Decode(config, bccspConfig)
+		if err != nil {
+			return errors.WithMessage(err, "could not decode peer BCCSP configuration")
+		}
 	}
 
 	err = mspmgmt.LoadLocalMspWithType(mspMgrConfigDir, bccspConfig, localMSPID, localMSPType)
@@ -244,7 +245,7 @@ func configFromEnv(prefix string) (address, override string, clientConfig comm.C
 		connTimeout = defaultConnTimeout
 	}
 	clientConfig.Timeout = connTimeout
-	secOpts := &comm.SecureOptions{
+	secOpts := comm.SecureOptions{
 		UseTLS:            viper.GetBool(prefix + ".tls.enabled"),
 		RequireClientCert: viper.GetBool(prefix + ".tls.clientAuthRequired")}
 	if secOpts.UseTLS {

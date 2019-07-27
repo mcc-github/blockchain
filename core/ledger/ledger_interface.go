@@ -29,6 +29,7 @@ type Initializer struct {
 	MetricsProvider                 metrics.Provider
 	HealthCheckRegistry             HealthCheckRegistry
 	Config                          *Config
+	CustomTxProcessors              map[common.HeaderType]CustomTxProcessor
 }
 
 
@@ -36,30 +37,25 @@ type Config struct {
 	
 	RootFSPath string
 	
-	StateDB *StateDB
+	StateDBConfig *StateDBConfig
 	
-	PrivateData *PrivateData
+	PrivateDataConfig *PrivateDataConfig
 	
-	HistoryDB *HistoryDB
+	HistoryDBConfig *HistoryDBConfig
 }
 
 
-type StateDB struct {
+type StateDBConfig struct {
 	
 	
 	StateDatabase string
-	
-	
-	LevelDBPath string
 	
 	
 	CouchDB *couchdb.Config
 }
 
 
-type PrivateData struct {
-	
-	StorePath string
+type PrivateDataConfig struct {
 	
 	
 	BatchesInterval int
@@ -72,7 +68,7 @@ type PrivateData struct {
 }
 
 
-type HistoryDB struct {
+type HistoryDBConfig struct {
 	Enabled bool
 }
 
@@ -525,6 +521,7 @@ type DeployedChaincodeInfo struct {
 	Version                     string
 	ExplicitCollectionConfigPkg *common.CollectionConfigPackage
 	ImplicitCollections         []*common.StaticCollectionConfig
+	IsLegacy                    bool
 }
 
 
@@ -607,6 +604,30 @@ func (cdef *ChaincodeDefinition) String() string {
 type ChaincodeLifecycleEventProvider interface {
 	RegisterListener(channelID string, listener ChaincodeLifecycleEventListener)
 }
+
+
+
+
+
+
+
+
+
+
+type CustomTxProcessor interface {
+	GenerateSimulationResults(txEnvelop *common.Envelope, simulator TxSimulator, initializingLedger bool) error
+}
+
+
+
+type InvalidTxError struct {
+	Msg string
+}
+
+func (e *InvalidTxError) Error() string {
+	return e.Msg
+}
+
 
 
 

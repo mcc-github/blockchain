@@ -20,6 +20,7 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/util"
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
+	"github.com/mcc-github/blockchain/common/metrics"
 )
 
 
@@ -27,12 +28,15 @@ type FsBlockstoreProvider struct {
 	conf            *Conf
 	indexConfig     *blkstorage.IndexConfig
 	leveldbProvider *leveldbhelper.Provider
+	stats           *stats
 }
 
 
-func NewProvider(conf *Conf, indexConfig *blkstorage.IndexConfig) blkstorage.BlockStoreProvider {
+func NewProvider(conf *Conf, indexConfig *blkstorage.IndexConfig, metricsProvider metrics.Provider) blkstorage.BlockStoreProvider {
 	p := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: conf.getIndexDir()})
-	return &FsBlockstoreProvider{conf, indexConfig, p}
+	
+	stats := newStats(metricsProvider)
+	return &FsBlockstoreProvider{conf, indexConfig, p, stats}
 }
 
 
@@ -45,7 +49,7 @@ func (p *FsBlockstoreProvider) CreateBlockStore(ledgerid string) (blkstorage.Blo
 
 func (p *FsBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.BlockStore, error) {
 	indexStoreHandle := p.leveldbProvider.GetDBHandle(ledgerid)
-	return newFsBlockStore(ledgerid, p.conf, p.indexConfig, indexStoreHandle), nil
+	return newFsBlockStore(ledgerid, p.conf, p.indexConfig, indexStoreHandle, p.stats), nil
 }
 
 

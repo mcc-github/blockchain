@@ -9,10 +9,8 @@ package transientstore
 import (
 	"bytes"
 	"errors"
-	"path/filepath"
 
 	"github.com/mcc-github/blockchain/common/ledger/util"
-	"github.com/mcc-github/blockchain/core/config"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
@@ -92,7 +90,7 @@ func splitCompositeKeyOfPurgeIndexByTxid(compositeKey []byte) (uuid string, bloc
 
 func splitCompositeKeyOfPurgeIndexByHeight(compositeKey []byte) (txid string, uuid string, blockHeight uint64) {
 	var n int
-	blockHeight, n = util.DecodeOrderPreservingVarUint64(compositeKey[2:])
+	blockHeight, n, _ = util.DecodeOrderPreservingVarUint64(compositeKey[2:])
 	splits := bytes.Split(compositeKey[n+3:], []byte{compositeKeySep})
 	txid = string(splits[0])
 	uuid = string(splits[1])
@@ -106,7 +104,7 @@ func splitCompositeKeyWithoutPrefixForTxid(compositeKey []byte) (uuid string, bl
 	firstSepIndex := bytes.IndexByte(compositeKey, compositeKeySep)
 	secondSepIndex := firstSepIndex + bytes.IndexByte(compositeKey[firstSepIndex+1:], compositeKeySep) + 1
 	uuid = string(compositeKey[firstSepIndex+1 : secondSepIndex])
-	blockHeight, _ = util.DecodeOrderPreservingVarUint64(compositeKey[secondSepIndex+1:])
+	blockHeight, _, _ = util.DecodeOrderPreservingVarUint64(compositeKey[secondSepIndex+1:])
 	return
 }
 
@@ -176,12 +174,6 @@ func createPurgeIndexByTxidRangeEndKey(txid string) []byte {
 	
 	endKey = append(endKey, byte(0xff))
 	return endKey
-}
-
-
-func GetTransientStorePath() string {
-	sysPath := config.GetPath("peer.fileSystemPath")
-	return filepath.Join(sysPath, "transientStore")
 }
 
 

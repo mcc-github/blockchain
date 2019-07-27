@@ -89,6 +89,7 @@ type ChaincodeStubInterface interface {
 	
 	
 	
+	
 	PutState(key string, value []byte) error
 
 	
@@ -243,6 +244,8 @@ type ChaincodeStubInterface interface {
 	
 	GetPrivateDataHash(collection, key string) ([]byte, error)
 
+	
+	
 	
 	
 	

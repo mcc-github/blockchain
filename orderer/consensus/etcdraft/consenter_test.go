@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package etcdraft_test
 
 import (
+	"encoding/pem"
 	"io/ioutil"
 	"os"
 	"path"
@@ -36,6 +37,7 @@ import (
 
 var _ = Describe("Consenter", func() {
 	var (
+		certAsPEM   []byte
 		chainGetter *mocks.ChainGetter
 		support     *consensusmocks.FakeConsenterSupport
 		dataDir     string
@@ -45,6 +47,7 @@ var _ = Describe("Consenter", func() {
 	)
 
 	BeforeEach(func() {
+		certAsPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("cert bytes")})
 		chainGetter = &mocks.ChainGetter{}
 		support = &consensusmocks.FakeConsenterSupport{}
 		dataDir, err = ioutil.TempDir("", "snap-")
@@ -141,10 +144,12 @@ var _ = Describe("Consenter", func() {
 	})
 
 	It("successfully constructs a Chain", func() {
-		certBytes := []byte("cert.orderer0.org0")
+		
+		certAsPEMWithLineFeed := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("cert bytes")})
+		certAsPEMWithLineFeed = append(certAsPEMWithLineFeed, []byte("\n")...)
 		m := &etcdraftproto.ConfigMetadata{
 			Consenters: []*etcdraftproto.Consenter{
-				{ServerTlsCert: certBytes},
+				{ServerTlsCert: certAsPEMWithLineFeed},
 			},
 			Options: &etcdraftproto.Options{
 				TickInterval:      "500ms",
@@ -183,7 +188,7 @@ var _ = Describe("Consenter", func() {
 	It("fails to handle chain if no matching cert found", func() {
 		m := &etcdraftproto.ConfigMetadata{
 			Consenters: []*etcdraftproto.Consenter{
-				{ServerTlsCert: []byte("cert.orderer1.org1")},
+				{ServerTlsCert: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("foo")})},
 			},
 			Options: &etcdraftproto.Options{
 				TickInterval:      "500ms",
@@ -229,10 +234,9 @@ var _ = Describe("Consenter", func() {
 	})
 
 	It("fails to handle chain if tick interval is invalid", func() {
-		certBytes := []byte("cert.orderer0.org0")
 		m := &etcdraftproto.ConfigMetadata{
 			Consenters: []*etcdraftproto.Consenter{
-				{ServerTlsCert: certBytes},
+				{ServerTlsCert: certAsPEM},
 			},
 			Options: &etcdraftproto.Options{
 				TickInterval:      "500",
@@ -256,6 +260,196 @@ var _ = Describe("Consenter", func() {
 	})
 })
 
+var _ = Describe("Metadata Validation", func() {
+	var (
+		consenter *consenter
+	)
+
+	BeforeEach(func() {
+		consenter = newConsenter(nil)
+	})
+
+	When("determining parameter well-formedness", func() {
+		It("succeeds when new consensus metadata is nil", func() {
+			Expect(consenter.ValidateConsensusMetadata(nil, nil, false)).To(Succeed())
+		})
+
+		It("fails when new consensus metadata is not nil while old consensus metadata is nil", func() {
+			Expect(func() {
+				consenter.ValidateConsensusMetadata(nil, []byte("test"), false)
+			}).To(Panic())
+		})
+
+		It("fails when old consensus metadata is not well-formed", func() {
+			Expect(func() {
+				consenter.ValidateConsensusMetadata([]byte("test"), []byte("test"), false)
+			}).To(Panic())
+		})
+
+		It("fails when new consensus metadata is not well-formed", func() {
+			oldBytes, _ := proto.Marshal(&etcdraftproto.ConfigMetadata{})
+			Expect(consenter.ValidateConsensusMetadata(oldBytes, []byte("test"), false)).NotTo(Succeed())
+		})
+	})
+
+	Context("valid old consensus metadata", func() {
+		var (
+			oldBytes    []byte
+			oldMetadata *etcdraftproto.ConfigMetadata
+			newMetadata *etcdraftproto.ConfigMetadata
+			tlsCA       tlsgen.CA
+			newChannel  bool
+		)
+
+		BeforeEach(func() {
+			tlsCA, _ = tlsgen.NewCA()
+			oldMetadata = &etcdraftproto.ConfigMetadata{
+				Options: &etcdraftproto.Options{
+					TickInterval:         "500ms",
+					ElectionTick:         10,
+					HeartbeatTick:        1,
+					MaxInflightBlocks:    5,
+					SnapshotIntervalSize: 20 * 1024 * 1024, 
+				},
+				Consenters: []*etcdraftproto.Consenter{
+					{
+						Host:          "host1",
+						Port:          10001,
+						ClientTlsCert: clientTLSCert(tlsCA),
+						ServerTlsCert: serverTLSCert(tlsCA),
+					},
+					{
+						Host:          "host2",
+						Port:          10002,
+						ClientTlsCert: clientTLSCert(tlsCA),
+						ServerTlsCert: serverTLSCert(tlsCA),
+					},
+					{
+						Host:          "host3",
+						Port:          10003,
+						ClientTlsCert: clientTLSCert(tlsCA),
+						ServerTlsCert: serverTLSCert(tlsCA),
+					},
+				},
+			}
+			newMetadata = oldMetadata
+			oldBytes, _ = proto.Marshal(oldMetadata)
+			newChannel = false
+		})
+
+		It("fails when new consensus metadata has invalid options", func() {
+			
+			newMetadata.Options.TickInterval = ""
+			newBytes, _ := proto.Marshal(newMetadata)
+			Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).NotTo(Succeed())
+		})
+
+		Context("new channel creation", func() {
+
+			BeforeEach(func() {
+				newChannel = true
+			})
+
+			It("fails when the new consenters are an empty set", func() {
+				newMetadata.Consenters = []*etcdraftproto.Consenter{}
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).NotTo(Succeed())
+			})
+
+			It("succeeds when the new consenters are the same as the existing consenters", func() {
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).To(Succeed())
+			})
+
+			It("succeeds when the new consenters are a subset of the existing consenters", func() {
+				newMetadata.Consenters = newMetadata.Consenters[:2]
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).To(Succeed())
+			})
+
+			It("fails when the new consenters are not a subset of the existing consenters", func() {
+				newMetadata.Consenters[2].ClientTlsCert = clientTLSCert(tlsCA)
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).NotTo(Succeed())
+			})
+
+		})
+
+		Context("config update on a channel", func() {
+
+			BeforeEach(func() {
+				newChannel = false
+			})
+
+			It("fails when the new consenters are an empty set", func() {
+				
+				newMetadata.Consenters = []*etcdraftproto.Consenter{}
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).NotTo(Succeed())
+			})
+
+			It("succeeds when the new consenters are the same as the existing consenters", func() {
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).To(Succeed())
+			})
+
+			It("succeeds on addition of a single consenter", func() {
+				newMetadata.Consenters = append(newMetadata.Consenters, &etcdraftproto.Consenter{
+					Host:          "host4",
+					Port:          10004,
+					ClientTlsCert: clientTLSCert(tlsCA),
+					ServerTlsCert: serverTLSCert(tlsCA),
+				})
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).To(Succeed())
+			})
+
+			It("fails on addition of more than one consenter", func() {
+				newMetadata.Consenters = append(newMetadata.Consenters,
+					&etcdraftproto.Consenter{
+						Host:          "host4",
+						Port:          10004,
+						ClientTlsCert: clientTLSCert(tlsCA),
+						ServerTlsCert: serverTLSCert(tlsCA),
+					},
+					&etcdraftproto.Consenter{
+						Host:          "host5",
+						Port:          10005,
+						ClientTlsCert: clientTLSCert(tlsCA),
+						ServerTlsCert: serverTLSCert(tlsCA),
+					},
+				)
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).NotTo(Succeed())
+			})
+
+			It("succeeds on removal of a single consenter", func() {
+				newMetadata.Consenters = newMetadata.Consenters[:2]
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).To(Succeed())
+			})
+
+			It("fails on removal of more than one consenter", func() {
+				newMetadata.Consenters = newMetadata.Consenters[:1]
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).NotTo(Succeed())
+			})
+
+			It("succeeds on rotating certs in case of both addition and removal of a node each to reuse the raft NodeId", func() {
+				newMetadata.Consenters = append(newMetadata.Consenters[:2], &etcdraftproto.Consenter{
+					Host:          "host4",
+					Port:          10004,
+					ClientTlsCert: clientTLSCert(tlsCA),
+					ServerTlsCert: serverTLSCert(tlsCA),
+				})
+				newBytes, _ := proto.Marshal(newMetadata)
+				Expect(consenter.ValidateConsensusMetadata(oldBytes, newBytes, newChannel)).To(Succeed())
+			})
+
+		})
+	})
+})
+
 type consenter struct {
 	*etcdraft.Consenter
 	icr *mocks.InactiveChainRegistry
@@ -268,10 +462,11 @@ func newConsenter(chainGetter *mocks.ChainGetter) *consenter {
 	communicator.On("Configure", mock.Anything, mock.Anything)
 	icr := &mocks.InactiveChainRegistry{}
 	icr.On("TrackChain", "foo", mock.Anything, mock.Anything)
+	certAsPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("cert bytes")})
 	c := &etcdraft.Consenter{
 		InactiveChainRegistry: icr,
 		Communication:         communicator,
-		Cert:                  []byte("cert.orderer0.org0"),
+		Cert:                  certAsPEM,
 		Logger:                flogging.MustGetLogger("test"),
 		Chains:                chainGetter,
 		Dispatcher: &etcdraft.Dispatcher{
@@ -280,7 +475,7 @@ func newConsenter(chainGetter *mocks.ChainGetter) *consenter {
 		},
 		Dialer: &cluster.PredicateDialer{
 			Config: comm.ClientConfig{
-				SecOpts: &comm.SecureOptions{
+				SecOpts: comm.SecureOptions{
 					Certificate: ca.CertBytes(),
 				},
 			},

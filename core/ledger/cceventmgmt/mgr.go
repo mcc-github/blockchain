@@ -119,6 +119,13 @@ func (m *Mgr) HandleChaincodeInstall(chaincodeDefinition *ChaincodeDefinition, d
 				chainid, chaincodeDefinition)
 			continue
 		}
+		if !deployedCCInfo.IsLegacy {
+			
+			
+			logger.Debugf("Channel [%s]: Chaincode [%s] is already defined in new lifecycle hence not creating chaincode artifacts.",
+				chainid, chaincodeDefinition)
+			continue
+		}
 		m.callbackStatus.setInstallPending(chainid)
 		chaincodeDefinition.CollectionConfigs = deployedCCInfo.ExplicitCollectionConfigPkg
 		if err := m.invokeHandler(chainid, chaincodeDefinition, dbArtifacts); err != nil {

@@ -9,8 +9,8 @@ package peer
 import (
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/customtx"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 )
@@ -21,13 +21,7 @@ const (
 )
 
 
-type configtxProcessor struct {
-}
-
-
-func newConfigTxProcessor() customtx.Processor {
-	return &configtxProcessor{}
-}
+type ConfigTxProcessor struct{}
 
 
 
@@ -37,7 +31,7 @@ func newConfigTxProcessor() customtx.Processor {
 
 
 
-func (tp *configtxProcessor) GenerateSimulationResults(txEnv *common.Envelope, simulator ledger.TxSimulator, initializingLedger bool) error {
+func (tp *ConfigTxProcessor) GenerateSimulationResults(txEnv *common.Envelope, simulator ledger.TxSimulator, initializingLedger bool) error {
 	payload := protoutil.UnmarshalPayloadOrPanic(txEnv.Payload)
 	channelHdr := protoutil.UnmarshalChannelHeaderOrPanic(payload.Header.ChannelHeader)
 	txType := common.HeaderType(channelHdr.GetType())
@@ -59,7 +53,7 @@ func processChannelConfigTx(txEnv *common.Envelope, simulator ledger.TxSimulator
 	}
 	channelConfig := configEnvelope.Config
 	if channelConfig == nil {
-		return fmt.Errorf("Channel config found nil")
+		return fmt.Errorf("channel config found nil")
 	}
 
 	if err := persistConf(simulator, channelConfigKey, channelConfig); err != nil {
@@ -72,7 +66,7 @@ func processChannelConfigTx(txEnv *common.Envelope, simulator ledger.TxSimulator
 }
 
 func persistConf(simulator ledger.TxSimulator, key string, config *common.Config) error {
-	serializedConfig, err := serialize(config)
+	serializedConfig, err := proto.Marshal(config)
 	if err != nil {
 		return err
 	}
@@ -88,4 +82,12 @@ func retrievePersistedConf(queryExecuter ledger.QueryExecutor, key string) (*com
 		return nil, nil
 	}
 	return deserialize(serializedConfig)
+}
+
+func deserialize(serializedConf []byte) (*common.Config, error) {
+	conf := &common.Config{}
+	if err := proto.Unmarshal(serializedConf, conf); err != nil {
+		return nil, err
+	}
+	return conf, nil
 }

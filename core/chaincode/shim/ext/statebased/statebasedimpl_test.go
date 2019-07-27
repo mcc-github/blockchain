@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/core/chaincode/shim/ext/statebased"
+	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,14 +30,14 @@ func TestAddOrg(t *testing.T) {
 
 	epBytes, err := ep.Policy()
 	assert.NoError(t, err)
-	expectedEP := cauthdsl.SignedByMspPeer("Org1")
+	expectedEP := signedByMspPeer("Org1", t)
 	expectedEPBytes, err := proto.Marshal(expectedEP)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedEPBytes, epBytes)
 }
 
 func TestListOrgs(t *testing.T) {
-	expectedEP := cauthdsl.SignedByMspPeer("Org1")
+	expectedEP := signedByMspPeer("Org1", t)
 	expectedEPBytes, err := proto.Marshal(expectedEP)
 	assert.NoError(t, err)
 
@@ -47,7 +48,7 @@ func TestListOrgs(t *testing.T) {
 }
 
 func TestDelAddOrg(t *testing.T) {
-	expectedEP := cauthdsl.SignedByMspPeer("Org1")
+	expectedEP := signedByMspPeer("Org1", t)
 	expectedEPBytes, err := proto.Marshal(expectedEP)
 	assert.NoError(t, err)
 	ep, err := statebased.NewStateEP(expectedEPBytes)
@@ -63,8 +64,50 @@ func TestDelAddOrg(t *testing.T) {
 	
 	epBytes, err := ep.Policy()
 	assert.NoError(t, err)
-	expectedEP = cauthdsl.SignedByMspPeer("Org2")
+	expectedEP = signedByMspPeer("Org2", t)
 	expectedEPBytes, err = proto.Marshal(expectedEP)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedEPBytes, epBytes)
+}
+
+
+
+func signedByMspPeer(mspId string, t *testing.T) *common.SignaturePolicyEnvelope {
+	
+	principal, err := proto.Marshal(
+		&msp.MSPRole{
+			Role:          msp.MSPRole_PEER,
+			MspIdentifier: mspId,
+		},
+	)
+	if err != nil {
+		t.Fatalf("failed to marshal principal: %s", err)
+	}
+
+	
+	p := &common.SignaturePolicyEnvelope{
+		Version: 0,
+		Rule: &common.SignaturePolicy{
+			Type: &common.SignaturePolicy_NOutOf_{
+				NOutOf: &common.SignaturePolicy_NOutOf{
+					N: 1,
+					Rules: []*common.SignaturePolicy{
+						{
+							Type: &common.SignaturePolicy_SignedBy{
+								SignedBy: 0,
+							},
+						},
+					},
+				},
+			},
+		},
+		Identities: []*msp.MSPPrincipal{
+			{
+				PrincipalClassification: msp.MSPPrincipal_ROLE,
+				Principal:               principal,
+			},
+		},
+	}
+
+	return p
 }

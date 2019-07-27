@@ -22,7 +22,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
@@ -54,7 +53,7 @@ func (*mockMCS) GetPKIidOfCert(peerIdentity api.PeerIdentityType) common.PKIidTy
 	return common.PKIidType("pkiID")
 }
 
-func (*mockMCS) VerifyBlock(chainID common.ChainID, seqNum uint64, signedBlock []byte) error {
+func (*mockMCS) VerifyBlock(chainID common.ChannelID, seqNum uint64, signedBlock []byte) error {
 	return nil
 }
 
@@ -66,7 +65,7 @@ func (*mockMCS) Verify(peerIdentity api.PeerIdentityType, signature, message []b
 	return nil
 }
 
-func (*mockMCS) VerifyByChannel(chainID common.ChainID, peerIdentity api.PeerIdentityType, signature, message []byte) error {
+func (*mockMCS) VerifyByChannel(chainID common.ChannelID, peerIdentity api.PeerIdentityType, signature, message []byte) error {
 	return nil
 }
 
@@ -91,20 +90,26 @@ func TestNewDeliverService(t *testing.T) {
 		}
 	}
 
-	connFactory := func(_ string) func(string) (*grpc.ClientConn, error) {
-		return func(endpoint string) (*grpc.ClientConn, error) {
+	connFactory := func(_ string) func(string, time.Duration) (*grpc.ClientConn, error) {
+		return func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
 			lock.Lock()
 			defer lock.Unlock()
 			return newConnection(), nil
 		}
 	}
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"a"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  abcf,
-		ConnFactory: connFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"a"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        abcf,
+		ConnFactory:       connFactory,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.NoError(t, err)
 	assert.NoError(t, service.StartDeliverForChannel("TEST_CHAINID", &mocks.MockLedgerInfo{Height: 0}, func() {}))
@@ -141,12 +146,18 @@ func TestDeliverServiceRestart(t *testing.T) {
 	gossipServiceAdapter := &mocks.MockGossipServiceAdapter{GossipBlockDisseminations: make(chan uint64)}
 
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"localhost:5611"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"localhost:5611"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.NoError(t, err)
 
@@ -188,12 +199,18 @@ func TestDeliverServiceFailover(t *testing.T) {
 	gossipServiceAdapter := &mocks.MockGossipServiceAdapter{GossipBlockDisseminations: make(chan uint64)}
 
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"localhost:5612", "localhost:5613"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"localhost:5612", "localhost:5613"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.NoError(t, err)
 	li := &mocks.MockLedgerInfo{Height: uint64(100)}
@@ -261,12 +278,18 @@ func TestDeliverServiceUpdateEndpoints(t *testing.T) {
 	gossipServiceAdapter := &mocks.MockGossipServiceAdapter{GossipBlockDisseminations: make(chan uint64)}
 
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"localhost:5612"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"localhost:5612"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	defer service.Stop()
 
@@ -311,12 +334,18 @@ func TestDeliverServiceServiceUnavailable(t *testing.T) {
 	gossipServiceAdapter := &mocks.MockGossipServiceAdapter{GossipBlockDisseminations: make(chan uint64)}
 
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"localhost:5615", "localhost:5616"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"localhost:5615", "localhost:5616"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.NoError(t, err)
 	li := &mocks.MockLedgerInfo{Height: 100}
@@ -442,12 +471,18 @@ func TestDeliverServiceAbruptStop(t *testing.T) {
 	
 	gossipServiceAdapter := &mocks.MockGossipServiceAdapter{GossipBlockDisseminations: make(chan uint64)}
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"a"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"a"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.NoError(t, err)
 
@@ -466,12 +501,18 @@ func TestDeliverServiceShutdown(t *testing.T) {
 	gossipServiceAdapter := &mocks.MockGossipServiceAdapter{GossipBlockDisseminations: make(chan uint64)}
 
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"localhost:5614"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"localhost:5614"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.NoError(t, err)
 
@@ -503,8 +544,6 @@ func TestDeliverServiceShutdownRespawn(t *testing.T) {
 	
 	
 	
-	viper.Set("peer.deliveryclient.reconnectTotalTimeThreshold", time.Second)
-	defer viper.Reset()
 	defer ensureNoGoroutineLeak(t)()
 
 	osn1 := mocks.NewOrderer(5614, t)
@@ -513,12 +552,18 @@ func TestDeliverServiceShutdownRespawn(t *testing.T) {
 	gossipServiceAdapter := &mocks.MockGossipServiceAdapter{GossipBlockDisseminations: make(chan uint64)}
 
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"localhost:5614", "localhost:5615"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"localhost:5614", "localhost:5615"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: time.Second,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.NoError(t, err)
 
@@ -557,8 +602,6 @@ func TestDeliverServiceDisconnectReconnect(t *testing.T) {
 	
 	
 	
-	viper.Set("peer.deliveryclient.reconnectTotalTimeThreshold", time.Second*2)
-	defer viper.Reset()
 	defer ensureNoGoroutineLeak(t)()
 
 	osn := mocks.NewOrderer(5614, t)
@@ -567,12 +610,18 @@ func TestDeliverServiceDisconnectReconnect(t *testing.T) {
 	gossipServiceAdapter := &mocks.MockGossipServiceAdapter{GossipBlockDisseminations: make(chan uint64)}
 
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{"localhost:5614"},
-		Gossip:      gossipServiceAdapter,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"localhost:5614"},
+		Gossip:            gossipServiceAdapter,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: time.Second * 2,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.NoError(t, err)
 
@@ -588,7 +637,7 @@ func TestDeliverServiceDisconnectReconnect(t *testing.T) {
 	assertBlockDissemination(101, gossipServiceAdapter.GossipBlockDisseminations, t)
 	atomic.StoreUint64(&li.Height, uint64(102))
 
-	for i := 0; i < 5; i += 1 {
+	for i := 0; i < 5; i++ {
 		
 		osn.Shutdown()
 		
@@ -611,71 +660,123 @@ func TestDeliverServiceDisconnectReconnect(t *testing.T) {
 func TestDeliverServiceBadConfig(t *testing.T) {
 	
 	service, err := NewDeliverService(&Config{
-		Endpoints:   []string{},
-		Gossip:      &mocks.MockGossipServiceAdapter{},
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{},
+		Gossip:            &mocks.MockGossipServiceAdapter{},
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.Error(t, err)
 	assert.Nil(t, service)
 
 	
 	service, err = NewDeliverService(&Config{
-		Endpoints:   []string{"a"},
-		Gossip:      nil,
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"a"},
+		Gossip:            nil,
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.Error(t, err)
 	assert.Nil(t, service)
 
 	
 	service, err = NewDeliverService(&Config{
-		Endpoints:   []string{"a"},
-		Gossip:      &mocks.MockGossipServiceAdapter{},
-		CryptoSvc:   nil,
-		ABCFactory:  DefaultABCFactory,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"a"},
+		Gossip:            &mocks.MockGossipServiceAdapter{},
+		CryptoSvc:         nil,
+		ABCFactory:        DefaultABCFactory,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.Error(t, err)
 	assert.Nil(t, service)
 
 	
 	service, err = NewDeliverService(&Config{
-		Endpoints:   []string{"a"},
-		Gossip:      &mocks.MockGossipServiceAdapter{},
-		CryptoSvc:   &mockMCS{},
-		ABCFactory:  nil,
-		ConnFactory: DefaultConnectionFactory,
-		Signer:      &mocks.SignerSerializer{},
+		Endpoints:         []string{"a"},
+		Gossip:            &mocks.MockGossipServiceAdapter{},
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        nil,
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.Error(t, err)
 	assert.Nil(t, service)
 
 	
 	service, err = NewDeliverService(&Config{
-		Endpoints:  []string{"a"},
-		Gossip:     &mocks.MockGossipServiceAdapter{},
-		CryptoSvc:  &mockMCS{},
-		ABCFactory: DefaultABCFactory,
-		Signer:     &mocks.SignerSerializer{},
+		Endpoints:         []string{"a"},
+		Gossip:            &mocks.MockGossipServiceAdapter{},
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: comm.NewCredentialSupport(),
+		DeliverServiceConfig: &DeliverServiceConfig{
+			ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+			ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+			ConnectionTimeout:           DefaultConnectionTimeout,
+		},
 	})
 	assert.Error(t, err)
+	assert.Nil(t, service)
+
+	
+	service, err = NewDeliverService(&Config{
+		ConnFactory:       (&CredSupportDialerFactory{}).Dialer,
+		Endpoints:         []string{"a"},
+		Gossip:            &mocks.MockGossipServiceAdapter{},
+		CryptoSvc:         &mockMCS{},
+		ABCFactory:        DefaultABCFactory,
+		Signer:            &mocks.SignerSerializer{},
+		CredentialSupport: nil,
+	})
+	assert.EqualError(t, err, "no credential support specified")
 	assert.Nil(t, service)
 }
 
 func TestRetryPolicyOverflow(t *testing.T) {
-	connFactory := func(channelID string) func(endpoint string) (*grpc.ClientConn, error) {
-		return func(_ string) (*grpc.ClientConn, error) {
+	connFactory := func(channelID string) func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
+		return func(_ string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
 			return nil, errors.New("")
 		}
 	}
-	client := (&deliverServiceImpl{conf: &Config{ConnFactory: connFactory}}).newClient("TEST", &mocks.MockLedgerInfo{Height: uint64(100)})
+	client := (&deliverServiceImpl{
+		conf: &Config{
+			ConnFactory: connFactory,
+			DeliverServiceConfig: &DeliverServiceConfig{
+				ReConnectBackoffThreshold:   DefaultReConnectBackoffThreshold,
+				ReconnectTotalTimeThreshold: DefaultReConnectTotalTimeThreshold,
+				ConnectionTimeout:           DefaultConnectionTimeout,
+			},
+		},
+	}).newClient("TEST", &mocks.MockLedgerInfo{Height: uint64(100)})
 	assert.NotNil(t, client.shouldRetry)
 	for i := 0; i < 100; i++ {
 		retryTime, _ := client.shouldRetry(i, time.Second)
@@ -770,4 +871,22 @@ func TestToEndpointCriteria(t *testing.T) {
 			assert.Equal(t, testCase.expectedOut, testCase.input.toEndpointCriteria())
 		})
 	}
+}
+
+func TestCredSupportDialerFactory(t *testing.T) {
+
+	dialerFactory := &CredSupportDialerFactory{
+		CredentialSupport: comm.NewCredentialSupport(),
+		KeepaliveOptions:  comm.DefaultKeepaliveOptions,
+		TLSEnabled:        true,
+	}
+
+	_, err := dialerFactory.Dialer("no-such-channel")(":0", 500*time.Millisecond)
+	assert.Error(t, err, "expected error when cnofigured to use tls and no certs")
+	assert.Contains(t, err.Error(), "failed obtaining credentials for channel no-such-channel")
+
+	dialerFactory.TLSEnabled = false
+	_, err = dialerFactory.Dialer("no-such-channel")(":0", 500*time.Millisecond)
+	assert.Error(t, err, "expected error when dialing an invalid address")
+	assert.Equal(t, context.DeadlineExceeded, err, "expected a DeadlineExceeded error")
 }

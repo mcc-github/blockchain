@@ -41,8 +41,12 @@ func TestMembershipInfoProvider(t *testing.T) {
 	
 	res, err = membershipProvider.AmMemberOf("test1", nil)
 	assert.False(t, res)
-	assert.Error(t, err)
-	assert.Equal(t, "Collection policy config is nil", err.Error())
+	assert.Nil(t, err)
+
+	
+	res, err = membershipProvider.AmMemberOf("test1", getBadAccessPolicy([]string{"signer0"}, 1))
+	assert.False(t, res)
+	assert.Nil(t, err)
 }
 
 func getAccessPolicy(signers []string) *common.CollectionPolicyConfig {
@@ -51,5 +55,15 @@ func getAccessPolicy(signers []string) *common.CollectionPolicyConfig {
 		data = append(data, []byte(signer))
 	}
 	policyEnvelope := cauthdsl.Envelope(cauthdsl.Or(cauthdsl.SignedBy(0), cauthdsl.SignedBy(1)), data)
+	return createCollectionPolicyConfig(policyEnvelope)
+}
+
+func getBadAccessPolicy(signers []string, badIndex int32) *common.CollectionPolicyConfig {
+	var data [][]byte
+	for _, signer := range signers {
+		data = append(data, []byte(signer))
+	}
+	
+	policyEnvelope := cauthdsl.Envelope(cauthdsl.Or(cauthdsl.SignedBy(0), cauthdsl.SignedBy(badIndex)), data)
 	return createCollectionPolicyConfig(policyEnvelope)
 }

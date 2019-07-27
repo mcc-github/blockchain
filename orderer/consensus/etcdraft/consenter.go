@@ -16,7 +16,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
-	"github.com/mcc-github/blockchain/common/viperutil"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
@@ -26,6 +25,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 )
@@ -105,10 +105,21 @@ func (c *Consenter) ReceiverByChain(channelID string) MessageReceiver {
 }
 
 func (c *Consenter) detectSelfID(consenters map[uint64]*etcdraft.Consenter) (uint64, error) {
+	thisNodeCertAsDER, err := pemToDER(c.Cert, 0, "server", c.Logger)
+	if err != nil {
+		return 0, err
+	}
+
 	var serverCertificates []string
 	for nodeID, cst := range consenters {
 		serverCertificates = append(serverCertificates, string(cst.ServerTlsCert))
-		if bytes.Equal(c.Cert, cst.ServerTlsCert) {
+
+		certAsDER, err := pemToDER(cst.ServerTlsCert, nodeID, "server", c.Logger)
+		if err != nil {
+			return 0, err
+		}
+
+		if bytes.Equal(thisNodeCertAsDER, certAsDER) {
 			return nodeID, nil
 		}
 	}
@@ -128,6 +139,11 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		return nil, errors.New("etcdraft options have not been provided")
 	}
 
+	isMigration := (metadata == nil || len(metadata.Value) == 0) && (support.Height() > 1)
+	if isMigration {
+		c.Logger.Debugf("Block metadata is nil at block height=%d, it is consensus-type migration", support.Height())
+	}
+
 	
 	
 	
@@ -139,10 +155,7 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		return nil, errors.Wrapf(err, "failed to read Raft metadata")
 	}
 
-	consenters := map[uint64]*etcdraft.Consenter{}
-	for i, consenter := range m.Consenters {
-		consenters[blockMetadata.ConsenterIds[i]] = consenter
-	}
+	consenters := CreateConsentersMap(blockMetadata, m)
 
 	id, err := c.detectSelfID(consenters)
 	if err != nil {
@@ -184,6 +197,8 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		BlockMetadata: blockMetadata,
 		Consenters:    consenters,
 
+		MigrationInit: isMigration,
+
 		WALDir:            path.Join(c.EtcdRaftConfig.WALDir, support.ChainID()),
 		SnapDir:           path.Join(c.EtcdRaftConfig.SnapDir, support.ChainID()),
 		EvictionSuspicion: evictionSuspicion,
@@ -206,6 +221,52 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		func() (BlockPuller, error) { return newBlockPuller(support, c.Dialer, c.OrdererConfig.General.Cluster) },
 		nil,
 	)
+}
+
+
+
+
+
+func (c *Consenter) ValidateConsensusMetadata(oldMetadataBytes, newMetadataBytes []byte, newChannel bool) error {
+	
+	if newMetadataBytes == nil {
+		return nil
+	}
+	if oldMetadataBytes == nil {
+		c.Logger.Panic("Programming Error: ValidateConsensusMetadata called with nil old metadata")
+	}
+
+	oldMetadata := &etcdraft.ConfigMetadata{}
+	if err := proto.Unmarshal(oldMetadataBytes, oldMetadata); err != nil {
+		c.Logger.Panicf("Programming Error: Failed to unmarshal old etcdraft consensus metadata: %v", err)
+	}
+	newMetadata := &etcdraft.ConfigMetadata{}
+	if err := proto.Unmarshal(newMetadataBytes, newMetadata); err != nil {
+		return errors.Wrap(err, "failed to unmarshal new etcdraft metadata configuration")
+	}
+
+	err := CheckConfigMetadata(newMetadata)
+	if err != nil {
+		return errors.Wrap(err, "invalid new config metdadata")
+	}
+
+	if newChannel {
+		
+		set := ConsentersToMap(oldMetadata.Consenters)
+		for _, c := range newMetadata.Consenters {
+			if _, exits := set[string(c.ClientTlsCert)]; !exits {
+				return errors.New("new channel has consenter that is not part of system consenter set")
+			}
+		}
+		return nil
+	}
+
+	
+	dummyOldBlockMetadata, _ := ReadBlockMetadata(nil, oldMetadata)
+	dummyOldConsentersMap := CreateConsentersMap(dummyOldBlockMetadata, oldMetadata)
+	_, err = ComputeMembershipChanges(dummyOldBlockMetadata, dummyOldConsentersMap, newMetadata.Consenters)
+
+	return err
 }
 
 
@@ -245,7 +306,8 @@ func New(
 	logger := flogging.MustGetLogger("orderer.consensus.etcdraft")
 
 	var cfg Config
-	if err := viperutil.Decode(conf.Consensus, &cfg); err != nil {
+	err := mapstructure.Decode(conf.Consensus, &cfg)
+	if err != nil {
 		logger.Panicf("Failed to decode etcdraft configuration: %s", err)
 	}
 

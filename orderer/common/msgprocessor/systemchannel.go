@@ -27,6 +27,11 @@ type ChannelConfigTemplator interface {
 }
 
 
+type MetadataValidator interface {
+	ValidateConsensusMetadata(oldMetadata, newMetadata []byte, newChannel bool) error
+}
+
+
 type SystemChannel struct {
 	*StandardChannel
 	templator ChannelConfigTemplator
@@ -45,17 +50,17 @@ func NewSystemChannel(support StandardChannelSupport, templator ChannelConfigTem
 
 
 
-func CreateSystemChannelFilters(chainCreator ChainCreator, ledgerResources channelconfig.Resources) *RuleSet {
-	ordererConfig, ok := ledgerResources.OrdererConfig()
-	if !ok {
-		logger.Panicf("Cannot create system channel filters without orderer config")
-	}
+func CreateSystemChannelFilters(
+	chainCreator ChainCreator,
+	ledgerResources channelconfig.Resources,
+	validator MetadataValidator,
+) *RuleSet {
 	return NewRuleSet([]Rule{
 		EmptyRejectRule,
 		NewExpirationRejectRule(ledgerResources),
-		NewSizeFilter(ordererConfig),
+		NewSizeFilter(ledgerResources),
 		NewSigFilter(policies.ChannelWriters, policies.ChannelOrdererWriters, ledgerResources),
-		NewSystemChannelFilter(ledgerResources, chainCreator),
+		NewSystemChannelFilter(ledgerResources, chainCreator, validator),
 	})
 }
 
@@ -106,7 +111,7 @@ func (s *SystemChannel) ProcessConfigUpdateMsg(envConfigUpdate *cb.Envelope) (co
 
 	newChannelConfigEnv, err := bundle.ConfigtxValidator().ProposeConfigUpdate(envConfigUpdate)
 	if err != nil {
-		return nil, 0, errors.WithMessagef(err, "error validating channel creation transaction for new channel '%s', could not succesfully apply update to template configuration", channelID)
+		return nil, 0, errors.WithMessagef(err, "error validating channel creation transaction for new channel '%s', could not successfully apply update to template configuration", channelID)
 	}
 
 	newChannelEnvConfig, err := protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG, channelID, s.support.Signer(), newChannelConfigEnv, msgVersion, epoch)
@@ -267,7 +272,7 @@ func (dt *DefaultTemplator) NewChannelConfig(envConfigUpdate *cb.Envelope) (chan
 	applicationGroup := protoutil.NewConfigGroup()
 	consortiumsConfig, ok := dt.support.ConsortiumsConfig()
 	if !ok {
-		return nil, fmt.Errorf("The ordering system channel does not appear to support creating channels")
+		return nil, fmt.Errorf("The ordering system channel does not appear to resources creating channels")
 	}
 
 	consortiumConf, ok := consortiumsConfig.Consortiums()[consortium.Name]

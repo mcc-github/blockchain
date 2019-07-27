@@ -35,6 +35,16 @@ const (
 )
 
 
+type StateDBConfig struct {
+	
+	*ledger.StateDBConfig
+	
+	
+	
+	LevelDBPath string
+}
+
+
 type CommonStorageDBProvider struct {
 	statedb.VersionedDBProvider
 	HealthCheckRegistry ledger.HealthCheckRegistry
@@ -46,7 +56,7 @@ func NewCommonStorageDBProvider(
 	bookkeeperProvider bookkeeping.Provider,
 	metricsProvider metrics.Provider,
 	healthCheckRegistry ledger.HealthCheckRegistry,
-	stateDBConf *ledger.StateDB,
+	stateDBConf *StateDBConfig,
 ) (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
 	var err error

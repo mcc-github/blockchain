@@ -22,8 +22,6 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
 	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/v20/mocks"
-	corepeer "github.com/mcc-github/blockchain/core/peer"
-	"github.com/mcc-github/blockchain/core/policy"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
@@ -229,15 +227,7 @@ var sid []byte
 var mspid string
 var chainId string = util.GetTestChainID()
 
-type mockPolicyCheckerFactory struct {
-}
-
-func (c *mockPolicyCheckerFactory) NewPolicyChecker() policy.PolicyChecker {
-	return &mockPolicyChecker{}
-}
-
-type mockPolicyChecker struct {
-}
+type mockPolicyChecker struct{}
 
 func (c *mockPolicyChecker) CheckPolicy(channelID, policyName string, signedProp *peer.SignedProposal) error {
 	return nil
@@ -259,14 +249,6 @@ func TestMain(m *testing.M) {
 	}
 	defer os.RemoveAll(testDir)
 	ccprovider.SetChaincodesPath(testDir)
-
-	policy.RegisterPolicyCheckerFactory(&mockPolicyCheckerFactory{})
-
-	mspGetter := func(cid string) []string {
-		return []string{"SampleOrg"}
-	}
-
-	corepeer.MockSetMSPIDGetter(mspGetter)
 
 	
 	msptesttools.LoadMSPSetupForTesting()

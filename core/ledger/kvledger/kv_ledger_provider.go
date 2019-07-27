@@ -20,6 +20,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb/historyleveldb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerstorage"
+	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
@@ -61,12 +62,17 @@ func NewProvider(initializer *ledger.Initializer) (*Provider, error) {
 	idStore := openIDStore(filepath.Join(p.initializer.Config.RootFSPath, "ledgerProvider"))
 	p.idStore = idStore
 	
+	privateData := &pvtdatastorage.PrivateDataConfig{
+		PrivateDataConfig: initializer.Config.PrivateDataConfig,
+		StorePath:         filepath.Join(initializer.Config.RootFSPath, "pvtdataStore"),
+	}
 	ledgerStoreProvider := ledgerstorage.NewProvider(
 		p.initializer.Config.RootFSPath,
-		p.initializer.Config.PrivateData,
+		privateData,
+		p.initializer.MetricsProvider,
 	)
 	p.ledgerStoreProvider = ledgerStoreProvider
-	if initializer.Config.HistoryDB.Enabled {
+	if initializer.Config.HistoryDBConfig.Enabled {
 		
 		historydbProvider := historyleveldb.NewHistoryDBProvider(
 			filepath.Join(p.initializer.Config.RootFSPath, "historyLeveldb"),
@@ -96,11 +102,15 @@ func NewProvider(initializer *ledger.Initializer) (*Provider, error) {
 		filepath.Join(p.initializer.Config.RootFSPath, "bookkeeper"),
 	)
 	var err error
+	stateDB := &privacyenabledstate.StateDBConfig{
+		StateDBConfig: initializer.Config.StateDBConfig,
+		LevelDBPath:   filepath.Join(initializer.Config.RootFSPath, "stateLeveldb"),
+	}
 	p.vdbProvider, err = privacyenabledstate.NewCommonStorageDBProvider(
 		p.bookkeepingProvider,
 		initializer.MetricsProvider,
 		initializer.HealthCheckRegistry,
-		initializer.Config.StateDB,
+		stateDB,
 	)
 	if err != nil {
 		return nil, err
@@ -197,6 +207,7 @@ func (p *Provider) openInternal(ledgerID string) (ledger.PeerLedger, error) {
 		p.initializer.DeployedChaincodeInfoProvider,
 		p.initializer.ChaincodeLifecycleEventProvider,
 		p.stats.ledgerStats(ledgerID),
+		p.initializer.CustomTxProcessors,
 	)
 	if err != nil {
 		return nil, err

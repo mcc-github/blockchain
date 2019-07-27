@@ -7,19 +7,21 @@ SPDX-License-Identifier: Apache-2.0
 package service
 
 import (
+	"bytes"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/transientstore"
 	"github.com/mcc-github/blockchain/gossip/api"
+	"github.com/mcc-github/blockchain/gossip/election"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -93,8 +95,11 @@ type embeddingDeliveryServiceFactory struct {
 	DeliveryServiceFactory
 }
 
-func (edsf *embeddingDeliveryServiceFactory) Service(g GossipService, endpoints []string, mcs api.MessageCryptoService) (deliverservice.DeliverService, error) {
-	ds, _ := edsf.DeliveryServiceFactory.Service(g, endpoints, mcs)
+func (edsf *embeddingDeliveryServiceFactory) Service(g GossipServiceAdapter, endpoints []string, mcs api.MessageCryptoService) (deliverservice.DeliverService, error) {
+	ds, err := edsf.DeliveryServiceFactory.Service(g, endpoints, mcs)
+	if err != nil {
+		panic(err)
+	}
 	return newEmbeddingDeliveryService(ds), nil
 }
 
@@ -104,38 +109,46 @@ func TestLeaderYield(t *testing.T) {
 	
 	
 	takeOverMaxTimeout := time.Minute
-	viper.Set("peer.gossip.election.leaderAliveThreshold", time.Second*5)
 	
 	
-	viper.Set("peer.gossip.election.leaderElectionDuration", time.Millisecond*500)
 	
-	viper.Set("peer.deliveryclient.reconnectTotalTimeThreshold", time.Second*1)
-	
-	
-	viper.Set("peer.gossip.election.membershipSampleInterval", time.Millisecond*100)
-	
-	
-	viper.Set("peer.deliveryclient.connTimeout", time.Millisecond*100)
-	viper.Set("peer.gossip.useLeaderElection", true)
-	viper.Set("peer.gossip.orgLeader", false)
+	serviceConfig := &ServiceConfig{
+		UseLeaderElection:          true,
+		OrgLeader:                  false,
+		ElectionStartupGracePeriod: election.DefStartupGracePeriod,
+		
+		
+		ElectionMembershipSampleInterval: time.Millisecond * 100,
+		ElectionLeaderAliveThreshold:     time.Second * 5,
+		
+		
+		ElectionLeaderElectionDuration: time.Millisecond * 500,
+	}
 	n := 2
-	gossips := startPeers(t, n, 0, 1)
+	gossips := startPeers(t, serviceConfig, n, 0, 1)
 	defer stopPeers(gossips)
 	channelName := "channelA"
 	peerIndexes := []int{0, 1}
 	
 	addPeersToChannel(t, n, channelName, gossips, peerIndexes)
 	
-	waitForFullMembershipOrFailNow(t, gossips, n, time.Second*30, time.Millisecond*100)
+	waitForFullMembershipOrFailNow(t, channelName, gossips, n, time.Second*30, time.Millisecond*100)
 
 	endpoint, socket := getAvailablePort(t)
 	socket.Close()
 
 	
-	newGossipService := func(i int) *gossipServiceImpl {
-		gs := gossips[i].(*gossipGRPC).gossipServiceImpl
-		gs.deliveryFactory = &embeddingDeliveryServiceFactory{&deliveryFactoryImpl{}}
-		gossipServiceInstance = gs
+	newGossipService := func(i int) *GossipService {
+		gs := gossips[i].GossipService
+		gs.deliveryFactory = &embeddingDeliveryServiceFactory{&deliveryFactoryImpl{
+			credentialSupport: comm.NewCredentialSupport(),
+			deliverServiceConfig: &deliverservice.DeliverServiceConfig{
+				PeerTLSEnabled:              false,
+				ReConnectBackoffThreshold:   deliverservice.DefaultReConnectBackoffThreshold,
+				ReconnectTotalTimeThreshold: time.Second,
+				ConnectionTimeout:           time.Millisecond * 100,
+			},
+		}}
 		gs.InitializeChannel(channelName, []string{endpoint}, Support{
 			Committer: &mockLedgerInfo{1},
 			Store:     &transientStoreMock{},
@@ -143,8 +156,20 @@ func TestLeaderYield(t *testing.T) {
 		return gs
 	}
 
-	p0 := newGossipService(0)
-	p1 := newGossipService(1)
+	
+	
+	pkiID0 := gossips[0].peerIdentity
+	pkiID1 := gossips[1].peerIdentity
+	var firstLeaderIdx, secondLeaderIdx int
+	if bytes.Compare(pkiID0, pkiID1) < 0 {
+		firstLeaderIdx = 0
+		secondLeaderIdx = 1
+	} else {
+		firstLeaderIdx = 1
+		secondLeaderIdx = 0
+	}
+	p0 := newGossipService(firstLeaderIdx)
+	p1 := newGossipService(secondLeaderIdx)
 
 	
 	getLeader := func() int {

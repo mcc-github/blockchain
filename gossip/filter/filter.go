@@ -14,6 +14,10 @@ import (
 	"github.com/mcc-github/blockchain/gossip/util"
 )
 
+func init() { 
+	rand.Seed(int64(util.RandomUInt64()))
+}
+
 
 
 
@@ -44,7 +48,6 @@ func CombineRoutingFilters(filters ...RoutingFilter) RoutingFilter {
 
 func SelectPeers(k int, peerPool []discovery.NetworkMember, filter RoutingFilter) []*comm.RemotePeer {
 	var res []*comm.RemotePeer
-	rand.Seed(int64(util.RandomUInt64()))
 	
 	for _, index := range rand.Perm(len(peerPool)) {
 		
@@ -53,11 +56,10 @@ func SelectPeers(k int, peerPool []discovery.NetworkMember, filter RoutingFilter
 		}
 		peer := peerPool[index]
 		
-		if !filter(peer) {
-			continue
+		if filter(peer) {
+			p := &comm.RemotePeer{PKIID: peer.PKIid, Endpoint: peer.PreferredEndpoint()}
+			res = append(res, p)
 		}
-		p := &comm.RemotePeer{PKIID: peer.PKIid, Endpoint: peer.PreferredEndpoint()}
-		res = append(res, p)
 	}
 	return res
 }

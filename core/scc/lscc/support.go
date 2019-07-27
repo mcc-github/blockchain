@@ -9,7 +9,6 @@ package lscc
 import (
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
@@ -17,6 +16,7 @@ import (
 )
 
 type supportImpl struct {
+	GetMSPIDs MSPIDsGetter
 }
 
 
@@ -56,7 +56,7 @@ func (s *supportImpl) GetInstantiationPolicy(channel string, ccpack ccprovider.C
 	} else {
 		
 		
-		mspids := peer.GetMSPIDs(channel)
+		mspids := s.GetMSPIDs(channel)
 
 		p := cauthdsl.SignedByAnyAdmin(mspids)
 		ip, err = protoutil.Marshal(p)

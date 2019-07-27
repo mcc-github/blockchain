@@ -26,7 +26,7 @@ var logger = flogging.MustGetLogger("pvtdatastorage")
 
 type provider struct {
 	dbProvider *leveldbhelper.Provider
-	pvtData    *ledger.PrivateData
+	pvtData    *PrivateDataConfig
 }
 
 type store struct {
@@ -109,7 +109,7 @@ type entriesForPvtDataOfOldBlocks struct {
 
 
 
-func NewProvider(conf *ledger.PrivateData) Provider {
+func NewProvider(conf *PrivateDataConfig) Provider {
 	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: conf.StorePath})
 	return &provider{
 		dbProvider: dbProvider,
@@ -174,7 +174,7 @@ func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error {
 	if s.batchPending {
-		return &ErrIllegalCall{`A pending batch exists as as result of last invoke to "Prepare" call.
+		return &ErrIllegalCall{`A pending batch exists as result of last invoke to "Prepare" call.
 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`}
 	}
 	expectedBlockNum := s.nextBlockNum()

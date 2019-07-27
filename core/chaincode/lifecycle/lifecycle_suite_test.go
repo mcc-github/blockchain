@@ -19,9 +19,24 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/msp"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+
+
+
+type convertiblePolicy interface {
+	policies.Policy
+	policies.Converter
+}
+
+
+type inconvertiblePolicy interface {
+	policies.Policy
+}
 
 
 type aclProvider interface {
@@ -118,6 +133,16 @@ type legacyMetadataProvider interface {
 
 type metadataHandler interface {
 	lifecycle.MetadataHandler
+}
+
+
+type mspManager interface {
+	msp.MSPManager
+}
+
+
+type msp1 interface {
+	msp.MSP
 }
 
 func TestLifecycle(t *testing.T) {

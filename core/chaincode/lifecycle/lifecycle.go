@@ -94,6 +94,7 @@ var (
 
 
 
+
 type ChaincodeLocalPackage struct {
 	PackageID string
 }
@@ -189,6 +190,11 @@ type InstallListener interface {
 }
 
 
+type InstalledChaincodesLister interface {
+	ListInstalledChaincodes() []*chaincode.InstalledChaincode
+}
+
+
 
 
 type Resources struct {
@@ -238,14 +244,17 @@ func (r *Resources) ChaincodeDefinitionIfDefined(chaincodeName string, state Rea
 
 
 
+
 type ExternalFunctions struct {
-	Resources       *Resources
-	InstallListener InstallListener
+	Resources                 *Resources
+	InstallListener           InstallListener
+	InstalledChaincodesLister InstalledChaincodesLister
 }
 
 
 
-func (ef *ExternalFunctions) QueryApprovalStatus(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) ([]bool, error) {
+
+func (ef *ExternalFunctions) SimulateCommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error) {
 	currentSequence, err := ef.Resources.Serializer.DeserializeFieldAsInt64(NamespacesName, ccname, "Sequence", publicState)
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not get current sequence")
@@ -259,28 +268,24 @@ func (ef *ExternalFunctions) QueryApprovalStatus(chname, ccname string, cd *Chai
 		return nil, errors.WithMessagef(err, "could not set defaults for chaincode definition in channel %s", chname)
 	}
 
-	agreement := make([]bool, len(orgStates))
-	privateName := fmt.Sprintf("%s#%d", ccname, cd.Sequence)
-	for i, orgState := range orgStates {
-		match, err := ef.Resources.Serializer.IsSerialized(NamespacesName, privateName, cd.Parameters(), orgState)
-		if err != nil {
-			return nil, errors.WithMessagef(err, "serialization check failed for key %s", privateName)
-		}
-
-		agreement[i] = match
+	var approvals map[string]bool
+	if approvals, err = ef.QueryOrgApprovals(ccname, cd, orgStates); err != nil {
+		return nil, err
 	}
 
-	logger.Infof("successfully queried approval status for definition %s, name '%s' on channel '%s'", cd, ccname, chname)
+	logger.Infof("successfully simulated committing chaincode definition %s, name '%s' on channel '%s'", cd, ccname, chname)
 
-	return agreement, nil
+	return approvals, nil
 }
 
 
 
 
 
-func (ef *ExternalFunctions) CommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) ([]bool, error) {
-	agreement, err := ef.QueryApprovalStatus(chname, ccname, cd, publicState, orgStates)
+
+
+func (ef *ExternalFunctions) CommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error) {
+	approvals, err := ef.SimulateCommitChaincodeDefinition(chname, ccname, cd, publicState, orgStates)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +296,7 @@ func (ef *ExternalFunctions) CommitChaincodeDefinition(chname, ccname string, cd
 
 	logger.Infof("successfully committed definition %s, name '%s' on channel '%s'", cd, ccname, chname)
 
-	return agreement, nil
+	return approvals, nil
 }
 
 
@@ -446,6 +451,25 @@ func (ef *ExternalFunctions) QueryChaincodeDefinition(name string, publicState R
 
 
 
+
+func (ef *ExternalFunctions) QueryOrgApprovals(name string, cd *ChaincodeDefinition, orgStates []OpaqueState) (map[string]bool, error) {
+	approvals := map[string]bool{}
+	privateName := fmt.Sprintf("%s#%d", name, cd.Sequence)
+	for _, orgState := range orgStates {
+		match, err := ef.Resources.Serializer.IsSerialized(NamespacesName, privateName, cd.Parameters(), orgState)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "serialization check failed for key %s", privateName)
+		}
+
+		org := OrgFromImplicitCollectionName(orgState.CollectionName())
+		approvals[org] = match
+	}
+
+	return approvals, nil
+}
+
+
+
 func (ef *ExternalFunctions) InstallChaincode(chaincodeInstallPackage []byte) (*chaincode.InstalledChaincode, error) {
 	
 	pkg, err := ef.Resources.PackageParser.Parse(chaincodeInstallPackage)
@@ -520,6 +544,6 @@ func (ef *ExternalFunctions) QueryInstalledChaincode(packageID p.PackageID) (*ch
 }
 
 
-func (ef *ExternalFunctions) QueryInstalledChaincodes() ([]chaincode.InstalledChaincode, error) {
-	return ef.Resources.ChaincodeStore.ListInstalledChaincodes()
+func (ef *ExternalFunctions) QueryInstalledChaincodes() []*chaincode.InstalledChaincode {
+	return ef.InstalledChaincodesLister.ListInstalledChaincodes()
 }

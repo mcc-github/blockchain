@@ -9,35 +9,41 @@ package msgprocessor
 import (
 	"fmt"
 
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain/common/channelconfig"
+	"github.com/mcc-github/blockchain/protos/common"
 )
 
 
-type Support interface {
-	BatchSize() *ab.BatchSize
+type SizeFilterResources interface {
+	
+	OrdererConfig() (channelconfig.Orderer, bool)
 }
 
 
-func NewSizeFilter(support Support) *MaxBytesRule {
-	return &MaxBytesRule{support: support}
+func NewSizeFilter(resources SizeFilterResources) *MaxBytesRule {
+	return &MaxBytesRule{resources: resources}
 }
 
 
 type MaxBytesRule struct {
-	support Support
+	resources SizeFilterResources
 }
 
 
-func (r *MaxBytesRule) Apply(message *cb.Envelope) error {
-	maxBytes := r.support.BatchSize().AbsoluteMaxBytes
+func (r *MaxBytesRule) Apply(message *common.Envelope) error {
+	ordererConf, ok := r.resources.OrdererConfig()
+	if !ok {
+		logger.Panic("Programming error: orderer config not found")
+	}
+
+	maxBytes := ordererConf.BatchSize().AbsoluteMaxBytes
 	if size := messageByteSize(message); size > maxBytes {
 		return fmt.Errorf("message payload is %d bytes and exceeds maximum allowed %d bytes", size, maxBytes)
 	}
 	return nil
 }
 
-func messageByteSize(message *cb.Envelope) uint32 {
+func messageByteSize(message *common.Envelope) uint32 {
 	
 	
 	return uint32(len(message.Payload) + len(message.Signature))

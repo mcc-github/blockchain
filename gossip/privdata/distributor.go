@@ -40,14 +40,14 @@ type gossipAdapter interface {
 
 	
 	
-	PeerFilter(channel gossipCommon.ChainID, messagePredicate api.SubChannelSelectionCriteria) (filter.RoutingFilter, error)
+	PeerFilter(channel gossipCommon.ChannelID, messagePredicate api.SubChannelSelectionCriteria) (filter.RoutingFilter, error)
 
 	
 	IdentityInfo() api.PeerIdentitySet
 
 	
 	
-	PeersOfChannel(gossipCommon.ChainID) []discovery.NetworkMember
+	PeersOfChannel(gossipCommon.ChannelID) []discovery.NetworkMember
 }
 
 
@@ -62,6 +62,14 @@ type IdentityDeserializerFactory interface {
 	
 	
 	GetIdentityDeserializer(chainID string) msp.IdentityDeserializer
+}
+
+
+
+type IdentityDeserializerFactoryFunc func(chainID string) msp.IdentityDeserializer
+
+func (i IdentityDeserializerFactoryFunc) GetIdentityDeserializer(chainID string) msp.IdentityDeserializer {
+	return i(chainID)
 }
 
 
@@ -194,7 +202,7 @@ func (d *distributorImpl) getCollectionConfig(config *common.CollectionConfigPac
 func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAccessPolicy, colFilter privdata.Filter, pvtDataMsg *protoext.SignedGossipMessage) ([]*dissemination, error) {
 	var disseminationPlan []*dissemination
 
-	routingFilter, err := d.gossipAdapter.PeerFilter(gossipCommon.ChainID(d.chainID), func(signature api.PeerSignature) bool {
+	routingFilter, err := d.gossipAdapter.PeerFilter(gossipCommon.ChannelID(d.chainID), func(signature api.PeerSignature) bool {
 		return colFilter(protoutil.SignedData{
 			Data:      signature.Message,
 			Signature: signature.Signature,
@@ -223,7 +231,7 @@ func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAcces
 			peer2SendPerOrg := selectionPeers[rand.Intn(len(selectionPeers))]
 			sc := gossipgossip.SendCriteria{
 				Timeout:  d.pushAckTimeout,
-				Channel:  gossipCommon.ChainID(d.chainID),
+				Channel:  gossipCommon.ChannelID(d.chainID),
 				MaxPeers: 1,
 				MinAck:   required,
 				IsEligible: func(member discovery.NetworkMember) bool {
@@ -253,7 +261,7 @@ func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAcces
 	
 	sc := gossipgossip.SendCriteria{
 		Timeout:  d.pushAckTimeout,
-		Channel:  gossipCommon.ChainID(d.chainID),
+		Channel:  gossipCommon.ChannelID(d.chainID),
 		MaxPeers: maximumPeerCount,
 		MinAck:   requiredPeerCount,
 		IsEligible: func(member discovery.NetworkMember) bool {
@@ -292,7 +300,7 @@ func (d *distributorImpl) identitiesOfEligiblePeers(eligiblePeers []discovery.Ne
 
 func (d *distributorImpl) eligiblePeersOfChannel(routingFilter filter.RoutingFilter) []discovery.NetworkMember {
 	var eligiblePeers []discovery.NetworkMember
-	for _, peer := range d.gossipAdapter.PeersOfChannel(gossipCommon.ChainID(d.chainID)) {
+	for _, peer := range d.gossipAdapter.PeersOfChannel(gossipCommon.ChannelID(d.chainID)) {
 		if routingFilter(peer) {
 			eligiblePeers = append(eligiblePeers, peer)
 		}

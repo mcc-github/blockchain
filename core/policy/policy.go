@@ -62,7 +62,7 @@ func (p *policyChecker) CheckPolicy(channelID, policyName string, signedProp *pb
 	}
 
 	
-	policyManager, _ := p.channelPolicyManagerGetter.Manager(channelID)
+	policyManager := p.channelPolicyManagerGetter.Manager(channelID)
 	if policyManager == nil {
 		return fmt.Errorf("Failed to get policy manager for channel [%s]", channelID)
 	}
@@ -156,7 +156,7 @@ func (p *policyChecker) CheckPolicyBySignedData(channelID, policyName string, sd
 	}
 
 	
-	policyManager, _ := p.channelPolicyManagerGetter.Manager(channelID)
+	policyManager := p.channelPolicyManagerGetter.Manager(channelID)
 	if policyManager == nil {
 		return fmt.Errorf("Failed to get policy manager for channel [%s]", channelID)
 	}
@@ -171,28 +171,4 @@ func (p *policyChecker) CheckPolicyBySignedData(channelID, policyName string, sd
 	}
 
 	return nil
-}
-
-var pcFactory PolicyCheckerFactory
-
-
-
-type PolicyCheckerFactory interface {
-	NewPolicyChecker() PolicyChecker
-}
-
-
-
-func RegisterPolicyCheckerFactory(f PolicyCheckerFactory) {
-	pcFactory = f
-}
-
-
-
-
-func GetPolicyChecker() PolicyChecker {
-	if pcFactory == nil {
-		panic("The factory must be set first via RegisterPolicyCheckerFactory")
-	}
-	return pcFactory.NewPolicyChecker()
 }

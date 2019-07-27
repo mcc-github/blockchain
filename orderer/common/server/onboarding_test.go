@@ -22,7 +22,7 @@ import (
 	deliver_mocks "github.com/mcc-github/blockchain/common/deliver/mock"
 	"github.com/mcc-github/blockchain/common/flogging"
 	ledger_mocks "github.com/mcc-github/blockchain/common/ledger/blockledger/mocks"
-	ramledger "github.com/mcc-github/blockchain/common/ledger/blockledger/ram"
+	"github.com/mcc-github/blockchain/common/ledger/blockledger/ramledger"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
@@ -43,7 +43,7 @@ import (
 
 func newServerNode(t *testing.T, key, cert []byte) *deliverServer {
 	srv, err := comm.NewGRPCServer("127.0.0.1:0", comm.ServerConfig{
-		SecOpts: &comm.SecureOptions{
+		SecOpts: comm.SecureOptions{
 			Key:         key,
 			Certificate: cert,
 			UseTLS:      true,
@@ -84,6 +84,9 @@ func (ds *deliverServer) Deliver(stream orderer.AtomicBroadcast_DeliverServer) e
 	}
 	if seekInfo.GetStart().GetNewest() != nil {
 		resp := <-ds.blockResponses
+		if resp == nil {
+			return nil
+		}
 		return stream.Send(resp)
 	}
 	panic(fmt.Sprintf("expected either specified or newest seek but got %v", seekInfo.GetStart()))
@@ -248,7 +251,7 @@ func TestOnboardingChannelUnavailable(t *testing.T) {
 		},
 	}
 
-	secConfig := &comm.SecureOptions{
+	secConfig := comm.SecureOptions{
 		Certificate:   cert,
 		Key:           key,
 		UseTLS:        true,
@@ -419,6 +422,14 @@ func TestOnboardingChannelUnavailable(t *testing.T) {
 func TestReplicate(t *testing.T) {
 	t.Parallel()
 
+	clusterConfig := localconfig.Cluster{
+		ReplicationPullTimeout:  time.Hour,
+		DialTimeout:             time.Hour,
+		RPCTimeout:              time.Hour,
+		ReplicationRetryTimeout: time.Hour,
+		ReplicationBufferSize:   1,
+	}
+
 	var bootBlock common.Block
 	var bootBlockWithCorruptedPayload common.Block
 
@@ -488,7 +499,7 @@ func TestReplicate(t *testing.T) {
 		panicValue         string
 		systemLedgerHeight uint64
 		bootBlock          *common.Block
-		secOpts            *comm.SecureOptions
+		secOpts            comm.SecureOptions
 		conf               *localconfig.TopLevel
 		ledgerFactoryErr   error
 		signer             identity.SignerSerializer
@@ -518,7 +529,7 @@ func TestReplicate(t *testing.T) {
 			panicValue:         "Failed creating puller config from bootstrap block: unable to decode TLS certificate PEM: ",
 			bootBlock:          &bootBlockWithCorruptedPayload,
 			conf:               &localconfig.TopLevel{},
-			secOpts:            &comm.SecureOptions{},
+			secOpts:            comm.SecureOptions{},
 			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
 				ri.replicateIfNeeded(bootstrapBlock)
 			},
@@ -529,7 +540,7 @@ func TestReplicate(t *testing.T) {
 			panicValue:         "Failed extracting system channel name from bootstrap block: failed to retrieve channel id - block is empty",
 			bootBlock:          &common.Block{Header: &common.BlockHeader{Number: 100}},
 			conf:               &localconfig.TopLevel{},
-			secOpts:            &comm.SecureOptions{},
+			secOpts:            comm.SecureOptions{},
 			replicateFunc: func(ri *replicationInitiator, bootstrapBlock *common.Block) {
 				ri.replicateIfNeeded(bootstrapBlock)
 			},
@@ -541,7 +552,7 @@ func TestReplicate(t *testing.T) {
 			panicValue:         "Failed determining whether replication is needed: I/O error",
 			bootBlock:          &bootBlock,
 			conf:               &localconfig.TopLevel{},
-			secOpts: &comm.SecureOptions{
+			secOpts: comm.SecureOptions{
 				Certificate: cert,
 				Key:         key,
 			},
@@ -554,7 +565,7 @@ func TestReplicate(t *testing.T) {
 			systemLedgerHeight: 11,
 			bootBlock:          &bootBlock,
 			conf:               &localconfig.TopLevel{},
-			secOpts: &comm.SecureOptions{
+			secOpts: comm.SecureOptions{
 				Certificate: cert,
 				Key:         key,
 			},
@@ -579,16 +590,10 @@ func TestReplicate(t *testing.T) {
 			conf: &localconfig.TopLevel{
 				General: localconfig.General{
 					SystemChannel: "system",
-					Cluster: localconfig.Cluster{
-						ReplicationPullTimeout:  time.Millisecond * 100,
-						DialTimeout:             time.Millisecond * 100,
-						RPCTimeout:              time.Millisecond * 100,
-						ReplicationRetryTimeout: time.Millisecond * 100,
-						ReplicationBufferSize:   1,
-					},
+					Cluster:       clusterConfig,
 				},
 			},
-			secOpts: &comm.SecureOptions{
+			secOpts: comm.SecureOptions{
 				Certificate:   cert,
 				Key:           key,
 				UseTLS:        true,
@@ -607,16 +612,10 @@ func TestReplicate(t *testing.T) {
 			conf: &localconfig.TopLevel{
 				General: localconfig.General{
 					SystemChannel: "system",
-					Cluster: localconfig.Cluster{
-						ReplicationPullTimeout:  time.Millisecond * 100,
-						DialTimeout:             time.Millisecond * 100,
-						RPCTimeout:              time.Millisecond * 100,
-						ReplicationRetryTimeout: time.Millisecond * 100,
-						ReplicationBufferSize:   1,
-					},
+					Cluster:       clusterConfig,
 				},
 			},
-			secOpts: &comm.SecureOptions{
+			secOpts: comm.SecureOptions{
 				Certificate:   cert,
 				Key:           key,
 				UseTLS:        true,
@@ -650,16 +649,10 @@ func TestReplicate(t *testing.T) {
 			conf: &localconfig.TopLevel{
 				General: localconfig.General{
 					SystemChannel: "system",
-					Cluster: localconfig.Cluster{
-						ReplicationPullTimeout:  time.Millisecond * 100,
-						DialTimeout:             time.Millisecond * 100,
-						RPCTimeout:              time.Millisecond * 100,
-						ReplicationRetryTimeout: time.Millisecond * 100,
-						ReplicationBufferSize:   1,
-					},
+					Cluster:       clusterConfig,
 				},
 			},
-			secOpts: &comm.SecureOptions{
+			secOpts: comm.SecureOptions{
 				Certificate:   cert,
 				Key:           key,
 				UseTLS:        true,

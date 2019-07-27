@@ -18,32 +18,12 @@ import (
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
 	"github.com/mcc-github/blockchain/gossip/api"
-	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 )
 
 var logger = flogging.MustGetLogger("deliveryClient")
-
-const (
-	defaultReConnectTotalTimeThreshold = time.Second * 60 * 60
-	defaultConnectionTimeout           = time.Second * 3
-	defaultReConnectBackoffThreshold   = float64(time.Hour)
-)
-
-func getReConnectTotalTimeThreshold() time.Duration {
-	return util.GetDurationOrDefault("peer.deliveryclient.reconnectTotalTimeThreshold", defaultReConnectTotalTimeThreshold)
-}
-
-func getConnectionTimeout() time.Duration {
-	return util.GetDurationOrDefault("peer.deliveryclient.connTimeout", defaultConnectionTimeout)
-}
-
-func getReConnectBackoffThreshold() float64 {
-	return util.GetFloat64OrDefault("peer.deliveryclient.reConnectBackoffThreshold", defaultReConnectBackoffThreshold)
-}
 
 
 
@@ -80,7 +60,7 @@ type deliverServiceImpl struct {
 
 type Config struct {
 	
-	ConnFactory func(channelID string) func(endpoint string) (*grpc.ClientConn, error)
+	ConnFactory func(channelID string) func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error)
 	
 	ABCFactory func(*grpc.ClientConn) orderer.AtomicBroadcastClient
 	
@@ -93,6 +73,13 @@ type Config struct {
 	Endpoints []string
 	
 	Signer identity.SignerSerializer
+	
+	CredentialSupport *comm.CredentialSupport
+	
+	DeliverClientDialOpts []grpc.DialOption
+	
+	
+	DeliverServiceConfig *DeliverServiceConfig
 }
 
 
@@ -182,6 +169,9 @@ func (d *deliverServiceImpl) validateConfiguration() error {
 	if conf.CryptoSvc == nil {
 		return errors.New("no crypto service specified")
 	}
+	if conf.CredentialSupport == nil {
+		return errors.New("no credential support specified")
+	}
 	return nil
 }
 
@@ -201,12 +191,11 @@ func (d *deliverServiceImpl) StartDeliverForChannel(chainID string, ledgerInfo b
 		errMsg := fmt.Sprintf("Delivery service - block provider already exists for %s found, can't start delivery", chainID)
 		logger.Errorf(errMsg)
 		return errors.New(errMsg)
-	} else {
-		client := d.newClient(chainID, ledgerInfo)
-		logger.Debug("This peer will pass blocks from orderer service to other peers for channel", chainID)
-		d.blockProviders[chainID] = blocksprovider.NewBlocksProvider(chainID, client, d.conf.Gossip, d.conf.CryptoSvc)
-		go d.launchBlockProvider(chainID, finalizer)
 	}
+	client := d.newClient(chainID, ledgerInfo)
+	logger.Debug("This peer will pass blocks from orderer service to other peers for channel", chainID)
+	d.blockProviders[chainID] = blocksprovider.NewBlocksProvider(chainID, client, d.conf.Gossip, d.conf.CryptoSvc)
+	go d.launchBlockProvider(chainID, finalizer)
 	return nil
 }
 
@@ -231,15 +220,15 @@ func (d *deliverServiceImpl) StopDeliverForChannel(chainID string) error {
 		logger.Errorf(errMsg)
 		return errors.New(errMsg)
 	}
-	if client, exist := d.blockProviders[chainID]; exist {
-		client.Stop()
-		delete(d.blockProviders, chainID)
-		logger.Debug("This peer will stop pass blocks from orderer service to other peers")
-	} else {
+	client, exist := d.blockProviders[chainID]
+	if !exist {
 		errMsg := fmt.Sprintf("Delivery service - no block provider for %s found, can't stop delivery", chainID)
 		logger.Errorf(errMsg)
 		return errors.New(errMsg)
 	}
+	client.Stop()
+	delete(d.blockProviders, chainID)
+	logger.Debug("This peer will stop pass blocks from orderer service to other peers")
 	return nil
 }
 
@@ -256,12 +245,14 @@ func (d *deliverServiceImpl) Stop() {
 }
 
 func (d *deliverServiceImpl) newClient(chainID string, ledgerInfoProvider blocksprovider.LedgerInfo) *broadcastClient {
-	reconnectBackoffThreshold := getReConnectBackoffThreshold()
-	reconnectTotalTimeThreshold := getReConnectTotalTimeThreshold()
+	reconnectBackoffThreshold := d.conf.DeliverServiceConfig.ReConnectBackoffThreshold
+	reconnectTotalTimeThreshold := d.conf.DeliverServiceConfig.ReconnectTotalTimeThreshold
+
 	requester := &blocksRequester{
-		tls:     viper.GetBool("peer.tls.enabled"),
-		chainID: chainID,
-		signer:  d.conf.Signer,
+		tls:         d.conf.DeliverServiceConfig.PeerTLSEnabled,
+		chainID:     chainID,
+		signer:      d.conf.Signer,
+		credSupport: d.conf.CredentialSupport,
 	}
 	broadcastSetup := func(bd blocksprovider.BlocksDeliverer) error {
 		return requester.RequestBlocks(ledgerInfoProvider)
@@ -274,32 +265,35 @@ func (d *deliverServiceImpl) newClient(chainID string, ledgerInfoProvider blocks
 		attempt := float64(attemptNum)
 		return time.Duration(math.Min(math.Pow(2, attempt)*sleepIncrement, reconnectBackoffThreshold)), true
 	}
-	connProd := comm.NewConnectionProducer(d.conf.ConnFactory(chainID), d.conf.Endpoints)
+	connectionFactory := d.conf.ConnFactory(chainID)
+	connProd := comm.NewConnectionProducer(
+		connectionFactory,
+		d.conf.Endpoints,
+		d.conf.DeliverClientDialOpts,
+		d.conf.DeliverServiceConfig.PeerTLSEnabled,
+		d.conf.DeliverServiceConfig.ConnectionTimeout,
+	)
 	bClient := NewBroadcastClient(connProd, d.conf.ABCFactory, broadcastSetup, backoffPolicy)
 	requester.client = bClient
 	return bClient
 }
 
-func DefaultConnectionFactory(channelID string) func(endpoint string) (*grpc.ClientConn, error) {
-	return func(endpoint string) (*grpc.ClientConn, error) {
-		dialOpts := []grpc.DialOption{grpc.WithBlock()}
-		
-		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(comm.MaxRecvMsgSize),
-			grpc.MaxCallSendMsgSize(comm.MaxSendMsgSize)))
-		
-		kaOpts := comm.DefaultKeepaliveOptions
-		if viper.IsSet("peer.keepalive.deliveryClient.interval") {
-			kaOpts.ClientInterval = viper.GetDuration(
-				"peer.keepalive.deliveryClient.interval")
-		}
-		if viper.IsSet("peer.keepalive.deliveryClient.timeout") {
-			kaOpts.ClientTimeout = viper.GetDuration(
-				"peer.keepalive.deliveryClient.timeout")
-		}
-		dialOpts = append(dialOpts, comm.ClientKeepaliveOptions(kaOpts)...)
+type CredSupportDialerFactory struct {
+	CredentialSupport *comm.CredentialSupport
+	KeepaliveOptions  comm.KeepaliveOptions
+	TLSEnabled        bool
+}
 
-		if viper.GetBool("peer.tls.enabled") {
-			creds, err := comm.GetCredentialSupport().GetDeliverServiceCredentials(channelID)
+func (c *CredSupportDialerFactory) Dialer(channelID string) func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
+	return func(endpoint string, connectionTimeout time.Duration) (*grpc.ClientConn, error) {
+		dialOpts := []grpc.DialOption{
+			grpc.WithBlock(),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(comm.MaxRecvMsgSize), grpc.MaxCallSendMsgSize(comm.MaxSendMsgSize)),
+		}
+		dialOpts = append(dialOpts, comm.ClientKeepaliveOptions(c.KeepaliveOptions)...)
+
+		if c.TLSEnabled {
+			creds, err := c.CredentialSupport.GetDeliverServiceCredentials(channelID)
 			if err != nil {
 				return nil, fmt.Errorf("failed obtaining credentials for channel %s: %v", channelID, err)
 			}
@@ -307,7 +301,7 @@ func DefaultConnectionFactory(channelID string) func(endpoint string) (*grpc.Cli
 		} else {
 			dialOpts = append(dialOpts, grpc.WithInsecure())
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), getConnectionTimeout())
+		ctx, cancel := context.WithTimeout(context.Background(), connectionTimeout)
 		defer cancel()
 		return grpc.DialContext(ctx, endpoint, dialOpts...)
 	}

@@ -6,17 +6,28 @@ SPDX-License-Identifier: Apache-2.0
 
 package graph
 
+import (
+	"math/rand"
+	"time"
+)
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 
 
 type treePermutations struct {
+	combinationUpperBound  int                             
 	originalRoot           *TreeVertex                     
 	permutations           []*TreeVertex                   
 	descendantPermutations map[*TreeVertex][][]*TreeVertex 
 }
 
 
-func newTreePermutation(root *TreeVertex) *treePermutations {
+func newTreePermutation(root *TreeVertex, combinationUpperBound int) *treePermutations {
 	return &treePermutations{
+		combinationUpperBound:  combinationUpperBound,
 		descendantPermutations: make(map[*TreeVertex][][]*TreeVertex),
 		originalRoot:           root,
 		permutations:           []*TreeVertex{root},
@@ -94,6 +105,13 @@ func (tp *treePermutations) computeDescendantPermutations() {
 		
 		if len(v.Descendants) == 0 {
 			continue
+		}
+
+		
+		for CombinationsExceed(len(v.Descendants), v.Threshold, tp.combinationUpperBound) {
+			
+			victim := rand.Intn(len(v.Descendants))
+			v.Descendants = append(v.Descendants[:victim], v.Descendants[victim+1:]...)
 		}
 
 		

@@ -8,123 +8,138 @@ package csp
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/pem"
+	"io"
 	"io/ioutil"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/mcc-github/blockchain/bccsp"
-	"github.com/mcc-github/blockchain/bccsp/factory"
-	"github.com/mcc-github/blockchain/bccsp/signer"
 	"github.com/pkg/errors"
 )
 
 
-func LoadPrivateKey(keystorePath string) (bccsp.Key, crypto.Signer, error) {
-	var err error
-	var priv bccsp.Key
-	var s crypto.Signer
 
-	opts := &factory.FactoryOpts{
-		ProviderName: "SW",
-		SwOpts: &factory.SwOpts{
-			HashFamily: "SHA2",
-			SecLevel:   256,
+func LoadPrivateKey(keystorePath string) (*ecdsa.PrivateKey, error) {
+	var priv *ecdsa.PrivateKey
 
-			FileKeystore: &factory.FileKeystoreOpts{
-				KeyStorePath: keystorePath,
-			},
-		},
-	}
+	walkFunc := func(path string, info os.FileInfo, pathErr error) error {
 
-	csp, err := factory.GetBCCSPFromOpts(opts)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	walkFunc := func(path string, info os.FileInfo, err error) error {
-		if strings.HasSuffix(path, "_sk") {
-			rawKey, err := ioutil.ReadFile(path)
-			if err != nil {
-				return err
-			}
-
-			block, _ := pem.Decode(rawKey)
-			if block == nil {
-				return errors.Errorf("%s: wrong PEM encoding", path)
-			}
-			priv, err = csp.KeyImport(block.Bytes, &bccsp.ECDSAPrivateKeyImportOpts{Temporary: true})
-			if err != nil {
-				return err
-			}
-
-			s, err = signer.New(csp, priv)
-			if err != nil {
-				return err
-			}
-
+		if !strings.HasSuffix(path, "_sk") {
 			return nil
 		}
+
+		rawKey, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		priv, err = parsePrivateKeyPEM(rawKey)
+		if err != nil {
+			return errors.WithMessage(err, path)
+		}
+
 		return nil
 	}
 
-	err = filepath.Walk(keystorePath, walkFunc)
+	err := filepath.Walk(keystorePath, walkFunc)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return priv, s, err
+	return priv, err
+}
+
+func parsePrivateKeyPEM(rawKey []byte) (*ecdsa.PrivateKey, error) {
+	block, _ := pem.Decode(rawKey)
+	if block == nil {
+		return nil, errors.New("bytes are not PEM encoded")
+	}
+
+	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, errors.WithMessage(err, "pem bytes are not PKCS8 encoded ")
+	}
+
+	priv, ok := key.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("pem bytes do not contain an EC private key")
+	}
+	return priv, nil
 }
 
 
-func GeneratePrivateKey(keystorePath string) (bccsp.Key,
-	crypto.Signer, error) {
 
-	var err error
-	var priv bccsp.Key
-	var s crypto.Signer
+func GeneratePrivateKey(keystorePath string) (*ecdsa.PrivateKey, error) {
 
-	opts := &factory.FactoryOpts{
-		ProviderName: "SW",
-		SwOpts: &factory.SwOpts{
-			HashFamily: "SHA2",
-			SecLevel:   256,
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to generate private key")
+	}
 
-			FileKeystore: &factory.FileKeystoreOpts{
-				KeyStorePath: keystorePath,
-			},
+	pkcs8Encoded, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to marshal private key")
+	}
+
+	pemEncoded := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8Encoded})
+
+	keyFile := filepath.Join(keystorePath, "priv_sk")
+	err = ioutil.WriteFile(keyFile, pemEncoded, 0600)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to save private key to file %s", keyFile)
+	}
+
+	return priv, err
+}
+
+
+type ECDSASigner struct {
+	PrivateKey *ecdsa.PrivateKey
+}
+
+
+func (e *ECDSASigner) Public() crypto.PublicKey {
+	return &e.PrivateKey.PublicKey
+}
+
+
+func (e *ECDSASigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	r, s, err := ecdsa.Sign(rand, e.PrivateKey, digest)
+	if err != nil {
+		return nil, err
+	}
+
+	
+	sig := toLowS(
+		e.PrivateKey.PublicKey,
+		ECDSASignature{
+			R: r,
+			S: s,
 		},
-	}
-	csp, err := factory.GetBCCSPFromOpts(opts)
-	if err == nil {
-		
-		priv, err = csp.KeyGen(&bccsp.ECDSAP256KeyGenOpts{Temporary: false})
-		if err == nil {
-			
-			s, err = signer.New(csp, priv)
-		}
-	}
-	return priv, s, err
+	)
+
+	
+	return asn1.Marshal(sig)
 }
 
-func GetECPublicKey(priv bccsp.Key) (*ecdsa.PublicKey, error) {
 
+func toLowS(key ecdsa.PublicKey, sig ECDSASignature) ECDSASignature {
 	
-	pubKey, err := priv.PublicKey()
-	if err != nil {
-		return nil, err
-	}
+	halfOrder := new(big.Int).Div(key.Curve.Params().N, big.NewInt(2))
 	
-	pubKeyBytes, err := pubKey.Bytes()
-	if err != nil {
-		return nil, err
+	if sig.S.Cmp(halfOrder) == 1 {
+		
+		sig.S.Sub(key.Params().N, sig.S)
 	}
-	
-	ecPubKey, err := x509.ParsePKIXPublicKey(pubKeyBytes)
-	if err != nil {
-		return nil, err
-	}
-	return ecPubKey.(*ecdsa.PublicKey), nil
+	return sig
+}
+
+type ECDSASignature struct {
+	R, S *big.Int
 }

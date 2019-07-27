@@ -152,6 +152,11 @@ func (*CCInfoFSImpl) GetChaincodeFromPath(ccname string, ccversion string, path 
 }
 
 
+func (*CCInfoFSImpl) GetChaincodeInstallPath() string {
+	return chaincodeInstallPath
+}
+
+
 
 func (*CCInfoFSImpl) PutChaincode(depSpec *pb.ChaincodeDeploymentSpec) (CCPackage, error) {
 	buf, err := proto.Marshal(depSpec)
@@ -386,6 +391,9 @@ type CCContext struct {
 	
 	
 	InitRequired bool
+
+	
+	SystemCC bool
 }
 
 
@@ -527,25 +535,17 @@ type TransactionParams struct {
 	ProposalDecorations map[string][]byte
 }
 
-
-
-
-
-type ChaincodeProvider interface {
-	
-	
-	ExecuteLegacyInit(txParams *TransactionParams, cccid *CCContext, spec *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error)
-	
-	Stop(ccci *ChaincodeContainerInfo) error
-}
-
-func DeploymentSpecToChaincodeContainerInfo(cds *pb.ChaincodeDeploymentSpec) *ChaincodeContainerInfo {
-	return &ChaincodeContainerInfo{
+func DeploymentSpecToChaincodeContainerInfo(cds *pb.ChaincodeDeploymentSpec, systemCC bool) *ChaincodeContainerInfo {
+	cci := &ChaincodeContainerInfo{
 		Name:          cds.ChaincodeSpec.ChaincodeId.Name,
 		Version:       cds.ChaincodeSpec.ChaincodeId.Version,
 		Path:          cds.ChaincodeSpec.ChaincodeId.Path,
 		Type:          cds.ChaincodeSpec.Type.String(),
-		ContainerType: cds.ExecEnv.String(),
+		ContainerType: "DOCKER",
 		PackageID:     persistence.PackageID(cds.ChaincodeSpec.ChaincodeId.Name + ":" + cds.ChaincodeSpec.ChaincodeId.Version),
 	}
+	if systemCC {
+		cci.ContainerType = "SYSTEM"
+	}
+	return cci
 }

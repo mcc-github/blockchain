@@ -4,54 +4,58 @@ Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package scc
+package scc_test
 
 import (
 	"os"
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/container/inproccontroller"
-	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
-	ccprovider2 "github.com/mcc-github/blockchain/core/mocks/ccprovider"
+	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/peer"
+	"github.com/mcc-github/blockchain/core/scc"
+	"github.com/mcc-github/blockchain/core/scc/mock"
+	"github.com/onsi/gomega"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
+
+
+type chaincodeStreamHandler interface {
+	scc.ChaincodeStreamHandler
+}
 
 func init() {
 	viper.Set("peer.fileSystemPath", os.TempDir())
 }
 
-func newTestProvider() *Provider {
-	p := &Provider{
-		Peer:        peer.Default,
-		PeerSupport: peer.DefaultSupport,
-		Registrar:   inproccontroller.NewRegistry(),
+func newTestProvider() *scc.Provider {
+	p := &scc.Provider{
+		Peer: &peer.Peer{},
 		Whitelist: map[string]bool{
 			"invokableExternalButNotCC2CC": true,
 			"invokableCC2CCButNotExternal": true,
 			"disabled":                     true,
 		},
 	}
-	for _, cc := range []SelfDescribingSysCC{
-		&SysCCWrapper{
-			SCC: &SystemChaincode{
+	for _, cc := range []scc.SelfDescribingSysCC{
+		&scc.SysCCWrapper{
+			SCC: &scc.SystemChaincode{
 				Name:              "invokableExternalButNotCC2CC",
 				InvokableExternal: true,
 				InvokableCC2CC:    false,
 				Enabled:           true,
 			},
 		},
-		&SysCCWrapper{
-			SCC: &SystemChaincode{
+		&scc.SysCCWrapper{
+			SCC: &scc.SystemChaincode{
 				Name:              "invokableCC2CCButNotExternal",
 				InvokableExternal: false,
 				InvokableCC2CC:    true,
 				Enabled:           true,
 			},
 		},
-		&SysCCWrapper{
-			SCC: &SystemChaincode{
+		&scc.SysCCWrapper{
+			SCC: &scc.SystemChaincode{
 				Name:    "disabled",
 				Enabled: false,
 			},
@@ -63,34 +67,18 @@ func newTestProvider() *Provider {
 }
 
 func TestDeploy(t *testing.T) {
-	p := newTestProvider()
-	ccp := &ccprovider2.MockCcProviderImpl{}
-	p.DeploySysCCs("", ccp)
-	f := func() {
-		p.DeploySysCCs("a", ccp)
-	}
-	assert.Panics(t, f)
+	gt := gomega.NewGomegaWithT(t)
 
-	cleanup := ledgermgmt.InitializeTestEnv(t)
-	defer cleanup()
-	err := peer.MockCreateChain("a")
-	if err != nil {
-		t.Fatalf("failed to create mock chain: %v", err)
-	}
-	p.deploySysCC("a", ccp, &SysCCWrapper{SCC: &SystemChaincode{
-		Enabled: true,
-		Name:    "invokableCC2CCButNotExternal",
-	}})
-}
-
-func TestDeDeploySysCC(t *testing.T) {
 	p := newTestProvider()
-	ccp := &ccprovider2.MockCcProviderImpl{}
-	p.DeDeploySysCCs("", ccp)
-	f := func() {
-		p.DeDeploySysCCs("a", ccp)
-	}
-	assert.NotPanics(t, f)
+	csh := &mock.ChaincodeStreamHandler{}
+	doneC := make(chan struct{})
+	close(doneC)
+	csh.LaunchInProcReturns(doneC)
+	p.DeploySysCCs(csh)
+	gt.Expect(csh.LaunchInProcCallCount()).To(gomega.Equal(2))
+	gt.Expect(csh.LaunchInProcArgsForCall(0)).To(gomega.Equal(ccintf.CCID("invokableExternalButNotCC2CC:latest")))
+	gt.Expect(csh.LaunchInProcArgsForCall(1)).To(gomega.Equal(ccintf.CCID("invokableCC2CCButNotExternal:latest")))
+	gt.Eventually(csh.HandleChaincodeStreamCallCount).Should(gomega.Equal(2))
 }
 
 func TestIsSysCC(t *testing.T) {
@@ -111,10 +99,8 @@ func TestIsSysCCAndNotInvokableExternal(t *testing.T) {
 }
 
 func TestSccProviderImpl_GetQueryExecutorForLedger(t *testing.T) {
-	p := &Provider{
-		Peer:        peer.Default,
-		PeerSupport: peer.DefaultSupport,
-		Registrar:   inproccontroller.NewRegistry(),
+	p := &scc.Provider{
+		Peer: &peer.Peer{},
 	}
 	qe, err := p.GetQueryExecutorForLedger("")
 	assert.Nil(t, qe)
@@ -122,19 +108,18 @@ func TestSccProviderImpl_GetQueryExecutorForLedger(t *testing.T) {
 }
 
 func TestCreatePluginSysCCs(t *testing.T) {
-	assert.NotPanics(t, func() { CreatePluginSysCCs(nil) }, "expected successful init")
+	assert.NotPanics(t, func() { scc.CreatePluginSysCCs(nil) }, "expected successful init")
 }
 
 func TestRegisterSysCC(t *testing.T) {
-	p := &Provider{
-		Registrar: inproccontroller.NewRegistry(),
+	p := &scc.Provider{
 		Whitelist: map[string]bool{
 			"invokableExternalButNotCC2CC": true,
 			"invokableCC2CCButNotExternal": true,
 		},
 	}
-	_, err := p.registerSysCC(&SysCCWrapper{
-		SCC: &SystemChaincode{
+	err := p.RegisterSysCC(&scc.SysCCWrapper{
+		SCC: &scc.SystemChaincode{
 			Name:      "invokableExternalButNotCC2CC",
 			Path:      "path",
 			Enabled:   true,
@@ -142,14 +127,13 @@ func TestRegisterSysCC(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	_, err = p.registerSysCC(&SysCCWrapper{
-		SCC: &SystemChaincode{
+	err = p.RegisterSysCC(&scc.SysCCWrapper{
+		SCC: &scc.SystemChaincode{
 			Name:      "invokableExternalButNotCC2CC",
 			Path:      "path",
 			Enabled:   true,
 			Chaincode: nil,
 		},
 	})
-	assert.Error(t, err)
-	assert.Contains(t, "invokableExternalButNotCC2CC:latest already registered", err)
+	assert.EqualError(t, err, "chaincode with name 'invokableExternalButNotCC2CC' already registered")
 }

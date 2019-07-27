@@ -77,14 +77,13 @@ var cases = []testCase{
 	},
 }
 
+func mspId(principal *msp.MSPPrincipal) string {
+	role := &msp.MSPRole{}
+	proto.Unmarshal(principal.Principal, role)
+	return role.MspIdentifier
+}
+
 func TestSatisfiedBy(t *testing.T) {
-
-	mspId := func(principal *msp.MSPPrincipal) string {
-		role := &msp.MSPRole{}
-		proto.Unmarshal(principal.Principal, role)
-		return role.MspIdentifier
-	}
-
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			p, err := cauthdsl.FromString(test.policy)
@@ -105,4 +104,32 @@ func TestSatisfiedBy(t *testing.T) {
 			assert.Equal(t, test.expected, actual)
 		})
 	}
+}
+
+func TestSatisfiedByTooManyCombinations(t *testing.T) {
+	
+	
+	
+
+	p, err := cauthdsl.FromString("OutOf(15, 'A.member', 'B.member', 'C.member', 'D.member', 'E.member', 'F.member'," +
+		" 'G.member', 'H.member', 'I.member', 'J.member', 'K.member', 'L.member', 'M.member', 'N.member', 'O.member', " +
+		"'P.member', 'Q.member', 'R.member', 'S.member', 'T.member', 'U.member', 'V.member', 'W.member', 'X.member', " +
+		"'Y.member', 'Z.member')")
+	assert.NoError(t, err)
+
+	ip := NewInquireableSignaturePolicy(p)
+	satisfiedBy := ip.SatisfiedBy()
+
+	actual := make(map[string]struct{})
+	for _, ps := range satisfiedBy {
+		
+		assert.Len(t, ps, 15)
+		var principals []string
+		for _, principal := range ps {
+			principals = append(principals, mspId(principal))
+		}
+		actual[fmt.Sprintf("%v", principals)] = struct{}{}
+	}
+	
+	assert.True(t, len(actual) < combinationsUpperBound)
 }

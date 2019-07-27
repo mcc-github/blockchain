@@ -25,6 +25,7 @@ import (
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	"github.com/mcc-github/blockchain/orderer/mocks/common/multichannel"
 	"github.com/mcc-github/blockchain/protos/common"
+	etcdraftproto "github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/onsi/gomega"
 	"github.com/pkg/errors"
@@ -219,7 +220,7 @@ func TestNewBlockPuller(t *testing.T) {
 
 	dialer := &cluster.PredicateDialer{
 		Config: comm.ClientConfig{
-			SecOpts: &comm.SecureOptions{
+			SecOpts: comm.SecureOptions{
 				Certificate: ca.CertBytes(),
 			},
 		},
@@ -255,8 +256,7 @@ func TestNewBlockPuller(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			cc := testCase.dialer.Config
-			cc.SecOpts.Certificate = testCase.certificate
+			testCase.dialer.Config.SecOpts.Certificate = testCase.certificate
 			bp, err := newBlockPuller(testCase.cs, testCase.dialer, localconfig.Cluster{})
 			assert.Nil(t, bp)
 			assert.EqualError(t, err, testCase.expectedError)
@@ -385,7 +385,7 @@ func TestEvictionSuspector(t *testing.T) {
 			description:                "puller creation fails",
 			evictionSuspicionThreshold: 10*time.Minute - time.Second,
 			blockPullerErr:             errors.New("oops"),
-			expectedPanic:              "Failed creating a block puller",
+			expectedPanic:              "Failed creating a block puller: oops",
 			halt:                       t.Fail,
 		},
 		{
@@ -510,4 +510,180 @@ func TestLedgerBlockPuller(t *testing.T) {
 
 	assert.Equal(t, genesisBlock, lbp.PullBlock(0))
 	assert.Equal(t, notGenesisBlock, lbp.PullBlock(1))
+}
+
+func TestCheckConfigMetadata(t *testing.T) {
+	tlsCA, err := tlsgen.NewCA()
+	if err != nil {
+		panic(err)
+	}
+	serverPair, err := tlsCA.NewServerCertKeyPair("localhost")
+	serverCert := serverPair.Cert
+	if err != nil {
+		panic(err)
+	}
+	clientPair, err := tlsCA.NewClientCertKeyPair()
+	clientCert := clientPair.Cert
+	if err != nil {
+		panic(err)
+	}
+	validOptions := &etcdraftproto.Options{
+		TickInterval:         "500ms",
+		ElectionTick:         10,
+		HeartbeatTick:        1,
+		MaxInflightBlocks:    5,
+		SnapshotIntervalSize: 20 * 1024 * 1024, 
+	}
+	singleConsenter := &etcdraftproto.Consenter{
+		Host:          "host1",
+		Port:          10001,
+		ClientTlsCert: clientCert,
+		ServerTlsCert: serverCert,
+	}
+
+	
+	goodMetadata := &etcdraftproto.ConfigMetadata{
+		Options: validOptions,
+		Consenters: []*etcdraftproto.Consenter{
+			singleConsenter,
+		},
+	}
+	assert.Nil(t, CheckConfigMetadata(goodMetadata))
+
+	
+	for _, testCase := range []struct {
+		description string
+		metadata    *etcdraftproto.ConfigMetadata
+		errRegex    string
+	}{
+		{
+			description: "nil metadata",
+			metadata:    nil,
+			errRegex:    "nil Raft config metadata",
+		},
+		{
+			description: "HeartbeatTick is 0",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: &etcdraftproto.Options{
+					HeartbeatTick: 0,
+				},
+			},
+			errRegex: "none of HeartbeatTick .* can be zero",
+		},
+		{
+			description: "ElectionTick is 0",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: &etcdraftproto.Options{
+					HeartbeatTick: validOptions.HeartbeatTick,
+					ElectionTick:  0,
+				},
+			},
+			errRegex: "none of .* ElectionTick .* can be zero",
+		},
+		{
+			description: "MaxInflightBlocks is 0",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: &etcdraftproto.Options{
+					HeartbeatTick:     validOptions.HeartbeatTick,
+					ElectionTick:      validOptions.ElectionTick,
+					MaxInflightBlocks: 0,
+				},
+			},
+			errRegex: "none of .* MaxInflightBlocks .* can be zero",
+		},
+		{
+			description: "ElectionTick is less than HeartbeatTick",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: &etcdraftproto.Options{
+					HeartbeatTick:     10,
+					ElectionTick:      1,
+					MaxInflightBlocks: validOptions.MaxInflightBlocks,
+				},
+			},
+			errRegex: "ElectionTick .* must be greater than HeartbeatTick",
+		},
+		{
+			description: "TickInterval is not parsable",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: &etcdraftproto.Options{
+					HeartbeatTick:     validOptions.HeartbeatTick,
+					ElectionTick:      validOptions.ElectionTick,
+					MaxInflightBlocks: validOptions.MaxInflightBlocks,
+					TickInterval:      "abcd",
+				},
+			},
+			errRegex: "failed to parse TickInterval .* to time duration",
+		},
+		{
+			description: "TickInterval is 0",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: &etcdraftproto.Options{
+					HeartbeatTick:     validOptions.HeartbeatTick,
+					ElectionTick:      validOptions.ElectionTick,
+					MaxInflightBlocks: validOptions.MaxInflightBlocks,
+					TickInterval:      "0s",
+				},
+			},
+			errRegex: "TickInterval cannot be zero",
+		},
+		{
+			description: "consenter set is empty",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options:    validOptions,
+				Consenters: []*etcdraftproto.Consenter{},
+			},
+			errRegex: "empty consenter set",
+		},
+		{
+			description: "metadata has nil consenter",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: validOptions,
+				Consenters: []*etcdraftproto.Consenter{
+					nil,
+				},
+			},
+			errRegex: "metadata has nil consenter",
+		},
+		{
+			description: "consenter has invalid server cert",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: validOptions,
+				Consenters: []*etcdraftproto.Consenter{
+					{
+						ServerTlsCert: []byte("invalid"),
+						ClientTlsCert: clientCert,
+					},
+				},
+			},
+			errRegex: "server TLS certificate is not PEM encoded",
+		},
+		{
+			description: "consenter has invalid client cert",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: validOptions,
+				Consenters: []*etcdraftproto.Consenter{
+					{
+						ServerTlsCert: serverCert,
+						ClientTlsCert: []byte("invalid"),
+					},
+				},
+			},
+			errRegex: "client TLS certificate is not PEM encoded",
+		},
+		{
+			description: "metadata has duplicate consenters",
+			metadata: &etcdraftproto.ConfigMetadata{
+				Options: validOptions,
+				Consenters: []*etcdraftproto.Consenter{
+					singleConsenter,
+					singleConsenter,
+				},
+			},
+			errRegex: "duplicate consenter",
+		},
+	} {
+		err := CheckConfigMetadata(testCase.metadata)
+		assert.NotNil(t, err, testCase.description)
+		assert.Regexp(t, testCase.errRegex, err)
+	}
 }

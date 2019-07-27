@@ -77,9 +77,12 @@ func TestGetRandomIntNoEntropy(t *testing.T) {
 }
 
 func TestRandomIndices(t *testing.T) {
+	
 	assert.Nil(t, GetRandomIndices(10, 5))
-	GetRandomIndices(10, 9)
-	GetRandomIndices(10, 12)
+	
+	assert.Len(t, GetRandomIndices(10, 9), 10)
+	
+	assert.Len(t, GetRandomIndices(10, 90), 10)
 }
 
 func TestGetIntOrDefault(t *testing.T) {

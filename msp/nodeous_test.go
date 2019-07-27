@@ -17,9 +17,11 @@ limitations under the License.
 package msp
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/stretchr/testify/assert"
 )
@@ -236,4 +238,144 @@ func TestSatisfiesPrincipalClient(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "The identity is not a [PEER] under this MSP [SampleOrg]")
 	}))
+}
+
+func TestSatisfiesPrincipalAdmin(t *testing.T) {
+	
+	
+	thisMSP := getLocalMSPWithVersion(t, "testdata/nodeouadmin", MSPv1_4_2)
+	assert.True(t, thisMSP.(*bccspmsp).ouEnforcement)
+
+	cert, err := readFile("testdata/nodeouadmin/adm/testadmincert.pem")
+	assert.NoError(t, err)
+
+	id, _, err := thisMSP.(*bccspmsp).getIdentityFromConf(cert)
+	assert.NoError(t, err)
+
+	principalBytes, err := proto.Marshal(&msp.MSPRole{Role: msp.MSPRole_ADMIN, MspIdentifier: "SampleOrg"})
+	assert.NoError(t, err)
+	principal := &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               principalBytes}
+	err = id.SatisfiesPrincipal(principal)
+	assert.NoError(t, err)
+}
+
+func TestLoad142MSPWithInvalidAdminConfiguration(t *testing.T) {
+	
+	
+	conf, err := GetLocalMspConfig("testdata/nodeouadmin2", nil, "SampleOrg")
+	assert.NoError(t, err)
+
+	ks, err := sw.NewFileBasedKeyStore(nil, filepath.Join("testdata/nodeouadmin2", "keystore"), true)
+	assert.NoError(t, err)
+	thisMSP, err := NewBccspMspWithKeyStore(MSPv1_4_2, ks)
+	assert.NoError(t, err)
+
+	err = thisMSP.Setup(conf)
+	assert.Error(t, err)
+	assert.Equal(t, "administrators must be declared when no admin ou classification is set", err.Error())
+
+	
+	
+	conf, err = GetLocalMspConfig("testdata/nodeouadmin3", nil, "SampleOrg")
+	assert.NoError(t, err)
+
+	ks, err = sw.NewFileBasedKeyStore(nil, filepath.Join("testdata/nodeouadmin3", "keystore"), true)
+	assert.NoError(t, err)
+	thisMSP, err = NewBccspMspWithKeyStore(MSPv1_4_2, ks)
+	assert.NoError(t, err)
+
+	err = thisMSP.Setup(conf)
+	assert.Error(t, err)
+	assert.Equal(t, "administrators must be declared when no admin ou classification is set", err.Error())
+}
+
+func TestSatisfiesPrincipalOrderer(t *testing.T) {
+	
+	
+	thisMSP := getLocalMSPWithVersion(t, "testdata/nodeouorderer", MSPv1_4_2)
+	assert.True(t, thisMSP.(*bccspmsp).ouEnforcement)
+
+	id, err := thisMSP.(*bccspmsp).GetDefaultSigningIdentity()
+	assert.NoError(t, err)
+
+	principalBytes, err := proto.Marshal(&msp.MSPRole{Role: msp.MSPRole_ORDERER, MspIdentifier: "SampleOrg"})
+	assert.NoError(t, err)
+	principal := &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               principalBytes}
+	err = id.SatisfiesPrincipal(principal)
+	assert.NoError(t, err)
+}
+
+func TestLoad142MSPWithInvalidOrdererConfiguration(t *testing.T) {
+	
+	
+	conf, err := GetLocalMspConfig("testdata/nodeouorderer2", nil, "SampleOrg")
+	assert.NoError(t, err)
+
+	ks, err := sw.NewFileBasedKeyStore(nil, filepath.Join("testdata/nodeouorderer2", "keystore"), true)
+	assert.NoError(t, err)
+	thisMSP, err := NewBccspMspWithKeyStore(MSPv1_4_2, ks)
+	assert.NoError(t, err)
+
+	err = thisMSP.Setup(conf)
+	assert.NoError(t, err)
+	id, err := thisMSP.(*bccspmsp).GetDefaultSigningIdentity()
+	assert.NoError(t, err)
+
+	principalBytes, err := proto.Marshal(&msp.MSPRole{Role: msp.MSPRole_ORDERER, MspIdentifier: "SampleOrg"})
+	assert.NoError(t, err)
+	principal := &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               principalBytes}
+	err = id.SatisfiesPrincipal(principal)
+	assert.Error(t, err)
+	assert.Equal(t, "The identity is not a [ORDERER] under this MSP [SampleOrg]: cannot test for classification, node ou for type [ORDERER], not defined, msp: [SampleOrg]", err.Error())
+
+	
+	
+	conf, err = GetLocalMspConfig("testdata/nodeouorderer3", nil, "SampleOrg")
+	assert.NoError(t, err)
+
+	ks, err = sw.NewFileBasedKeyStore(nil, filepath.Join("testdata/nodeouorderer3", "keystore"), true)
+	assert.NoError(t, err)
+	thisMSP, err = NewBccspMspWithKeyStore(MSPv1_4_2, ks)
+	assert.NoError(t, err)
+
+	err = thisMSP.Setup(conf)
+	assert.NoError(t, err)
+	id, err = thisMSP.(*bccspmsp).GetDefaultSigningIdentity()
+	assert.NoError(t, err)
+
+	principalBytes, err = proto.Marshal(&msp.MSPRole{Role: msp.MSPRole_ORDERER, MspIdentifier: "SampleOrg"})
+	assert.NoError(t, err)
+	principal = &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               principalBytes}
+	err = id.SatisfiesPrincipal(principal)
+	assert.Error(t, err)
+	assert.Equal(t, "The identity is not a [ORDERER] under this MSP [SampleOrg]: cannot test for classification, node ou for type [ORDERER], not defined, msp: [SampleOrg]", err.Error())
+}
+
+func TestValidMSPWithNodeOUMissingClassification(t *testing.T) {
+	
+	
+	_, err := getLocalMSPWithVersionAndError(t, "testdata/nodeousbadconf1", MSPv1_3)
+	assert.Error(t, err)
+	assert.Equal(t, "Failed setting up NodeOUs. ClientOU must be different from nil.", err.Error())
+
+	_, err = getLocalMSPWithVersionAndError(t, "testdata/nodeousbadconf1", MSPv1_4_2)
+	assert.Error(t, err)
+	assert.Equal(t, "admin 0 is invalid [cannot test for classification, node ou for type [CLIENT], not defined, msp: [SampleOrg],The identity does not contain OU [ADMIN], MSP: [SampleOrg]]", err.Error())
+
+	
+	
+	_, err = getLocalMSPWithVersionAndError(t, "testdata/nodeousbadconf2", MSPv1_3)
+	assert.Error(t, err)
+	assert.Equal(t, "Failed setting up NodeOUs. PeerOU must be different from nil.", err.Error())
+
+	_, err = getLocalMSPWithVersionAndError(t, "testdata/nodeousbadconf2", MSPv1_4_2)
+	assert.NoError(t, err)
 }

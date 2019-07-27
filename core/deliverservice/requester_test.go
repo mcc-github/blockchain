@@ -37,19 +37,14 @@ type signerSerializer interface {
 func TestTLSBinding(t *testing.T) {
 	defer ensureNoGoroutineLeak(t)()
 
-	requester := blocksRequester{
-		tls:     true,
-		chainID: "testchainid",
-		signer:  &mocks.SignerSerializer{},
-	}
-
 	
 	serverCert, serverKey, caCert := loadCertificates(t)
 	serverTLScert, err := tls.X509KeyPair(serverCert, serverKey)
 	assert.NoError(t, err)
-	comm.GetCredentialSupport().SetClientCertificate(serverTLScert)
+	cs := comm.NewCredentialSupport()
+	cs.SetClientCertificate(serverTLScert)
 	s, err := comm.NewGRPCServer("localhost:9435", comm.ServerConfig{
-		SecOpts: &comm.SecureOptions{
+		SecOpts: comm.SecureOptions{
 			RequireClientCert: true,
 			Key:               serverKey,
 			Certificate:       serverCert,
@@ -63,6 +58,13 @@ func TestTLSBinding(t *testing.T) {
 	go s.Start()
 	defer s.Stop()
 	time.Sleep(time.Second * 3)
+
+	requester := blocksRequester{
+		tls:         true,
+		chainID:     "testchainid",
+		signer:      &mocks.SignerSerializer{},
+		credSupport: cs,
+	}
 
 	
 	

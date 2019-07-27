@@ -88,17 +88,17 @@ var _ = Describe("SBE_E2E", func() {
 			network.UpdateChannelAnchors(orderer, "testchannel")
 
 			By("deploying the chaincode")
-			nwo.DeployChaincode(network, "testchannel", orderer, chaincode)
+			nwo.DeployChaincodeLegacy(network, "testchannel", orderer, chaincode)
 
 			By("deploying a second instance of the chaincode")
 			chaincode.Name = "mycc2"
-			nwo.DeployChaincode(network, "testchannel", orderer, chaincode)
+			nwo.DeployChaincodeLegacy(network, "testchannel", orderer, chaincode)
 
 			RunSBE(network, orderer, "pub")
 			RunSBE(network, orderer, "priv")
 		})
 
-		It("executes a basic solo network with 2 orgs and SBE checks with new lifecycle", func() {
+		It("executes a basic solo network with 2 orgs and SBE checks with _lifecycle", func() {
 			chaincode = nwo.Chaincode{
 				Name:              "mycc",
 				Version:           "0.0",
@@ -121,18 +121,19 @@ var _ = Describe("SBE_E2E", func() {
 
 			By("updating the anchor peers")
 			network.UpdateChannelAnchors(orderer, "testchannel")
-
-			By("enabling 2.0 capabilities")
 			network.VerifyMembership(network.PeersWithChannel("testchannel"), "testchannel")
-			nwo.EnableV2_0Capabilities(network, "testchannel", orderer, network.Peer("Org1", "peer0"), network.Peer("Org2", "peer0"))
+
+			By("enabling 2.0 application capabilities")
+			nwo.EnableCapabilities(network, "testchannel", "Application", "V2_0", orderer, network.Peer("Org1", "peer0"), network.Peer("Org2", "peer0"))
 
 			By("deploying the chaincode")
-			nwo.DeployChaincodeNewLifecycle(network, "testchannel", orderer, chaincode)
+			nwo.DeployChaincode(network, "testchannel", orderer, chaincode)
 
 			By("deploying a second instance of the chaincode")
 			chaincode.Name = "mycc2"
+			chaincode.PackageFile = filepath.Join(tempDir, "simplecc2.tar.gz")
 			chaincode.Label = "my_other_simple_chaincode"
-			nwo.DeployChaincodeNewLifecycle(network, "testchannel", orderer, chaincode)
+			nwo.DeployChaincode(network, "testchannel", orderer, chaincode)
 
 			RunSBE(network, orderer, "pub")
 			RunSBE(network, orderer, "priv")

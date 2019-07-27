@@ -121,11 +121,12 @@ func (p *Peer) Anchor() bool {
 
 
 type Profile struct {
-	Name            string   `yaml:"name,omitempty"`
-	Orderers        []string `yaml:"orderers,omitempty"`
-	Consortium      string   `yaml:"consortium,omitempty"`
-	Organizations   []string `yaml:"organizations,omitempty"`
-	AppCapabilities []string `yaml:"appcapabilities,omitempty"`
+	Name                string   `yaml:"name,omitempty"`
+	Orderers            []string `yaml:"orderers,omitempty"`
+	Consortium          string   `yaml:"consortium,omitempty"`
+	Organizations       []string `yaml:"organizations,omitempty"`
+	AppCapabilities     []string `yaml:"app_capabilities,omitempty"`
+	ChannelCapabilities []string `yaml:"channel_capabilities,omitempty"`
 }
 
 
@@ -211,6 +212,50 @@ func New(c *Config, rootDir string, client *docker.Client, startPort int, compon
 		network.PortsByPeerID[p.ID()] = ports
 	}
 	return network
+}
+
+
+func (n *Network) AddOrg(o *Organization, peers ...*Peer) {
+	for _, p := range peers {
+		ports := Ports{}
+		for _, portName := range PeerPortNames() {
+			ports[portName] = n.ReservePort()
+		}
+		n.PortsByPeerID[p.ID()] = ports
+		n.Peers = append(n.Peers, p)
+	}
+
+	n.Organizations = append(n.Organizations, o)
+	n.Consortiums[0].Organizations = append(n.Consortiums[0].Organizations, o.Name)
+}
+
+
+
+func (n *Network) GenerateOrgUpdateMaterials(peers ...*Peer) {
+	orgUpdateNetwork := *n
+	orgUpdateNetwork.Peers = peers
+	orgUpdateNetwork.Templates = &Templates{
+		ConfigTx: OrgUpdateConfigTxTemplate,
+		Crypto:   OrgUpdateCryptoTemplate,
+		Core:     n.Templates.CoreTemplate(),
+	}
+
+	orgUpdateNetwork.GenerateConfigTxConfig()
+	for _, peer := range peers {
+		orgUpdateNetwork.GenerateCoreConfig(peer)
+	}
+
+	orgUpdateNetwork.GenerateCryptoConfig()
+	sess, err := orgUpdateNetwork.Cryptogen(commands.Generate{
+		Config: orgUpdateNetwork.CryptoConfigPath(),
+		Output: orgUpdateNetwork.CryptoPath(),
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(sess, orgUpdateNetwork.EventuallyTimeout).Should(gexec.Exit(0))
+
+	
+	
+	n.ConcatenateTLSCACertificates()
 }
 
 
@@ -378,12 +423,44 @@ func (n *Network) PeerUserCert(p *Peer, user string) string {
 
 
 
+func (n *Network) OrdererUserCert(o *Orderer, user string) string {
+	org := n.Organization(o.Organization)
+	Expect(org).NotTo(BeNil())
+
+	return filepath.Join(
+		n.OrdererUserMSPDir(o, user),
+		"signcerts",
+		fmt.Sprintf("%s@%s-cert.pem", user, org.Domain),
+	)
+}
+
+
+
 func (n *Network) PeerUserKey(p *Peer, user string) string {
 	org := n.Organization(p.Organization)
 	Expect(org).NotTo(BeNil())
 
 	keystore := filepath.Join(
 		n.PeerUserMSPDir(p, user),
+		"keystore",
+	)
+
+	
+	keys, err := ioutil.ReadDir(keystore)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(keys).To(HaveLen(1))
+
+	return filepath.Join(keystore, keys[0].Name())
+}
+
+
+
+func (n *Network) OrdererUserKey(o *Orderer, user string) string {
+	org := n.Organization(o.Organization)
+	Expect(org).NotTo(BeNil())
+
+	keystore := filepath.Join(
+		n.OrdererUserMSPDir(o, user),
 		"keystore",
 	)
 
@@ -585,12 +662,12 @@ func (n *Network) Bootstrap() {
 		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 	}
 
-	n.concatenateTLSCACertificates()
+	n.ConcatenateTLSCACertificates()
 }
 
 
 
-func (n *Network) concatenateTLSCACertificates() {
+func (n *Network) ConcatenateTLSCACertificates() {
 	bundle := &bytes.Buffer{}
 	for _, tlsCertPath := range n.listTLSCACertificates() {
 		certBytes, err := ioutil.ReadFile(tlsCertPath)
@@ -736,25 +813,7 @@ func (n *Network) VerifyMembership(expectedPeers []*Peer, channel string, chainc
 
 func (n *Network) CreateChannel(channelName string, o *Orderer, p *Peer, additionalSigners ...interface{}) {
 	channelCreateTxPath := n.CreateChannelTxPath(channelName)
-
-	for _, signer := range additionalSigners {
-		switch t := signer.(type) {
-		case *Peer:
-			sess, err := n.PeerAdminSession(t, commands.SignConfigTx{
-				File: channelCreateTxPath,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-		case *Orderer:
-			sess, err := n.OrdererAdminSession(t, p, commands.SignConfigTx{
-				File: channelCreateTxPath,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-		default:
-			panic("unknown signer type, expect Peer or Orderer")
-		}
-	}
+	n.signConfigTransaction(channelCreateTxPath, p, additionalSigners...)
 
 	createChannel := func() int {
 		sess, err := n.PeerAdminSession(p, commands.ChannelCreate{
@@ -774,40 +833,42 @@ func (n *Network) CreateChannel(channelName string, o *Orderer, p *Peer, additio
 
 
 
-func (n *Network) CreateChannelFail(channelName string, o *Orderer, p *Peer, additionalSigners ...interface{}) {
-	channelCreateTxPath := n.CreateChannelTxPath(channelName)
 
-	for _, signer := range additionalSigners {
-		switch t := signer.(type) {
+func (n *Network) CreateChannelExitCode(channelName string, o *Orderer, p *Peer, additionalSigners ...interface{}) int {
+	channelCreateTxPath := n.CreateChannelTxPath(channelName)
+	n.signConfigTransaction(channelCreateTxPath, p, additionalSigners...)
+
+	sess, err := n.PeerAdminSession(p, commands.ChannelCreate{
+		ChannelID:   channelName,
+		Orderer:     n.OrdererAddress(o, ListenPort),
+		File:        channelCreateTxPath,
+		OutputBlock: "/dev/null",
+	})
+	Expect(err).NotTo(HaveOccurred())
+	return sess.Wait(n.EventuallyTimeout).ExitCode()
+}
+
+func (n *Network) signConfigTransaction(channelTxPath string, submittingPeer *Peer, signers ...interface{}) {
+	for _, signer := range signers {
+		switch signer := signer.(type) {
 		case *Peer:
-			sess, err := n.PeerAdminSession(t, commands.SignConfigTx{
-				File: channelCreateTxPath,
+			sess, err := n.PeerAdminSession(signer, commands.SignConfigTx{
+				File: channelTxPath,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+
 		case *Orderer:
-			sess, err := n.OrdererAdminSession(t, p, commands.SignConfigTx{
-				File: channelCreateTxPath,
+			sess, err := n.OrdererAdminSession(signer, submittingPeer, commands.SignConfigTx{
+				File: channelTxPath,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+
 		default:
-			panic("unknown signer type, expect Peer or Orderer")
+			panic(fmt.Sprintf("unknown signer type %T, expect Peer or Orderer", signer))
 		}
 	}
-
-	createChannelFail := func() int {
-		sess, err := n.PeerAdminSession(p, commands.ChannelCreate{
-			ChannelID:   channelName,
-			Orderer:     n.OrdererAddress(o, ListenPort),
-			File:        channelCreateTxPath,
-			OutputBlock: "/dev/null",
-		})
-		Expect(err).NotTo(HaveOccurred())
-		return sess.Wait(n.EventuallyTimeout).ExitCode()
-	}
-
-	Eventually(createChannelFail, n.EventuallyTimeout).ShouldNot(Equal(0))
 }
 
 
