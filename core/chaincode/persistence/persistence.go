@@ -167,7 +167,6 @@ func (s *Store) Save(label string, ccInstallPkg []byte) (persistence.PackageID, 
 
 
 
-
 func (s *Store) Load(packageID persistence.PackageID) ([]byte, error) {
 	ccInstallPkgPath := filepath.Join(s.Path, packageID.String()+".bin")
 

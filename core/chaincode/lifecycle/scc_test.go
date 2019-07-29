@@ -20,6 +20,7 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle/mock"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
+	p "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	persistenceintf "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/dispatcher"
@@ -188,8 +189,6 @@ var _ = Describe("SCC", func() {
 			)
 
 			BeforeEach(func() {
-				fakeStub.GetChannelIDReturns("")
-
 				arg = &lb.InstallChaincodeArgs{
 					ChaincodeInstallPackage: []byte("chaincode-package"),
 				}
@@ -289,6 +288,52 @@ var _ = Describe("SCC", func() {
 					res := scc.Invoke(fakeStub)
 					Expect(res.Status).To(Equal(int32(500)))
 					Expect(res.Message).To(Equal("failed to invoke backing implementation of 'QueryInstalledChaincode': underlying-error"))
+				})
+			})
+		})
+
+		Describe("GetInstalledChaincodePackage", func() {
+			var (
+				arg          *lb.GetInstalledChaincodePackageArgs
+				marshaledArg []byte
+			)
+
+			BeforeEach(func() {
+				arg = &lb.GetInstalledChaincodePackageArgs{
+					PackageId: "package-id",
+				}
+
+				var err error
+				marshaledArg, err = proto.Marshal(arg)
+				Expect(err).NotTo(HaveOccurred())
+
+				fakeStub.GetArgsReturns([][]byte{[]byte("GetInstalledChaincodePackage"), marshaledArg})
+
+				fakeSCCFuncs.GetInstalledChaincodePackageReturns([]byte("chaincode-package"), nil)
+			})
+
+			It("passes the arguments to and returns the results from the backing scc function implementation", func() {
+				res := scc.Invoke(fakeStub)
+				Expect(res.Status).To(Equal(int32(200)))
+				payload := &lb.GetInstalledChaincodePackageResult{}
+				err := proto.Unmarshal(res.Payload, payload)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(payload.ChaincodeInstallPackage).To(Equal([]byte("chaincode-package")))
+
+				Expect(fakeSCCFuncs.GetInstalledChaincodePackageCallCount()).To(Equal(1))
+				packageID := fakeSCCFuncs.GetInstalledChaincodePackageArgsForCall(0)
+				Expect(packageID).To(Equal(p.PackageID("package-id")))
+			})
+
+			Context("when the underlying function implementation fails", func() {
+				BeforeEach(func() {
+					fakeSCCFuncs.GetInstalledChaincodePackageReturns(nil, fmt.Errorf("underlying-error"))
+				})
+
+				It("wraps and returns the error", func() {
+					res := scc.Invoke(fakeStub)
+					Expect(res.Status).To(Equal(int32(500)))
+					Expect(res.Message).To(Equal("failed to invoke backing implementation of 'GetInstalledChaincodePackage': underlying-error"))
 				})
 			})
 		})
@@ -1159,16 +1204,16 @@ var _ = Describe("SCC", func() {
 			})
 		})
 
-		Describe("SimulateCommitChaincodeDefinition", func() {
+		Describe("CheckCommitReadiness", func() {
 			var (
 				err            error
-				arg            *lb.SimulateCommitChaincodeDefinitionArgs
+				arg            *lb.CheckCommitReadinessArgs
 				marshaledArg   []byte
 				fakeOrgConfigs []*mock.ApplicationOrgConfig
 			)
 
 			BeforeEach(func() {
-				arg = &lb.SimulateCommitChaincodeDefinitionArgs{
+				arg = &lb.CheckCommitReadinessArgs{
 					Sequence:            7,
 					Name:                "name",
 					Version:             "version",
@@ -1182,7 +1227,7 @@ var _ = Describe("SCC", func() {
 				marshaledArg, err = proto.Marshal(arg)
 				Expect(err).NotTo(HaveOccurred())
 
-				fakeStub.GetArgsReturns([][]byte{[]byte("SimulateCommitChaincodeDefinition"), marshaledArg})
+				fakeStub.GetArgsReturns([][]byte{[]byte("CheckCommitReadiness"), marshaledArg})
 
 				fakeOrgConfigs = []*mock.ApplicationOrgConfig{{}, {}}
 				fakeOrgConfigs[0].MSPIDReturns("fake-mspid")
@@ -1193,7 +1238,7 @@ var _ = Describe("SCC", func() {
 					"org1": fakeOrgConfigs[1],
 				})
 
-				fakeSCCFuncs.SimulateCommitChaincodeDefinitionReturns(map[string]bool{
+				fakeSCCFuncs.CheckCommitReadinessReturns(map[string]bool{
 					"fake-mspid":  true,
 					"other-mspid": true,
 				}, nil)
@@ -1203,18 +1248,18 @@ var _ = Describe("SCC", func() {
 				res := scc.Invoke(fakeStub)
 				Expect(res.Message).To(Equal(""))
 				Expect(res.Status).To(Equal(int32(200)))
-				payload := &lb.SimulateCommitChaincodeDefinitionResult{}
+				payload := &lb.CheckCommitReadinessResult{}
 				err = proto.Unmarshal(res.Payload, payload)
 				Expect(err).NotTo(HaveOccurred())
 
-				orgApprovals := payload.GetApproved()
+				orgApprovals := payload.GetApprovals()
 				Expect(orgApprovals).NotTo(BeNil())
 				Expect(len(orgApprovals)).To(Equal(2))
 				Expect(orgApprovals["fake-mspid"]).To(BeTrue())
 				Expect(orgApprovals["other-mspid"]).To(BeTrue())
 
-				Expect(fakeSCCFuncs.SimulateCommitChaincodeDefinitionCallCount()).To(Equal(1))
-				chname, ccname, cd, pubState, orgStates := fakeSCCFuncs.SimulateCommitChaincodeDefinitionArgsForCall(0)
+				Expect(fakeSCCFuncs.CheckCommitReadinessCallCount()).To(Equal(1))
+				chname, ccname, cd, pubState, orgStates := fakeSCCFuncs.CheckCommitReadinessArgsForCall(0)
 				Expect(chname).To(Equal("test-channel"))
 				Expect(ccname).To(Equal("name"))
 				Expect(cd).To(Equal(&lifecycle.ChaincodeDefinition{
@@ -1258,20 +1303,20 @@ var _ = Describe("SCC", func() {
 					It("returns an error", func() {
 						res := scc.Invoke(fakeStub)
 						Expect(res.Status).To(Equal(int32(500)))
-						Expect(res.Message).To(Equal("failed to invoke backing implementation of 'SimulateCommitChaincodeDefinition': no application config for channel ''"))
+						Expect(res.Message).To(Equal("failed to invoke backing implementation of 'CheckCommitReadiness': no application config for channel ''"))
 					})
 				})
 			})
 
 			Context("when the underlying function implementation fails", func() {
 				BeforeEach(func() {
-					fakeSCCFuncs.SimulateCommitChaincodeDefinitionReturns(nil, fmt.Errorf("underlying-error"))
+					fakeSCCFuncs.CheckCommitReadinessReturns(nil, fmt.Errorf("underlying-error"))
 				})
 
 				It("wraps and returns the error", func() {
 					res := scc.Invoke(fakeStub)
 					Expect(res.Status).To(Equal(int32(500)))
-					Expect(res.Message).To(Equal("failed to invoke backing implementation of 'SimulateCommitChaincodeDefinition': underlying-error"))
+					Expect(res.Message).To(Equal("failed to invoke backing implementation of 'CheckCommitReadiness': underlying-error"))
 				})
 			})
 		})
@@ -1340,7 +1385,7 @@ var _ = Describe("SCC", func() {
 					ValidationPlugin:    "validation-plugin",
 					ValidationParameter: []byte("validation-parameter"),
 					Collections:         &cb.CollectionConfigPackage{},
-					Approved: map[string]bool{
+					Approvals: map[string]bool{
 						"fake-mspid":  true,
 						"other-mspid": true,
 					},
@@ -1513,50 +1558,6 @@ var _ = Describe("SCC", func() {
 					res := scc.Invoke(fakeStub)
 					Expect(res.Status).To(Equal(int32(500)))
 					Expect(res.Message).To(Equal("failed to invoke backing implementation of 'QueryChaincodeDefinitions': underlying-error"))
-				})
-			})
-		})
-
-		Describe("QueryNamespaceDefinitions", func() {
-			var (
-				arg          *lb.QueryNamespaceDefinitionsArgs
-				marshaledArg []byte
-			)
-
-			BeforeEach(func() {
-				arg = &lb.QueryNamespaceDefinitionsArgs{}
-
-				var err error
-				marshaledArg, err = proto.Marshal(arg)
-				Expect(err).NotTo(HaveOccurred())
-
-				fakeStub.GetArgsReturns([][]byte{[]byte("QueryNamespaceDefinitions"), marshaledArg})
-				fakeSCCFuncs.QueryNamespaceDefinitionsReturns(map[string]string{
-					"foo": "Chaincode",
-					"bar": "Token",
-				}, nil)
-			})
-
-			It("passes the arguments to and returns the results from the backing scc function implementation", func() {
-				res := scc.Invoke(fakeStub)
-				Expect(res.Status).To(Equal(int32(200)))
-				payload := &lb.QueryNamespaceDefinitionsResult{}
-				err := proto.Unmarshal(res.Payload, payload)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(fakeSCCFuncs.QueryNamespaceDefinitionsCallCount()).To(Equal(1))
-				Expect(fakeSCCFuncs.QueryNamespaceDefinitionsArgsForCall(0)).To(Equal(&lifecycle.ChaincodePublicLedgerShim{ChaincodeStubInterface: fakeStub}))
-			})
-
-			Context("when the underlying function implementation fails", func() {
-				BeforeEach(func() {
-					fakeSCCFuncs.QueryNamespaceDefinitionsReturns(nil, fmt.Errorf("underlying-error"))
-				})
-
-				It("wraps and returns the error", func() {
-					res := scc.Invoke(fakeStub)
-					Expect(res.Status).To(Equal(int32(500)))
-					Expect(res.Message).To(Equal("failed to invoke backing implementation of 'QueryNamespaceDefinitions': underlying-error"))
 				})
 			})
 		})

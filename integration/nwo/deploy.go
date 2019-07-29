@@ -66,7 +66,7 @@ func DeployChaincode(n *Network, channel string, orderer *Orderer, chaincode Cha
 	ApproveChaincodeForMyOrg(n, channel, orderer, chaincode, peers...)
 
 	
-	SimulateCommitUntilSuccess(n, channel, chaincode, n.PeerOrgs(), peers...)
+	CheckCommitReadinessUntilReady(n, channel, chaincode, n.PeerOrgs(), peers...)
 	CommitChaincode(n, channel, orderer, chaincode, peers[0], peers...)
 
 	
@@ -224,13 +224,13 @@ func ApproveChaincodeForMyOrg(n *Network, channel string, orderer *Orderer, chai
 	}
 }
 
-func SimulateCommitUntilSuccess(n *Network, channel string, chaincode Chaincode, checkOrgs []*Organization, peers ...*Peer) {
+func CheckCommitReadinessUntilReady(n *Network, channel string, chaincode Chaincode, checkOrgs []*Organization, peers ...*Peer) {
 	for _, p := range peers {
 		keys := Keys{}
 		for _, org := range checkOrgs {
 			keys[org.MSPID] = BeTrue()
 		}
-		Eventually(simulateCommit(n, p, channel, chaincode), n.EventuallyTimeout).Should(
+		Eventually(checkCommitReadiness(n, p, channel, chaincode), n.EventuallyTimeout).Should(
 			MatchKeys(IgnoreExtras, keys),
 		)
 	}
@@ -285,9 +285,9 @@ func EnsureChaincodeCommitted(n *Network, channel, name, version, sequence strin
 		}
 		Eventually(listCommitted(n, p, channel, name), n.EventuallyTimeout).Should(
 			MatchFields(IgnoreExtras, Fields{
-				"Version":  Equal(version),
-				"Sequence": Equal(sequenceInt),
-				"Approved": MatchKeys(IgnoreExtras, approvedKeys),
+				"Version":   Equal(version),
+				"Sequence":  Equal(sequenceInt),
+				"Approvals": MatchKeys(IgnoreExtras, approvedKeys),
 			}),
 		)
 	}
@@ -426,13 +426,13 @@ func queryInstalled(n *Network, peer *Peer) func() []lifecycle.QueryInstalledCha
 	}
 }
 
-type simulateCommitOutput struct {
-	Approved map[string]bool
+type checkCommitReadinessOutput struct {
+	Approvals map[string]bool `json:"approvals"`
 }
 
-func simulateCommit(n *Network, peer *Peer, channel string, chaincode Chaincode) func() map[string]bool {
+func checkCommitReadiness(n *Network, peer *Peer, channel string, chaincode Chaincode) func() map[string]bool {
 	return func() map[string]bool {
-		sess, err := n.PeerAdminSession(peer, commands.ChaincodeSimulateCommit{
+		sess, err := n.PeerAdminSession(peer, commands.ChaincodeCheckCommitReadiness{
 			ChannelID:           channel,
 			Name:                chaincode.Name,
 			Version:             chaincode.Version,
@@ -446,17 +446,17 @@ func simulateCommit(n *Network, peer *Peer, channel string, chaincode Chaincode)
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
-		output := &simulateCommitOutput{}
+		output := &checkCommitReadinessOutput{}
 		err = json.Unmarshal(sess.Out.Contents(), output)
 		Expect(err).NotTo(HaveOccurred())
-		return output.Approved
+		return output.Approvals
 	}
 }
 
 type queryCommittedOutput struct {
-	Sequence int64           `json:"sequence"`
-	Version  string          `json:"version"`
-	Approved map[string]bool `json:"approved"`
+	Sequence  int64           `json:"sequence"`
+	Version   string          `json:"version"`
+	Approvals map[string]bool `json:"approvals"`
 }
 
 

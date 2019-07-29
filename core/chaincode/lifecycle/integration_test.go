@@ -177,18 +177,16 @@ var _ = Describe("Integration", func() {
 
 			
 			fakeStub.GetArgsReturns([][]byte{
-				[]byte("QueryNamespaceDefinitions"),
-				protoutil.MarshalOrPanic(&lb.QueryNamespaceDefinitionsArgs{}),
+				[]byte("QueryChaincodeDefinitions"),
+				protoutil.MarshalOrPanic(&lb.QueryChaincodeDefinitionsArgs{}),
 			})
 			response = scc.Invoke(fakeStub)
 			Expect(response.Status).To(Equal(int32(200)))
-			namespaceResult := &lb.QueryNamespaceDefinitionsResult{}
-			err := proto.Unmarshal(response.Payload, namespaceResult)
+			definitionsResult := &lb.QueryChaincodeDefinitionsResult{}
+			err := proto.Unmarshal(response.Payload, definitionsResult)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(namespaceResult.Namespaces)).To(Equal(1))
-			namespace, ok := namespaceResult.Namespaces["cc-name"]
-			Expect(ok).To(BeTrue())
-			Expect(namespace.Type).To(Equal("Chaincode"))
+			Expect(len(definitionsResult.ChaincodeDefinitions)).To(Equal(1))
+			Expect(definitionsResult.ChaincodeDefinitions[0].Name).To(Equal("cc-name"))
 
 			
 			fakeStub.GetArgsReturns([][]byte{
@@ -209,7 +207,7 @@ var _ = Describe("Integration", func() {
 				ValidationPlugin:    "builtin",
 				ValidationParameter: []byte("validation-parameter"),
 				Collections:         &cb.CollectionConfigPackage{},
-				Approved: map[string]bool{
+				Approvals: map[string]bool{
 					"fake-mspid": true,
 				},
 			})).To(BeTrue())

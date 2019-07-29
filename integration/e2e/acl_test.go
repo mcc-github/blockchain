@@ -362,12 +362,12 @@ var _ = Describe("EndToEndACL", func() {
 		
 		
 		By("setting the simulate commit chaincode definition ACL policy to Org1/Admins")
-		policyName = resources.Lifecycle_SimulateCommitChaincodeDefinition
+		policyName = resources.Lifecycle_CheckCommitReadiness
 		policy = "/Channel/Application/Org1/Admins"
 		SetACLPolicy(network, "testchannel", policyName, policy, "orderer")
 
 		By("simulating the commit of a chaincode dwefinition as a forbidden Org2 Admin identity")
-		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeSimulateCommit{
+		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeCheckCommitReadiness{
 			ChannelID:           "testchannel",
 			Name:                chaincode.Name,
 			Version:             chaincode.Version,
@@ -386,7 +386,7 @@ var _ = Describe("EndToEndACL", func() {
 		
 		
 		
-		nwo.SimulateCommitUntilSuccess(network, "testchannel", chaincode, network.PeerOrgs(), org1Peer0)
+		nwo.CheckCommitReadinessUntilReady(network, "testchannel", chaincode, network.PeerOrgs(), org1Peer0)
 
 		
 		

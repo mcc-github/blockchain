@@ -15,6 +15,7 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
+	p "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	persistenceintf "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/dispatcher"
@@ -54,7 +55,8 @@ const (
 
 	
 	
-	QueryApprovalStatusFuncName = "QueryApprovalStatus"
+	
+	CheckCommitReadinessFuncName = "CheckCommitReadiness"
 
 	
 	
@@ -67,11 +69,6 @@ const (
 	
 	
 	QueryChaincodeDefinitionsFuncName = "QueryChaincodeDefinitions"
-
-	
-	
-	
-	QueryNamespaceDefinitionsFuncName = "QueryNamespaceDefinitions"
 )
 
 
@@ -84,6 +81,10 @@ type SCCFunctions interface {
 	QueryInstalledChaincode(packageID persistenceintf.PackageID) (*chaincode.InstalledChaincode, error)
 
 	
+	
+	GetInstalledChaincodePackage(packageID p.PackageID) ([]byte, error)
+
+	
 	QueryInstalledChaincodes() []*chaincode.InstalledChaincode
 
 	
@@ -92,7 +93,7 @@ type SCCFunctions interface {
 	
 	
 	
-	SimulateCommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error)
+	CheckCommitReadiness(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error)
 
 	
 	
@@ -304,10 +305,24 @@ func (i *Invocation) QueryInstalledChaincode(input *lb.QueryInstalledChaincodeAr
 	if err != nil {
 		return nil, err
 	}
-
 	return &lb.QueryInstalledChaincodeResult{
 		Label:     chaincode.Label,
 		PackageId: chaincode.PackageID.String(),
+	}, nil
+}
+
+
+
+func (i *Invocation) GetInstalledChaincodePackage(input *lb.GetInstalledChaincodePackageArgs) (proto.Message, error) {
+	logger.Debugf("received invocation of GetInstalledChaincodePackage")
+
+	pkgBytes, err := i.SCC.Functions.GetInstalledChaincodePackage(p.PackageID(input.PackageId))
+	if err != nil {
+		return nil, err
+	}
+
+	return &lb.GetInstalledChaincodePackageResult{
+		ChaincodeInstallPackage: pkgBytes,
 	}, nil
 }
 
@@ -407,7 +422,7 @@ func (i *Invocation) ApproveChaincodeDefinitionForMyOrg(input *lb.ApproveChainco
 
 
 
-func (i *Invocation) SimulateCommitChaincodeDefinition(input *lb.SimulateCommitChaincodeDefinitionArgs) (proto.Message, error) {
+func (i *Invocation) CheckCommitReadiness(input *lb.CheckCommitReadinessArgs) (proto.Message, error) {
 	opaqueStates, err := i.createOpaqueStates()
 	if err != nil {
 		return nil, err
@@ -427,12 +442,12 @@ func (i *Invocation) SimulateCommitChaincodeDefinition(input *lb.SimulateCommitC
 		Collections: input.Collections,
 	}
 
-	logger.Debugf("received invocation of SimulateCommitChaincodeDefinition on channel '%s' for definition '%s'",
+	logger.Debugf("received invocation of CheckCommitReadiness on channel '%s' for definition '%s'",
 		i.Stub.GetChannelID(),
 		cd,
 	)
 
-	approvals, err := i.SCC.Functions.SimulateCommitChaincodeDefinition(
+	approvals, err := i.SCC.Functions.CheckCommitReadiness(
 		i.Stub.GetChannelID(),
 		input.Name,
 		cd,
@@ -443,8 +458,8 @@ func (i *Invocation) SimulateCommitChaincodeDefinition(input *lb.SimulateCommitC
 		return nil, err
 	}
 
-	return &lb.SimulateCommitChaincodeDefinitionResult{
-		Approved: approvals,
+	return &lb.CheckCommitReadinessResult{
+		Approvals: approvals,
 	}, nil
 }
 
@@ -544,7 +559,7 @@ func (i *Invocation) QueryChaincodeDefinition(input *lb.QueryChaincodeDefinition
 		ValidationParameter: definedChaincode.ValidationInfo.ValidationParameter,
 		InitRequired:        definedChaincode.EndorsementInfo.InitRequired,
 		Collections:         definedChaincode.Collections,
-		Approved:            approvals,
+		Approvals:           approvals,
 	}, nil
 }
 
@@ -583,28 +598,6 @@ func (i *Invocation) QueryChaincodeDefinitions(input *lb.QueryChaincodeDefinitio
 
 	return &lb.QueryChaincodeDefinitionsResult{
 		ChaincodeDefinitions: chaincodeDefinitions,
-	}, nil
-}
-
-
-
-func (i *Invocation) QueryNamespaceDefinitions(input *lb.QueryNamespaceDefinitionsArgs) (proto.Message, error) {
-	logger.Debugf("received invocation of QueryNamespaceDefinitions on channel '%s'",
-		i.Stub.GetChannelID(),
-	)
-
-	namespaces, err := i.SCC.Functions.QueryNamespaceDefinitions(&ChaincodePublicLedgerShim{ChaincodeStubInterface: i.Stub})
-	if err != nil {
-		return nil, err
-	}
-	result := map[string]*lb.QueryNamespaceDefinitionsResult_Namespace{}
-	for namespace, nType := range namespaces {
-		result[namespace] = &lb.QueryNamespaceDefinitionsResult_Namespace{
-			Type: nType,
-		}
-	}
-	return &lb.QueryNamespaceDefinitionsResult{
-		Namespaces: result,
 	}, nil
 }
 

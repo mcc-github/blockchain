@@ -254,7 +254,7 @@ type ExternalFunctions struct {
 
 
 
-func (ef *ExternalFunctions) SimulateCommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error) {
+func (ef *ExternalFunctions) CheckCommitReadiness(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error) {
 	currentSequence, err := ef.Resources.Serializer.DeserializeFieldAsInt64(NamespacesName, ccname, "Sequence", publicState)
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not get current sequence")
@@ -285,7 +285,7 @@ func (ef *ExternalFunctions) SimulateCommitChaincodeDefinition(chname, ccname st
 
 
 func (ef *ExternalFunctions) CommitChaincodeDefinition(chname, ccname string, cd *ChaincodeDefinition, publicState ReadWritableState, orgStates []OpaqueState) (map[string]bool, error) {
-	approvals, err := ef.SimulateCommitChaincodeDefinition(chname, ccname, cd, publicState, orgStates)
+	approvals, err := ef.CheckCommitReadiness(chname, ccname, cd, publicState, orgStates)
 	if err != nil {
 		return nil, err
 	}
@@ -494,6 +494,17 @@ func (ef *ExternalFunctions) InstallChaincode(chaincodeInstallPackage []byte) (*
 		PackageID: packageID,
 		Label:     pkg.Metadata.Label,
 	}, nil
+}
+
+
+
+func (ef *ExternalFunctions) GetInstalledChaincodePackage(packageID p.PackageID) ([]byte, error) {
+	pkgBytes, err := ef.Resources.ChaincodeStore.Load(packageID)
+	if err != nil {
+		return nil, errors.WithMessage(err, "could not load cc install package")
+	}
+
+	return pkgBytes, nil
 }
 
 

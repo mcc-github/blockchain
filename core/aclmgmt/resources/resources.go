@@ -14,13 +14,13 @@ const (
 	
 	Lifecycle_InstallChaincode                   = "_lifecycle/InstallChaincode"
 	Lifecycle_QueryInstalledChaincode            = "_lifecycle/QueryInstalledChaincode"
+	Lifecycle_GetInstalledChaincodePackage       = "_lifecycle/GetInstalledChaincodePackage"
 	Lifecycle_QueryInstalledChaincodes           = "_lifecycle/QueryInstalledChaincodes"
 	Lifecycle_ApproveChaincodeDefinitionForMyOrg = "_lifecycle/ApproveChaincodeDefinitionForMyOrg"
 	Lifecycle_CommitChaincodeDefinition          = "_lifecycle/CommitChaincodeDefinition"
 	Lifecycle_QueryChaincodeDefinition           = "_lifecycle/QueryChaincodeDefinition"
 	Lifecycle_QueryChaincodeDefinitions          = "_lifecycle/QueryChaincodeDefinitions"
-	Lifecycle_QueryNamespaceDefinitions          = "_lifecycle/QueryNamespaceDefinitions"
-	Lifecycle_SimulateCommitChaincodeDefinition  = "_lifecycle/SimulateCommitChaincodeDefinition"
+	Lifecycle_CheckCommitReadiness               = "_lifecycle/CheckCommitReadiness"
 
 	
 	Lscc_Install                   = "lscc/Install"
