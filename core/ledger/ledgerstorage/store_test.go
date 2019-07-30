@@ -70,9 +70,10 @@ func TestStore(t *testing.T) {
 	
 	pvtdata, err = store.GetPvtDataByNum(2, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, 2, len(pvtdata))
+	assert.Equal(t, 3, len(pvtdata))
 	assert.Equal(t, uint64(3), pvtdata[0].SeqInBlock)
 	assert.Equal(t, uint64(5), pvtdata[1].SeqInBlock)
+	assert.Equal(t, uint64(6), pvtdata[2].SeqInBlock)
 
 	
 	pvtdata, err = store.GetPvtDataByNum(3, nil)
@@ -108,6 +109,7 @@ func TestStore(t *testing.T) {
 	
 	expectedMissingDataInfo := make(ledger.MissingPvtDataInfo)
 	expectedMissingDataInfo.Add(5, 4, "ns-4", "coll-4")
+	expectedMissingDataInfo.Add(5, 5, "ns-5", "coll-5")
 	missingDataInfo, err := store.GetMissingPvtDataInfoForMostRecentBlocks(1)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMissingDataInfo, missingDataInfo)
@@ -346,6 +348,83 @@ func TestAddAfterBlkStoreError(t *testing.T) {
 	pvtStorePndingBatch, err := store.pvtdataStore.HasPendingBatch()
 	assert.NoError(t, err)
 	assert.False(t, pvtStorePndingBatch)
+}
+
+func TestPvtStoreAheadOfBlockStore(t *testing.T) {
+	storeDir, err := ioutil.TempDir("", "lstore")
+	if err != nil {
+		t.Fatalf("Failed to create ledger storage directory: %s", err)
+	}
+	defer os.RemoveAll(storeDir)
+	conf := buildPrivateDataConfig(storeDir)
+	provider := NewProvider(storeDir, conf, metricsProvider)
+	defer provider.Close()
+	store, err := provider.Open("testLedger")
+	store.Init(btlPolicyForSampleData())
+	defer store.Shutdown()
+	assert.NoError(t, err)
+
+	
+	assert.False(t, store.IsPvtStoreAheadOfBlockStore())
+
+	sampleData := sampleDataWithPvtdataForSelectiveTx(t)
+	for _, d := range sampleData[0:9] { 
+		assert.NoError(t, store.CommitWithPvtData(d))
+	}
+	assert.False(t, store.IsPvtStoreAheadOfBlockStore())
+
+	
+	store.Shutdown()
+	provider.Close()
+	provider = NewProvider(storeDir, conf, metricsProvider)
+	store, err = provider.Open("testLedger")
+	assert.NoError(t, err)
+	store.Init(btlPolicyForSampleData())
+
+	
+	info, err := store.GetBlockchainInfo()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(9), info.Height)
+	pvtStoreHt, err := store.pvtdataStore.LastCommittedBlockHeight()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(9), pvtStoreHt)
+	assert.False(t, store.IsPvtStoreAheadOfBlockStore())
+
+	lastBlkAndPvtData := sampleData[9]
+	
+	
+	validTxPvtData, validTxMissingPvtData := constructPvtDataAndMissingData(lastBlkAndPvtData)
+	err = store.pvtdataStore.Prepare(lastBlkAndPvtData.Block.Header.Number, validTxPvtData, validTxMissingPvtData)
+	assert.NoError(t, err)
+	err = store.pvtdataStore.Commit()
+	assert.NoError(t, err)
+
+	
+	store.Shutdown()
+	provider.Close()
+	provider = NewProvider(storeDir, conf, metricsProvider)
+	store, err = provider.Open("testLedger")
+	assert.NoError(t, err)
+	store.Init(btlPolicyForSampleData())
+
+	
+	info, err = store.GetBlockchainInfo()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(9), info.Height)
+	pvtStoreHt, err = store.pvtdataStore.LastCommittedBlockHeight()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(10), pvtStoreHt)
+	assert.True(t, store.IsPvtStoreAheadOfBlockStore())
+
+	
+	assert.NoError(t, store.CommitWithPvtData(lastBlkAndPvtData))
+	info, err = store.GetBlockchainInfo()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(10), info.Height)
+	pvtStoreHt, err = store.pvtdataStore.LastCommittedBlockHeight()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(10), pvtStoreHt)
+	assert.False(t, store.IsPvtStoreAheadOfBlockStore())
 }
 
 func TestConstructPvtdataMap(t *testing.T) {

@@ -33,3 +33,16 @@ func (c CCID) String() string {
 func New(packageID persistence.PackageID) CCID {
 	return CCID(packageID.String())
 }
+
+
+type PeerConnection struct {
+	Address   string
+	TLSConfig *TLSConfig
+}
+
+
+type TLSConfig struct {
+	ClientCert []byte
+	ClientKey  []byte
+	RootCert   []byte
+}

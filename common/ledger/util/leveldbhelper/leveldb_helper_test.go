@@ -17,6 +17,7 @@ limitations under the License.
 package leveldbhelper
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,6 +108,52 @@ func TestLevelDBHelper(t *testing.T) {
 		keys = append(keys, string(itr.Key()))
 	}
 	assert.Equal(t, []string{"key1", "key2"}, keys)
+}
+
+func TestFileLock(t *testing.T) {
+	
+	fileLockPath := testDBPath + "/fileLock"
+	fileLock1 := NewFileLock(fileLockPath)
+	assert.Nil(t, fileLock1.db)
+	assert.Equal(t, fileLock1.filePath, fileLockPath)
+
+	
+	err := fileLock1.Lock()
+	assert.NoError(t, err)
+	assert.NotNil(t, fileLock1.db)
+
+	
+	fileLock2 := NewFileLock(fileLockPath)
+	assert.Nil(t, fileLock2.db)
+	assert.Equal(t, fileLock2.filePath, fileLockPath)
+
+	
+	
+	err = fileLock2.Lock()
+	expectedErr := fmt.Sprintf("lock is already acquired on file %s", fileLockPath)
+	assert.EqualError(t, err, expectedErr)
+	assert.Nil(t, fileLock2.db)
+
+	
+	fileLock1.Unlock()
+	assert.Nil(t, fileLock1.db)
+
+	
+	
+	err = fileLock2.Lock()
+	assert.NoError(t, err)
+	assert.NotNil(t, fileLock2.db)
+
+	
+	fileLock2.Unlock()
+	assert.Nil(t, fileLock1.db)
+
+	
+	fileLock2.Unlock()
+	assert.Nil(t, fileLock1.db)
+
+	
+	assert.NoError(t, os.RemoveAll(fileLockPath))
 }
 
 func TestCreateDBInEmptyDir(t *testing.T) {

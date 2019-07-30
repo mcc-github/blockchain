@@ -8,8 +8,6 @@ package ledgermgmttest
 
 import (
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
@@ -33,7 +31,6 @@ func NewInitializer(testLedgerDir string) *ledgermgmt.Initializer {
 				PurgeInterval:   100,
 			},
 		},
-		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
 		MetricsProvider:               &disabled.Provider{},
 		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
 	}

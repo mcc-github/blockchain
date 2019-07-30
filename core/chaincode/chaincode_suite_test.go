@@ -51,8 +51,8 @@ type certGenerator interface {
 }
 
 
-type processor interface {
-	chaincode.Processor
+type containerRouter interface {
+	chaincode.ContainerRouter
 }
 
 

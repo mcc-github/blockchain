@@ -121,7 +121,8 @@ type PeerLedger interface {
 	
 	GetPvtDataByNum(blockNum uint64, filter PvtNsCollFilter) ([]*TxPvtData, error)
 	
-	CommitWithPvtData(blockAndPvtdata *BlockAndPvtData) error
+	
+	CommitLegacy(blockAndPvtdata *BlockAndPvtData, commitOpts *CommitOptions) error
 	
 	GetConfigHistoryRetriever() (ConfigHistoryRetriever, error)
 	
@@ -131,6 +132,12 @@ type PeerLedger interface {
 	CommitPvtDataOfOldBlocks(blockPvtData []*BlockPvtData) ([]*PvtdataHashMismatch, error)
 	
 	GetMissingPvtDataTracker() (MissingPvtDataTracker, error)
+	
+	
+	
+	
+	
+	DoesPvtDataInfoExist(blockNum uint64) (bool, error)
 }
 
 
@@ -295,6 +302,11 @@ type BlockPvtData struct {
 
 func (txMissingPvtData TxMissingPvtDataMap) Add(txNum uint64, ns, coll string, isEligible bool) {
 	txMissingPvtData[txNum] = append(txMissingPvtData[txNum], &MissingPvtData{ns, coll, isEligible})
+}
+
+
+type CommitOptions struct {
+	FetchPvtDataFromLedger bool
 }
 
 

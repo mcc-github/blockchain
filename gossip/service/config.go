@@ -52,6 +52,10 @@ type ServiceConfig struct {
 	
 	
 	TransientstoreMaxBlockRetention uint64
+	
+	
+	
+	SkipPullingInvalidTransactionsDuringCommit bool
 }
 
 func GlobalConfig() *ServiceConfig {
@@ -75,6 +79,7 @@ func (c *ServiceConfig) loadGossipConfig() {
 
 	c.PvtDataPushAckTimeout = viper.GetDuration("peer.gossip.pvtData.pushAckTimeout")
 	c.PvtDataPullRetryThreshold = viper.GetDuration("peer.gossip.pvtData.pullRetryThreshold")
+	c.SkipPullingInvalidTransactionsDuringCommit = viper.GetBool("peer.gossip.pvtData.skipPullingInvalidTransactionsDuringCommit")
 
 	c.BtlPullMargin = btlPullMarginDefault
 	if viper.IsSet("peer.gossip.pvtData.btlPullMargin") {

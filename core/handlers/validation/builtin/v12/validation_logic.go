@@ -14,8 +14,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
@@ -28,6 +26,7 @@ import (
 	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/internal/car"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/scc/lscc"
+	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/protos/msp"
@@ -42,7 +41,9 @@ const (
 	DUPLICATED_IDENTITY_ERROR = "Endorsement policy evaluation failure might be caused by duplicated identities"
 )
 
-var validCollectionNameRegex = regexp.MustCompile(ccmetadata.AllowedCharsCollectionName)
+const AllowedCharsCollectionName = "[A-Za-z0-9_-]+"
+
+var validCollectionNameRegex = regexp.MustCompile(AllowedCharsCollectionName)
 
 
 
@@ -345,7 +346,7 @@ func validateCollectionName(collectionName string) error {
 	match := validCollectionNameRegex.FindString(collectionName)
 	if len(match) != len(collectionName) {
 		return fmt.Errorf("collection-name: %s not allowed. A valid collection name follows the pattern: %s",
-			collectionName, ccmetadata.AllowedCharsCollectionName)
+			collectionName, AllowedCharsCollectionName)
 	}
 	return nil
 }
@@ -523,7 +524,7 @@ func (vscc *Validator) ValidateLSCCInvocation(
 			return policyErr(fmt.Errorf("GetChaincodeDeploymentSpec error %s", err))
 		}
 
-		err = platforms.NewRegistry(
+		err = packaging.NewRegistry(
 			
 			
 			

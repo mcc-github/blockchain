@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/internal/peer/common"
+	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -28,7 +28,7 @@ var logger = flogging.MustGetLogger("chaincodeCmd")
 
 
 
-var platformRegistry = platforms.NewRegistry(platforms.SupportedPlatforms...)
+var platformRegistry = packaging.NewRegistry(packaging.SupportedPlatforms...)
 
 func addFlags(cmd *cobra.Command) {
 	common.AddOrdererFlags(cmd)

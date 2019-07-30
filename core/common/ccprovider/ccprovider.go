@@ -510,9 +510,6 @@ type ChaincodeContainerInfo struct {
 	Type      string
 
 	
-	ContainerType string
-
-	
 	
 	Name    string
 	Version string
@@ -537,15 +534,11 @@ type TransactionParams struct {
 
 func DeploymentSpecToChaincodeContainerInfo(cds *pb.ChaincodeDeploymentSpec, systemCC bool) *ChaincodeContainerInfo {
 	cci := &ChaincodeContainerInfo{
-		Name:          cds.ChaincodeSpec.ChaincodeId.Name,
-		Version:       cds.ChaincodeSpec.ChaincodeId.Version,
-		Path:          cds.ChaincodeSpec.ChaincodeId.Path,
-		Type:          cds.ChaincodeSpec.Type.String(),
-		ContainerType: "DOCKER",
-		PackageID:     persistence.PackageID(cds.ChaincodeSpec.ChaincodeId.Name + ":" + cds.ChaincodeSpec.ChaincodeId.Version),
-	}
-	if systemCC {
-		cci.ContainerType = "SYSTEM"
+		Name:      cds.ChaincodeSpec.ChaincodeId.Name,
+		Version:   cds.ChaincodeSpec.ChaincodeId.Version,
+		Path:      cds.ChaincodeSpec.ChaincodeId.Path,
+		Type:      cds.ChaincodeSpec.Type.String(),
+		PackageID: persistence.PackageID(cds.ChaincodeSpec.ChaincodeId.Name + ":" + cds.ChaincodeSpec.ChaincodeId.Version),
 	}
 	return cci
 }

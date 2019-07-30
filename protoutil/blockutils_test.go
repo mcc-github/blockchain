@@ -262,7 +262,7 @@ func TestInitBlockMeta(t *testing.T) {
 	block := &cb.Block{}
 	protoutil.InitBlockMetadata(block)
 	
-	assert.Equal(t, 3, len(block.Metadata.Metadata), "Expected block to have 3 metadata entries")
+	assert.Equal(t, 5, len(block.Metadata.Metadata), "Expected block to have 5 metadata entries")
 
 	
 	block = &cb.Block{
@@ -271,7 +271,7 @@ func TestInitBlockMeta(t *testing.T) {
 	block.Metadata.Metadata = append(block.Metadata.Metadata, []byte{})
 	protoutil.InitBlockMetadata(block)
 	
-	assert.Equal(t, 3, len(block.Metadata.Metadata), "Expected block to have 3 metadata entries")
+	assert.Equal(t, 5, len(block.Metadata.Metadata), "Expected block to have 5 metadata entries")
 }
 
 func TestCopyBlockMetadata(t *testing.T) {

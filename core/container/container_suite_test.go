@@ -12,11 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-
-
-
-
-
 func TestContainer(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Container Suite")

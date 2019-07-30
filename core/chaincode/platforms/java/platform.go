@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/util"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -136,10 +135,4 @@ func (p *Platform) DockerBuildOptions(path string) (util.DockerBuildOptions, err
 		Image: util.GetDockerfileFromConfig("chaincode.java.runtime"),
 		Cmd:   "./build.sh",
 	}, nil
-}
-
-
-func (p *Platform) GetMetadataAsTarEntries(code []byte) ([]byte, error) {
-	metadataProvider := &ccmetadata.TargzMetadataProvider{Code: code}
-	return metadataProvider.GetMetadataAsTarEntries()
 }

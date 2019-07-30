@@ -32,19 +32,19 @@ func newCommitter(lgr ledger.PeerLedger, t *testing.T) *committer {
 
 
 
-func (c *committer) cutBlockAndCommitWithPvtdata(trans ...*txAndPvtdata) *ledger.BlockAndPvtData {
-	blk := c.blkgen.nextBlockAndPvtdata(trans...)
+func (c *committer) cutBlockAndCommitLegacy(trans []*txAndPvtdata, missingPvtData ledger.TxMissingPvtDataMap) *ledger.BlockAndPvtData {
+	blk := c.blkgen.nextBlockAndPvtdata(trans, missingPvtData)
 	blkCopy := c.copyOfBlockAndPvtdata(blk)
 	c.assert.NoError(
-		c.lgr.CommitWithPvtData(blk),
+		c.lgr.CommitLegacy(blk, &ledger.CommitOptions{}),
 	)
 	return blkCopy
 }
 
-func (c *committer) cutBlockAndCommitExpectError(trans ...*txAndPvtdata) (*ledger.BlockAndPvtData, error) {
-	blk := c.blkgen.nextBlockAndPvtdata(trans...)
+func (c *committer) cutBlockAndCommitExpectError(trans []*txAndPvtdata, missingPvtData ledger.TxMissingPvtDataMap) (*ledger.BlockAndPvtData, error) {
+	blk := c.blkgen.nextBlockAndPvtdata(trans, missingPvtData)
 	blkCopy := c.copyOfBlockAndPvtdata(blk)
-	err := c.lgr.CommitWithPvtData(blk)
+	err := c.lgr.CommitLegacy(blk, &ledger.CommitOptions{})
 	c.assert.Error(err)
 	return blkCopy, err
 }
@@ -77,7 +77,7 @@ func newBlockGenerator(lgr ledger.PeerLedger, t *testing.T) *blkGenerator {
 }
 
 
-func (g *blkGenerator) nextBlockAndPvtdata(trans ...*txAndPvtdata) *ledger.BlockAndPvtData {
+func (g *blkGenerator) nextBlockAndPvtdata(trans []*txAndPvtdata, missingPvtData ledger.TxMissingPvtDataMap) *ledger.BlockAndPvtData {
 	block := protoutil.NewBlock(g.lastNum+1, g.lastHash)
 	blockPvtdata := make(map[uint64]*ledger.TxPvtData)
 	for i, tran := range trans {
@@ -93,5 +93,5 @@ func (g *blkGenerator) nextBlockAndPvtdata(trans ...*txAndPvtdata) *ledger.Block
 	g.lastHash = protoutil.BlockHeaderHash(block.Header)
 	setBlockFlagsToValid(block)
 	return &ledger.BlockAndPvtData{Block: block, PvtData: blockPvtdata,
-		MissingPvtData: make(ledger.TxMissingPvtDataMap)}
+		MissingPvtData: missingPvtData}
 }

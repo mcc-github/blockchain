@@ -12,7 +12,6 @@ import (
 
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/common/validation/statebased"
 	vc "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
 	vi "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
@@ -25,7 +24,10 @@ import (
 
 var logger = flogging.MustGetLogger("vscc")
 
-var validCollectionNameRegex = regexp.MustCompile(ccmetadata.AllowedCharsCollectionName)
+
+const AllowedCharsCollectionName = "[A-Za-z0-9_-]+"
+
+var validCollectionNameRegex = regexp.MustCompile(AllowedCharsCollectionName)
 
 
 

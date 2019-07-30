@@ -447,6 +447,36 @@ func InitCmdFactory(cmdName string, isEndorserRequired, isOrdererRequired bool) 
 }
 
 
+func processProposals(endorserClients []pb.EndorserClient, signedProposal *pb.SignedProposal) ([]*pb.ProposalResponse, error) {
+	responsesCh := make(chan *pb.ProposalResponse, len(endorserClients))
+	errorCh := make(chan error, len(endorserClients))
+	wg := sync.WaitGroup{}
+	for _, endorser := range endorserClients {
+		wg.Add(1)
+		go func(endorser pb.EndorserClient) {
+			defer wg.Done()
+			proposalResp, err := endorser.ProcessProposal(context.Background(), signedProposal)
+			if err != nil {
+				errorCh <- err
+				return
+			}
+			responsesCh <- proposalResp
+		}(endorser)
+	}
+	wg.Wait()
+	close(responsesCh)
+	close(errorCh)
+	for err := range errorCh {
+		return nil, err
+	}
+	var responses []*pb.ProposalResponse
+	for response := range responsesCh {
+		responses = append(responses, response)
+	}
+	return responses, nil
+}
+
+
 
 
 
@@ -496,13 +526,10 @@ func ChaincodeInvokeOrQuery(
 	if err != nil {
 		return nil, errors.WithMessagef(err, "error creating signed proposal for %s", funcName)
 	}
-	var responses []*pb.ProposalResponse
-	for _, endorser := range endorserClients {
-		proposalResp, err := endorser.ProcessProposal(context.Background(), signedProp)
-		if err != nil {
-			return nil, errors.WithMessagef(err, "error endorsing %s", funcName)
-		}
-		responses = append(responses, proposalResp)
+
+	responses, err := processProposals(endorserClients, signedProp)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "error endorsing %s", funcName)
 	}
 
 	if len(responses) == 0 {

@@ -15,8 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
@@ -24,6 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/policy"
+	"github.com/mcc-github/blockchain/internal/pkg/ccmetadata"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -142,8 +141,6 @@ type LifeCycleSysCC struct {
 	
 	Support FilesystemSupport
 
-	PlatformRegistry *platforms.Registry
-
 	GetMSPIDs MSPIDsGetter
 }
 
@@ -152,17 +149,15 @@ type LifeCycleSysCC struct {
 func New(
 	sccp sysccprovider.SystemChaincodeProvider,
 	ACLProvider aclmgmt.ACLProvider,
-	platformRegistry *platforms.Registry,
 	getMSPIDs MSPIDsGetter,
 	policyChecker policy.PolicyChecker,
 ) *LifeCycleSysCC {
 	return &LifeCycleSysCC{
-		Support:          &supportImpl{GetMSPIDs: getMSPIDs},
-		PolicyChecker:    policyChecker,
-		SCCProvider:      sccp,
-		ACLProvider:      ACLProvider,
-		PlatformRegistry: platformRegistry,
-		GetMSPIDs:        getMSPIDs,
+		Support:       &supportImpl{GetMSPIDs: getMSPIDs},
+		PolicyChecker: policyChecker,
+		SCCProvider:   sccp,
+		ACLProvider:   ACLProvider,
+		GetMSPIDs:     getMSPIDs,
 	}
 }
 
@@ -625,7 +620,7 @@ func (lscc *LifeCycleSysCC) executeInstall(stub shim.ChaincodeStubInterface, ccb
 	}
 
 	
-	statedbArtifactsTar, err := ccprovider.ExtractStatedbArtifactsFromCCPackage(ccpack, lscc.PlatformRegistry)
+	statedbArtifactsTar, err := ccprovider.ExtractStatedbArtifactsFromCCPackage(ccpack)
 	if err != nil {
 		return err
 	}

@@ -16,13 +16,13 @@ import (
 	"github.com/mcc-github/blockchain/common/configtx"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/common/validation"
 	"github.com/mcc-github/blockchain/core/ledger"
 	ledgerUtil "github.com/mcc-github/blockchain/core/ledger/util"
+	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protos/common"
 	mspprotos "github.com/mcc-github/blockchain/protos/msp"
@@ -613,7 +613,8 @@ func (v *TxValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sy
 		return nil, err
 	}
 
-	err = platforms.NewRegistry(&golang.Platform{}).ValidateDeploymentSpec(cds.ChaincodeSpec.Type.String(), cds.CodePackage)
+	
+	err = packaging.NewRegistry(&golang.Platform{}).ValidateDeploymentSpec(cds.ChaincodeSpec.Type.String(), cds.CodePackage)
 	if err != nil {
 		return nil, err
 	}
@@ -647,6 +648,10 @@ func (ds *dynamicCapabilities) ACLs() bool {
 
 func (ds *dynamicCapabilities) CollectionUpgrade() bool {
 	return ds.cr.Capabilities().CollectionUpgrade()
+}
+
+func (ds *dynamicCapabilities) StorePvtDataOfInvalidTx() bool {
+	return ds.cr.Capabilities().StorePvtDataOfInvalidTx()
 }
 
 

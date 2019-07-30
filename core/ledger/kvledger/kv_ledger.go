@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/util"
@@ -23,8 +24,10 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerstorage"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
+	lutil "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -40,6 +43,7 @@ type kvLedger struct {
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
 	stats                  *ledgerStats
+	commitHash             []byte
 }
 
 
@@ -77,6 +81,13 @@ func newKVLedger(
 	l.initBlockStore(btlPolicy)
 
 	
+	var err error
+	l.commitHash, err = l.lastPersistedCommitHash()
+	if err != nil {
+		return nil, err
+	}
+
+	
 	
 	
 	ccEventListener := versionedDB.GetChaincodeEventListener()
@@ -88,7 +99,7 @@ func newKVLedger(
 
 	
 	if err := l.recoverDBs(); err != nil {
-		panic(errors.WithMessage(err, "error during state DB recovery"))
+		return nil, err
 	}
 	l.configHistoryRetriever = configHistoryMgr.GetRetriever(ledgerID, l)
 
@@ -135,6 +146,35 @@ func (l *kvLedger) initTxMgr(
 
 func (l *kvLedger) initBlockStore(btlPolicy pvtdatapolicy.BTLPolicy) {
 	l.blockStore.Init(btlPolicy)
+}
+
+func (l *kvLedger) lastPersistedCommitHash() ([]byte, error) {
+	bcInfo, err := l.GetBlockchainInfo()
+	if err != nil {
+		return nil, err
+	}
+	if bcInfo.Height == 0 {
+		logger.Debugf("Chain is empty")
+		return nil, nil
+	}
+
+	logger.Debugf("Fetching block [%d] to retrieve the currentCommitHash", bcInfo.Height-1)
+	block, err := l.GetBlockByNumber(bcInfo.Height - 1)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(block.Metadata.Metadata) < int(common.BlockMetadataIndex_COMMIT_HASH+1) {
+		logger.Debugf("Last block metadata does not contain commit hash")
+		return nil, nil
+	}
+
+	commitHash := &common.Metadata{}
+	err = proto.Unmarshal(block.Metadata.Metadata[common.BlockMetadataIndex_COMMIT_HASH], commitHash)
+	if err != nil {
+		return nil, errors.Wrap(err, "error unmarshaling last persisted commit hash")
+	}
+	return commitHash.Value, nil
 }
 
 
@@ -205,17 +245,37 @@ func (l *kvLedger) syncStateDBWithPvtdatastore() error {
 	
 	
 	
+
 	blocksPvtData, err := l.blockStore.GetLastUpdatedOldBlocksPvtData()
 	if err != nil {
 		return err
 	}
-	if err := l.txtmgmt.RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtData); err != nil {
-		return err
-	}
-	if err := l.blockStore.ResetLastUpdatedOldBlocksList(); err != nil {
+
+	
+	
+	
+	if err := l.filterYetToCommitBlocks(blocksPvtData); err != nil {
 		return err
 	}
 
+	if err = l.applyValidTxPvtDataOfOldBlocks(blocksPvtData); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *kvLedger) filterYetToCommitBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	info, err := l.blockStore.GetBlockchainInfo()
+	if err != nil {
+		return err
+	}
+	for blkNum := range blocksPvtData {
+		if blkNum > info.Height-1 {
+			logger.Infof("found pvtdata associated with yet to be committed block [%d]", blkNum)
+			delete(blocksPvtData, blkNum)
+		}
+	}
 	return nil
 }
 
@@ -330,20 +390,48 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
 }
 
 
-func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+func (l *kvLedger) CommitLegacy(pvtdataAndBlock *ledger.BlockAndPvtData, commitOpts *ledger.CommitOptions) error {
 	var err error
 	block := pvtdataAndBlock.Block
 	blockNo := pvtdataAndBlock.Block.Header.Number
 
 	startBlockProcessing := time.Now()
+	if commitOpts.FetchPvtDataFromLedger {
+		
+		
+		
+		
+
+		
+		
+		
+		
+		
+		
+		
+		txPvtData, err := l.blockStore.GetPvtDataByNum(blockNo, nil)
+		if err != nil {
+			return err
+		}
+		pvtdataAndBlock.PvtData = convertTxPvtDataArrayToMap(txPvtData)
+	}
+
 	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, blockNo)
-	txstatsInfo, err := l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
+	txstatsInfo, updateBatchBytes, err := l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
 	if err != nil {
 		return err
 	}
 	elapsedBlockProcessing := time.Since(startBlockProcessing)
 
 	startBlockstorageAndPvtdataCommit := time.Now()
+	logger.Debugf("[%s] Adding CommitHash to the block [%d]", l.ledgerID, blockNo)
+	
+	
+	
+	if block.Header.Number == 1 || l.commitHash != nil {
+		l.addBlockCommitHash(pvtdataAndBlock.Block, updateBatchBytes)
+	}
+
 	logger.Debugf("[%s] Committing block [%d] to storage", l.ledgerID, blockNo)
 	l.blockAPIsRWLock.Lock()
 	defer l.blockAPIsRWLock.Unlock()
@@ -368,12 +456,14 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		}
 	}
 
-	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_and_pvtdata_commit=%dms state_commit=%dms)",
+	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_and_pvtdata_commit=%dms state_commit=%dms)"+
+		" commitHash=[%x]",
 		l.ledgerID, block.Header.Number, len(block.Data.Data),
 		time.Since(startBlockProcessing)/time.Millisecond,
 		elapsedBlockProcessing/time.Millisecond,
 		elapsedBlockstorageAndPvtdataCommit/time.Millisecond,
 		elapsedCommitState/time.Millisecond,
+		l.commitHash,
 	)
 	l.updateBlockStats(
 		elapsedBlockProcessing,
@@ -382,6 +472,14 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		txstatsInfo,
 	)
 	return nil
+}
+
+func convertTxPvtDataArrayToMap(txPvtData []*ledger.TxPvtData) ledger.TxPvtDataMap {
+	txPvtDataMap := make(ledger.TxPvtDataMap)
+	for _, pvtData := range txPvtData {
+		txPvtDataMap[pvtData.SeqInBlock] = pvtData
+	}
+	return txPvtDataMap
 }
 
 func (l *kvLedger) updateBlockStats(
@@ -399,7 +497,27 @@ func (l *kvLedger) updateBlockStats(
 
 
 func (l *kvLedger) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
+	
+	
+	
+	
+	if l.blockStore.IsPvtStoreAheadOfBlockStore() {
+		return nil, nil
+	}
 	return l.blockStore.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
+}
+
+func (l *kvLedger) addBlockCommitHash(block *common.Block, updateBatchBytes []byte) {
+	var valueBytes []byte
+
+	txValidationCode := block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER]
+	valueBytes = append(valueBytes, proto.EncodeVarint(uint64(len(txValidationCode)))...)
+	valueBytes = append(valueBytes, txValidationCode...)
+	valueBytes = append(valueBytes, updateBatchBytes...)
+	valueBytes = append(valueBytes, l.commitHash...)
+
+	l.commitHash = util.ComputeSHA256(valueBytes)
+	block.Metadata.Metadata[common.BlockMetadataIndex_COMMIT_HASH] = protoutil.MarshalOrPanic(&common.Metadata{Value: l.commitHash})
 }
 
 
@@ -420,6 +538,15 @@ func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilte
 	return pvtdata, err
 }
 
+
+
+
+
+
+func (l *kvLedger) DoesPvtDataInfoExist(blockNum uint64) (bool, error) {
+	return l.blockStore.DoesPvtDataInfoExist(blockNum)
+}
+
 func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, error) {
 	return l.configHistoryRetriever, nil
 }
@@ -427,29 +554,44 @@ func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, e
 func (l *kvLedger) CommitPvtDataOfOldBlocks(pvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error) {
 	logger.Debugf("[%s:] Comparing pvtData of [%d] old blocks against the hashes in transaction's rwset to find valid and invalid data",
 		l.ledgerID, len(pvtData))
-	validPvtData, hashMismatches, err := ConstructValidAndInvalidPvtData(pvtData, l.blockStore)
+
+	hashVerifiedPvtData, hashMismatches, err := constructValidAndInvalidPvtData(pvtData, l.blockStore)
 	if err != nil {
 		return nil, err
 	}
 
 	logger.Debugf("[%s:] Committing pvtData of [%d] old blocks to the pvtdatastore", l.ledgerID, len(pvtData))
-	err = l.blockStore.CommitPvtDataOfOldBlocks(validPvtData)
+	err = l.blockStore.CommitPvtDataOfOldBlocks(hashVerifiedPvtData)
 	if err != nil {
 		return nil, err
 	}
 
-	logger.Debugf("[%s:] Committing pvtData of [%d] old blocks to the stateDB", l.ledgerID, len(pvtData))
-	err = l.txtmgmt.RemoveStaleAndCommitPvtDataOfOldBlocks(validPvtData)
+	err = l.applyValidTxPvtDataOfOldBlocks(hashVerifiedPvtData)
 	if err != nil {
-		return nil, err
-	}
-
-	logger.Debugf("[%s:] Clearing the bookkeeping information from pvtdatastore", l.ledgerID)
-	if err := l.blockStore.ResetLastUpdatedOldBlocksList(); err != nil {
 		return nil, err
 	}
 
 	return hashMismatches, nil
+}
+
+func (l *kvLedger) applyValidTxPvtDataOfOldBlocks(hashVerifiedPvtData map[uint64][]*ledger.TxPvtData) error {
+	logger.Debugf("[%s:] Filtering pvtData of invalidation transactions", l.ledgerID)
+	committedPvtData, err := filterPvtDataOfInvalidTx(hashVerifiedPvtData, l.blockStore)
+	if err != nil {
+		return err
+	}
+
+	logger.Debugf("[%s:] Committing pvtData of [%d] old blocks to the stateDB", l.ledgerID, len(hashVerifiedPvtData))
+	err = l.txtmgmt.RemoveStaleAndCommitPvtDataOfOldBlocks(committedPvtData)
+	if err != nil {
+		return err
+	}
+
+	logger.Debugf("[%s:] Clearing the bookkeeping information from pvtdatastore", l.ledgerID)
+	if err := l.blockStore.ResetLastUpdatedOldBlocksList(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (l *kvLedger) GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error) {
@@ -513,4 +655,28 @@ func (a *ccEventListenerAdaptor) HandleChaincodeDeploy(chaincodeDefinition *ledg
 
 func (a *ccEventListenerAdaptor) ChaincodeDeployDone(succeeded bool) {
 	a.legacyEventListener.ChaincodeDeployDone(succeeded)
+}
+
+func filterPvtDataOfInvalidTx(hashVerifiedPvtData map[uint64][]*ledger.TxPvtData, blockStore *ledgerstorage.Store) (map[uint64][]*ledger.TxPvtData, error) {
+	committedPvtData := make(map[uint64][]*ledger.TxPvtData)
+	for blkNum, txsPvtData := range hashVerifiedPvtData {
+
+		
+		
+		
+		block, err := blockStore.RetrieveBlockByNumber(blkNum)
+		if err != nil {
+			return nil, err
+		}
+		blockValidationFlags := lutil.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+
+		var blksPvtData []*ledger.TxPvtData
+		for _, pvtData := range txsPvtData {
+			if blockValidationFlags.IsValid(int(pvtData.SeqInBlock)) {
+				blksPvtData = append(blksPvtData, pvtData)
+			}
+		}
+		committedPvtData[blkNum] = blksPvtData
+	}
+	return committedPvtData, nil
 }

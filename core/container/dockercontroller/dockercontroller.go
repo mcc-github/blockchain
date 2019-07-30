@@ -23,15 +23,13 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
+	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
+	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 )
-
-
-
-const ContainerType = "DOCKER"
 
 var (
 	dockerLogger = flogging.MustGetLogger("dockercontroller")
@@ -75,20 +73,25 @@ type dockerClient interface {
 }
 
 type PlatformBuilder interface {
-	GenerateDockerBuild(ccType, path, name, version string, codePackage []byte) (io.Reader, error)
+	GenerateDockerBuild(ccci *ccprovider.ChaincodeContainerInfo, codePackage []byte) (io.Reader, error)
 }
 
+type ContainerInstance struct {
+	CCID     ccintf.CCID
+	Type     string
+	DockerVM *DockerVM
+}
 
-type Provider struct {
-	PeerID          string
-	NetworkID       string
-	BuildMetrics    *BuildMetrics
-	HostConfig      *docker.HostConfig
-	Client          dockerClient
-	AttachStdOut    bool
-	ChaincodePull   bool
-	NetworkMode     string
-	PlatformBuilder PlatformBuilder
+func (ci *ContainerInstance) Start(peerConnection *ccintf.PeerConnection) error {
+	return ci.DockerVM.Start(ci.CCID, ci.Type, peerConnection)
+}
+
+func (ci *ContainerInstance) Stop() error {
+	return ci.DockerVM.Stop(ci.CCID)
+}
+
+func (ci *ContainerInstance) Wait() (int, error) {
+	return ci.DockerVM.Wait(ci.CCID)
 }
 
 
@@ -105,24 +108,9 @@ type DockerVM struct {
 }
 
 
-func (p *Provider) NewVM() container.VM {
-	return &DockerVM{
-		PeerID:          p.PeerID,
-		NetworkID:       p.NetworkID,
-		Client:          p.Client,
-		BuildMetrics:    p.BuildMetrics,
-		AttachStdOut:    p.AttachStdOut,
-		HostConfig:      p.HostConfig,
-		ChaincodePull:   p.ChaincodePull,
-		NetworkMode:     p.NetworkMode,
-		PlatformBuilder: p.PlatformBuilder,
-	}
-}
 
-
-
-func (p *Provider) HealthCheck(ctx context.Context) error {
-	if err := p.Client.PingWithContext(ctx); err != nil {
+func (vm *DockerVM) HealthCheck(ctx context.Context) error {
+	if err := vm.Client.PingWithContext(ctx); err != nil {
 		return errors.Wrap(err, "failed to ping to Docker daemon")
 	}
 	return nil
@@ -183,31 +171,83 @@ func (vm *DockerVM) buildImage(ccid ccintf.CCID, reader io.Reader) error {
 }
 
 
-func (vm *DockerVM) Build(ccid ccintf.CCID, ccType, path, name, version string, codePackage []byte) error {
+func (vm *DockerVM) Build(ccci *ccprovider.ChaincodeContainerInfo, codePackage []byte) (container.Instance, error) {
+	ccid := ccintf.New(ccci.PackageID)
 	imageName, err := vm.GetVMNameForDocker(ccid)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_, err = vm.Client.InspectImage(imageName)
-	if err != docker.ErrNoSuchImage {
-		return errors.Wrap(err, "docker image inspection failed")
+	switch err {
+	case docker.ErrNoSuchImage:
+		dockerfileReader, err := vm.PlatformBuilder.GenerateDockerBuild(ccci, codePackage)
+		if err != nil {
+			return nil, errors.Wrap(err, "platform builder failed")
+		}
+		err = vm.buildImage(ccid, dockerfileReader)
+		if err != nil {
+			return nil, errors.Wrap(err, "docker image build failed")
+		}
+	case nil:
+	default:
+		return nil, errors.Wrap(err, "docker image inspection failed")
 	}
 
-	dockerfileReader, err := vm.PlatformBuilder.GenerateDockerBuild(ccType, path, name, version, codePackage)
-	if err != nil {
-		return errors.Wrap(err, "platform builder failed")
+	return &ContainerInstance{
+		DockerVM: vm,
+		CCID:     ccid,
+		Type:     ccci.Type,
+	}, nil
+}
+
+func (vm *DockerVM) GetArgs(ccType string, peerAddress string) ([]string, error) {
+	
+	
+	switch ccType {
+	case pb.ChaincodeSpec_GOLANG.String(), pb.ChaincodeSpec_CAR.String():
+		return []string{"chaincode", fmt.Sprintf("-peer.address=%s", peerAddress)}, nil
+	case pb.ChaincodeSpec_JAVA.String():
+		return []string{"/root/chaincode-java/start", "--peerAddress", peerAddress}, nil
+	case pb.ChaincodeSpec_NODE.String():
+		return []string{"/bin/sh", "-c", fmt.Sprintf("cd /usr/local/src; npm start -- --peer.address %s", peerAddress)}, nil
+	default:
+		return nil, errors.Errorf("unknown chaincodeType: %s", ccType)
 	}
-	err = vm.buildImage(ccid, dockerfileReader)
-	if err != nil {
-		return errors.Wrap(err, "docker image build failed")
+}
+
+const (
+	
+	TLSClientKeyPath      string = "/etc/mcc-github/blockchain/client.key"
+	TLSClientCertPath     string = "/etc/mcc-github/blockchain/client.crt"
+	TLSClientRootCertPath string = "/etc/mcc-github/blockchain/peer.crt"
+)
+
+func GetEnv(ccid ccintf.CCID, tlsConfig *ccintf.TLSConfig) []string {
+	
+	
+	
+	
+	
+	
+	envs := []string{"CORE_CHAINCODE_ID_NAME=" + string(ccid)}
+
+	
+	if tlsConfig != nil {
+		envs = append(envs, "CORE_PEER_TLS_ENABLED=true")
+		envs = append(envs, fmt.Sprintf("CORE_TLS_CLIENT_KEY_PATH=%s", TLSClientKeyPath))
+		envs = append(envs, fmt.Sprintf("CORE_TLS_CLIENT_CERT_PATH=%s", TLSClientCertPath))
+		envs = append(envs, fmt.Sprintf("CORE_PEER_TLS_ROOTCERT_FILE=%s", TLSClientRootCertPath))
+	} else {
+		envs = append(envs, "CORE_PEER_TLS_ENABLED=false")
 	}
 
-	return nil
+	return envs
+
 }
 
 
-func (vm *DockerVM) Start(ccid ccintf.CCID, args, env []string, filesToUpload map[string][]byte) error {
+func (vm *DockerVM) Start(ccid ccintf.CCID, ccType string, peerConnection *ccintf.PeerConnection) error {
 	imageName, err := vm.GetVMNameForDocker(ccid)
 	if err != nil {
 		return err
@@ -216,7 +256,16 @@ func (vm *DockerVM) Start(ccid ccintf.CCID, args, env []string, filesToUpload ma
 	containerName := vm.GetVMName(ccid)
 	logger := dockerLogger.With("imageName", imageName, "containerName", containerName)
 
-	vm.stopInternal(containerName, 0, false, false)
+	vm.stopInternal(containerName)
+
+	args, err := vm.GetArgs(ccType, peerConnection.Address)
+	if err != nil {
+		return errors.WithMessage(err, "could not get args")
+	}
+	dockerLogger.Debugf("start container with args: %s", strings.Join(args, " "))
+
+	env := GetEnv(ccid, peerConnection.TLSConfig)
+	dockerLogger.Debugf("start container with env:\n\t%s", strings.Join(env, "\n\t"))
 
 	err = vm.createContainer(imageName, containerName, args, env)
 	if err != nil {
@@ -231,17 +280,16 @@ func (vm *DockerVM) Start(ccid ccintf.CCID, args, env []string, filesToUpload ma
 	}
 
 	
-	
-	if len(filesToUpload) != 0 {
+	if peerConnection.TLSConfig != nil {
 		
 		
 		payload := bytes.NewBuffer(nil)
 		gw := gzip.NewWriter(payload)
 		tw := tar.NewWriter(gw)
 
-		for path, fileToUpload := range filesToUpload {
-			cutil.WriteBytesToPackage(path, fileToUpload, tw)
-		}
+		cutil.WriteBytesToPackage(TLSClientKeyPath, peerConnection.TLSConfig.ClientKey, tw)
+		cutil.WriteBytesToPackage(TLSClientCertPath, peerConnection.TLSConfig.ClientCert, tw)
+		cutil.WriteBytesToPackage(TLSClientRootCertPath, peerConnection.TLSConfig.RootCert, tw)
 
 		
 		if err := tw.Close(); err != nil {
@@ -332,9 +380,9 @@ func streamOutput(logger *flogging.FabricLogger, client dockerClient, containerN
 }
 
 
-func (vm *DockerVM) Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error {
+func (vm *DockerVM) Stop(ccid ccintf.CCID) error {
 	id := vm.ccidToContainerID(ccid)
-	return vm.stopInternal(id, timeout, dontkill, dontremove)
+	return vm.stopInternal(id)
 }
 
 
@@ -347,24 +395,20 @@ func (vm *DockerVM) ccidToContainerID(ccid ccintf.CCID) string {
 	return strings.Replace(vm.GetVMName(ccid), ":", "_", -1)
 }
 
-func (vm *DockerVM) stopInternal(id string, timeout uint, dontkill, dontremove bool) error {
+func (vm *DockerVM) stopInternal(id string) error {
 	logger := dockerLogger.With("id", id)
 
 	logger.Debugw("stopping container")
-	err := vm.Client.StopContainer(id, timeout)
+	err := vm.Client.StopContainer(id, 0)
 	dockerLogger.Debugw("stop container result", "error", err)
 
-	if !dontkill {
-		logger.Debugw("killing container")
-		err = vm.Client.KillContainer(docker.KillContainerOptions{ID: id})
-		logger.Debugw("kill container result", "error", err)
-	}
+	logger.Debugw("killing container")
+	err = vm.Client.KillContainer(docker.KillContainerOptions{ID: id})
+	logger.Debugw("kill container result", "error", err)
 
-	if !dontremove {
-		logger.Debugw("removing container")
-		err = vm.Client.RemoveContainer(docker.RemoveContainerOptions{ID: id, Force: true})
-		logger.Debugw("remove container result", "error", err)
-	}
+	logger.Debugw("removing container")
+	err = vm.Client.RemoveContainer(docker.RemoveContainerOptions{ID: id, Force: true})
+	logger.Debugw("remove container result", "error", err)
 
 	return err
 }

@@ -276,9 +276,7 @@ func TestTxValidationFailure_InvalidTxid(t *testing.T) {
 	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
 
 	
-	ledger.CommitWithPvtData(&ledger2.BlockAndPvtData{
-		Block: block,
-	})
+	ledger.CommitLegacy(&ledger2.BlockAndPvtData{Block: block}, &ledger2.CommitOptions{})
 
 	
 	

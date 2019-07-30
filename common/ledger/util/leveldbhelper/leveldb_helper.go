@@ -9,6 +9,7 @@ package leveldbhelper
 import (
 	"fmt"
 	"sync"
+	"syscall"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/util"
@@ -163,4 +164,59 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
 		return errors.Wrap(err, "error writing batch to leveldb")
 	}
 	return nil
+}
+
+
+
+
+
+type FileLock struct {
+	db       *leveldb.DB
+	filePath string
+}
+
+
+func NewFileLock(filePath string) *FileLock {
+	return &FileLock{
+		filePath: filePath,
+	}
+}
+
+
+
+
+
+
+
+
+
+func (f *FileLock) Lock() error {
+	dbOpts := &opt.Options{}
+	var err error
+	var dirEmpty bool
+	if dirEmpty, err = util.CreateDirIfMissing(f.filePath); err != nil {
+		panic(fmt.Sprintf("Error creating dir if missing: %s", err))
+	}
+	dbOpts.ErrorIfMissing = !dirEmpty
+	f.db, err = leveldb.OpenFile(f.filePath, dbOpts)
+	if err != nil && err == syscall.EAGAIN {
+		return errors.Errorf("lock is already acquired on file %s", f.filePath)
+	}
+	if err != nil {
+		panic(fmt.Sprintf("Error acquiring lock on file %s: %s", f.filePath, err))
+	}
+	return nil
+}
+
+
+
+func (f *FileLock) Unlock() {
+	if f.db == nil {
+		return
+	}
+	if err := f.db.Close(); err != nil {
+		logger.Warningf("unable to release the lock on file %s: %s", f.filePath, err)
+		return
+	}
+	f.db = nil
 }

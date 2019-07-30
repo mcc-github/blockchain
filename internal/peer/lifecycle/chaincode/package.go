@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
+	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -25,11 +25,6 @@ import (
 
 type PlatformRegistry interface {
 	GetDeploymentPayload(ccType, path string) ([]byte, error)
-}
-
-
-type Writer interface {
-	WriteFile(string, string, []byte) error
 }
 
 
@@ -77,7 +72,7 @@ func PackageCmd(p *Packager) *cobra.Command {
 		ValidArgs: []string{"1"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if p == nil {
-				pr := platforms.NewRegistry(platforms.SupportedPlatforms...)
+				pr := packaging.NewRegistry(packaging.SupportedPlatforms...)
 
 				p = &Packager{
 					PlatformRegistry: pr,

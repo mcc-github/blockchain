@@ -9,6 +9,7 @@ package ledgerstorage
 import (
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
@@ -17,7 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
-	lutil "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
@@ -35,21 +35,24 @@ type Provider struct {
 
 type Store struct {
 	blkstorage.BlockStore
-	pvtdataStore pvtdatastorage.Store
-	rwlock       *sync.RWMutex
+	pvtdataStore                pvtdatastorage.Store
+	rwlock                      sync.RWMutex
+	isPvtstoreAheadOfBlockstore atomic.Value
+}
+
+var attrsToIndex = []blkstorage.IndexableAttr{
+	blkstorage.IndexableAttrBlockHash,
+	blkstorage.IndexableAttrBlockNum,
+	blkstorage.IndexableAttrTxID,
+	blkstorage.IndexableAttrBlockNumTranNum,
+	
+	blkstorage.IndexableAttrBlockTxID,
+	blkstorage.IndexableAttrTxValidationCode,
 }
 
 
 func NewProvider(storeDir string, conf *pvtdatastorage.PrivateDataConfig, metricsProvider metrics.Provider) *Provider {
 	
-	attrsToIndex := []blkstorage.IndexableAttr{
-		blkstorage.IndexableAttrBlockHash,
-		blkstorage.IndexableAttrBlockNum,
-		blkstorage.IndexableAttrTxID,
-		blkstorage.IndexableAttrBlockNumTranNum,
-		blkstorage.IndexableAttrBlockTxID,
-		blkstorage.IndexableAttrTxValidationCode,
-	}
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
 	blockStoreProvider := fsblkstorage.NewProvider(
 		fsblkstorage.NewConf(
@@ -76,10 +79,24 @@ func (p *Provider) Open(ledgerid string) (*Store, error) {
 	if pvtdataStore, err = p.pvtdataStoreProvider.OpenStore(ledgerid); err != nil {
 		return nil, err
 	}
-	store := &Store{blockStore, pvtdataStore, &sync.RWMutex{}}
+	store := &Store{
+		BlockStore:   blockStore,
+		pvtdataStore: pvtdataStore,
+	}
 	if err := store.init(); err != nil {
 		return nil, err
 	}
+
+	info, err := blockStore.GetBlockchainInfo()
+	if err != nil {
+		return nil, err
+	}
+	pvtstoreHeight, err := pvtdataStore.LastCommittedBlockHeight()
+	if err != nil {
+		return nil, err
+	}
+	store.isPvtstoreAheadOfBlockstore.Store(pvtstoreHeight > info.Height)
+
 	return store, nil
 }
 
@@ -87,6 +104,11 @@ func (p *Provider) Open(ledgerid string) (*Store, error) {
 func (p *Provider) Close() {
 	p.blkStoreProvider.Close()
 	p.pvtdataStoreProvider.Close()
+}
+
+
+func (p *Provider) Exists(ledgerID string) (bool, error) {
+	return p.blkStoreProvider.Exists(ledgerID)
 }
 
 
@@ -118,18 +140,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		
 		
 		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		validTxPvtData, validTxMissingPvtData := constructValidTxPvtDataAndMissingData(blockAndPvtdata)
-		if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, validTxPvtData, validTxMissingPvtData); err != nil {
+		pvtData, missingPvtData := constructPvtDataAndMissingData(blockAndPvtdata)
+		if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtData, missingPvtData); err != nil {
 			return err
 		}
 		writtenToPvtStore = true
@@ -142,39 +154,41 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		return err
 	}
 
+	if pvtBlkStoreHt == blockNum+1 {
+		
+		
+		
+		s.isPvtstoreAheadOfBlockstore.Store(false)
+	}
+
 	if writtenToPvtStore {
 		return s.pvtdataStore.Commit()
 	}
 	return nil
 }
 
-func constructValidTxPvtDataAndMissingData(blockAndPvtData *ledger.BlockAndPvtData) ([]*ledger.TxPvtData,
+func constructPvtDataAndMissingData(blockAndPvtData *ledger.BlockAndPvtData) ([]*ledger.TxPvtData,
 	ledger.TxMissingPvtDataMap) {
 
-	var validTxPvtData []*ledger.TxPvtData
-	validTxMissingPvtData := make(ledger.TxMissingPvtDataMap)
+	var pvtData []*ledger.TxPvtData
+	missingPvtData := make(ledger.TxMissingPvtDataMap)
 
-	txsFilter := lutil.TxValidationFlags(blockAndPvtData.Block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 	numTxs := uint64(len(blockAndPvtData.Block.Data.Data))
 
 	
 	for txNum := uint64(0); txNum < numTxs; txNum++ {
-		if txsFilter.IsInvalid(int(txNum)) {
-			continue
-		}
-
 		if pvtdata, ok := blockAndPvtData.PvtData[txNum]; ok {
-			validTxPvtData = append(validTxPvtData, pvtdata)
+			pvtData = append(pvtData, pvtdata)
 		}
 
-		if missingPvtData, ok := blockAndPvtData.MissingPvtData[txNum]; ok {
-			for _, missing := range missingPvtData {
-				validTxMissingPvtData.Add(txNum, missing.Namespace,
+		if missingData, ok := blockAndPvtData.MissingPvtData[txNum]; ok {
+			for _, missing := range missingData {
+				missingPvtData.Add(txNum, missing.Namespace,
 					missing.Collection, missing.IsEligible)
 			}
 		}
 	}
-	return validTxPvtData, validTxMissingPvtData
+	return pvtData, missingPvtData
 }
 
 
@@ -226,6 +240,19 @@ func (s *Store) getPvtDataByNumWithoutLock(blockNum uint64, filter ledger.PvtNsC
 }
 
 
+
+
+
+
+func (s *Store) DoesPvtDataInfoExist(blockNum uint64) (bool, error) {
+	pvtStoreHt, err := s.pvtdataStore.LastCommittedBlockHeight()
+	if err != nil {
+		return false, err
+	}
+	return blockNum+1 <= pvtStoreHt, nil
+}
+
+
 func (s *Store) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
 	
 	
@@ -247,6 +274,12 @@ func (s *Store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData
 
 func (s *Store) ResetLastUpdatedOldBlocksList() error {
 	return s.pvtdataStore.ResetLastUpdatedOldBlocksList()
+}
+
+
+
+func (s *Store) IsPvtStoreAheadOfBlockStore() bool {
+	return s.isPvtstoreAheadOfBlockstore.Load().(bool)
 }
 
 
@@ -336,4 +369,26 @@ func constructPvtdataMap(pvtdata []*ledger.TxPvtData) map[uint64]*ledger.TxPvtDa
 		m[pvtdatum.SeqInBlock] = pvtdatum
 	}
 	return m
+}
+
+
+func LoadPreResetHeight(blockstorePath string) (map[string]uint64, error) {
+	return fsblkstorage.LoadPreResetHeight(blockstorePath)
+}
+
+
+func ResetBlockStore(blockstorePath string) error {
+	return fsblkstorage.ResetBlockStore(blockstorePath)
+}
+
+
+
+func ValidateRollbackParams(blockstorePath, ledgerID string, blockNum uint64) error {
+	return fsblkstorage.ValidateRollbackParams(blockstorePath, ledgerID, blockNum)
+}
+
+
+func Rollback(blockstorePath, ledgerID string, blockNum uint64) error {
+	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
+	return fsblkstorage.Rollback(blockstorePath, ledgerID, blockNum, indexConfig)
 }

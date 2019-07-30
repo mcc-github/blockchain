@@ -36,7 +36,7 @@ func TestReadWriteCustomTxProcessor(t *testing.T) {
 		s.setState("ns", "key2", "value2")
 		s.setState("ns", "key3", "value3")
 	})
-	h.cutBlockAndCommitWithPvtdata() 
+	h.cutBlockAndCommitLegacy() 
 
 	valueCounter := 0
 	fakeTxProcessor.GenerateSimulationResultsStub =
@@ -52,7 +52,7 @@ func TestReadWriteCustomTxProcessor(t *testing.T) {
 	
 	h.addPostOrderTx("tx1", 100)
 	h.addPostOrderTx("tx2", 100)
-	h.cutBlockAndCommitWithPvtdata()
+	h.cutBlockAndCommitLegacy()
 
 	
 	
@@ -84,7 +84,7 @@ func TestRangeReadAndWriteCustomTxProcessor(t *testing.T) {
 		s.setState("ns", "key2", "value2")
 		s.setState("ns", "key3", "value3")
 	})
-	h.cutBlockAndCommitWithPvtdata() 
+	h.cutBlockAndCommitLegacy() 
 
 	fakeTxProcessor1.GenerateSimulationResultsStub =
 		
@@ -126,7 +126,7 @@ func TestRangeReadAndWriteCustomTxProcessor(t *testing.T) {
 	h.addPostOrderTx("tx1", 101)
 	h.addPostOrderTx("tx2", 102)
 	h.addPostOrderTx("tx3", 103)
-	h.cutBlockAndCommitWithPvtdata()
+	h.cutBlockAndCommitLegacy()
 
 	
 	

@@ -12,7 +12,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
@@ -40,7 +39,6 @@ type LedgerMgr struct {
 type Initializer struct {
 	CustomTxProcessors              map[common.HeaderType]ledger.CustomTxProcessor
 	StateListeners                  []ledger.StateListener
-	PlatformRegistry                *platforms.Registry
 	DeployedChaincodeInfoProvider   ledger.DeployedChaincodeInfoProvider
 	MembershipInfoProvider          ledger.MembershipInfoProvider
 	ChaincodeLifecycleEventProvider ledger.ChaincodeLifecycleEventProvider
@@ -78,7 +76,6 @@ func NewLedgerMgr(initializer *Initializer) *LedgerMgr {
 	
 	cceventmgmt.Initialize(&chaincodeInfoProviderImpl{
 		ledgerMgr,
-		initializer.PlatformRegistry,
 		initializer.DeployedChaincodeInfoProvider,
 	})
 	logger.Info("Initialized LedgerMgr")
@@ -194,7 +191,6 @@ func addListenerForCCEventsHandler(
 
 type chaincodeInfoProviderImpl struct {
 	ledgerMgr              *LedgerMgr
-	pr                     *platforms.Registry
 	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
 }
 
@@ -224,5 +220,5 @@ func (p *chaincodeInfoProviderImpl) GetDeployedChaincodeInfo(chainid string,
 
 
 func (p *chaincodeInfoProviderImpl) RetrieveChaincodeArtifacts(chaincodeDefinition *cceventmgmt.ChaincodeDefinition) (installed bool, dbArtifactsTar []byte, err error) {
-	return ccprovider.ExtractStatedbArtifactsForChaincode(chaincodeDefinition.Name, chaincodeDefinition.Version, p.pr)
+	return ccprovider.ExtractStatedbArtifactsForChaincode(chaincodeDefinition.Name, chaincodeDefinition.Version)
 }

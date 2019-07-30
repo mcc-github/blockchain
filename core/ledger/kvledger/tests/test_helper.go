@@ -48,14 +48,20 @@ func (env *env) newTestHelperOpenLgr(id string, t *testing.T) *testhelper {
 
 
 
-func (h *testhelper) cutBlockAndCommitWithPvtdata() *ledger.BlockAndPvtData {
-	defer func() { h.simulatedTrans = nil }()
-	return h.committer.cutBlockAndCommitWithPvtdata(h.simulatedTrans...)
+func (h *testhelper) cutBlockAndCommitLegacy() *ledger.BlockAndPvtData {
+	defer func() {
+		h.simulatedTrans = nil
+		h.missingPvtData = make(ledger.TxMissingPvtDataMap)
+	}()
+	return h.committer.cutBlockAndCommitLegacy(h.simulatedTrans, h.missingPvtData)
 }
 
 func (h *testhelper) cutBlockAndCommitExpectError() (*ledger.BlockAndPvtData, error) {
-	defer func() { h.simulatedTrans = nil }()
-	return h.committer.cutBlockAndCommitExpectError(h.simulatedTrans...)
+	defer func() {
+		h.simulatedTrans = nil
+		h.missingPvtData = make(ledger.TxMissingPvtDataMap)
+	}()
+	return h.committer.cutBlockAndCommitExpectError(h.simulatedTrans, h.missingPvtData)
 }
 
 

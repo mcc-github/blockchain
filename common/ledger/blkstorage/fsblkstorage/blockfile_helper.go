@@ -77,6 +77,53 @@ func constructCheckpointInfoFromBlockFiles(rootDir string) (*checkpointInfo, err
 	return cpInfo, nil
 }
 
+
+
+
+func binarySearchFileNumForBlock(rootDir string, blockNum uint64) (int, error) {
+	cpInfo, err := constructCheckpointInfoFromBlockFiles(rootDir)
+	if err != nil {
+		return -1, err
+	}
+
+	beginFile := 0
+	endFile := cpInfo.latestFileChunkSuffixNum
+
+	for endFile != beginFile {
+		searchFile := beginFile + (endFile-beginFile)/2 + 1
+		n, err := retriveFirstBlockNumFromFile(rootDir, searchFile)
+		if err != nil {
+			return -1, err
+		}
+		switch {
+		case n == blockNum:
+			return searchFile, nil
+		case n > blockNum:
+			endFile = searchFile - 1
+		case n < blockNum:
+			beginFile = searchFile
+		}
+	}
+	return beginFile, nil
+}
+
+func retriveFirstBlockNumFromFile(rootDir string, fileNum int) (uint64, error) {
+	s, err := newBlockfileStream(rootDir, fileNum, 0)
+	if err != nil {
+		return 0, err
+	}
+	defer s.close()
+	bb, err := s.nextBlockBytes()
+	if err != nil {
+		return 0, err
+	}
+	blockInfo, err := extractSerializedBlockInfo(bb)
+	if err != nil {
+		return 0, err
+	}
+	return blockInfo.blockHeader.Number, nil
+}
+
 func retrieveLastFileSuffix(rootDir string) (int, error) {
 	logger.Debugf("retrieveLastFileSuffix()")
 	biggestFileNum := -1

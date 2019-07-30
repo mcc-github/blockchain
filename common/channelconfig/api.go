@@ -171,6 +171,10 @@ type ApplicationCapabilities interface {
 
 	
 	
+	StorePvtDataOfInvalidTx() bool
+
+	
+	
 	
 	
 	V2_0Validation() bool

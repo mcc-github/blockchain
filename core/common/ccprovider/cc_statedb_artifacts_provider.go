@@ -14,8 +14,6 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"strings"
-
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 )
 
 
@@ -27,7 +25,7 @@ type TarFileEntry struct {
 
 
 
-func ExtractStatedbArtifactsForChaincode(ccname, ccversion string, pr *platforms.Registry) (installed bool, statedbArtifactsTar []byte, err error) {
+func ExtractStatedbArtifactsForChaincode(ccname, ccversion string) (installed bool, statedbArtifactsTar []byte, err error) {
 	ccpackage, err := GetChaincodeFromFS(ccname, ccversion)
 	if err != nil {
 		
@@ -37,16 +35,18 @@ func ExtractStatedbArtifactsForChaincode(ccname, ccversion string, pr *platforms
 		return false, nil, nil
 	}
 
-	statedbArtifactsTar, err = ExtractStatedbArtifactsFromCCPackage(ccpackage, pr)
+	statedbArtifactsTar, err = ExtractStatedbArtifactsFromCCPackage(ccpackage)
 	return true, statedbArtifactsTar, err
 }
 
 
 
 
-func ExtractStatedbArtifactsFromCCPackage(ccpackage CCPackage, pr *platforms.Registry) (statedbArtifactsTar []byte, err error) {
+func ExtractStatedbArtifactsFromCCPackage(ccpackage CCPackage) (statedbArtifactsTar []byte, err error) {
 	cds := ccpackage.GetDepSpec()
-	metaprov, err := pr.GetMetadataProvider(cds.ChaincodeSpec.Type.String(), cds.CodePackage)
+
+	metadataProvider := TargzMetadataProvider{Code: cds.CodePackage}
+	metaprov, err := metadataProvider.GetMetadataAsTarEntries()
 	if err != nil {
 		ccproviderLogger.Infof("invalid deployment spec: %s", err)
 		return nil, fmt.Errorf("invalid deployment spec")

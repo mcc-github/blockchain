@@ -15,7 +15,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -50,7 +49,6 @@ import (
 	plgr "github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
-	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -179,8 +177,7 @@ func initMockPeer(chainIDs ...string) (*peer.Peer, *ChaincodeSupport, func(), er
 	globalConfig := GlobalConfig()
 	globalConfig.StartupTimeout = 10 * time.Second
 	globalConfig.ExecuteTimeout = 1 * time.Second
-	pr := platforms.NewRegistry(&golang.Platform{})
-	lsccImpl := lscc.New(sccp, mockAclProvider, pr, peerInstance.GetMSPIDs, newPolicyChecker(peerInstance))
+	lsccImpl := lscc.New(sccp, mockAclProvider, peerInstance.GetMSPIDs, newPolicyChecker(peerInstance))
 	ml := &mock.Lifecycle{}
 	ml.ChaincodeContainerInfoStub = func(_, name string, _ ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
 		switch name {
@@ -211,21 +208,13 @@ func initMockPeer(chainIDs ...string) (*peer.Peer, *ChaincodeSupport, func(), er
 	containerRuntime := &ContainerRuntime{
 		CACert:        ca.CertBytes(),
 		CertGenerator: certGenerator,
-		PeerAddress:   "0.0.0.0:7052",
-		Processor: container.NewVMController(
-			map[string]container.VMProvider{
-				dockercontroller.ContainerType: &dockercontroller.Provider{
-					PlatformBuilder: &platforms.Builder{
-						Registry: pr,
-						Client:   client,
-					},
+		ContainerRouter: &container.Router{
+			DockerVM: &dockercontroller.DockerVM{
+				PlatformBuilder: &platforms.Builder{
+					Registry: platforms.NewRegistry(&golang.Platform{}),
+					Client:   client,
 				},
 			},
-		),
-		CommonEnv: []string{
-			"CORE_CHAINCODE_LOGGING_LEVEL=" + globalConfig.LogLevel,
-			"CORE_CHAINCODE_LOGGING_SHIM=" + globalConfig.ShimLogLevel,
-			"CORE_CHAINCODE_LOGGING_FORMAT=" + globalConfig.LogFormat,
 		},
 	}
 	if !globalConfig.TLSEnabled {
@@ -932,65 +921,6 @@ func getHistory(t *testing.T, chainID, ccname string, ccSide *mockpeer.MockCCCom
 	return nil
 }
 
-func getLaunchConfigs(t *testing.T, cr *ContainerRuntime) {
-	gt := NewGomegaWithT(t)
-	packageID := "mycc:v0"
-	lc, err := cr.LaunchConfig(packageID, pb.ChaincodeSpec_GOLANG.String())
-	if err != nil {
-		t.Fatalf("calling getLaunchConfigs() failed with error %s", err)
-	}
-	args := lc.Args
-	envs := lc.Envs
-	filesToUpload := lc.Files
-
-	if len(args) != 2 {
-		t.Fatalf("calling getLaunchConfigs() for golang chaincode should have returned an array of 2 elements for Args, but got %v", args)
-	}
-	if args[0] != "chaincode" || !strings.HasPrefix(args[1], "-peer.address") {
-		t.Fatalf("calling getLaunchConfigs() should have returned the start command for golang chaincode, but got %v", args)
-	}
-
-	if len(envs) != 8 {
-		t.Fatalf("calling getLaunchConfigs() with TLS enabled should have returned an array of 8 elements for Envs, but got %v", envs)
-	}
-	gt.Expect(envs).To(ContainElement("CORE_CHAINCODE_LOGGING_LEVEL=info"))
-	gt.Expect(envs).To(ContainElement("CORE_CHAINCODE_LOGGING_SHIM=warn"))
-	gt.Expect(envs).To(ContainElement("CORE_CHAINCODE_ID_NAME=mycc:v0"))
-	gt.Expect(envs).To(ContainElement("CORE_PEER_TLS_ENABLED=true"))
-	gt.Expect(envs).To(ContainElement("CORE_TLS_CLIENT_KEY_PATH=/etc/mcc-github/blockchain/client.key"))
-	gt.Expect(envs).To(ContainElement("CORE_TLS_CLIENT_CERT_PATH=/etc/mcc-github/blockchain/client.crt"))
-	gt.Expect(envs).To(ContainElement("CORE_PEER_TLS_ROOTCERT_FILE=/etc/mcc-github/blockchain/peer.crt"))
-
-	if len(filesToUpload) != 3 {
-		t.Fatalf("calling getLaunchConfigs() with TLS enabled should have returned an array of 3 elements for filesToUpload, but got %v", len(filesToUpload))
-	}
-
-	cr.CertGenerator = nil 
-	lc, err = cr.LaunchConfig(packageID, pb.ChaincodeSpec_NODE.String())
-	assert.NoError(t, err)
-	args = lc.Args
-
-	if len(args) != 3 {
-		t.Fatalf("calling getLaunchConfigs() for node chaincode should have returned an array of 3 elements for Args, but got %v", args)
-	}
-
-	if args[0] != "/bin/sh" || args[1] != "-c" || !strings.HasPrefix(args[2], "cd /usr/local/src; npm start -- --peer.address") {
-		t.Fatalf("calling getLaunchConfigs() should have returned the start command for node.js chaincode, but got %v", args)
-	}
-
-	lc, err = cr.LaunchConfig(packageID, pb.ChaincodeSpec_GOLANG.String())
-	assert.NoError(t, err)
-
-	envs = lc.Envs
-	if len(envs) != 5 {
-		t.Fatalf("calling getLaunchConfigs() with TLS disabled should have returned an array of 4 elements for Envs, but got %v", envs)
-	}
-	gt.Expect(envs).To(ContainElement("CORE_CHAINCODE_LOGGING_LEVEL=info"))
-	gt.Expect(envs).To(ContainElement("CORE_CHAINCODE_LOGGING_SHIM=warn"))
-	gt.Expect(envs).To(ContainElement("CORE_CHAINCODE_ID_NAME=mycc:v0"))
-	gt.Expect(envs).To(ContainElement("CORE_PEER_TLS_ENABLED=false"))
-}
-
 
 func TestStartAndWaitSuccess(t *testing.T) {
 	handlerRegistry := NewHandlerRegistry(false)
@@ -1013,11 +943,10 @@ func TestStartAndWaitSuccess(t *testing.T) {
 	}
 
 	ccci := &ccprovider.ChaincodeContainerInfo{
-		Type:          "GOLANG",
-		Name:          "testcc",
-		Version:       "0",
-		ContainerType: "DOCKER",
-		PackageID:     persistence.PackageID("testcc:0"),
+		Type:      "GOLANG",
+		Name:      "testcc",
+		Version:   "0",
+		PackageID: persistence.PackageID("testcc:0"),
 	}
 
 	
@@ -1048,10 +977,9 @@ func TestStartAndWaitTimeout(t *testing.T) {
 	}
 
 	ccci := &ccprovider.ChaincodeContainerInfo{
-		Type:          "GOLANG",
-		Name:          "testcc",
-		Version:       "0",
-		ContainerType: "DOCKER",
+		Type:    "GOLANG",
+		Name:    "testcc",
+		Version: "0",
 	}
 
 	
@@ -1081,10 +1009,9 @@ func TestStartAndWaitLaunchError(t *testing.T) {
 	}
 
 	ccci := &ccprovider.ChaincodeContainerInfo{
-		Type:          "GOLANG",
-		Name:          "testcc",
-		Version:       "0",
-		ContainerType: "DOCKER",
+		Type:    "GOLANG",
+		Name:    "testcc",
+		Version: "0",
 	}
 
 	
@@ -1326,10 +1253,6 @@ func TestCCFramework(t *testing.T) {
 
 	
 	getHistory(t, chainID, ccname, ccSide, chaincodeSupport)
-
-	
-	cr := chaincodeSupport.Runtime.(*ContainerRuntime)
-	getLaunchConfigs(t, cr)
 
 	ccSide.Quit()
 }

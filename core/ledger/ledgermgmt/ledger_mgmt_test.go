@@ -13,8 +13,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
@@ -94,7 +92,6 @@ func TestChaincodeInfoProvider(t *testing.T) {
 
 	ccInfoProvider := &chaincodeInfoProviderImpl{
 		ledgerMgr,
-		platforms.NewRegistry(&golang.Platform{}),
 		mockDeployedCCInfoProvider,
 	}
 	_, err = ccInfoProvider.GetDeployedChaincodeInfo("ledger2", constructTestCCDef("cc2", "1.0", "cc2Hash"))
@@ -129,7 +126,6 @@ func constructDefaultInitializer(testDir string) *Initializer {
 			},
 		},
 
-		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
 		MetricsProvider:               &disabled.Provider{},
 		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
 	}

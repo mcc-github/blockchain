@@ -23,8 +23,10 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/metrics/metricsfakes"
 	"github.com/mcc-github/blockchain/common/util"
+	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/container/dockercontroller/mock"
+	pb "github.com/mcc-github/blockchain/protos/peer"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/stretchr/testify/assert"
@@ -39,31 +41,84 @@ func TestIntegrationPath(t *testing.T) {
 	fakePlatformBuilder := &mock.PlatformBuilder{}
 	fakePlatformBuilder.GenerateDockerBuildReturns(InMemBuilder{}.Build())
 
-	provider := Provider{
+	dc := DockerVM{
 		PeerID:          "",
 		NetworkID:       util.GenerateUUID(),
 		BuildMetrics:    NewBuildMetrics(&disabled.Provider{}),
 		Client:          client,
 		PlatformBuilder: fakePlatformBuilder,
 	}
-	dc := provider.NewVM().(*DockerVM)
 	ccid := ccintf.CCID("simple")
 
-	err = dc.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+	instance, err := dc.Build(&ccprovider.ChaincodeContainerInfo{
+		PackageID: "simple",
+		Type:      "type",
+		Path:      "path",
+		Name:      "name",
+		Version:   "version",
+	}, []byte("code-package"))
 	require.NoError(t, err)
 
-	err = dc.Start(ccid, nil, nil, nil)
+	assert.Equal(t, &ContainerInstance{
+		CCID:     ccintf.CCID("simple"),
+		Type:     "type",
+		DockerVM: &dc,
+	}, instance)
+
+	err = dc.Start(ccid, "NODE", &ccintf.PeerConnection{
+		Address: "peer-address",
+	})
 	require.NoError(t, err)
 
-	
-	err = dc.Stop(ccid, 0, true, true)
+	err = dc.Stop(ccid)
 	require.NoError(t, err)
+}
 
-	err = dc.Start(ccid, nil, nil, nil)
-	require.NoError(t, err)
+func TestGetArgs(t *testing.T) {
+	tests := []struct {
+		name         string
+		ccType       pb.ChaincodeSpec_Type
+		expectedArgs []string
+		expectedErr  string
+	}{
+		{"golang-chaincode", pb.ChaincodeSpec_GOLANG, []string{"chaincode", "-peer.address=peer-address"}, ""},
+		{"java-chaincode", pb.ChaincodeSpec_JAVA, []string{"/root/chaincode-java/start", "--peerAddress", "peer-address"}, ""},
+		{"node-chaincode", pb.ChaincodeSpec_NODE, []string{"/bin/sh", "-c", "cd /usr/local/src; npm start -- --peer.address peer-address"}, ""},
+		{"unknown-chaincode", pb.ChaincodeSpec_Type(999), []string{}, "unknown chaincodeType: 999"},
+	}
+	for _, tc := range tests {
+		vm := &DockerVM{}
 
-	
-	_ = dc.Stop(ccid, 0, false, true)
+		args, err := vm.GetArgs(tc.ccType.String(), "peer-address")
+		if tc.expectedErr != "" {
+			assert.EqualError(t, err, tc.expectedErr)
+			continue
+		}
+		assert.NoError(t, err)
+		assert.Equal(t, tc.expectedArgs, args)
+	}
+}
+
+func TestGetEnv(t *testing.T) {
+	t.Run("nil TLS config", func(t *testing.T) {
+		env := GetEnv(ccintf.CCID("test"), nil)
+		assert.Equal(t, []string{"CORE_CHAINCODE_ID_NAME=test", "CORE_PEER_TLS_ENABLED=false"}, env)
+	})
+
+	t.Run("real TLS config", func(t *testing.T) {
+		env := GetEnv(ccintf.CCID("test"), &ccintf.TLSConfig{
+			ClientKey:  []byte("key"),
+			ClientCert: []byte("cert"),
+			RootCert:   []byte("root"),
+		})
+		assert.Equal(t, []string{
+			"CORE_CHAINCODE_ID_NAME=test",
+			"CORE_PEER_TLS_ENABLED=true",
+			"CORE_TLS_CLIENT_KEY_PATH=/etc/mcc-github/blockchain/client.key",
+			"CORE_TLS_CLIENT_CERT_PATH=/etc/mcc-github/blockchain/client.crt",
+			"CORE_PEER_TLS_ROOTCERT_FILE=/etc/mcc-github/blockchain/peer.crt",
+		}, env)
+	})
 }
 
 func Test_Start(t *testing.T) {
@@ -73,24 +128,28 @@ func Test_Start(t *testing.T) {
 		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
 		Client:       dockerClient,
 	}
+
 	ccid := ccintf.CCID("simple:1.0")
-	args := make([]string, 1)
-	env := make([]string, 1)
-	files := map[string][]byte{
-		"hello": []byte("world"),
+	peerConnection := &ccintf.PeerConnection{
+		Address: "peer-address",
+		TLSConfig: &ccintf.TLSConfig{
+			ClientKey:  []byte("key"),
+			ClientCert: []byte("cert"),
+			RootCert:   []byte("root"),
+		},
 	}
 
 	
 	testError1 := errors.New("junk1")
 	dockerClient.CreateContainerReturns(nil, testError1)
-	err := dvm.Start(ccid, args, env, files)
+	err := dvm.Start(ccid, "GOLANG", peerConnection)
 	gt.Expect(err).To(MatchError(testError1))
 	dockerClient.CreateContainerReturns(&docker.Container{}, nil)
 
 	
 	testError2 := errors.New("junk2")
 	dockerClient.UploadToContainerReturns(testError2)
-	err = dvm.Start(ccid, args, env, files)
+	err = dvm.Start(ccid, "GOLANG", peerConnection)
 	gt.Expect(err.Error()).To(ContainSubstring("junk2"))
 	dockerClient.UploadToContainerReturns(nil)
 
@@ -99,27 +158,31 @@ func Test_Start(t *testing.T) {
 	testError3 := errors.New("junk3")
 	dvm.AttachStdOut = true
 	dockerClient.CreateContainerReturns(nil, testError3)
-	err = dvm.Start(ccid, args, env, files)
+	err = dvm.Start(ccid, "GOLANG", peerConnection)
 	gt.Expect(err).To(MatchError(testError3))
 	dockerClient.CreateContainerReturns(&docker.Container{}, nil)
 
 	
-	err = dvm.Start(ccid, args, env, files)
+	err = dvm.Start(ccid, "FAKE_TYPE", peerConnection)
+	gt.Expect(err).To(MatchError("could not get args: unknown chaincodeType: FAKE_TYPE"))
+
+	
+	err = dvm.Start(ccid, "GOLANG", peerConnection)
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	err = dvm.Start(ccid, args, env, files)
+	err = dvm.Start(ccid, "GOLANG", peerConnection)
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	err = dvm.Start(ccid, args, env, files)
+	err = dvm.Start(ccid, "GOLANG", peerConnection)
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	err = dvm.Start(ccid, args, env, files)
+	err = dvm.Start(ccid, "GOLANG", peerConnection)
 	gt.Expect(err).NotTo(HaveOccurred())
 
-	err = dvm.Start(ccid, args, env, files)
+	err = dvm.Start(ccid, "GOLANG", peerConnection)
 	gt.Expect(err).NotTo(HaveOccurred())
 }
 
@@ -197,7 +260,7 @@ func Test_Stop(t *testing.T) {
 	ccid := ccintf.CCID("simple")
 
 	
-	err := dvm.Stop(ccid, 10, true, true)
+	err := dvm.Stop(ccid)
 	assert.NoError(t, err)
 }
 
@@ -222,13 +285,13 @@ func Test_Wait(t *testing.T) {
 
 func TestHealthCheck(t *testing.T) {
 	client := &mock.DockerClient{}
-	provider := &Provider{Client: client}
+	vm := &DockerVM{Client: client}
 
-	err := provider.HealthCheck(context.Background())
+	err := vm.HealthCheck(context.Background())
 	assert.NoError(t, err)
 
 	client.PingWithContextReturns(errors.New("Error pinging daemon"))
-	err = provider.HealthCheck(context.Background())
+	err = vm.HealthCheck(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Error pinging daemon")
 }
@@ -305,29 +368,6 @@ func TestGetVMName(t *testing.T) {
 
 }
 
-func TestCreateNewVM(t *testing.T) {
-	networkID := util.GenerateUUID()
-	client := &mock.DockerClient{}
-
-	provider := Provider{
-		PeerID:       "peerID",
-		NetworkID:    networkID,
-		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
-		Client:       client,
-		NetworkMode:  "bridge",
-	}
-	dvm := provider.NewVM()
-
-	expectedClient := &DockerVM{
-		PeerID:       "peerID",
-		NetworkID:    networkID,
-		BuildMetrics: NewBuildMetrics(&disabled.Provider{}),
-		Client:       client,
-		NetworkMode:  "bridge",
-	}
-	assert.Equal(t, expectedClient, dvm)
-}
-
 func Test_buildImage(t *testing.T) {
 	client := &mock.DockerClient{}
 	dvm := DockerVM{
@@ -363,7 +403,13 @@ func Test_buildImageFailure(t *testing.T) {
 
 func TestBuild(t *testing.T) {
 	buildMetrics := NewBuildMetrics(&disabled.Provider{})
-	ccid := ccintf.CCID("chaincode-name:chaincode-version")
+	ccci := &ccprovider.ChaincodeContainerInfo{
+		PackageID: "chaincode-name:chaincode-version",
+		Name:      "name",
+		Version:   "version",
+		Type:      "type",
+		Path:      "path",
+	}
 
 	t.Run("when the image does not exist", func(t *testing.T) {
 		client := &mock.DockerClient{}
@@ -373,17 +419,18 @@ func TestBuild(t *testing.T) {
 		fakePlatformBuilder.GenerateDockerBuildReturns(&bytes.Buffer{}, nil)
 
 		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics, PlatformBuilder: fakePlatformBuilder}
-		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		_, err := dvm.Build(ccci, []byte("code-package"))
 		assert.NoError(t, err, "should have built successfully")
 
 		assert.Equal(t, 1, client.BuildImageCallCount())
 
 		require.Equal(t, 1, fakePlatformBuilder.GenerateDockerBuildCallCount())
-		ccType, path, name, version, codePackage := fakePlatformBuilder.GenerateDockerBuildArgsForCall(0)
-		assert.Equal(t, "type", ccType)
-		assert.Equal(t, "path", path)
-		assert.Equal(t, "name", name)
-		assert.Equal(t, "version", version)
+		ccci, codePackage := fakePlatformBuilder.GenerateDockerBuildArgsForCall(0)
+		assert.Equal(t, "chaincode-name:chaincode-version", string(ccci.PackageID))
+		assert.Equal(t, "type", ccci.Type)
+		assert.Equal(t, "path", ccci.Path)
+		assert.Equal(t, "name", ccci.Name)
+		assert.Equal(t, "version", ccci.Version)
 		assert.Equal(t, []byte("code-package"), codePackage)
 
 	})
@@ -393,7 +440,7 @@ func TestBuild(t *testing.T) {
 		client.InspectImageReturns(nil, errors.New("inspecting-image-fails"))
 
 		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics}
-		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		_, err := dvm.Build(ccci, []byte("code-package"))
 		assert.EqualError(t, err, "docker image inspection failed: inspecting-image-fails")
 
 		assert.Equal(t, 0, client.BuildImageCallCount())
@@ -403,7 +450,7 @@ func TestBuild(t *testing.T) {
 		client := &mock.DockerClient{}
 
 		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics}
-		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		_, err := dvm.Build(ccci, []byte("code-package"))
 		assert.NoError(t, err)
 
 		assert.Equal(t, 0, client.BuildImageCallCount())
@@ -418,7 +465,7 @@ func TestBuild(t *testing.T) {
 		fakePlatformBuilder.GenerateDockerBuildReturns(nil, errors.New("fake-builder-error"))
 
 		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics, PlatformBuilder: fakePlatformBuilder}
-		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		_, err := dvm.Build(ccci, []byte("code-package"))
 		assert.Equal(t, 1, client.InspectImageCallCount())
 		assert.Equal(t, 1, fakePlatformBuilder.GenerateDockerBuildCallCount())
 		assert.Equal(t, 0, client.BuildImageCallCount())
@@ -433,7 +480,7 @@ func TestBuild(t *testing.T) {
 		fakePlatformBuilder := &mock.PlatformBuilder{}
 
 		dvm := &DockerVM{Client: client, BuildMetrics: buildMetrics, PlatformBuilder: fakePlatformBuilder}
-		err := dvm.Build(ccid, "type", "path", "name", "version", []byte("code-package"))
+		_, err := dvm.Build(ccci, []byte("code-package"))
 		assert.Equal(t, 1, client.InspectImageCallCount())
 		assert.Equal(t, 1, client.BuildImageCallCount())
 		assert.EqualError(t, err, "docker image build failed: no-build-for-you")

@@ -125,7 +125,7 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 
 
 func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) (
-	[]*txmgr.TxStatInfo, error,
+	[]*txmgr.TxStatInfo, []byte, error,
 ) {
 	
 	
@@ -148,14 +148,17 @@ func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAnd
 	batch, txstatsInfo, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
 	if err != nil {
 		txmgr.reset()
-		return nil, err
+		return nil, nil, err
 	}
 	txmgr.current = &current{block: block, batch: batch}
 	if err := txmgr.invokeNamespaceListeners(); err != nil {
 		txmgr.reset()
-		return nil, err
+		return nil, nil, err
 	}
-	return txstatsInfo, nil
+
+	updateBytesBuilder := &privacyenabledstate.UpdatesBytesBuilder{}
+	updateBytes, err := updateBytesBuilder.DeterministicBytesForPubAndHashUpdates(batch)
+	return txstatsInfo, updateBytes, err
 }
 
 
@@ -537,7 +540,7 @@ func (txmgr *LockBasedTxMgr) ShouldRecover(lastAvailableBlock uint64) (bool, uin
 func (txmgr *LockBasedTxMgr) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
 	block := blockAndPvtdata.Block
 	logger.Debugf("Constructing updateSet for the block %d", block.Header.Number)
-	if _, err := txmgr.ValidateAndPrepare(blockAndPvtdata, false); err != nil {
+	if _, _, err := txmgr.ValidateAndPrepare(blockAndPvtdata, false); err != nil {
 		return err
 	}
 

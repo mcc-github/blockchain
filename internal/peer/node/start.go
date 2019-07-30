@@ -7,16 +7,19 @@ SPDX-License-Identifier: Apache-2.0
 package node
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/mcc-github/blockchain/core/deliverservice"
+	"github.com/mcc-github/blockchain/core/ledger"
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
@@ -40,7 +43,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/ccmetadata"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
@@ -56,8 +58,8 @@ import (
 	endorsement3 "github.com/mcc-github/blockchain/core/handlers/endorsement/api/identities"
 	"github.com/mcc-github/blockchain/core/handlers/library"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
-	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/operations"
 	"github.com/mcc-github/blockchain/core/peer"
@@ -80,6 +82,7 @@ import (
 	"github.com/mcc-github/blockchain/gossip/service"
 	gossipservice "github.com/mcc-github/blockchain/gossip/service"
 	peergossip "github.com/mcc-github/blockchain/internal/peer/gossip"
+	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/mcc-github/blockchain/internal/peer/version"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
@@ -154,6 +157,7 @@ func serve(args []string) error {
 	}
 
 	platformRegistry := platforms.NewRegistry(platforms.SupportedPlatforms...)
+	packagingRegistry := packaging.NewRegistry(packaging.SupportedPlatforms...)
 
 	identityDeserializerFactory := func(chainID string) msp.IdentityDeserializer {
 		return mgmt.GetManagerForChain(chainID)
@@ -177,7 +181,7 @@ func serve(args []string) error {
 	chaincodeInstallPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "lifecycle", "chaincodes")
 	ccStore := persistence.NewStore(chaincodeInstallPath)
 	ccPackageParser := &persistence.ChaincodePackageParser{
-		MetadataProvider: &ccmetadata.PersistenceMetadataProvider{},
+		MetadataProvider: &ccprovider.PersistenceMetadataProvider{},
 	}
 
 	peerHost, _, err := net.SplitHostPort(coreConfig.PeerAddress)
@@ -342,7 +346,6 @@ func serve(args []string) error {
 	peerInstance.LedgerMgr = ledgermgmt.NewLedgerMgr(
 		&ledgermgmt.Initializer{
 			CustomTxProcessors:              txProcessors,
-			PlatformRegistry:                platformRegistry,
 			DeployedChaincodeInfoProvider:   lifecycleValidatorCommitter,
 			MembershipInfoProvider:          membershipInfoProvider,
 			ChaincodeLifecycleEventProvider: lifecycleCache,
@@ -411,7 +414,7 @@ func serve(args []string) error {
 		Whitelist: scc.GlobalWhitelist(),
 	}
 
-	lsccInst := lscc.New(sccp, aclProvider, platformRegistry, peerInstance.GetMSPIDs, policyChecker)
+	lsccInst := lscc.New(sccp, aclProvider, peerInstance.GetMSPIDs, policyChecker)
 
 	chaincodeHandlerRegistry := chaincode.NewHandlerRegistry(userRunsCC)
 	lifecycleTxQueryExecutorGetter := &chaincode.TxQueryExecutorGetter{
@@ -452,7 +455,7 @@ func serve(args []string) error {
 		logger.Panicf("cannot create docker client: %s", err)
 	}
 
-	dockerProvider := &dockercontroller.Provider{
+	dockerVM := &dockercontroller.DockerVM{
 		PeerID:        coreConfig.PeerID,
 		NetworkID:     coreConfig.NetworkID,
 		BuildMetrics:  dockercontroller.NewBuildMetrics(opsSystem.Provider),
@@ -466,29 +469,21 @@ func serve(args []string) error {
 			Client:   client,
 		},
 	}
-	if err := opsSystem.RegisterChecker("docker", dockerProvider); err != nil {
+	if err := opsSystem.RegisterChecker("docker", dockerVM); err != nil {
 		if err != nil {
 			logger.Panicf("failed to register docker health check: %s", err)
 		}
 	}
 
 	chaincodeConfig := chaincode.GlobalConfig()
-	chaincodeVMController := container.NewVMController(
-		map[string]container.VMProvider{
-			dockercontroller.ContainerType: dockerProvider,
-		},
-	)
 
 	containerRuntime := &chaincode.ContainerRuntime{
 		CACert:        ca.CertBytes(),
 		CertGenerator: authenticator,
-		CommonEnv: []string{
-			"CORE_CHAINCODE_LOGGING_LEVEL=" + chaincodeConfig.LogLevel,
-			"CORE_CHAINCODE_LOGGING_SHIM=" + chaincodeConfig.ShimLogLevel,
-			"CORE_CHAINCODE_LOGGING_FORMAT=" + chaincodeConfig.LogFormat,
+		PeerAddress:   ccEndpoint,
+		ContainerRouter: &container.Router{
+			DockerVM: dockerVM,
 		},
-		PeerAddress: ccEndpoint,
-		Processor:   chaincodeVMController,
 	}
 
 	
@@ -582,10 +577,7 @@ func serve(args []string) error {
 		SigningIdentityFetcher:  signingIdentityFetcher,
 	})
 	endorserSupport.PluginEndorser = pluginEndorser
-	serverEndorser := endorser.NewEndorserServer(privDataDist, endorserSupport, platformRegistry, metricsProvider)
-	auth := authHandler.ChainFilters(serverEndorser, authFilters...)
-	
-	pb.RegisterEndorserServer(peerServer.Server(), auth)
+	serverEndorser := endorser.NewEndorserServer(privDataDist, endorserSupport, packagingRegistry, metricsProvider)
 
 	
 	err = registerProverService(peerInstance, peerServer, aclProvider, signingIdentity)
@@ -667,16 +659,6 @@ func serve(args []string) error {
 	
 	serve := make(chan error)
 
-	go func() {
-		var grpcErr error
-		if grpcErr = peerServer.Start(); grpcErr != nil {
-			grpcErr = fmt.Errorf("grpc server exited with error: %s", grpcErr)
-		} else {
-			logger.Info("peer server exited")
-		}
-		serve <- grpcErr
-	}()
-
 	
 	if profileEnabled {
 		go func() {
@@ -693,6 +675,39 @@ func serve(args []string) error {
 	}))
 
 	logger.Infof("Started peer with ID=[%s], network ID=[%s], address=[%s]", coreConfig.PeerID, coreConfig.NetworkID, coreConfig.PeerAddress)
+
+	
+	rootFSPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "ledgersData")
+	preResetHeights, err := kvledger.LoadPreResetHeight(rootFSPath)
+	if err != nil {
+		return fmt.Errorf("error loading prereset height: %s", err)
+	}
+
+	for cid, height := range preResetHeights {
+		logger.Infof("Ledger rebuild: channel [%s]: preresetHeight: [%d]", cid, height)
+	}
+
+	if len(preResetHeights) > 0 {
+		logger.Info("Ledger rebuild: Entering loop to check if current ledger heights surpass prereset ledger heights. Endorsement request processing will be disabled.")
+		resetFilter := &reset{
+			reject: true,
+		}
+		authFilters = append(authFilters, resetFilter)
+		go resetLoop(resetFilter, preResetHeights, peerInstance.GetLedger, 10*time.Second)
+	}
+
+	
+	auth := authHandler.ChainFilters(serverEndorser, authFilters...)
+	
+	pb.RegisterEndorserServer(peerServer.Server(), auth)
+
+	go func() {
+		var grpcErr error
+		if grpcErr = peerServer.Start(); grpcErr != nil {
+			grpcErr = fmt.Errorf("grpc server exited with error: %s", grpcErr)
+		}
+		serve <- grpcErr
+	}()
 
 	
 	return <-serve
@@ -1154,4 +1169,91 @@ func getDockerHostConfig() *docker.HostConfig {
 		CPUPeriod:        getInt64("CpuPeriod"),
 		BlkioWeight:      getInt64("BlkioWeight"),
 	}
+}
+
+
+
+
+type peerLedger interface {
+	ledger.PeerLedger
+}
+
+type getLedger func(string) ledger.PeerLedger
+
+func resetLoop(
+	resetFilter *reset,
+	preResetHeights map[string]uint64,
+	pLedger getLedger,
+	interval time.Duration,
+) {
+	
+	ticker := time.NewTicker(interval)
+
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			logger.Info("Ledger rebuild: Checking if current ledger heights surpass prereset ledger heights")
+			logger.Debugf("Ledger rebuild: Number of ledgers still rebuilding before check: %d", len(preResetHeights))
+			for cid, height := range preResetHeights {
+				var l peerLedger
+				l = pLedger(cid)
+				if l != nil {
+					bcInfo, err := l.GetBlockchainInfo()
+					if bcInfo != nil {
+						logger.Debugf("Ledger rebuild: channel [%s]: currentHeight [%d] : preresetHeight [%d]", cid, bcInfo.GetHeight(), height)
+						if bcInfo.GetHeight() >= height {
+							delete(preResetHeights, cid)
+						} else {
+							break
+						}
+					} else {
+						if err != nil {
+							logger.Warningf("Ledger rebuild: could not retrieve info for channel [%s]: %s", cid, err.Error())
+						}
+					}
+				}
+			}
+
+			logger.Debugf("Ledger rebuild: Number of ledgers still rebuilding after check: %d", len(preResetHeights))
+			if len(preResetHeights) == 0 {
+				logger.Infof("Ledger rebuild: Complete, all ledgers surpass prereset heights. Endorsement request processing will be enabled.")
+				rootFSPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "ledgersData")
+				err := kvledger.ClearPreResetHeight(rootFSPath)
+				if err != nil {
+					logger.Warningf("Ledger rebuild: could not clear off prerest files: error=%s", err)
+				}
+				resetFilter.setReject(false)
+				return
+			}
+		}
+	}
+}
+
+
+type reset struct {
+	sync.RWMutex
+	next   pb.EndorserServer
+	reject bool
+}
+
+func (r *reset) setReject(reject bool) {
+	r.Lock()
+	defer r.Unlock()
+	r.reject = reject
+}
+
+
+func (r *reset) Init(next pb.EndorserServer) {
+	r.next = next
+}
+
+
+func (r *reset) ProcessProposal(ctx context.Context, signedProp *pb.SignedProposal) (*pb.ProposalResponse, error) {
+	r.RLock()
+	defer r.RUnlock()
+	if r.reject {
+		return nil, errors.New("endorse requests are blocked while ledgers are being rebuilt")
+	}
+	return r.next.ProcessProposal(ctx, signedProp)
 }

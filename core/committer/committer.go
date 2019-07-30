@@ -31,7 +31,7 @@ import (
 type Committer interface {
 
 	
-	CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error
+	CommitLegacy(blockAndPvtData *ledger.BlockAndPvtData, commitOpts *ledger.CommitOptions) error
 
 	
 	
@@ -44,6 +44,10 @@ type Committer interface {
 
 	
 	LedgerHeight() (uint64, error)
+
+	
+	
+	DoesPvtDataInfoExistInLedger(blockNum uint64) (bool, error)
 
 	
 	GetBlocks(blockSeqs []uint64) []*common.Block

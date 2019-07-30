@@ -26,11 +26,13 @@ type PeerLedgerSupport interface {
 
 	GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error)
 
-	CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+	CommitLegacy(blockAndPvtdata *ledger.BlockAndPvtData, commitOpts *ledger.CommitOptions) error
 
 	CommitPvtDataOfOldBlocks(blockPvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error)
 
 	GetBlockchainInfo() (*common.BlockchainInfo, error)
+
+	DoesPvtDataInfoExist(blockNum uint64) (bool, error)
 
 	GetBlockByNumber(blockNumber uint64) (*common.Block, error)
 
@@ -55,9 +57,9 @@ func NewLedgerCommitter(ledger PeerLedgerSupport) *LedgerCommitter {
 }
 
 
-func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error {
+func (lc *LedgerCommitter) CommitLegacy(blockAndPvtData *ledger.BlockAndPvtData, commitOpts *ledger.CommitOptions) error {
 	
-	if err := lc.PeerLedgerSupport.CommitWithPvtData(blockAndPvtData); err != nil {
+	if err := lc.PeerLedgerSupport.CommitLegacy(blockAndPvtData, commitOpts); err != nil {
 		return err
 	}
 
@@ -78,6 +80,12 @@ func (lc *LedgerCommitter) LedgerHeight() (uint64, error) {
 	}
 
 	return info.Height, nil
+}
+
+
+
+func (lc *LedgerCommitter) DoesPvtDataInfoExistInLedger(blockNum uint64) (bool, error) {
+	return lc.DoesPvtDataInfoExist(blockNum)
 }
 
 

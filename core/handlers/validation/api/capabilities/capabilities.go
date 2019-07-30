@@ -45,6 +45,10 @@ type Capabilities interface {
 
 	
 	
+	StorePvtDataOfInvalidTx() bool
+
+	
+	
 	
 	
 	V2_0Validation() bool

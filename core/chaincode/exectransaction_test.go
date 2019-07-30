@@ -56,6 +56,7 @@ import (
 	"github.com/mcc-github/blockchain/core/policy/mocks"
 	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/core/scc/lscc"
+	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
@@ -107,7 +108,7 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 	ca, _ := tlsgen.NewCA()
 	pr := platforms.NewRegistry(&golang.Platform{})
 	mockAclProvider := &mock.ACLProvider{}
-	lsccImpl := lscc.New(sccp, mockAclProvider, pr, peerInstance.GetMSPIDs, newPolicyChecker(peerInstance))
+	lsccImpl := lscc.New(sccp, mockAclProvider, peerInstance.GetMSPIDs, newPolicyChecker(peerInstance))
 	ml := &cm.Lifecycle{}
 	ml.ChaincodeContainerInfoStub = func(_, name string, _ ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
 		switch name {
@@ -140,27 +141,20 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 		TotalQueryLimit: 10000,
 	}
 	containerRuntime := &ContainerRuntime{
-		CACert:      ca.CertBytes(),
-		PeerAddress: peerAddress,
-		Processor: container.NewVMController(
-			map[string]container.VMProvider{
-				dockercontroller.ContainerType: &dockercontroller.Provider{
-					PeerID:       "",
-					NetworkID:    "",
-					BuildMetrics: dockercontroller.NewBuildMetrics(&disabled.Provider{}),
-					Client:       client,
-					PlatformBuilder: &platforms.Builder{
-						Registry: pr,
-						Client:   client,
-					},
+		CACert: ca.CertBytes(),
+		ContainerRouter: &container.Router{
+			DockerVM: &dockercontroller.DockerVM{
+				PeerID:       "",
+				NetworkID:    "",
+				BuildMetrics: dockercontroller.NewBuildMetrics(&disabled.Provider{}),
+				Client:       client,
+				PlatformBuilder: &platforms.Builder{
+					Registry: pr,
+					Client:   client,
 				},
 			},
-		),
-		CommonEnv: []string{
-			"CORE_CHAINCODE_LOGGING_LEVEL=" + globalConfig.LogLevel,
-			"CORE_CHAINCODE_LOGGING_SHIM=" + globalConfig.ShimLogLevel,
-			"CORE_CHAINCODE_LOGGING_FORMAT=" + globalConfig.LogFormat,
 		},
+		PeerAddress: peerAddress,
 	}
 	userRunsCC := false
 	metricsProviders := &disabled.Provider{}
@@ -370,7 +364,7 @@ func endTxSimulation(peerInstance *peer.Peer, chainID string, ccid *pb.Chaincode
 				}
 			}
 
-			if err := lgr.CommitWithPvtData(blockAndPvtData); err != nil {
+			if err := lgr.CommitLegacy(blockAndPvtData, &ledger.CommitOptions{}); err != nil {
 				return err
 			}
 		}
@@ -382,7 +376,7 @@ func endTxSimulation(peerInstance *peer.Peer, chainID string, ccid *pb.Chaincode
 
 func getDeploymentSpec(spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
 	fmt.Printf("getting deployment spec for chaincode spec: %v\n", spec)
-	codePackageBytes, err := platforms.NewRegistry(&golang.Platform{}).GetDeploymentPayload(spec.Type.String(), spec.ChaincodeId.Path)
+	codePackageBytes, err := packaging.NewRegistry(&golang.Platform{}).GetDeploymentPayload(spec.Type.String(), spec.ChaincodeId.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -748,10 +742,10 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 
 func stopChaincode(chaincodeCtx *ccprovider.CCContext, chaincodeSupport *ChaincodeSupport) {
 	chaincodeSupport.Stop(&ccprovider.ChaincodeContainerInfo{
-		Name:          chaincodeCtx.Name,
-		Version:       chaincodeCtx.Version,
-		ContainerType: "DOCKER",
-		Type:          "GOLANG",
+		PackageID: persistence.PackageID(chaincodeCtx.Name + ":" + chaincodeCtx.Version),
+		Name:      chaincodeCtx.Name,
+		Version:   chaincodeCtx.Version,
+		Type:      "GOLANG",
 	})
 }
 
@@ -783,11 +777,11 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 
 	var nextBlockNumber uint64 = 1
 	defer chaincodeSupport.Stop(&ccprovider.ChaincodeContainerInfo{
-		Name:          cID1.Name,
-		Version:       cID1.Version,
-		Path:          cID1.Path,
-		ContainerType: "DOCKER",
-		Type:          "GOLANG",
+		PackageID: persistence.PackageID(cID1.Name + ":" + cID1.Version),
+		Name:      cID1.Name,
+		Version:   cID1.Version,
+		Path:      cID1.Path,
+		Type:      "GOLANG",
 	})
 
 	_, err = deploy(chainID, cccid1, spec1, nextBlockNumber, chaincodeSupport)
@@ -814,11 +808,11 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 	}
 
 	defer chaincodeSupport.Stop(&ccprovider.ChaincodeContainerInfo{
-		Name:          cID2.Name,
-		Version:       cID2.Version,
-		Path:          cID2.Path,
-		ContainerType: "DOCKER",
-		Type:          "GOLANG",
+		PackageID: persistence.PackageID(cID2.Name + ":" + cID2.Version),
+		Name:      cID2.Name,
+		Version:   cID2.Version,
+		Path:      cID2.Path,
+		Type:      "GOLANG",
 	})
 	_, err = deploy(chainID, cccid2, spec2, nextBlockNumber, chaincodeSupport)
 	nextBlockNumber++
@@ -877,11 +871,11 @@ func TestChaincodeInit(t *testing.T) {
 	}
 
 	defer chaincodeSupport.Stop(&ccprovider.ChaincodeContainerInfo{
-		Name:          cID.Name,
-		Version:       cID.Version,
-		Path:          cID.Path,
-		Type:          "GOLANG",
-		ContainerType: "DOCKER",
+		PackageID: persistence.PackageID(cID.Name + ":" + cID.Version),
+		Name:      cID.Name,
+		Version:   cID.Version,
+		Path:      cID.Path,
+		Type:      "GOLANG",
 	})
 
 	var nextBlockNumber uint64 = 1
@@ -900,14 +894,6 @@ func TestChaincodeInit(t *testing.T) {
 		Name:    "tmap",
 		Version: "0",
 	}
-
-	defer chaincodeSupport.Stop(&ccprovider.ChaincodeContainerInfo{
-		Name:          cID.Name,
-		Version:       cID.Version,
-		Path:          cID.Path,
-		Type:          "GOLANG",
-		ContainerType: "DOCKER",
-	})
 
 	resp, err := deploy(chainID, cccid, spec, nextBlockNumber, chaincodeSupport)
 	assert.NoError(t, err)
@@ -945,11 +931,11 @@ func TestQueries(t *testing.T) {
 	}
 
 	defer chaincodeSupport.Stop(&ccprovider.ChaincodeContainerInfo{
-		Name:          cID.Name,
-		Version:       cID.Version,
-		Path:          cID.Path,
-		Type:          "GOLANG",
-		ContainerType: "DOCKER",
+		PackageID: persistence.PackageID(cID.Name + ":" + cID.Version),
+		Name:      cID.Name,
+		Version:   cID.Version,
+		Path:      cID.Path,
+		Type:      "GOLANG",
 	})
 
 	var nextBlockNumber uint64 = 1

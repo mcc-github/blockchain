@@ -23,6 +23,9 @@ const (
 	ApplicationV1_3 = "V1_3"
 
 	
+	ApplicationV1_4_2 = "V1_4_2"
+
+	
 	ApplicationV2_0 = "V2_0"
 
 	
@@ -38,6 +41,7 @@ type ApplicationProvider struct {
 	v11                    bool
 	v12                    bool
 	v13                    bool
+	v142                   bool
 	v20                    bool
 	v11PvtDataExperimental bool
 }
@@ -49,6 +53,7 @@ func NewApplicationProvider(capabilities map[string]*cb.Capability) *Application
 	_, ap.v11 = capabilities[ApplicationV1_1]
 	_, ap.v12 = capabilities[ApplicationV1_2]
 	_, ap.v13 = capabilities[ApplicationV1_3]
+	_, ap.v142 = capabilities[ApplicationV1_4_2]
 	_, ap.v20 = capabilities[ApplicationV2_0]
 	_, ap.v11PvtDataExperimental = capabilities[ApplicationPvtDataExperimental]
 	return ap
@@ -61,44 +66,44 @@ func (ap *ApplicationProvider) Type() string {
 
 
 func (ap *ApplicationProvider) ACLs() bool {
-	return ap.v12 || ap.v13 || ap.v20
+	return ap.v12 || ap.v13 || ap.v142 || ap.v20
 }
 
 
 
 func (ap *ApplicationProvider) ForbidDuplicateTXIdInBlock() bool {
-	return ap.v11 || ap.v12 || ap.v13 || ap.v20
+	return ap.v11 || ap.v12 || ap.v13 || ap.v142 || ap.v20
 }
 
 
 
 
 func (ap *ApplicationProvider) PrivateChannelData() bool {
-	return ap.v11PvtDataExperimental || ap.v12 || ap.v13 || ap.v20
+	return ap.v11PvtDataExperimental || ap.v12 || ap.v13 || ap.v142 || ap.v20
 }
 
 
 
 func (ap ApplicationProvider) CollectionUpgrade() bool {
-	return ap.v12 || ap.v13 || ap.v20
+	return ap.v12 || ap.v13 || ap.v142 || ap.v20
 }
 
 
 
 func (ap *ApplicationProvider) V1_1Validation() bool {
-	return ap.v11 || ap.v12 || ap.v13 || ap.v20
+	return ap.v11 || ap.v12 || ap.v13 || ap.v142 || ap.v20
 }
 
 
 
 func (ap *ApplicationProvider) V1_2Validation() bool {
-	return ap.v12 || ap.v13 || ap.v20
+	return ap.v12 || ap.v13 || ap.v142 || ap.v20
 }
 
 
 
 func (ap *ApplicationProvider) V1_3Validation() bool {
-	return ap.v13 || ap.v20
+	return ap.v13 || ap.v142 || ap.v20
 }
 
 
@@ -125,12 +130,18 @@ func (ap *ApplicationProvider) MetadataLifecycle() bool {
 
 
 func (ap *ApplicationProvider) KeyLevelEndorsement() bool {
-	return ap.v13 || ap.v20
+	return ap.v13 || ap.v142 || ap.v20
 }
 
 
 func (ap *ApplicationProvider) FabToken() bool {
 	return ap.v20
+}
+
+
+
+func (ap *ApplicationProvider) StorePvtDataOfInvalidTx() bool {
+	return ap.v142 || ap.v20
 }
 
 
@@ -142,6 +153,8 @@ func (ap *ApplicationProvider) HasCapability(capability string) bool {
 	case ApplicationV1_2:
 		return true
 	case ApplicationV1_3:
+		return true
+	case ApplicationV1_4_2:
 		return true
 	case ApplicationV2_0:
 		return true
