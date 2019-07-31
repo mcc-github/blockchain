@@ -95,14 +95,14 @@ type blockValidationResult struct {
 }
 
 
-func NewTxValidator(chainID string, sem Semaphore, cr ChannelResources, sccp sysccprovider.SystemChaincodeProvider, pm plugin.Mapper) *TxValidator {
+func NewTxValidator(chainID string, sem Semaphore, cr ChannelResources, pm plugin.Mapper) *TxValidator {
 	
 	pluginValidator := NewPluginValidator(pm, cr.Ledger(), &dynamicDeserializer{cr: cr}, &dynamicCapabilities{cr: cr})
 	return &TxValidator{
 		ChainID:          chainID,
 		Semaphore:        sem,
 		ChannelResources: cr,
-		Vscc:             newVSCCValidator(chainID, cr, sccp, pluginValidator)}
+		Vscc:             newVSCCValidator(chainID, cr, pluginValidator)}
 }
 
 func (v *TxValidator) chainExists(chain string) bool {

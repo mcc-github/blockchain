@@ -21,7 +21,7 @@ import (
 
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/util"
 	cutil "github.com/mcc-github/blockchain/core/container/util"
-	"github.com/mcc-github/blockchain/internal/pkg/ccmetadata"
+	"github.com/mcc-github/blockchain/internal/ccmetadata"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"

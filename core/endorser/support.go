@@ -166,18 +166,6 @@ func (s *SupportImpl) CheckACL(signedProp *pb.SignedProposal, chdr *common.Chann
 
 
 
-func (s *SupportImpl) IsJavaCC(buf []byte) (bool, error) {
-	
-	ccpack, err := ccprovider.GetCCPackage(buf)
-	if err != nil {
-		return false, err
-	}
-	cds := ccpack.GetDepSpec()
-	return (cds.ChaincodeSpec.Type == pb.ChaincodeSpec_JAVA), nil
-}
-
-
-
 
 func (s *SupportImpl) CheckInstantiationPolicy(name, version string, cd ccprovider.ChaincodeDefinition) error {
 	if cData, ok := cd.(*ccprovider.ChaincodeData); ok {

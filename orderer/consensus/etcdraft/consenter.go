@@ -225,52 +225,6 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 
 
 
-
-
-func (c *Consenter) ValidateConsensusMetadata(oldMetadataBytes, newMetadataBytes []byte, newChannel bool) error {
-	
-	if newMetadataBytes == nil {
-		return nil
-	}
-	if oldMetadataBytes == nil {
-		c.Logger.Panic("Programming Error: ValidateConsensusMetadata called with nil old metadata")
-	}
-
-	oldMetadata := &etcdraft.ConfigMetadata{}
-	if err := proto.Unmarshal(oldMetadataBytes, oldMetadata); err != nil {
-		c.Logger.Panicf("Programming Error: Failed to unmarshal old etcdraft consensus metadata: %v", err)
-	}
-	newMetadata := &etcdraft.ConfigMetadata{}
-	if err := proto.Unmarshal(newMetadataBytes, newMetadata); err != nil {
-		return errors.Wrap(err, "failed to unmarshal new etcdraft metadata configuration")
-	}
-
-	err := CheckConfigMetadata(newMetadata)
-	if err != nil {
-		return errors.Wrap(err, "invalid new config metdadata")
-	}
-
-	if newChannel {
-		
-		set := ConsentersToMap(oldMetadata.Consenters)
-		for _, c := range newMetadata.Consenters {
-			if _, exits := set[string(c.ClientTlsCert)]; !exits {
-				return errors.New("new channel has consenter that is not part of system consenter set")
-			}
-		}
-		return nil
-	}
-
-	
-	dummyOldBlockMetadata, _ := ReadBlockMetadata(nil, oldMetadata)
-	dummyOldConsentersMap := CreateConsentersMap(dummyOldBlockMetadata, oldMetadata)
-	_, err = ComputeMembershipChanges(dummyOldBlockMetadata, dummyOldConsentersMap, newMetadata.Consenters)
-
-	return err
-}
-
-
-
 func ReadBlockMetadata(blockMetadata *common.Metadata, configMetadata *etcdraft.ConfigMetadata) (*etcdraft.BlockMetadata, error) {
 	if blockMetadata != nil && len(blockMetadata.Value) != 0 { 
 		m := &etcdraft.BlockMetadata{}

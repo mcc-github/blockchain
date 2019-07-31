@@ -28,16 +28,14 @@ import (
 type VsccValidatorImpl struct {
 	chainID         string
 	cr              ChannelResources
-	sccprovider     sysccprovider.SystemChaincodeProvider
 	pluginValidator *PluginValidator
 }
 
 
-func newVSCCValidator(chainID string, cr ChannelResources, sccp sysccprovider.SystemChaincodeProvider, pluginValidator *PluginValidator) *VsccValidatorImpl {
+func newVSCCValidator(chainID string, cr ChannelResources, pluginValidator *PluginValidator) *VsccValidatorImpl {
 	return &VsccValidatorImpl{
 		chainID:         chainID,
 		cr:              cr,
-		sccprovider:     sccp,
 		pluginValidator: pluginValidator,
 	}
 }
@@ -132,11 +130,11 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 			writesToLSCC = true
 		}
 
-		if !writesToNonInvokableSCC && v.sccprovider.IsSysCCAndNotInvokableCC2CC(ns.NameSpace) {
+		if !writesToNonInvokableSCC && IsSysCCAndNotInvokableCC2CC(ns.NameSpace) {
 			writesToNonInvokableSCC = true
 		}
 
-		if !writesToNonInvokableSCC && v.sccprovider.IsSysCCAndNotInvokableExternal(ns.NameSpace) {
+		if !writesToNonInvokableSCC && IsSysCCAndNotInvokableExternal(ns.NameSpace) {
 			writesToNonInvokableSCC = true
 		}
 	}
@@ -145,7 +143,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 	
 	
 
-	if !v.sccprovider.IsSysCC(ccID) {
+	if !IsSysCC(ccID) {
 		
 		
 		
@@ -212,7 +210,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 		
 		
 		
-		if v.sccprovider.IsSysCCAndNotInvokableExternal(ccID) {
+		if IsSysCCAndNotInvokableExternal(ccID) {
 			return errors.Errorf("committing an invocation of cc %s is illegal", ccID),
 				peer.TxValidationCode_ILLEGAL_WRITESET
 		}
@@ -320,7 +318,7 @@ func (v *VsccValidatorImpl) GetInfoForValidate(chdr *common.ChannelHeader, ccID 
 	}
 	var policy []byte
 	var err error
-	if !v.sccprovider.IsSysCC(ccID) {
+	if !IsSysCC(ccID) {
 		
 		
 		
@@ -384,4 +382,16 @@ func (v *VsccValidatorImpl) txWritesToNamespace(ns *rwsetutil.NsRwSet) bool {
 	}
 
 	return false
+}
+
+func IsSysCCAndNotInvokableExternal(name string) bool {
+	return name == "vscc" || name == "escc"
+}
+
+func IsSysCC(name string) bool {
+	return name == "vscc" || name == "escc" || name == "lscc" || name == "qscc" || name == "cscc"
+}
+
+func IsSysCCAndNotInvokableCC2CC(name string) bool {
+	return name == "vscc" || name == "escc" || name == "cscc"
 }

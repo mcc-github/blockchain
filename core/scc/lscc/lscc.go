@@ -22,7 +22,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/policy"
-	"github.com/mcc-github/blockchain/internal/pkg/ccmetadata"
+	"github.com/mcc-github/blockchain/internal/ccmetadata"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"

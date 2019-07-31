@@ -7,8 +7,6 @@ import (
 	"compress/gzip"
 	"io"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 
@@ -18,40 +16,14 @@ const (
 	ccPackageStatedbDir = "META-INF/statedb/"
 )
 
+type PersistenceAdapter func([]byte) ([]byte, error)
 
-
-
-type PersistenceMetadataProvider struct{}
-
-
-
-func (t *PersistenceMetadataProvider) GetDBArtifacts(codePackage []byte) ([]byte, error) {
-	return (&TargzMetadataProvider{
-		Code: codePackage,
-	}).GetMetadataAsTarEntries()
+func (pa PersistenceAdapter) GetDBArtifacts(codePackage []byte) ([]byte, error) {
+	return pa(codePackage)
 }
 
 
-
-type TargzMetadataProvider struct {
-	Code []byte
-}
-
-func (tgzProv *TargzMetadataProvider) getCode() ([]byte, error) {
-	if tgzProv.Code == nil {
-		return nil, errors.New("nil code package")
-	}
-
-	return tgzProv.Code, nil
-}
-
-
-func (tgzProv *TargzMetadataProvider) GetMetadataAsTarEntries() ([]byte, error) {
-	code, err := tgzProv.getCode()
-	if err != nil {
-		return nil, err
-	}
-
+func MetadataAsTarEntries(code []byte) ([]byte, error) {
 	is := bytes.NewReader(code)
 	gr, err := gzip.NewReader(is)
 	if err != nil {

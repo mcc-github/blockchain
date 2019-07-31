@@ -105,11 +105,6 @@ func (cs *ChaincodeSupport) Launch(channelID string, ccci *ccprovider.ChaincodeC
 }
 
 
-func (cs *ChaincodeSupport) Stop(ccci *ccprovider.ChaincodeContainerInfo) error {
-	return cs.Runtime.Stop(ccci)
-}
-
-
 func (cs *ChaincodeSupport) LaunchInProc(ccid ccintf.CCID) <-chan struct{} {
 	launchStatus, ok := cs.HandlerRegistry.Launching(ccid)
 	if ok {

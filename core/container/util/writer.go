@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/internal/pkg/ccmetadata"
+	"github.com/mcc-github/blockchain/internal/ccmetadata"
 	"github.com/pkg/errors"
 )
 

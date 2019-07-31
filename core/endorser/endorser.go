@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/util"
@@ -76,21 +75,10 @@ type Support interface {
 
 	
 	
-	IsJavaCC(buf []byte) (bool, error)
-
-	
-	
 	CheckInstantiationPolicy(name, version string, cd ccprovider.ChaincodeDefinition) error
 
 	
 	GetChaincodeDeploymentSpecFS(cds *pb.ChaincodeDeploymentSpec) (*pb.ChaincodeDeploymentSpec, error)
-
-	
-	
-	GetApplicationConfig(cid string) (channelconfig.Application, bool)
-
-	
-	NewQueryCreator(channel string) (QueryCreator, error)
 
 	
 	EndorseWithPlugin(ctx Context) (*pb.ProposalResponse, error)

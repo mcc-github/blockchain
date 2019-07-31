@@ -22,39 +22,38 @@ import (
 
 func TestRollback(t *testing.T) {
 	path := testPath()
-	blocks := testutil.ConstructTestBlocks(t, 1000)
-	
-	
-	
-	maxFileSize := int(0.2 * float64(testutilEstimateTotalSizeOnDisk(t, blocks)))
-	
-	env := newTestEnv(t, NewConf(path, maxFileSize))
+	blocks := testutil.ConstructTestBlocks(t, 50) 
+	blocksPerFile := 50 / 5
+	env := newTestEnv(t, NewConf(path, 0))
 	defer env.Cleanup()
 	blkfileMgrWrapper := newTestBlockfileWrapper(env, "testLedger")
-
+	blkfileMgr := blkfileMgrWrapper.blockfileMgr
 	
-	blkfileMgrWrapper.addBlocks(blocks)
+	for i, b := range blocks {
+		assert.NoError(t, blkfileMgr.addBlock(b))
+		if i != 0 && i%blocksPerFile == 0 {
+			
+			blkfileMgr.moveToNextFile()
+		}
+	}
 
 	
 	expectedBlockchainInfo := &common.BlockchainInfo{
-		Height:            1000,
-		CurrentBlockHash:  protoutil.BlockHeaderHash(blocks[999].Header),
-		PreviousBlockHash: protoutil.BlockHeaderHash(blocks[998].Header),
+		Height:            50,
+		CurrentBlockHash:  protoutil.BlockHeaderHash(blocks[49].Header),
+		PreviousBlockHash: protoutil.BlockHeaderHash(blocks[48].Header),
 	}
 	actualBlockchainInfo := blkfileMgrWrapper.blockfileMgr.getBlockchainInfo()
 	assert.Equal(t, expectedBlockchainInfo, actualBlockchainInfo)
 
 	
-	expectedCheckpointInfoLastBlockNumber := uint64(999)
+	expectedCheckpointInfoLastBlockNumber := uint64(49)
 	expectedCheckpointInfoIsChainEmpty := false
 	actualCheckpointInfo, err := blkfileMgrWrapper.blockfileMgr.loadCurrentInfo()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedCheckpointInfoLastBlockNumber, actualCheckpointInfo.lastBlockNumber)
 	assert.Equal(t, expectedCheckpointInfoIsChainEmpty, actualCheckpointInfo.isChainEmpty)
-	assert.True(t, actualCheckpointInfo.latestFileChunkSuffixNum >= 5)
-	
-	
-	
+	assert.Equal(t, actualCheckpointInfo.latestFileChunkSuffixNum, 4)
 
 	
 	blkfileMgrWrapper.testGetBlockByNumber(blocks, 0, nil)
@@ -64,102 +63,90 @@ func TestRollback(t *testing.T) {
 	
 	env.provider.Close()
 	blkfileMgrWrapper.close()
-
-	
-	ledgerDir := (&Conf{blockStorageDir: path}).getLedgerBlockDir("testLedger")
-	_, _, numBlocksInLastFile, err := scanForLastCompleteBlock(ledgerDir, actualCheckpointInfo.latestFileChunkSuffixNum, 0)
-	assert.NoError(t, err)
-	lastFileSuffixNum := actualCheckpointInfo.latestFileChunkSuffixNum
-	lastBlockNumberInLastFile := uint64(999)
-	middleBlockNumberInLastFile := uint64(999 - (numBlocksInLastFile / 2))
-	firstBlockNumberInLastFile := uint64(999 - numBlocksInLastFile + 1)
+	lastBlockNumberInLastFile := uint64(49)
+	middleBlockNumberInLastFile := uint64(45)
+	firstBlockNumberInLastFile := uint64(41)
 
 	
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
 	err = Rollback(path, "testLedger", lastBlockNumberInLastFile-uint64(1), indexConfig)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, lastBlockNumberInLastFile-uint64(1), lastFileSuffixNum, indexConfig)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, lastBlockNumberInLastFile-uint64(1), 4, indexConfig)
 
 	
 	err = Rollback(path, "testLedger", middleBlockNumberInLastFile, indexConfig)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, middleBlockNumberInLastFile, lastFileSuffixNum, indexConfig)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, middleBlockNumberInLastFile, 4, indexConfig)
 
 	
 	err = Rollback(path, "testLedger", firstBlockNumberInLastFile, indexConfig)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, firstBlockNumberInLastFile, lastFileSuffixNum, indexConfig)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, firstBlockNumberInLastFile, 4, indexConfig)
 
 	
 	err = Rollback(path, "testLedger", firstBlockNumberInLastFile-1, indexConfig)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, firstBlockNumberInLastFile-1, lastFileSuffixNum-1, indexConfig)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, firstBlockNumberInLastFile-1, 3, indexConfig)
 
 	
-	blockBytes, _, numBlocks, err := scanForLastCompleteBlock(ledgerDir, lastFileSuffixNum/2, 0)
-	assert.NoError(t, err)
-	blockInfo, err := extractSerializedBlockInfo(blockBytes)
-	assert.NoError(t, err)
-	middleBlockNumberInMiddleFile := blockInfo.blockHeader.Number - uint64(numBlocks/2)
+	middleBlockNumberInMiddleFile := uint64(25)
 
 	
 	err = Rollback(path, "testLedger", middleBlockNumberInMiddleFile, indexConfig)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, middleBlockNumberInMiddleFile, lastFileSuffixNum/2, indexConfig)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, middleBlockNumberInMiddleFile, 2, indexConfig)
 
 	
 	err = Rollback(path, "testLedger", 5, indexConfig)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, 5, 0, indexConfig)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, 5, 0, indexConfig)
 
 	
 	err = Rollback(path, "testLedger", 1, indexConfig)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, 1, 0, indexConfig)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, 1, 0, indexConfig)
 }
 
 
 
 func TestRollbackWithOnlyBlockIndexAttributes(t *testing.T) {
 	path := testPath()
-	blocks := testutil.ConstructTestBlocks(t, 100)
-	
-	
-	
-	maxFileSize := int(0.2 * float64(testutilEstimateTotalSizeOnDisk(t, blocks)))
-	
-
+	blocks := testutil.ConstructTestBlocks(t, 50) 
+	blocksPerFile := 50 / 5
 	onlyBlockNumIndex := []blkstorage.IndexableAttr{
 		blkstorage.IndexableAttrBlockNum,
 	}
-
-	env := newTestEnvSelectiveIndexing(t, NewConf(path, maxFileSize), onlyBlockNumIndex, &disabled.Provider{})
+	env := newTestEnvSelectiveIndexing(t, NewConf(path, 0), onlyBlockNumIndex, &disabled.Provider{})
 	defer env.Cleanup()
 	blkfileMgrWrapper := newTestBlockfileWrapper(env, "testLedger")
+	blkfileMgr := blkfileMgrWrapper.blockfileMgr
 
 	
-	blkfileMgrWrapper.addBlocks(blocks)
+	for i, b := range blocks {
+		assert.NoError(t, blkfileMgr.addBlock(b))
+		if i != 0 && i%blocksPerFile == 0 {
+			
+			blkfileMgr.moveToNextFile()
+		}
+	}
 
 	
 	expectedBlockchainInfo := &common.BlockchainInfo{
-		Height:            100,
-		CurrentBlockHash:  protoutil.BlockHeaderHash(blocks[99].Header),
-		PreviousBlockHash: protoutil.BlockHeaderHash(blocks[98].Header),
+		Height:            50,
+		CurrentBlockHash:  protoutil.BlockHeaderHash(blocks[49].Header),
+		PreviousBlockHash: protoutil.BlockHeaderHash(blocks[48].Header),
 	}
 	actualBlockchainInfo := blkfileMgrWrapper.blockfileMgr.getBlockchainInfo()
 	assert.Equal(t, expectedBlockchainInfo, actualBlockchainInfo)
 
 	
-	expectedCheckpointInfoLastBlockNumber := uint64(99)
+	expectedCheckpointInfoLastBlockNumber := uint64(49)
 	expectedCheckpointInfoIsChainEmpty := false
 	actualCheckpointInfo, err := blkfileMgrWrapper.blockfileMgr.loadCurrentInfo()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedCheckpointInfoLastBlockNumber, actualCheckpointInfo.lastBlockNumber)
 	assert.Equal(t, expectedCheckpointInfoIsChainEmpty, actualCheckpointInfo.isChainEmpty)
-	assert.True(t, actualCheckpointInfo.latestFileChunkSuffixNum >= 5)
-	
-	
-	
+	assert.Equal(t, actualCheckpointInfo.latestFileChunkSuffixNum, 4)
 
 	
 	env.provider.Close()
@@ -171,45 +158,45 @@ func TestRollbackWithOnlyBlockIndexAttributes(t *testing.T) {
 	}
 	err = Rollback(path, "testLedger", 2, onlyBlockNumIndexCfg)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, 2, 0, onlyBlockNumIndexCfg)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, 2, 0, onlyBlockNumIndexCfg)
 }
 
 func TestRollbackWithNoIndexDir(t *testing.T) {
 	path := testPath()
-	blocks := testutil.ConstructTestBlocks(t, 100)
-	
-	
-	
-	maxFileSize := int(0.2 * float64(testutilEstimateTotalSizeOnDisk(t, blocks)))
-	
-	conf := NewConf(path, maxFileSize)
+	blocks := testutil.ConstructTestBlocks(t, 50)
+	blocksPerFile := 50 / 5
+	conf := NewConf(path, 0)
 	env := newTestEnv(t, conf)
 	defer env.Cleanup()
 	blkfileMgrWrapper := newTestBlockfileWrapper(env, "testLedger")
+	blkfileMgr := blkfileMgrWrapper.blockfileMgr
 
 	
-	blkfileMgrWrapper.addBlocks(blocks)
+	for i, b := range blocks {
+		assert.NoError(t, blkfileMgr.addBlock(b))
+		if i != 0 && i%blocksPerFile == 0 {
+			
+			blkfileMgr.moveToNextFile()
+		}
+	}
 
 	
 	expectedBlockchainInfo := &common.BlockchainInfo{
-		Height:            100,
-		CurrentBlockHash:  protoutil.BlockHeaderHash(blocks[99].Header),
-		PreviousBlockHash: protoutil.BlockHeaderHash(blocks[98].Header),
+		Height:            50,
+		CurrentBlockHash:  protoutil.BlockHeaderHash(blocks[49].Header),
+		PreviousBlockHash: protoutil.BlockHeaderHash(blocks[48].Header),
 	}
 	actualBlockchainInfo := blkfileMgrWrapper.blockfileMgr.getBlockchainInfo()
 	assert.Equal(t, expectedBlockchainInfo, actualBlockchainInfo)
 
 	
-	expectedCheckpointInfoLastBlockNumber := uint64(99)
+	expectedCheckpointInfoLastBlockNumber := uint64(49)
 	expectedCheckpointInfoIsChainEmpty := false
 	actualCheckpointInfo, err := blkfileMgrWrapper.blockfileMgr.loadCurrentInfo()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedCheckpointInfoLastBlockNumber, actualCheckpointInfo.lastBlockNumber)
 	assert.Equal(t, expectedCheckpointInfoIsChainEmpty, actualCheckpointInfo.isChainEmpty)
-	assert.True(t, actualCheckpointInfo.latestFileChunkSuffixNum >= 5)
-	
-	
-	
+	assert.Equal(t, actualCheckpointInfo.latestFileChunkSuffixNum, 4)
 
 	
 	env.provider.Close()
@@ -224,7 +211,7 @@ func TestRollbackWithNoIndexDir(t *testing.T) {
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
 	err = Rollback(path, "testLedger", 2, indexConfig)
 	assert.NoError(t, err)
-	assertBlockStoreRollback(t, path, "testLedger", maxFileSize, blocks, 2, 0, indexConfig)
+	assertBlockStoreRollback(t, path, "testLedger", blocks, 2, 0, indexConfig)
 }
 
 func TestValidateRollbackParams(t *testing.T) {
@@ -343,10 +330,10 @@ func TestRollbackTxIDMissingFromIndex(t *testing.T) {
 	assert.Equal(t, expectedBlockchainInfo, actualBlockchainInfo)
 }
 
-func assertBlockStoreRollback(t *testing.T, path, ledgerID string, maxFileSize int, blocks []*common.Block,
+func assertBlockStoreRollback(t *testing.T, path, ledgerID string, blocks []*common.Block,
 	rollbackedToBlkNum uint64, lastFileSuffixNum int, indexConfig *blkstorage.IndexConfig) {
 
-	env := newTestEnvSelectiveIndexing(t, NewConf(path, maxFileSize), indexConfig.AttrsToIndex, &disabled.Provider{})
+	env := newTestEnvSelectiveIndexing(t, NewConf(path, 0), indexConfig.AttrsToIndex, &disabled.Provider{})
 	blkfileMgrWrapper := newTestBlockfileWrapper(env, ledgerID)
 
 	

@@ -23,9 +23,9 @@ var logger = flogging.MustGetLogger("chaincode.accesscontrol")
 
 type CertAndPrivKeyPair struct {
 	
-	Cert string
+	Cert []byte
 	
-	Key string
+	Key []byte
 }
 
 type Authenticator struct {
@@ -52,8 +52,8 @@ func (ac *Authenticator) Generate(ccName string) (*CertAndPrivKeyPair, error) {
 		return nil, err
 	}
 	return &CertAndPrivKeyPair{
-		Key:  cert.PrivKeyString(),
-		Cert: cert.PubKeyString(),
+		Key:  cert.Key,
+		Cert: cert.Cert,
 	}, nil
 }
 

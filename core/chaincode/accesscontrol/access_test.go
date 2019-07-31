@@ -10,7 +10,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"fmt"
 	"net"
 	"testing"
@@ -200,11 +199,7 @@ func TestAccessControl(t *testing.T) {
 	
 	kp, err := auth.Generate("example01")
 	assert.NoError(t, err)
-	keyBytes, err := base64.StdEncoding.DecodeString(kp.Key)
-	assert.NoError(t, err)
-	certBytes, err := base64.StdEncoding.DecodeString(kp.Cert)
-	assert.NoError(t, err)
-	cert, err = tls.X509KeyPair(certBytes, keyBytes)
+	cert, err = tls.X509KeyPair(kp.Cert, kp.Key)
 	assert.NoError(t, err)
 	mismatchedShim, err := newClient(t, 7052, &cert, ca.CertBytes())
 	assert.NoError(t, err)
@@ -218,11 +213,7 @@ func TestAccessControl(t *testing.T) {
 	
 	kp, err = auth.Generate("example02")
 	assert.NoError(t, err)
-	keyBytes, err = base64.StdEncoding.DecodeString(kp.Key)
-	assert.NoError(t, err)
-	certBytes, err = base64.StdEncoding.DecodeString(kp.Cert)
-	assert.NoError(t, err)
-	cert, err = tls.X509KeyPair(certBytes, keyBytes)
+	cert, err = tls.X509KeyPair(kp.Cert, kp.Key)
 	assert.NoError(t, err)
 	realCC, err := newClient(t, 7052, &cert, ca.CertBytes())
 	assert.NoError(t, err)
@@ -242,11 +233,7 @@ func TestAccessControl(t *testing.T) {
 	
 	kp, err = auth.Generate("example02")
 	assert.NoError(t, err)
-	keyBytes, err = base64.StdEncoding.DecodeString(kp.Key)
-	assert.NoError(t, err)
-	certBytes, err = base64.StdEncoding.DecodeString(kp.Cert)
-	assert.NoError(t, err)
-	cert, err = tls.X509KeyPair(certBytes, keyBytes)
+	cert, err = tls.X509KeyPair(kp.Cert, kp.Key)
 	assert.NoError(t, err)
 	confusedCC, err := newClient(t, 7052, &cert, ca.CertBytes())
 	assert.NoError(t, err)
@@ -261,11 +248,7 @@ func TestAccessControl(t *testing.T) {
 	
 	kp, err = auth.Generate("example02")
 	assert.NoError(t, err)
-	keyBytes, err = base64.StdEncoding.DecodeString(kp.Key)
-	assert.NoError(t, err)
-	certBytes, err = base64.StdEncoding.DecodeString(kp.Cert)
-	assert.NoError(t, err)
-	cert, err = tls.X509KeyPair(certBytes, keyBytes)
+	cert, err = tls.X509KeyPair(kp.Cert, kp.Key)
 	assert.NoError(t, err)
 	malformedMessageCC, err := newClient(t, 7052, &cert, ca.CertBytes())
 	assert.NoError(t, err)
@@ -287,11 +270,7 @@ func TestAccessControl(t *testing.T) {
 	
 	kp, err = auth.Generate("example02")
 	assert.NoError(t, err)
-	keyBytes, err = base64.StdEncoding.DecodeString(kp.Key)
-	assert.NoError(t, err)
-	certBytes, err = base64.StdEncoding.DecodeString(kp.Cert)
-	assert.NoError(t, err)
-	cert, err = tls.X509KeyPair(certBytes, keyBytes)
+	cert, err = tls.X509KeyPair(kp.Cert, kp.Key)
 	assert.NoError(t, err)
 	lateCC, err := newClient(t, 7052, &cert, ca.CertBytes())
 	assert.NoError(t, err)
