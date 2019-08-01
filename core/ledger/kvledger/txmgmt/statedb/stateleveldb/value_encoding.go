@@ -33,7 +33,10 @@ func encodeValue(v *statedb.VersionedValue) ([]byte, error) {
 
 func decodeValue(encodedValue []byte) (*statedb.VersionedValue, error) {
 	if oldFormatEncoding(encodedValue) {
-		val, ver := decodeValueOldFormat(encodedValue)
+		val, ver, err := decodeValueOldFormat(encodedValue)
+		if err != nil {
+			return nil, err
+		}
 		return &statedb.VersionedValue{Version: ver, Value: val, Metadata: nil}, nil
 	}
 	msg := &msgs.VersionedValueProto{}
@@ -41,7 +44,10 @@ func decodeValue(encodedValue []byte) (*statedb.VersionedValue, error) {
 	if err != nil {
 		return nil, err
 	}
-	ver, _ := version.NewHeightFromBytes(msg.VersionBytes)
+	ver, _, err := version.NewHeightFromBytes(msg.VersionBytes)
+	if err != nil {
+		return nil, err
+	}
 	val := msg.Value
 	metadata := msg.Metadata
 	
@@ -69,10 +75,13 @@ func encodeValueOldFormat(value []byte, version *version.Height) []byte {
 
 
 
-func decodeValueOldFormat(encodedValue []byte) ([]byte, *version.Height) {
-	height, n := version.NewHeightFromBytes(encodedValue)
+func decodeValueOldFormat(encodedValue []byte) ([]byte, *version.Height, error) {
+	height, n, err := version.NewHeightFromBytes(encodedValue)
+	if err != nil {
+		return nil, nil, err
+	}
 	value := encodedValue[n:]
-	return value, height
+	return value, height, nil
 }
 
 

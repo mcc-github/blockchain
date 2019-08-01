@@ -76,21 +76,24 @@ func createCompositeKeyForPurgeIndexByHeight(blockHeight uint64, txid string, uu
 
 
 
-func splitCompositeKeyOfPvtRWSet(compositeKey []byte) (uuid string, blockHeight uint64) {
+func splitCompositeKeyOfPvtRWSet(compositeKey []byte) (uuid string, blockHeight uint64, err error) {
 	return splitCompositeKeyWithoutPrefixForTxid(compositeKey[2:])
 }
 
 
 
-func splitCompositeKeyOfPurgeIndexByTxid(compositeKey []byte) (uuid string, blockHeight uint64) {
+func splitCompositeKeyOfPurgeIndexByTxid(compositeKey []byte) (uuid string, blockHeight uint64, err error) {
 	return splitCompositeKeyWithoutPrefixForTxid(compositeKey[2:])
 }
 
 
 
-func splitCompositeKeyOfPurgeIndexByHeight(compositeKey []byte) (txid string, uuid string, blockHeight uint64) {
+func splitCompositeKeyOfPurgeIndexByHeight(compositeKey []byte) (txid string, uuid string, blockHeight uint64, err error) {
 	var n int
-	blockHeight, n, _ = util.DecodeOrderPreservingVarUint64(compositeKey[2:])
+	blockHeight, n, err = util.DecodeOrderPreservingVarUint64(compositeKey[2:])
+	if err != nil {
+		return
+	}
 	splits := bytes.Split(compositeKey[n+3:], []byte{compositeKeySep})
 	txid = string(splits[0])
 	uuid = string(splits[1])
@@ -99,12 +102,12 @@ func splitCompositeKeyOfPurgeIndexByHeight(compositeKey []byte) (txid string, uu
 
 
 
-func splitCompositeKeyWithoutPrefixForTxid(compositeKey []byte) (uuid string, blockHeight uint64) {
+func splitCompositeKeyWithoutPrefixForTxid(compositeKey []byte) (uuid string, blockHeight uint64, err error) {
 	
 	firstSepIndex := bytes.IndexByte(compositeKey, compositeKeySep)
 	secondSepIndex := firstSepIndex + bytes.IndexByte(compositeKey[firstSepIndex+1:], compositeKeySep) + 1
 	uuid = string(compositeKey[firstSepIndex+1 : secondSepIndex])
-	blockHeight, _, _ = util.DecodeOrderPreservingVarUint64(compositeKey[secondSepIndex+1:])
+	blockHeight, _, err = util.DecodeOrderPreservingVarUint64(compositeKey[secondSepIndex+1:])
 	return
 }
 

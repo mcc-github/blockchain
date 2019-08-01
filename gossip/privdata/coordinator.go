@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	vsccErrors "github.com/mcc-github/blockchain/common/errors"
 	commonutil "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/committer"
@@ -118,10 +119,10 @@ type Fetcher interface {
 
 
 
-type AppCapabilities interface {
+
+type CapabilityProvider interface {
 	
-	
-	StorePvtDataOfInvalidTx() bool
+	Capabilities() channelconfig.ApplicationCapabilities
 }
 
 
@@ -133,7 +134,7 @@ type Support struct {
 	committer.Committer
 	TransientStore
 	Fetcher
-	AppCapabilities
+	CapabilityProvider
 }
 
 type coordinator struct {
@@ -716,7 +717,8 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 		privateRWsetsInBlock: privateRWsetsInBlock,
 		coordinator:          c,
 	}
-	txList, err := data.forEachTxn(c.Support.StorePvtDataOfInvalidTx(), txsFilter, bi.inspectTransaction)
+	storePvtDataOfInvalidTx := c.Support.CapabilityProvider.Capabilities().StorePvtDataOfInvalidTx()
+	txList, err := data.forEachTxn(storePvtDataOfInvalidTx, txsFilter, bi.inspectTransaction)
 	if err != nil {
 		return nil, err
 	}
@@ -893,7 +895,8 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo protou
 
 	seqs2Namespaces := aggregatedCollections(make(map[seqAndDataModel]map[string][]*rwset.CollectionPvtReadWriteSet))
 	data := blockData(blockAndPvtData.Block.Data.Data)
-	data.forEachTxn(c.Support.StorePvtDataOfInvalidTx(), make(txValidationFlags, len(data)),
+	storePvtDataOfInvalidTx := c.Support.CapabilityProvider.Capabilities().StorePvtDataOfInvalidTx()
+	data.forEachTxn(storePvtDataOfInvalidTx, make(txValidationFlags, len(data)),
 		func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, _ []*peer.Endorsement) error {
 			item, exists := blockAndPvtData.PvtData[seqInBlock]
 			if !exists {

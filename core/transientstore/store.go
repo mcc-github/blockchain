@@ -277,7 +277,10 @@ func (s *store) PurgeByTxids(txids []string) error {
 			compositeKeyPurgeIndexByTxid := iter.Key()
 			
 			
-			uuid, blockHeight := splitCompositeKeyOfPurgeIndexByTxid(compositeKeyPurgeIndexByTxid)
+			uuid, blockHeight, err := splitCompositeKeyOfPurgeIndexByTxid(compositeKeyPurgeIndexByTxid)
+			if err != nil {
+				return err
+			}
 			compositeKeyPvtRWSet := createCompositeKeyForPvtRWSet(txid, uuid, blockHeight)
 			dbBatch.Delete(compositeKeyPvtRWSet)
 
@@ -319,7 +322,10 @@ func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
 
 		
 		compositeKeyPurgeIndexByHeight := iter.Key()
-		txid, uuid, blockHeight := splitCompositeKeyOfPurgeIndexByHeight(compositeKeyPurgeIndexByHeight)
+		txid, uuid, blockHeight, err := splitCompositeKeyOfPurgeIndexByHeight(compositeKeyPurgeIndexByHeight)
+		if err != nil {
+			return err
+		}
 		logger.Debugf("Purging from transient store private data simulated at block [%d]: txid [%s] uuid [%s]", blockHeight, txid, uuid)
 
 		compositeKeyPvtRWSet := createCompositeKeyForPvtRWSet(txid, uuid, blockHeight)
@@ -349,8 +355,8 @@ func (s *store) GetMinTransientBlkHt() (uint64, error) {
 	
 	if iter.Next() {
 		dbKey := iter.Key()
-		_, _, blockHeight := splitCompositeKeyOfPurgeIndexByHeight(dbKey)
-		return blockHeight, nil
+		_, _, blockHeight, err := splitCompositeKeyOfPurgeIndexByHeight(dbKey)
+		return blockHeight, err
 	}
 	
 	
@@ -371,7 +377,10 @@ func (scanner *RwsetScanner) Next() (*EndorserPvtSimulationResults, error) {
 	}
 	dbKey := scanner.dbItr.Key()
 	dbVal := scanner.dbItr.Value()
-	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
+	_, blockHeight, err := splitCompositeKeyOfPvtRWSet(dbKey)
+	if err != nil {
+		return nil, err
+	}
 
 	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
 	if err := proto.Unmarshal(dbVal, txPvtRWSet); err != nil {
@@ -394,7 +403,10 @@ func (scanner *RwsetScanner) NextWithConfig() (*EndorserPvtSimulationResultsWith
 	}
 	dbKey := scanner.dbItr.Key()
 	dbVal := scanner.dbItr.Value()
-	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
+	_, blockHeight, err := splitCompositeKeyOfPvtRWSet(dbKey)
+	if err != nil {
+		return nil, err
+	}
 
 	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
 	filteredTxPvtRWSet := &rwset.TxPvtReadWriteSet{}

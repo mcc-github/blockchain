@@ -42,7 +42,10 @@ func decodeVersionAndMetadata(encodedstr string) (*version.Height, []byte, error
 	if err = proto.Unmarshal(versionFieldBytes, versionFieldMsg); err != nil {
 		return nil, nil, err
 	}
-	ver, _ := version.NewHeightFromBytes(versionFieldMsg.VersionBytes)
+	ver, _, err := version.NewHeightFromBytes(versionFieldMsg.VersionBytes)
+	if err != nil {
+		return nil, nil, err
+	}
 	return ver, versionFieldMsg.Metadata, nil
 }
 
