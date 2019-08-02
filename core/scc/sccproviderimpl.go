@@ -48,23 +48,6 @@ func (p *Provider) IsSysCC(name string) bool {
 }
 
 
-
-
-func (p *Provider) IsSysCCAndNotInvokableCC2CC(name string) bool {
-	for _, sysCC := range p.SysCCs {
-		if sysCC.Name() == name {
-			return !sysCC.InvokableCC2CC()
-		}
-	}
-
-	if isDeprecatedSysCC(name) {
-		return true
-	}
-
-	return false
-}
-
-
 func (p *Provider) GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, error) {
 	l := p.Peer.GetLedger(cid)
 	if l == nil {
@@ -72,23 +55,6 @@ func (p *Provider) GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, 
 	}
 
 	return l.NewQueryExecutor()
-}
-
-
-
-
-func (p *Provider) IsSysCCAndNotInvokableExternal(name string) bool {
-	for _, sysCC := range p.SysCCs {
-		if sysCC.Name() == name {
-			return !sysCC.InvokableExternal()
-		}
-	}
-
-	if isDeprecatedSysCC(name) {
-		return true
-	}
-
-	return false
 }
 
 

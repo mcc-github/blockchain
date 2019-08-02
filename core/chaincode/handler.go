@@ -53,7 +53,6 @@ type Invoker interface {
 
 type SystemCCProvider interface {
 	IsSysCC(name string) bool
-	IsSysCCAndNotInvokableCC2CC(name string) bool
 }
 
 
@@ -351,12 +350,6 @@ func (h *Handler) serialSendAsync(msg *pb.ChaincodeMessage) {
 
 
 func (h *Handler) checkACL(signedProp *pb.SignedProposal, proposal *pb.Proposal, ccIns *sysccprovider.ChaincodeInstance) error {
-	
-	
-	if h.SystemCCProvider.IsSysCCAndNotInvokableCC2CC(ccIns.ChaincodeName) {
-		return errors.Errorf("system chaincode %s cannot be invoked with a cc2cc invocation", ccIns.ChaincodeName)
-	}
-
 	
 	
 	

@@ -42,10 +42,6 @@ type Support interface {
 	identity.SignerSerializer
 	
 	
-	IsSysCCAndNotInvokableExternal(name string) bool
-
-	
-	
 	
 	GetTxSimulator(ledgername string, txid string) (ledger.TxSimulator, error)
 
@@ -366,14 +362,6 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, e
 
 	shdr, err := protoutil.GetSignatureHeader(hdr.SignatureHeader)
 	if err != nil {
-		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
-		return vr, err
-	}
-
-	
-	if e.s.IsSysCCAndNotInvokableExternal(hdrExt.ChaincodeId.Name) {
-		endorserLogger.Errorf("Error: an attempt was made by %#v to invoke system chaincode %s", shdr.Creator, hdrExt.ChaincodeId.Name)
-		err = errors.Errorf("chaincode %s cannot be invoked through a proposal", hdrExt.ChaincodeId.Name)
 		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
 		return vr, err
 	}

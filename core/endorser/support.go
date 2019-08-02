@@ -57,12 +57,6 @@ func (s *SupportImpl) SigningIdentityForRequest(*pb.SignedProposal) (SigningIden
 
 
 
-func (s *SupportImpl) IsSysCCAndNotInvokableExternal(name string) bool {
-	return s.SysCCProvider.IsSysCCAndNotInvokableExternal(name)
-}
-
-
-
 
 func (s *SupportImpl) GetTxSimulator(ledgername string, txid string) (ledger.TxSimulator, error) {
 	lgr := s.Peer.GetLedger(ledgername)

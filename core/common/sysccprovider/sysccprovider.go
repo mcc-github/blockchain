@@ -32,14 +32,6 @@ type SystemChaincodeProvider interface {
 
 	
 	
-	IsSysCCAndNotInvokableCC2CC(name string) bool
-
-	
-	
-	IsSysCCAndNotInvokableExternal(name string) bool
-
-	
-	
 	
 	
 	GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, error)
