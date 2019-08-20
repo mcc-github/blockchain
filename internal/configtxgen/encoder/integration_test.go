@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
@@ -62,9 +63,11 @@ var _ = Describe("Integration", func() {
 			group, err := encoder.NewChannelGroup(config)
 			Expect(err).NotTo(HaveOccurred())
 
+			cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+			Expect(err).NotTo(HaveOccurred())
 			_, err = channelconfig.NewBundle("test", &cb.Config{
 				ChannelGroup: group,
-			})
+			}, cryptoProvider)
 			Expect(err).NotTo(HaveOccurred())
 
 			err = hasModPolicySet("Channel", group)

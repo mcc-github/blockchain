@@ -7,12 +7,15 @@ SPDX-License-Identifier: Apache-2.0
 package lscc
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
+	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
@@ -21,7 +24,9 @@ import (
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
+	"github.com/mcc-github/blockchain/core/peer"
 	"github.com/mcc-github/blockchain/core/policy"
+	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/internal/ccmetadata"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
@@ -43,8 +48,8 @@ var (
 	logger = flogging.MustGetLogger("lscc")
 	
 	
-	chaincodeNameRegExp    = regexp.MustCompile("^[a-zA-Z0-9]+([-_][a-zA-Z0-9]+)*$")
-	chaincodeVersionRegExp = regexp.MustCompile("^[A-Za-z0-9_.+-]+$")
+	ChaincodeNameRegExp    = regexp.MustCompile("^[a-zA-Z0-9]+([-_][a-zA-Z0-9]+)*$")
+	ChaincodeVersionRegExp = regexp.MustCompile("^[A-Za-z0-9_.+-]+$")
 )
 
 const (
@@ -104,7 +109,7 @@ type FilesystemSupport interface {
 
 	
 	
-	GetChaincodeFromLocalStorage(ccname string, ccversion string) (ccprovider.CCPackage, error)
+	GetChaincodeFromLocalStorage(ccNameVersion string) (ccprovider.CCPackage, error)
 
 	
 	
@@ -129,6 +134,8 @@ type LifeCycleSysCC struct {
 	
 	ACLProvider aclmgmt.ACLProvider
 
+	BuiltinSCCs scc.BuiltinSCCs
+
 	
 	
 	SCCProvider sysccprovider.SystemChaincodeProvider
@@ -146,13 +153,46 @@ type LifeCycleSysCC struct {
 
 
 
+
+
+type PeerShim struct {
+	Peer *peer.Peer
+}
+
+
+func (p *PeerShim) GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, error) {
+	l := p.Peer.GetLedger(cid)
+	if l == nil {
+		return nil, fmt.Errorf("Could not retrieve ledger for channel %s", cid)
+	}
+
+	return l.NewQueryExecutor()
+}
+
+
+
+func (p *PeerShim) GetApplicationConfig(cid string) (channelconfig.Application, bool) {
+	return p.Peer.GetApplicationConfig(cid)
+}
+
+
+
+func (p *PeerShim) PolicyManager(channelID string) (policies.Manager, bool) {
+	m := p.Peer.GetPolicyManager(channelID)
+	return m, (m != nil)
+}
+
+
+
 func New(
+	builtinSCCs scc.BuiltinSCCs,
 	sccp sysccprovider.SystemChaincodeProvider,
 	ACLProvider aclmgmt.ACLProvider,
 	getMSPIDs MSPIDsGetter,
 	policyChecker policy.PolicyChecker,
 ) *LifeCycleSysCC {
 	return &LifeCycleSysCC{
+		BuiltinSCCs:   builtinSCCs,
 		Support:       &supportImpl{GetMSPIDs: getMSPIDs},
 		PolicyChecker: policyChecker,
 		SCCProvider:   sccp,
@@ -162,32 +202,49 @@ func New(
 }
 
 func (lscc *LifeCycleSysCC) Name() string              { return "lscc" }
-func (lscc *LifeCycleSysCC) Path() string              { return "github.com/mcc-github/blockchain/core/scc/lscc" }
-func (lscc *LifeCycleSysCC) InitArgs() [][]byte        { return nil }
 func (lscc *LifeCycleSysCC) Chaincode() shim.Chaincode { return lscc }
-func (lscc *LifeCycleSysCC) InvokableExternal() bool   { return true }
-func (lscc *LifeCycleSysCC) InvokableCC2CC() bool      { return true }
-func (lscc *LifeCycleSysCC) Enabled() bool             { return true }
 
-func (lscc *LifeCycleSysCC) ChaincodeContainerInfo(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
-	chaincodeDataBytes, err := qe.GetState("lscc", chaincodeName)
+type LegacySecurity struct {
+	*ccprovider.ChaincodeData
+	Support FilesystemSupport
+}
+
+func (ls *LegacySecurity) SecurityCheckLegacyChaincode() error {
+	ccpack, err := ls.Support.GetChaincodeFromLocalStorage(ls.ChaincodeData.ChaincodeID())
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not retrieve state for chaincode %s", chaincodeName)
-	}
-
-	if chaincodeDataBytes == nil {
-		return nil, errors.Errorf("chaincode %s not found", chaincodeName)
+		return InvalidDeploymentSpecErr(err.Error())
 	}
 
 	
 	
 	
-	cds, _, err := lscc.getCCCode(chaincodeName, chaincodeDataBytes)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not get chaincode code")
+	
+	
+	if err = ccpack.ValidateCC(ls.ChaincodeData); err != nil {
+		return InvalidCCOnFSError(err.Error())
 	}
 
-	return ccprovider.DeploymentSpecToChaincodeContainerInfo(cds, false), nil
+	fsData := ccpack.GetChaincodeData()
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	if fsData.InstantiationPolicy != nil {
+		if !bytes.Equal(fsData.InstantiationPolicy, ls.ChaincodeData.InstantiationPolicy) {
+			return fmt.Errorf("Instantiation policy mismatch for cc %s", ls.ChaincodeID())
+		}
+	}
+
+	return nil
 }
 
 func (lscc *LifeCycleSysCC) ChaincodeDefinition(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error) {
@@ -206,7 +263,10 @@ func (lscc *LifeCycleSysCC) ChaincodeDefinition(channelID, chaincodeName string,
 		return nil, errors.Wrapf(err, "chaincode %s has bad definition", chaincodeName)
 	}
 
-	return chaincodeData, nil
+	return &LegacySecurity{
+		ChaincodeData: chaincodeData,
+		Support:       lscc.Support,
+	}, nil
 }
 
 
@@ -441,7 +501,7 @@ func (lscc *LifeCycleSysCC) getCCCode(ccname string, cdbytes []byte) (*pb.Chainc
 		return nil, nil, err
 	}
 
-	ccpack, err := lscc.Support.GetChaincodeFromLocalStorage(ccname, cd.Version)
+	ccpack, err := lscc.Support.GetChaincodeFromLocalStorage(cd.ChaincodeID())
 	if err != nil {
 		return nil, nil, InvalidDeploymentSpecErr(err.Error())
 	}
@@ -494,7 +554,7 @@ func (lscc *LifeCycleSysCC) getChaincodes(stub shim.ChaincodeStubInterface) pb.R
 
 		
 		
-		ccpack, err := lscc.Support.GetChaincodeFromLocalStorage(ccdata.Name, ccdata.Version)
+		ccpack, err := lscc.Support.GetChaincodeFromLocalStorage(ccdata.ChaincodeID())
 		if err == nil {
 			path = ccpack.GetDepSpec().GetChaincodeSpec().ChaincodeId.Path
 			input = ccpack.GetDepSpec().GetChaincodeSpec().Input.String()
@@ -545,11 +605,7 @@ func (lscc *LifeCycleSysCC) isValidChannelName(channel string) bool {
 
 
 func (lscc *LifeCycleSysCC) isValidChaincodeName(chaincodeName string) error {
-	if chaincodeName == "" {
-		return EmptyChaincodeNameErr("")
-	}
-
-	if !chaincodeNameRegExp.MatchString(chaincodeName) {
+	if !ChaincodeNameRegExp.MatchString(chaincodeName) {
 		return InvalidChaincodeNameErr(chaincodeName)
 	}
 
@@ -560,11 +616,7 @@ func (lscc *LifeCycleSysCC) isValidChaincodeName(chaincodeName string) error {
 
 
 func (lscc *LifeCycleSysCC) isValidChaincodeVersion(chaincodeName string, version string) error {
-	if version == "" {
-		return EmptyVersionErr(chaincodeName)
-	}
-
-	if !chaincodeVersionRegExp.MatchString(version) {
+	if !ChaincodeVersionRegExp.MatchString(version) {
 		return InvalidVersionErr(version)
 	}
 
@@ -615,7 +667,7 @@ func (lscc *LifeCycleSysCC) executeInstall(stub shim.ChaincodeStubInterface, ccb
 		return err
 	}
 
-	if lscc.SCCProvider.IsSysCC(cds.ChaincodeSpec.ChaincodeId.Name) {
+	if lscc.BuiltinSCCs.IsSysCC(cds.ChaincodeSpec.ChaincodeId.Name) {
 		return errors.Errorf("cannot install: %s is the name of a system chaincode", cds.ChaincodeSpec.ChaincodeId.Name)
 	}
 
@@ -677,9 +729,11 @@ func (lscc *LifeCycleSysCC) executeDeployOrUpgrade(
 		return nil, err
 	}
 
-	ccpack, err := lscc.Support.GetChaincodeFromLocalStorage(chaincodeName, chaincodeVersion)
+	chaincodeNameVersion := chaincodeName + ":" + chaincodeVersion
+
+	ccpack, err := lscc.Support.GetChaincodeFromLocalStorage(chaincodeNameVersion)
 	if err != nil {
-		retErrMsg := fmt.Sprintf("cannot get package for chaincode (%s:%s)", chaincodeName, chaincodeVersion)
+		retErrMsg := fmt.Sprintf("cannot get package for chaincode (%s)", chaincodeNameVersion)
 		logger.Errorf("%s-err:%s", retErrMsg, err)
 		return nil, fmt.Errorf("%s", retErrMsg)
 	}

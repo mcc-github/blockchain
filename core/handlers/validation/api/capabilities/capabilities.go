@@ -59,7 +59,4 @@ type Capabilities interface {
 	
 	
 	KeyLevelEndorsement() bool
-
-	
-	FabToken() bool
 }

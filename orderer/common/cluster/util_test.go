@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/capabilities"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
@@ -544,7 +545,10 @@ func TestEndpointconfigFromConfigBlockGreenPath(t *testing.T) {
 		}
 		channelGroup, err := encoder.NewChannelGroup(gConf)
 		assert.NoError(t, err)
-		bundle, err := channelconfig.NewBundle("mychannel", &common.Config{ChannelGroup: channelGroup})
+
+		cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+		assert.NoError(t, err)
+		bundle, err := channelconfig.NewBundle("mychannel", &common.Config{ChannelGroup: channelGroup}, cryptoProvider)
 		assert.NoError(t, err)
 
 		msps, err := bundle.MSPManager().GetMSPs()
@@ -1060,7 +1064,7 @@ func injectAdditionalTLSCAEndpointPair(t *testing.T, block *common.Block, endpoi
 	
 	env, err := protoutil.ExtractEnvelope(block, 0)
 	assert.NoError(t, err)
-	payload, err := protoutil.ExtractPayload(env)
+	payload, err := protoutil.UnmarshalPayload(env.Payload)
 	assert.NoError(t, err)
 	confEnv, err := configtx.UnmarshalConfigEnvelope(payload.Data)
 	assert.NoError(t, err)

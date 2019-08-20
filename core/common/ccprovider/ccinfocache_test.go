@@ -26,7 +26,6 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/core/container/util"
 	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 )
@@ -38,7 +37,17 @@ func getDepSpec(name string, path string, version string, initArgs [][]byte) (*p
 	gz := gzip.NewWriter(codePackageBytes)
 	tw := tar.NewWriter(gz)
 
-	err := util.WriteBytesToPackage("src/garbage.go", []byte(name+path+version), tw)
+	payload := []byte(name + path + version)
+	err := tw.WriteHeader(&tar.Header{
+		Name: "src/garbage.go",
+		Size: int64(len(payload)),
+		Mode: 0100644,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tw.Write(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -71,36 +80,32 @@ type mockCCInfoFSStorageMgrImpl struct {
 	CCMap map[string]CCPackage
 }
 
-func (m *mockCCInfoFSStorageMgrImpl) GetChaincode(ccname string, ccversion string) (CCPackage, error) {
-	return m.CCMap[ccname+ccversion], nil
+func (m *mockCCInfoFSStorageMgrImpl) GetChaincode(ccNameVersion string) (CCPackage, error) {
+	return m.CCMap[ccNameVersion], nil
 }
 
 
 func TestCCInfoCache(t *testing.T) {
-	ccname := "foo"
-	ccver := "1.0"
-	ccpath := "mychaincode"
-
 	ccinfoFs := &mockCCInfoFSStorageMgrImpl{CCMap: map[string]CCPackage{}}
 	cccache := NewCCInfoCache(ccinfoFs)
 
 	
 
 	
-	_, err := cccache.GetChaincodeData(ccname, ccver)
+	_, err := cccache.GetChaincodeData("foo:1.0")
 	assert.Error(t, err)
 
 	
-	pack, err := buildPackage(ccname, ccpath, ccver, [][]byte{[]byte("init"), []byte("a"), []byte("100"), []byte("b"), []byte("200")})
+	pack, err := buildPackage("foo", "mychaincode", "1.0", [][]byte{[]byte("init"), []byte("a"), []byte("100"), []byte("b"), []byte("200")})
 	assert.NoError(t, err)
-	ccinfoFs.CCMap[ccname+ccver] = pack
+	ccinfoFs.CCMap["foo:1.0"] = pack
 
 	
-	cd1, err := cccache.GetChaincodeData(ccname, ccver)
+	cd1, err := cccache.GetChaincodeData("foo:1.0")
 	assert.NoError(t, err)
 
 	
-	cd2, err := cccache.GetChaincodeData(ccname, ccver)
+	cd2, err := cccache.GetChaincodeData("foo:1.0")
 	assert.NoError(t, err)
 
 	
@@ -108,22 +113,20 @@ func TestCCInfoCache(t *testing.T) {
 	assert.NotNil(t, cd2)
 
 	
-	ccver = "2.0"
-	
-	pack, err = buildPackage(ccname, ccpath, ccver, [][]byte{[]byte("init"), []byte("a"), []byte("100"), []byte("b"), []byte("200")})
+	pack, err = buildPackage("foo", "mychaincode", "2.0", [][]byte{[]byte("init"), []byte("a"), []byte("100"), []byte("b"), []byte("200")})
 	assert.NoError(t, err)
-	ccinfoFs.CCMap[ccname+ccver] = pack
+	ccinfoFs.CCMap["foo:2.0"] = pack
 
 	
-	_, err = getDepSpec(ccname, ccpath, ccver, [][]byte{[]byte("init"), []byte("a"), []byte("100"), []byte("b"), []byte("200")})
+	_, err = getDepSpec("foo", "mychaincode", "2.0", [][]byte{[]byte("init"), []byte("a"), []byte("100"), []byte("b"), []byte("200")})
 	assert.NoError(t, err)
 
 	
-	cd1, err = cccache.GetChaincodeData(ccname, ccver)
+	cd1, err = cccache.GetChaincodeData("foo:2.0")
 	assert.NoError(t, err)
 
 	
-	cd2, err = cccache.GetChaincodeData(ccname, ccver)
+	cd2, err = cccache.GetChaincodeData("foo:2.0")
 	assert.NoError(t, err)
 
 	
@@ -167,7 +170,7 @@ func TestCCInfoFSPeerInstance(t *testing.T) {
 	ccpath := "mychaincode"
 
 	
-	_, err := GetChaincodeFromFS(ccname, ccver)
+	_, err := GetChaincodeFromFS("bar:1.0")
 	assert.Error(t, err)
 
 	
@@ -185,7 +188,7 @@ func TestCCInfoFSPeerInstance(t *testing.T) {
 	assert.NotZero(t, len(resp.Chaincodes), "GetInstalledChaincodes should not have returned 0 chaincodes")
 
 	
-	_, err = GetChaincodeData(ccname, ccver)
+	_, err = GetChaincodeData("bar:1.0")
 	assert.NoError(t, err)
 }
 

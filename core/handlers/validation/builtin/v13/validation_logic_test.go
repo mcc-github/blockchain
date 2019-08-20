@@ -31,7 +31,6 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccpackage"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
-	cutils "github.com/mcc-github/blockchain/core/container/util"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
 	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/v13/mocks"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -97,14 +96,24 @@ func processSignedCDS(cds *peer.ChaincodeDeploymentSpec, policy *common.Signatur
 	return protoutil.MarshalOrPanic(cd), nil
 }
 
-func constructDeploymentSpec(name string, path string, version string, initArgs [][]byte, createFS bool) (*peer.ChaincodeDeploymentSpec, error) {
+func constructDeploymentSpec(name, path, version string, initArgs [][]byte, createFS bool) (*peer.ChaincodeDeploymentSpec, error) {
 	spec := &peer.ChaincodeSpec{Type: 1, ChaincodeId: &peer.ChaincodeID{Name: name, Path: path, Version: version}, Input: &peer.ChaincodeInput{Args: initArgs}}
 
 	codePackageBytes := bytes.NewBuffer(nil)
 	gz := gzip.NewWriter(codePackageBytes)
 	tw := tar.NewWriter(gz)
 
-	err := cutils.WriteBytesToPackage("src/garbage.go", []byte(name+path+version), tw)
+	payload := []byte(name + path + version)
+	err := tw.WriteHeader(&tar.Header{
+		Name: "src/garbage.go",
+		Size: int64(len(payload)),
+		Mode: 0100644,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tw.Write(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +452,7 @@ func TestRWSetTooBig(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -503,7 +512,7 @@ func TestValidateDeployFail(t *testing.T) {
 
 	v := newValidationInstance(state)
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -770,7 +779,7 @@ func TestAlreadyDeployed(t *testing.T) {
 
 	v := newValidationInstance(state)
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -854,6 +863,66 @@ func TestValidateDeployNoLedger(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestValidateDeployNOKNilChaincodeSpec(t *testing.T) {
+	state := make(map[string]map[string][]byte)
+	mp := (&scc.MocksccProviderFactory{
+		Qe:                    lm.NewMockQueryExecutor(state),
+		ApplicationConfigBool: true,
+		ApplicationConfigRv:   &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+	}).NewSystemChaincodeProvider().(*scc.MocksccProviderImpl)
+
+	v := newValidationInstance(state)
+
+	mockAclProvider := &aclmocks.MockACLProvider{}
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	stublccc := shimtest.NewMockStub("lscc", lccc)
+	state["lscc"] = stublccc.State
+
+	ccname := "mycc"
+	ccver := "1"
+
+	defaultPolicy, err := getSignedByMSPAdminPolicy(mspid)
+	assert.NoError(t, err)
+	res, err := createCCDataRWset(ccname, ccname, ccver, defaultPolicy)
+	assert.NoError(t, err)
+
+	
+	cdsBytes, err := proto.Marshal(&peer.ChaincodeDeploymentSpec{})
+	assert.NoError(t, err)
+
+	
+	cis := &peer.ChaincodeInvocationSpec{
+		ChaincodeSpec: &peer.ChaincodeSpec{
+			ChaincodeId: &peer.ChaincodeID{Name: "lscc"},
+			Input: &peer.ChaincodeInput{
+				Args: [][]byte{[]byte(lscc.DEPLOY), []byte("barf"), cdsBytes},
+			},
+			Type: peer.ChaincodeSpec_GOLANG,
+		},
+	}
+
+	prop, _, err := protoutil.CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, util.GetTestChainID(), cis, sid)
+	assert.NoError(t, err)
+
+	ccid := &peer.ChaincodeID{Name: ccname, Version: ccver}
+
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, &peer.Response{Status: 200}, res, nil, ccid, nil, id)
+	assert.NoError(t, err)
+
+	env, err := protoutil.CreateSignedTx(prop, id, presp)
+	assert.NoError(t, err)
+
+	
+	policy, err := getSignedByMSPMemberPolicy(mspid)
+	if err != nil {
+		t.Fatalf("failed getting policy, err %s", err)
+	}
+
+	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(env)}}, Header: &common.BlockHeader{}}
+	err = v.Validate(b, "lscc", 0, 0, policy)
+	assert.EqualError(t, err, "VSCC error: invocation of lscc(deploy) does not have appropriate arguments")
+}
+
 func TestValidateDeployOK(t *testing.T) {
 	state := make(map[string]map[string][]byte)
 	mp := (&scc.MocksccProviderFactory{
@@ -865,7 +934,7 @@ func TestValidateDeployOK(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -898,6 +967,65 @@ func TestValidateDeployOK(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestValidateDeployNOK(t *testing.T) {
+	var testCases = []struct {
+		description string
+		ccName      string
+		ccVersion   string
+		errMsg      string
+	}{
+		{description: "empty cc name", ccName: "", ccVersion: "1", errMsg: "invalid chaincode name ''"},
+		{description: "bad first character in cc name", ccName: "_badname", ccVersion: "1.2", errMsg: "invalid chaincode name '_badname'"},
+		{description: "bad character in cc name", ccName: "bad.name", ccVersion: "1-5", errMsg: "invalid chaincode name 'bad.name'"},
+		{description: "empty cc version", ccName: "1good_name", ccVersion: "", errMsg: "invalid chaincode version ''"},
+		{description: "bad cc version", ccName: "good-name", ccVersion: "$badversion", errMsg: "invalid chaincode version '$badversion'"},
+		{description: "use system cc name", ccName: "qscc", ccVersion: "2.1", errMsg: "chaincode name 'qscc' is reserved for system chaincodes"},
+	}
+
+	
+	state := make(map[string]map[string][]byte)
+	mp := (&scc.MocksccProviderFactory{
+		Qe:                    lm.NewMockQueryExecutor(state),
+		ApplicationConfigBool: true,
+		ApplicationConfigRv:   &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+	}).NewSystemChaincodeProvider().(*scc.MocksccProviderImpl)
+
+	v := newValidationInstance(state)
+
+	mockAclProvider := &aclmocks.MockACLProvider{}
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	stublccc := shimtest.NewMockStub("lscc", lccc)
+	state["lscc"] = stublccc.State
+
+	policy, err := getSignedByMSPAdminPolicy(mspid)
+	assert.NoError(t, err)
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			testChaincodeDeployNOK(t, tc.ccName, tc.ccVersion, tc.errMsg, v, policy)
+		})
+	}
+}
+
+func testChaincodeDeployNOK(t *testing.T, ccName, ccVersion, errMsg string, v *Validator, policy []byte) {
+	res, err := createCCDataRWset(ccName, ccName, ccVersion, policy)
+	assert.NoError(t, err)
+
+	tx, err := createLSCCTx(ccName, ccVersion, lscc.DEPLOY, res)
+	if err != nil {
+		t.Fatalf("createTx returned err %s", err)
+	}
+
+	envBytes, err := protoutil.GetBytesEnvelope(tx)
+	if err != nil {
+		t.Fatalf("GetBytesEnvelope returned err %s", err)
+	}
+
+	b := &common.Block{Data: &common.BlockData{Data: [][]byte{envBytes}}, Header: &common.BlockHeader{}}
+	err = v.Validate(b, "lscc", 0, 0, policy)
+	assert.EqualError(t, err, errMsg)
+}
+
 func TestValidateDeployWithCollection(t *testing.T) {
 	state := make(map[string]map[string][]byte)
 	mp := (&scc.MocksccProviderFactory{
@@ -915,7 +1043,7 @@ func TestValidateDeployWithCollection(t *testing.T) {
 	})
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1007,7 +1135,7 @@ func TestValidateDeployWithCollection(t *testing.T) {
 	}).NewSystemChaincodeProvider().(*scc.MocksccProviderImpl)
 
 	v = newValidationInstance(state)
-	lccc = lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc = lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc = shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1032,7 +1160,7 @@ func TestValidateDeployWithPolicies(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1105,7 +1233,7 @@ func TestInvalidUpgrade(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1147,7 +1275,7 @@ func TestValidateUpgradeOK(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1210,7 +1338,7 @@ func TestInvalidateUpgradeBadVersion(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1279,7 +1407,7 @@ func validateUpgradeWithCollection(t *testing.T, ccver string, V1_2Validation bo
 	})
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1466,7 +1594,7 @@ func TestValidateUpgradeWithPoliciesOK(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1552,7 +1680,7 @@ func validateUpgradeWithNewFailAllIP(t *testing.T, ccver string, v11capability, 
 	v := newCustomValidationInstance(qec, capabilities)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 
@@ -1630,7 +1758,7 @@ func TestValidateUpgradeWithPoliciesFail(t *testing.T) {
 	v := newValidationInstance(state)
 
 	mockAclProvider := &aclmocks.MockACLProvider{}
-	lccc := lscc.New(mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
+	lccc := lscc.New(nil, mp, mockAclProvider, mockMSPIDGetter, &mockPolicyChecker{})
 	stublccc := shimtest.NewMockStub("lscc", lccc)
 	state["lscc"] = stublccc.State
 

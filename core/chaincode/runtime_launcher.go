@@ -10,35 +10,26 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/pkg/errors"
 )
 
 
 type LaunchRegistry interface {
-	Launching(packageID ccintf.CCID) (launchState *LaunchState, started bool)
-	Deregister(packageID ccintf.CCID) error
-}
-
-
-type PackageProvider interface {
-	GetChaincodeCodePackage(ccci *ccprovider.ChaincodeContainerInfo) ([]byte, error)
+	Launching(ccid string) (launchState *LaunchState, started bool)
+	Deregister(ccid string) error
 }
 
 
 type RuntimeLauncher struct {
-	Runtime         Runtime
-	Registry        LaunchRegistry
-	PackageProvider PackageProvider
-	StartupTimeout  time.Duration
-	Metrics         *LaunchMetrics
+	Runtime        Runtime
+	Registry       LaunchRegistry
+	StartupTimeout time.Duration
+	Metrics        *LaunchMetrics
 }
 
-func (r *RuntimeLauncher) Launch(ccci *ccprovider.ChaincodeContainerInfo) error {
+func (r *RuntimeLauncher) Launch(ccid string) error {
 	var startFailCh chan error
 	var timeoutCh <-chan time.Time
-	ccid := ccintf.New(ccci.PackageID)
 
 	startTime := time.Now()
 	launchState, alreadyStarted := r.Registry.Launching(ccid)
@@ -46,17 +37,12 @@ func (r *RuntimeLauncher) Launch(ccci *ccprovider.ChaincodeContainerInfo) error 
 		startFailCh = make(chan error, 1)
 		timeoutCh = time.NewTimer(r.StartupTimeout).C
 
-		codePackage, err := r.PackageProvider.GetChaincodeCodePackage(ccci)
-		if err != nil {
-			return errors.Wrap(err, "failed to get chaincode package")
-		}
-
 		go func() {
-			if err := r.Runtime.Start(ccci, codePackage); err != nil {
+			if err := r.Runtime.Start(ccid); err != nil {
 				startFailCh <- errors.WithMessage(err, "error starting container")
 				return
 			}
-			exitCode, err := r.Runtime.Wait(ccci)
+			exitCode, err := r.Runtime.Wait(ccid)
 			if err != nil {
 				launchState.Notify(errors.Wrap(err, "failed to wait on container exit"))
 			}
@@ -70,11 +56,11 @@ func (r *RuntimeLauncher) Launch(ccci *ccprovider.ChaincodeContainerInfo) error 
 		err = errors.WithMessage(launchState.Err(), "chaincode registration failed")
 	case err = <-startFailCh:
 		launchState.Notify(err)
-		r.Metrics.LaunchFailures.With("chaincode", ccid.String()).Add(1)
+		r.Metrics.LaunchFailures.With("chaincode", ccid).Add(1)
 	case <-timeoutCh:
-		err = errors.Errorf("timeout expired while starting chaincode %s for transaction", ccci.PackageID)
+		err = errors.Errorf("timeout expired while starting chaincode %s for transaction", ccid)
 		launchState.Notify(err)
-		r.Metrics.LaunchTimeouts.With("chaincode", ccid.String()).Add(1)
+		r.Metrics.LaunchTimeouts.With("chaincode", ccid).Add(1)
 	}
 
 	success := true
@@ -82,13 +68,13 @@ func (r *RuntimeLauncher) Launch(ccci *ccprovider.ChaincodeContainerInfo) error 
 		success = false
 		chaincodeLogger.Debugf("stopping due to error while launching: %+v", err)
 		defer r.Registry.Deregister(ccid)
-		if err := r.Runtime.Stop(ccci); err != nil {
+		if err := r.Runtime.Stop(ccid); err != nil {
 			chaincodeLogger.Debugf("stop failed: %+v", err)
 		}
 	}
 
 	r.Metrics.LaunchDuration.With(
-		"chaincode", ccid.String(),
+		"chaincode", ccid,
 		"success", strconv.FormatBool(success),
 	).Observe(time.Since(startTime).Seconds())
 

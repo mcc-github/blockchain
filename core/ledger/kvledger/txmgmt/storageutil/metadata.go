@@ -8,6 +8,7 @@ package storageutil
 
 import (
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 )
 
@@ -15,6 +16,19 @@ import (
 func SerializeMetadata(metadataEntries []*kvrwset.KVMetadataEntry) ([]byte, error) {
 	metadata := &kvrwset.KVMetadataWrite{Entries: metadataEntries}
 	return proto.Marshal(metadata)
+}
+
+
+func SerializeMetadataByMap(metadataMap map[string][]byte) ([]byte, error) {
+	if metadataMap == nil {
+		return nil, nil
+	}
+	names := util.GetSortedKeys(metadataMap)
+	metadataEntries := []*kvrwset.KVMetadataEntry{}
+	for _, k := range names {
+		metadataEntries = append(metadataEntries, &kvrwset.KVMetadataEntry{Name: k, Value: metadataMap[k]})
+	}
+	return SerializeMetadata(metadataEntries)
 }
 
 

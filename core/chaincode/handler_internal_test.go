@@ -8,12 +8,11 @@ package chaincode
 
 import (
 	"github.com/mcc-github/blockchain/core/container/ccintf"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 
 
-func SetHandlerChaincodeID(h *Handler, chaincodeID *pb.ChaincodeID) {
+func SetHandlerChaincodeID(h *Handler, chaincodeID string) {
 	h.chaincodeID = chaincodeID
 }
 

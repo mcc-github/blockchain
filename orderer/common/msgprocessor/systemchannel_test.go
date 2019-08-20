@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/capabilities"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	mockchannelconfig "github.com/mcc-github/blockchain/common/mocks/config"
@@ -472,7 +473,10 @@ func TestNewChannelConfig(t *testing.T) {
 	}
 	channelGroup, err := encoder.NewChannelGroup(gConf)
 	assert.NoError(t, err)
-	ctxm, err := channelconfig.NewBundle(channelID, &cb.Config{ChannelGroup: channelGroup})
+
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
+	ctxm, err := channelconfig.NewBundle(channelID, &cb.Config{ChannelGroup: channelGroup}, cryptoProvider)
 
 	originalCG := proto.Clone(ctxm.ConfigtxValidator().ConfigProto().ChannelGroup).(*cb.ConfigGroup)
 

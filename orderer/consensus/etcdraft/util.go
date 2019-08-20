@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -30,32 +31,6 @@ import (
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
-
-
-
-type MembershipChanges struct {
-	NewBlockMetadata *etcdraft.BlockMetadata
-	NewConsenters    map[uint64]*etcdraft.Consenter
-	AddedNodes       []*etcdraft.Consenter
-	RemovedNodes     []*etcdraft.Consenter
-	ConfChange       *raftpb.ConfChange
-	RotatedNode      uint64
-}
-
-
-func (mc *MembershipChanges) String() string {
-	return fmt.Sprintf("add %d node(s), remove %d node(s)", len(mc.AddedNodes), len(mc.RemovedNodes))
-}
-
-
-func (mc *MembershipChanges) Changed() bool {
-	return len(mc.AddedNodes) > 0 || len(mc.RemovedNodes) > 0
-}
-
-
-func (mc *MembershipChanges) Rotated() bool {
-	return len(mc.AddedNodes) == 1 && len(mc.RemovedNodes) == 1
-}
 
 
 func EndpointconfigFromFromSupport(support consensus.ConsenterSupport) ([]cluster.EndpointCriteria, error) {
@@ -147,83 +122,6 @@ func ConsentersToMap(consenters []*etcdraft.Consenter) map[string]struct{} {
 		set[string(c.ClientTlsCert)] = struct{}{}
 	}
 	return set
-}
-
-
-
-func MembershipByCert(consenters map[uint64]*etcdraft.Consenter) map[string]uint64 {
-	set := map[string]uint64{}
-	for nodeID, c := range consenters {
-		set[string(c.ClientTlsCert)] = nodeID
-	}
-	return set
-}
-
-
-
-func ComputeMembershipChanges(oldMetadata *etcdraft.BlockMetadata, oldConsenters map[uint64]*etcdraft.Consenter, newConsenters []*etcdraft.Consenter) (mc *MembershipChanges, err error) {
-	result := &MembershipChanges{
-		NewConsenters:    map[uint64]*etcdraft.Consenter{},
-		NewBlockMetadata: proto.Clone(oldMetadata).(*etcdraft.BlockMetadata),
-		AddedNodes:       []*etcdraft.Consenter{},
-		RemovedNodes:     []*etcdraft.Consenter{},
-	}
-
-	result.NewBlockMetadata.ConsenterIds = make([]uint64, len(newConsenters))
-
-	var addedNodeIndex int
-	currentConsentersSet := MembershipByCert(oldConsenters)
-	for i, c := range newConsenters {
-		if nodeID, exists := currentConsentersSet[string(c.ClientTlsCert)]; exists {
-			result.NewBlockMetadata.ConsenterIds[i] = nodeID
-			result.NewConsenters[nodeID] = c
-			continue
-		}
-		addedNodeIndex = i
-		result.AddedNodes = append(result.AddedNodes, c)
-	}
-
-	var deletedNodeID uint64
-	newConsentersSet := ConsentersToMap(newConsenters)
-	for nodeID, c := range oldConsenters {
-		if _, exists := newConsentersSet[string(c.ClientTlsCert)]; !exists {
-			result.RemovedNodes = append(result.RemovedNodes, c)
-			deletedNodeID = nodeID
-		}
-	}
-
-	switch {
-	case len(result.AddedNodes) == 1 && len(result.RemovedNodes) == 1:
-		
-		result.RotatedNode = deletedNodeID
-		result.NewBlockMetadata.ConsenterIds[addedNodeIndex] = deletedNodeID
-		result.NewConsenters[deletedNodeID] = result.AddedNodes[0]
-	case len(result.AddedNodes) == 1 && len(result.RemovedNodes) == 0:
-		
-		nodeID := result.NewBlockMetadata.NextConsenterId
-		result.NewConsenters[nodeID] = result.AddedNodes[0]
-		result.NewBlockMetadata.ConsenterIds[addedNodeIndex] = nodeID
-		result.NewBlockMetadata.NextConsenterId++
-		result.ConfChange = &raftpb.ConfChange{
-			NodeID: nodeID,
-			Type:   raftpb.ConfChangeAddNode,
-		}
-	case len(result.AddedNodes) == 0 && len(result.RemovedNodes) == 1:
-		
-		nodeID := deletedNodeID
-		result.ConfChange = &raftpb.ConfChange{
-			Type:   raftpb.ConfChangeRemoveNode,
-			NodeID: nodeID,
-		}
-		delete(result.NewConsenters, nodeID)
-	case len(result.AddedNodes) == 0 && len(result.RemovedNodes) == 0:
-		
-	default:
-		
-		return nil, errors.Errorf("update of more than one consenter at a time is not supported, requested changes: %s", result)
-	}
-
-	return result, nil
 }
 
 
@@ -364,7 +262,7 @@ func ConsensusMetadataFromConfigBlock(block *common.Block) (*etcdraft.ConfigMeta
 		return nil, errors.Wrap(err, "cannot read config update")
 	}
 
-	payload, err := protoutil.ExtractPayload(configEnvelope)
+	payload, err := protoutil.UnmarshalPayload(configEnvelope.Payload)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract payload from config envelope")
 	}
@@ -456,7 +354,7 @@ func (conCert ConsenterCertificate) IsConsenterOfChannel(configBlock *common.Blo
 	if err != nil {
 		return err
 	}
-	bundle, err := channelconfig.NewBundleFromEnvelope(envelopeConfig)
+	bundle, err := channelconfig.NewBundleFromEnvelope(envelopeConfig, factory.GetDefault())
 	if err != nil {
 		return err
 	}

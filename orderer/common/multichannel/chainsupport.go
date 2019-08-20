@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package multichannel
 
 import (
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	"github.com/mcc-github/blockchain/common/policies"
@@ -62,7 +63,7 @@ func newChainSupport(
 	}
 
 	
-	cs.Processor = msgprocessor.NewStandardChannel(cs, msgprocessor.CreateStandardChannelFilters(cs))
+	cs.Processor = msgprocessor.NewStandardChannel(cs, msgprocessor.CreateStandardChannelFilters(cs, registrar.config))
 
 	
 	cs.BlockWriter = newBlockWriter(lastBlock, registrar, cs)
@@ -192,7 +193,7 @@ func (cs *ChainSupport) VerifyBlockSignature(sd []*protoutil.SignedData, envelop
 	policyMgr := cs.PolicyManager()
 	
 	if envelope != nil {
-		bundle, err := channelconfig.NewBundle(cs.ChainID(), envelope.Config)
+		bundle, err := channelconfig.NewBundle(cs.ChainID(), envelope.Config, factory.GetDefault())
 		if err != nil {
 			return err
 		}

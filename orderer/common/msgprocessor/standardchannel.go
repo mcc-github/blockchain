@@ -14,6 +14,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 
+	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/pkg/errors"
 )
 
@@ -61,13 +62,20 @@ func NewStandardChannel(support StandardChannelSupport, filters *RuleSet) *Stand
 
 
 
-func CreateStandardChannelFilters(filterSupport channelconfig.Resources) *RuleSet {
-	return NewRuleSet([]Rule{
+func CreateStandardChannelFilters(filterSupport channelconfig.Resources, config localconfig.TopLevel) *RuleSet {
+	rules := []Rule{
 		EmptyRejectRule,
-		NewExpirationRejectRule(filterSupport),
 		NewSizeFilter(filterSupport),
 		NewSigFilter(policies.ChannelWriters, policies.ChannelOrdererWriters, filterSupport),
-	})
+	}
+
+	if !config.General.Authentication.NoExpirationChecks {
+		expirationRule := NewExpirationRejectRule(filterSupport)
+		
+		rules = append(rules[:2], append([]Rule{expirationRule}, rules[2:]...)...)
+	}
+
+	return NewRuleSet(rules)
 }
 
 

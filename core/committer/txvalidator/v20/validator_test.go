@@ -14,10 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
-	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/common/semaphore"
 	"github.com/mcc-github/blockchain/common/util"
@@ -39,10 +37,11 @@ import (
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/ledger/rwset"
+	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	protosmsp "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/peer"
 	protospeer "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -60,17 +59,6 @@ func v20Capabilities() *mockconfig.MockApplicationCapabilities {
 		PrivateChannelDataRv:  true,
 		KeyLevelEndorsementRv: true,
 		V2_0ValidationRv:      true,
-	}
-}
-
-func fabTokenCapabilities() *mockconfig.MockApplicationCapabilities {
-	return &mockconfig.MockApplicationCapabilities{
-		V1_2ValidationRv:      true,
-		V1_3ValidationRv:      true,
-		PrivateChannelDataRv:  true,
-		KeyLevelEndorsementRv: true,
-		V2_0ValidationRv:      true,
-		FabTokenRv:            true,
 	}
 }
 
@@ -147,58 +135,6 @@ func getEnvWithSigner(ccID string, event []byte, res []byte, sig msp.SigningIden
 	assert.NoError(t, err)
 
 	return tx
-}
-
-func getTokenTx(t *testing.T) *common.Envelope {
-	transactionData := &token.TokenTransaction{
-		Action: &token.TokenTransaction_TokenAction{
-			TokenAction: &token.TokenAction{
-				Data: &token.TokenAction_Issue{
-					Issue: &token.Issue{
-						Outputs: []*token.Token{
-							{Owner: &token.TokenOwner{Raw: []byte("owner-1")}, Type: "TOK1", Quantity: ToHex(111)},
-							{Owner: &token.TokenOwner{Raw: []byte("owner-2")}, Type: "TOK2", Quantity: ToHex(222)},
-						},
-					},
-				},
-			},
-		},
-	}
-	tdBytes, err := proto.Marshal(transactionData)
-	assert.NoError(t, err)
-
-	signerBytes, err := signer.Serialize()
-	assert.NoError(t, err)
-	nonce := []byte{0, 1, 2, 3, 4}
-	txID, err := protoutil.ComputeTxID(nonce, signerBytes)
-	assert.NoError(t, err)
-
-	hdr := &common.Header{
-		SignatureHeader: protoutil.MarshalOrPanic(
-			&common.SignatureHeader{
-				Creator: signerBytes,
-				Nonce:   nonce,
-			},
-		),
-		ChannelHeader: protoutil.MarshalOrPanic(
-			&common.ChannelHeader{
-				Type: int32(common.HeaderType_TOKEN_TRANSACTION),
-				TxId: txID,
-			},
-		),
-	}
-
-	
-	payl := &common.Payload{Header: hdr, Data: tdBytes}
-	paylBytes, err := protoutil.GetBytesPayload(payl)
-	assert.NoError(t, err)
-
-	
-	sig, err := signer.Sign(paylBytes)
-	assert.NoError(t, err)
-
-	
-	return &common.Envelope{Payload: paylBytes, Signature: sig}
 }
 
 func assertInvalid(block *common.Block, t *testing.T, code peer.TxValidationCode) {
@@ -308,6 +244,56 @@ func TestInvokeOK(t *testing.T) {
 	err := v.Validate(b)
 	assert.NoError(t, err)
 	assertValid(b, t)
+}
+
+func TestInvokeNOKDuplicateNs(t *testing.T) {
+	ccID := "mycc"
+
+	v, mockQE, _, _ := setupValidator()
+
+	mockQE.On("GetState", "lscc", ccID).Return(protoutil.MarshalOrPanic(&ccp.ChaincodeData{
+		Name:    ccID,
+		Version: ccVersion,
+		Vscc:    "vscc",
+		Policy:  signedByAnyMember([]string{"SampleOrg"}),
+	}), nil)
+	mockQE.On("GetStateMetadata", ccID, "key").Return(nil, nil)
+
+	
+	txrws := &rwset.TxReadWriteSet{
+		DataModel: rwset.TxReadWriteSet_KV,
+		NsRwset: []*rwset.NsReadWriteSet{
+			{
+				Namespace: "mycc",
+				Rwset: protoutil.MarshalOrPanic(&kvrwset.KVRWSet{
+					Writes: []*kvrwset.KVWrite{
+						{
+							Key:   "foo",
+							Value: []byte("bar1"),
+						},
+					},
+				}),
+			},
+			{
+				Namespace: "mycc",
+				Rwset: protoutil.MarshalOrPanic(&kvrwset.KVRWSet{
+					Writes: []*kvrwset.KVWrite{
+						{
+							Key:   "foo",
+							Value: []byte("bar2"),
+						},
+					},
+				}),
+			},
+		},
+	}
+
+	tx := getEnv(ccID, nil, protoutil.MarshalOrPanic(txrws), t)
+	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 2}}
+
+	err := v.Validate(b)
+	assert.NoError(t, err)
+	assertInvalid(b, t, peer.TxValidationCode_ILLEGAL_WRITESET)
 }
 
 func TestInvokeNoRWSet(t *testing.T) {
@@ -947,60 +933,6 @@ func TestValidateTxWithStateBasedEndorsement(t *testing.T) {
 	err := v.Validate(b)
 	assert.NoError(t, err)
 	assertInvalid(b, t, peer.TxValidationCode_ENDORSEMENT_POLICY_FAILURE)
-}
-
-func TestTokenValidTransaction(t *testing.T) {
-	v, _, _, _ := setupValidator()
-	v.ChannelResources.(*mocktxvalidator.Support).ACVal = fabTokenCapabilities()
-
-	tx := getTokenTx(t)
-	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 1}}
-
-	err := v.Validate(b)
-	assert.NoError(t, err)
-	assertValid(b, t)
-}
-
-func TestTokenCapabilityNotEnabled(t *testing.T) {
-	v, _, _, _ := setupValidator()
-
-	tx := getTokenTx(t)
-	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 1}}
-
-	err := v.Validate(b)
-
-	assertion := assert.New(t)
-	
-	assertion.NoError(err)
-
-	
-	txsfltr := ledgerutils.TxValidationFlags(b.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	assertion.True(txsfltr.IsInvalid(0))
-	assertion.True(txsfltr.Flag(0) == peer.TxValidationCode_UNKNOWN_TX_TYPE)
-}
-
-func TestTokenDuplicateTxId(t *testing.T) {
-	v, _, _, _ := setupValidator()
-	v.ChannelResources.(*mocktxvalidator.Support).ACVal = fabTokenCapabilities()
-
-	mockLedger := &txvalidatormocks.LedgerResources{}
-	v.LedgerResources = mockLedger
-	mockLedger.On("GetTransactionByID", mock.Anything).Return(&peer.ProcessedTransaction{}, nil)
-
-	tx := getTokenTx(t)
-
-	b := testutil.NewBlock([]*common.Envelope{tx}, 0, nil)
-
-	err := v.Validate(b)
-
-	assertion := assert.New(t)
-	
-	assertion.NoError(err)
-
-	
-	txsfltr := ledgerutils.TxValidationFlags(b.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	assertion.True(txsfltr.IsInvalid(0))
-	assertion.True(txsfltr.Flag(0) == peer.TxValidationCode_DUPLICATE_TXID)
 }
 
 func TestDynamicCapabilitiesAndMSP(t *testing.T) {

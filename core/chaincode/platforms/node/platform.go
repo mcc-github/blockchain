@@ -16,7 +16,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/util"
-	cutil "github.com/mcc-github/blockchain/core/container/util"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
@@ -144,8 +143,7 @@ func (p *Platform) GetDeploymentPayload(path string) ([]byte, error) {
 
 	logger.Debugf("Packaging node.js project from path %s", folder)
 
-	if err = cutil.WriteFolderToTarPackage(tw, folder, []string{"node_modules"}, nil, nil); err != nil {
-
+	if err = util.WriteFolderToTarPackage(tw, folder, []string{"node_modules"}, nil, nil); err != nil {
 		logger.Errorf("Error writing folder to tar package %s", err)
 		return nil, fmt.Errorf("Error writing Chaincode package contents: %s", err)
 	}

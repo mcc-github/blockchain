@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package kvledger
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -208,6 +209,21 @@ func (l *kvLedger) syncStateAndHistoryDBWithBlockstore() error {
 		if err != nil {
 			return err
 		}
+
+		
+		
+		
+		
+
+		
+		
+		if firstBlockNum > lastAvailableBlockNum+1 {
+			dbName := recoverable.Name()
+			return fmt.Errorf("the %s database [height=%d] is ahead of the block store [height=%d]. "+
+				"This is possible when the %s database is not dropped after a ledger reset/rollback. "+
+				"The %s database can safely be dropped and will be rebuilt up to block store height upon the next peer start.",
+				dbName, firstBlockNum, lastAvailableBlockNum+1, dbName, dbName)
+		}
 		if recoverFlag {
 			recoverers = append(recoverers, &recoverer{firstBlockNum, recoverable})
 		}
@@ -261,6 +277,8 @@ func (l *kvLedger) syncStateDBWithPvtdatastore() error {
 	if err = l.applyValidTxPvtDataOfOldBlocks(blocksPvtData); err != nil {
 		return err
 	}
+
+	l.blockStore.ResetLastUpdatedOldBlocksList()
 
 	return nil
 }
@@ -560,13 +578,13 @@ func (l *kvLedger) CommitPvtDataOfOldBlocks(pvtData []*ledger.BlockPvtData) ([]*
 		return nil, err
 	}
 
-	logger.Debugf("[%s:] Committing pvtData of [%d] old blocks to the pvtdatastore", l.ledgerID, len(pvtData))
-	err = l.blockStore.CommitPvtDataOfOldBlocks(hashVerifiedPvtData)
+	err = l.applyValidTxPvtDataOfOldBlocks(hashVerifiedPvtData)
 	if err != nil {
 		return nil, err
 	}
 
-	err = l.applyValidTxPvtDataOfOldBlocks(hashVerifiedPvtData)
+	logger.Debugf("[%s:] Committing pvtData of [%d] old blocks to the pvtdatastore", l.ledgerID, len(pvtData))
+	err = l.blockStore.CommitPvtDataOfOldBlocks(hashVerifiedPvtData)
 	if err != nil {
 		return nil, err
 	}
@@ -581,17 +599,17 @@ func (l *kvLedger) applyValidTxPvtDataOfOldBlocks(hashVerifiedPvtData map[uint64
 		return err
 	}
 
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	logger.Debugf("[%s:] Committing pvtData of [%d] old blocks to the stateDB", l.ledgerID, len(hashVerifiedPvtData))
-	err = l.txtmgmt.RemoveStaleAndCommitPvtDataOfOldBlocks(committedPvtData)
-	if err != nil {
-		return err
-	}
-
-	logger.Debugf("[%s:] Clearing the bookkeeping information from pvtdatastore", l.ledgerID)
-	if err := l.blockStore.ResetLastUpdatedOldBlocksList(); err != nil {
-		return err
-	}
-	return nil
+	return l.txtmgmt.RemoveStaleAndCommitPvtDataOfOldBlocks(committedPvtData)
 }
 
 func (l *kvLedger) GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error) {

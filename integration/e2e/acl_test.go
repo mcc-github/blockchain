@@ -17,7 +17,6 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/integration/nwo"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
@@ -257,10 +256,7 @@ var _ = Describe("EndToEndACL", func() {
 		nwo.PackageChaincode(network, chaincode, org1Peer0)
 
 		
-		filebytes, err := ioutil.ReadFile(chaincode.PackageFile)
-		Expect(err).NotTo(HaveOccurred())
-		hashStr := fmt.Sprintf("%x", util.ComputeSHA256(filebytes))
-		chaincode.PackageID = chaincode.Label + ":" + hashStr
+		chaincode.SetPackageIDFromPackageFile()
 
 		
 		

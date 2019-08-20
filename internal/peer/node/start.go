@@ -9,6 +9,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -18,11 +19,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mcc-github/blockchain/core/deliverservice"
-	"github.com/mcc-github/blockchain/core/ledger"
-
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	ccdef "github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
@@ -34,9 +33,7 @@ import (
 	"github.com/mcc-github/blockchain/common/metadata"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/policies"
-	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
-	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/cclifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/accesscontrol"
@@ -49,9 +46,9 @@ import (
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	coreconfig "github.com/mcc-github/blockchain/core/config"
 	"github.com/mcc-github/blockchain/core/container"
-	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/container/dockercontroller"
 	"github.com/mcc-github/blockchain/core/container/externalbuilders"
+	"github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/dispatcher"
 	"github.com/mcc-github/blockchain/core/endorser"
 	authHandler "github.com/mcc-github/blockchain/core/handlers/auth"
@@ -59,6 +56,7 @@ import (
 	endorsement3 "github.com/mcc-github/blockchain/core/handlers/endorsement/api/identities"
 	"github.com/mcc-github/blockchain/core/handlers/library"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
@@ -83,7 +81,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/service"
 	gossipservice "github.com/mcc-github/blockchain/gossip/service"
 	peergossip "github.com/mcc-github/blockchain/internal/peer/gossip"
-	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/mcc-github/blockchain/internal/peer/version"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
@@ -91,12 +88,8 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	discprotos "github.com/mcc-github/blockchain/protos/discovery"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/token"
 	pt "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protoutil"
-	"github.com/mcc-github/blockchain/token/server"
-	"github.com/mcc-github/blockchain/token/tms/manager"
-	"github.com/mcc-github/blockchain/token/transaction"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -132,6 +125,20 @@ var nodeStartCmd = &cobra.Command{
 	},
 }
 
+
+
+type externalVMAdapter struct {
+	detector *externalbuilders.Detector
+}
+
+func (e externalVMAdapter) Build(
+	ccid string,
+	metadata *persistence.ChaincodePackageMetadata,
+	codePackage io.Reader,
+) (container.Instance, error) {
+	return e.detector.Build(ccid, metadata, codePackage)
+}
+
 func serve(args []string) error {
 	
 	
@@ -158,7 +165,6 @@ func serve(args []string) error {
 	}
 
 	platformRegistry := platforms.NewRegistry(platforms.SupportedPlatforms...)
-	packagingRegistry := packaging.NewRegistry(packaging.SupportedPlatforms...)
 
 	identityDeserializerFactory := func(chainID string) msp.IdentityDeserializer {
 		return mgmt.GetManagerForChain(chainID)
@@ -234,6 +240,7 @@ func serve(args []string) error {
 		StoreProvider: transientstore.NewStoreProvider(
 			filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "transientstore"),
 		),
+		CryptoProvider: factory.GetDefault(),
 	}
 
 	signingIdentity := mgmt.GetLocalSigningIdentityOrPanic()
@@ -296,8 +303,6 @@ func serve(args []string) error {
 
 	packageProvider := &persistence.PackageProvider{
 		LegacyPP: &ccprovider.CCInfoFSImpl{},
-		Store:    ccStore,
-		Parser:   ccPackageParser,
 	}
 
 	
@@ -337,11 +342,6 @@ func serve(args []string) error {
 
 	txProcessors := map[common.HeaderType]ledger.CustomTxProcessor{
 		common.HeaderType_CONFIG: &peer.ConfigTxProcessor{},
-		common.HeaderType_TOKEN_TRANSACTION: &transaction.Processor{
-			TMSManager: &manager.Manager{
-				IdentityDeserializerManager: &manager.FabricIdentityDeserializerManager{},
-			},
-		},
 	}
 
 	peerInstance.LedgerMgr = ledgermgmt.NewLedgerMgr(
@@ -388,6 +388,7 @@ func serve(args []string) error {
 			coreConfig.AuthenticationTimeWindow,
 			mutualTLS,
 			metrics,
+			false,
 		),
 		PolicyCheckerProvider: policyCheckerProvider,
 	}
@@ -410,22 +411,25 @@ func serve(args []string) error {
 	
 	authenticator := accesscontrol.NewAuthenticator(ca)
 
-	sccp := &scc.Provider{
-		Peer:      peerInstance,
-		Whitelist: scc.GlobalWhitelist(),
+	builtinSCCs := map[string]struct{}{
+		"lscc":       {},
+		"qscc":       {},
+		"cscc":       {},
+		"_lifecycle": {},
 	}
 
-	lsccInst := lscc.New(sccp, aclProvider, peerInstance.GetMSPIDs, policyChecker)
+	lsccInst := lscc.New(builtinSCCs, &lscc.PeerShim{Peer: peerInstance}, aclProvider, peerInstance.GetMSPIDs, policyChecker)
 
 	chaincodeHandlerRegistry := chaincode.NewHandlerRegistry(userRunsCC)
 	lifecycleTxQueryExecutorGetter := &chaincode.TxQueryExecutorGetter{
-		PackageID:       ccintf.CCID(lifecycle.LifecycleNamespace + ":" + util.GetSysCCVersion()),
+		CCID:            scc.ChaincodeID(lifecycle.LifecycleNamespace),
 		HandlerRegistry: chaincodeHandlerRegistry,
 	}
 	chaincodeEndorsementInfo := &lifecycle.ChaincodeEndorsementInfo{
-		LegacyImpl: lsccInst,
-		Resources:  lifecycleResources,
-		Cache:      lifecycleCache,
+		LegacyImpl:  lsccInst,
+		Resources:   lifecycleResources,
+		Cache:       lifecycleCache,
+		BuiltinSCCs: builtinSCCs,
 	}
 
 	lifecycleFunctions := &lifecycle.ExternalFunctions{
@@ -494,7 +498,13 @@ func serve(args []string) error {
 		PeerAddress:   ccEndpoint,
 		ContainerRouter: &container.Router{
 			DockerVM:   dockerVM,
-			ExternalVM: externalVM,
+			ExternalVM: externalVMAdapter{externalVM},
+			PackageProvider: &persistence.FallbackPackageLocator{
+				ChaincodePackageLocator: &persistence.ChaincodePackageLocator{
+					ChaincodeDir: chaincodeInstallPath,
+				},
+				LegacyCCPackageLocator: &ccprovider.CCInfoFSImpl{},
+			},
 		},
 	}
 
@@ -504,11 +514,10 @@ func serve(args []string) error {
 	}
 
 	chaincodeLauncher := &chaincode.RuntimeLauncher{
-		Metrics:         chaincode.NewLaunchMetrics(opsSystem.Provider),
-		PackageProvider: packageProvider,
-		Registry:        chaincodeHandlerRegistry,
-		Runtime:         containerRuntime,
-		StartupTimeout:  chaincodeConfig.StartupTimeout,
+		Metrics:        chaincode.NewLaunchMetrics(opsSystem.Provider),
+		Registry:       chaincodeHandlerRegistry,
+		Runtime:        containerRuntime,
+		StartupTimeout: chaincodeConfig.StartupTimeout,
 	}
 
 	chaincodeSupport := &chaincode.ChaincodeSupport{
@@ -523,7 +532,7 @@ func serve(args []string) error {
 		Lifecycle:              chaincodeEndorsementInfo,
 		Peer:                   peerInstance,
 		Runtime:                containerRuntime,
-		SystemCCProvider:       sccp,
+		BuiltinSCCs:            builtinSCCs,
 		TotalQueryLimit:        chaincodeConfig.TotalQueryLimit,
 		UserRunsCC:             userRunsCC,
 	}
@@ -546,11 +555,6 @@ func serve(args []string) error {
 		qsccInst = scc.Throttle(maxConcurrency, qsccInst)
 	}
 
-	
-	sccs := scc.CreatePluginSysCCs(sccp)
-	for _, cc := range append([]scc.SelfDescribingSysCC{lsccInst, csccInst, qsccInst, lifecycleSCC}, sccs...) {
-		sccp.RegisterSysCC(cc)
-	}
 	pb.RegisterChaincodeSupportServer(ccSrv.Server(), ccSupSrv)
 
 	
@@ -574,8 +578,8 @@ func serve(args []string) error {
 		SignerSerializer: signingIdentity,
 		Peer:             peerInstance,
 		ChaincodeSupport: chaincodeSupport,
-		SysCCProvider:    sccp,
 		ACLProvider:      aclProvider,
+		BuiltinSCCs:      builtinSCCs,
 	}
 	endorsementPluginsByName := reg.Lookup(library.Endorsement).(map[string]endorsement2.PluginFactory)
 	validationPluginsByName := reg.Lookup(library.Validation).(map[string]validation.PluginFactory)
@@ -589,16 +593,17 @@ func serve(args []string) error {
 		SigningIdentityFetcher:  signingIdentityFetcher,
 	})
 	endorserSupport.PluginEndorser = pluginEndorser
-	serverEndorser := endorser.NewEndorserServer(privDataDist, endorserSupport, packagingRegistry, metricsProvider)
+	serverEndorser := endorser.NewEndorserServer(privDataDist, endorserSupport, metricsProvider)
 
 	
-	err = registerProverService(peerInstance, peerServer, aclProvider, signingIdentity)
-	if err != nil {
-		return err
+	for _, cc := range []scc.SelfDescribingSysCC{lsccInst, csccInst, qsccInst, lifecycleSCC} {
+		if enabled, ok := chaincodeConfig.SCCWhitelist[cc.Name()]; !ok || !enabled {
+			logger.Infof("not deploying chaincode %s as it is not enabled", cc.Name())
+			continue
+		}
+		scc.DeploySysCC(cc, chaincodeSupport)
 	}
 
-	
-	sccp.DeploySysCCs(chaincodeSupport)
 	logger.Infof("Deployed system chaincodes")
 
 	
@@ -1046,6 +1051,7 @@ func initGossipService(
 		policyMgr,
 		signer,
 		mgmt.NewDeserializersManager(),
+		factory.GetDefault(),
 	)
 	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager())
 	bootstrap := viper.GetStringSlice("peer.gossip.bootstrap")
@@ -1097,41 +1103,6 @@ func newOperationsSystem(coreConfig *peer.Config) *operations.System {
 		},
 		Version: metadata.Version,
 	})
-}
-
-func registerProverService(peerInstance *peer.Peer, peerServer *comm.GRPCServer, aclProvider aclmgmt.ACLProvider, signingIdentity msp.SigningIdentity) error {
-	policyChecker := &server.PolicyBasedAccessControl{
-		ACLProvider: aclProvider,
-		ACLResources: &server.ACLResources{
-			IssueTokens:    resources.Token_Issue,
-			TransferTokens: resources.Token_Transfer,
-			ListTokens:     resources.Token_List,
-		},
-	}
-
-	responseMarshaler, err := server.NewResponseMarshaler(signingIdentity)
-	if err != nil {
-		logger.Errorf("Failed to create prover service: %s", err)
-		return err
-	}
-
-	prover := &server.Prover{
-		CapabilityChecker: &server.TokenCapabilityChecker{
-			ChannelConfigGetter: peerInstance,
-		},
-		Marshaler:     responseMarshaler,
-		PolicyChecker: policyChecker,
-		TMSManager: &server.Manager{
-			LedgerManager: &server.PeerLedgerManager{
-				Peer: peerInstance,
-			},
-			TokenOwnerValidatorManager: &server.PeerTokenOwnerValidatorManager{
-				IdentityDeserializerManager: &manager.FabricIdentityDeserializerManager{},
-			},
-		},
-	}
-	token.RegisterProverServer(peerServer.Server(), prover)
-	return nil
 }
 
 func getDockerHostConfig() *docker.HostConfig {

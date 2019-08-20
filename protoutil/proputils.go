@@ -24,11 +24,11 @@ func GetChaincodeInvocationSpec(prop *peer.Proposal) (*peer.ChaincodeInvocationS
 	if prop == nil {
 		return nil, errors.New("proposal is nil")
 	}
-	_, err := GetHeader(prop.Header)
+	_, err := UnmarshalHeader(prop.Header)
 	if err != nil {
 		return nil, err
 	}
-	ccPropPayload, err := GetChaincodeProposalPayload(prop.Payload)
+	ccPropPayload, err := UnmarshalChaincodeProposalPayload(prop.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func GetChaincodeProposalContext(prop *peer.Proposal) ([]byte, map[string][]byte
 		return nil, nil, errors.New("proposal's payload is nil")
 	}
 	
-	hdr, err := GetHeader(prop.Header)
+	hdr, err := UnmarshalHeader(prop.Header)
 	if err != nil {
 		return nil, nil, errors.WithMessage(err, "error extracting header from proposal")
 	}
@@ -66,12 +66,12 @@ func GetChaincodeProposalContext(prop *peer.Proposal) ([]byte, map[string][]byte
 		return nil, nil, errors.WithMessage(err, "invalid proposal")
 	}
 
-	shdr, err := GetSignatureHeader(hdr.SignatureHeader)
+	shdr, err := UnmarshalSignatureHeader(hdr.SignatureHeader)
 	if err != nil {
 		return nil, nil, errors.WithMessage(err, "error extracting signature header from proposal")
 	}
 
-	ccPropPayload, err := GetChaincodeProposalPayload(prop.Payload)
+	ccPropPayload, err := UnmarshalChaincodeProposalPayload(prop.Payload)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -89,20 +89,13 @@ func validateChannelHeaderType(chdr *common.ChannelHeader, expectedTypes []commo
 }
 
 
-func GetHeader(bytes []byte) (*common.Header, error) {
-	hdr := &common.Header{}
-	err := proto.Unmarshal(bytes, hdr)
-	return hdr, errors.Wrap(err, "error unmarshaling Header")
-}
-
-
 func GetNonce(prop *peer.Proposal) ([]byte, error) {
 	if prop == nil {
 		return nil, errors.New("proposal is nil")
 	}
 
 	
-	hdr, err := GetHeader(prop.Header)
+	hdr, err := UnmarshalHeader(prop.Header)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +109,7 @@ func GetNonce(prop *peer.Proposal) ([]byte, error) {
 		return nil, errors.WithMessage(err, "invalid proposal")
 	}
 
-	shdr, err := GetSignatureHeader(hdr.SignatureHeader)
+	shdr, err := UnmarshalSignatureHeader(hdr.SignatureHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -126,105 +119,6 @@ func GetNonce(prop *peer.Proposal) ([]byte, error) {
 	}
 
 	return shdr.Nonce, nil
-}
-
-
-func GetChaincodeHeaderExtension(hdr *common.Header) (*peer.ChaincodeHeaderExtension, error) {
-	chdr, err := UnmarshalChannelHeader(hdr.ChannelHeader)
-	if err != nil {
-		return nil, err
-	}
-
-	chaincodeHdrExt := &peer.ChaincodeHeaderExtension{}
-	err = proto.Unmarshal(chdr.Extension, chaincodeHdrExt)
-	return chaincodeHdrExt, errors.Wrap(err, "error unmarshaling ChaincodeHeaderExtension")
-}
-
-
-func GetProposalResponse(prBytes []byte) (*peer.ProposalResponse, error) {
-	proposalResponse := &peer.ProposalResponse{}
-	err := proto.Unmarshal(prBytes, proposalResponse)
-	return proposalResponse, errors.Wrap(err, "error unmarshaling ProposalResponse")
-}
-
-
-func GetChaincodeDeploymentSpec(code []byte) (*peer.ChaincodeDeploymentSpec, error) {
-	cds := &peer.ChaincodeDeploymentSpec{}
-	err := proto.Unmarshal(code, cds)
-	if err != nil {
-		return nil, errors.Wrap(err, "error unmarshaling ChaincodeDeploymentSpec")
-	}
-
-	return cds, nil
-}
-
-
-func GetChaincodeAction(caBytes []byte) (*peer.ChaincodeAction, error) {
-	chaincodeAction := &peer.ChaincodeAction{}
-	err := proto.Unmarshal(caBytes, chaincodeAction)
-	return chaincodeAction, errors.Wrap(err, "error unmarshaling ChaincodeAction")
-}
-
-
-func GetResponse(resBytes []byte) (*peer.Response, error) {
-	response := &peer.Response{}
-	err := proto.Unmarshal(resBytes, response)
-	return response, errors.Wrap(err, "error unmarshaling Response")
-}
-
-
-func GetChaincodeEvents(eBytes []byte) (*peer.ChaincodeEvent, error) {
-	chaincodeEvent := &peer.ChaincodeEvent{}
-	err := proto.Unmarshal(eBytes, chaincodeEvent)
-	return chaincodeEvent, errors.Wrap(err, "error unmarshaling ChaicnodeEvent")
-}
-
-
-func GetProposalResponsePayload(prpBytes []byte) (*peer.ProposalResponsePayload, error) {
-	prp := &peer.ProposalResponsePayload{}
-	err := proto.Unmarshal(prpBytes, prp)
-	return prp, errors.Wrap(err, "error unmarshaling ProposalResponsePayload")
-}
-
-
-func GetProposal(propBytes []byte) (*peer.Proposal, error) {
-	prop := &peer.Proposal{}
-	err := proto.Unmarshal(propBytes, prop)
-	return prop, errors.Wrap(err, "error unmarshaling Proposal")
-}
-
-
-func GetPayload(e *common.Envelope) (*common.Payload, error) {
-	payload := &common.Payload{}
-	err := proto.Unmarshal(e.Payload, payload)
-	return payload, errors.Wrap(err, "error unmarshaling Payload")
-}
-
-
-func GetTransaction(txBytes []byte) (*peer.Transaction, error) {
-	tx := &peer.Transaction{}
-	err := proto.Unmarshal(txBytes, tx)
-	return tx, errors.Wrap(err, "error unmarshaling Transaction")
-
-}
-
-
-func GetChaincodeActionPayload(capBytes []byte) (*peer.ChaincodeActionPayload, error) {
-	cap := &peer.ChaincodeActionPayload{}
-	err := proto.Unmarshal(capBytes, cap)
-	return cap, errors.Wrap(err, "error unmarshaling ChaincodeActionPayload")
-}
-
-
-func GetChaincodeProposalPayload(bytes []byte) (*peer.ChaincodeProposalPayload, error) {
-	cpp := &peer.ChaincodeProposalPayload{}
-	err := proto.Unmarshal(bytes, cpp)
-	return cpp, errors.Wrap(err, "error unmarshaling ChaincodeProposalPayload")
-}
-
-
-func GetSignatureHeader(bytes []byte) (*common.SignatureHeader, error) {
-	return UnmarshalSignatureHeader(bytes)
 }
 
 
@@ -243,10 +137,7 @@ func CreateChaincodeProposalWithTransient(typ common.HeaderType, chainID string,
 	}
 
 	
-	txid, err := ComputeTxID(nonce, creator)
-	if err != nil {
-		return nil, "", err
-	}
+	txid := ComputeTxID(nonce, creator)
 
 	return CreateChaincodeProposalWithTxIDNonceAndTransient(txid, typ, chainID, cis, nonce, creator, transientMap)
 }
@@ -263,10 +154,7 @@ func CreateChaincodeProposalWithTxIDAndTransient(typ common.HeaderType, chainID 
 
 	
 	if txid == "" {
-		txid, err = ComputeTxID(nonce, creator)
-		if err != nil {
-			return nil, "", err
-		}
+		txid = ComputeTxID(nonce, creator)
 	}
 
 	return CreateChaincodeProposalWithTxIDNonceAndTransient(txid, typ, chainID, cis, nonce, creator, transientMap)
@@ -431,12 +319,12 @@ func GetActionFromEnvelope(envBytes []byte) (*peer.ChaincodeAction, error) {
 }
 
 func GetActionFromEnvelopeMsg(env *common.Envelope) (*peer.ChaincodeAction, error) {
-	payl, err := GetPayload(env)
+	payl, err := UnmarshalPayload(env.Payload)
 	if err != nil {
 		return nil, err
 	}
 
-	tx, err := GetTransaction(payl.Data)
+	tx, err := UnmarshalTransaction(payl.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -575,20 +463,17 @@ func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, pr
 
 
 
-func ComputeTxID(nonce, creator []byte) (string, error) {
+func ComputeTxID(nonce, creator []byte) string {
 	
 	
 	digest := sha256.Sum256(append(nonce, creator...))
-	return hex.EncodeToString(digest[:]), nil
+	return hex.EncodeToString(digest[:])
 }
 
 
 
 func CheckTxID(txid string, nonce, creator []byte) error {
-	computedTxID, err := ComputeTxID(nonce, creator)
-	if err != nil {
-		return errors.WithMessage(err, "error computing target txid")
-	}
+	computedTxID := ComputeTxID(nonce, creator)
 
 	if txid != computedTxID {
 		return errors.Errorf("invalid txid. got [%s], expected [%s]", txid, computedTxID)
@@ -606,7 +491,7 @@ func ComputeProposalBinding(proposal *peer.Proposal) ([]byte, error) {
 		return nil, errors.New("proposal's header is nil")
 	}
 
-	h, err := GetHeader(proposal.Header)
+	h, err := UnmarshalHeader(proposal.Header)
 	if err != nil {
 		return nil, err
 	}
@@ -615,7 +500,7 @@ func ComputeProposalBinding(proposal *peer.Proposal) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	shdr, err := GetSignatureHeader(h.SignatureHeader)
+	shdr, err := UnmarshalSignatureHeader(h.SignatureHeader)
 	if err != nil {
 		return nil, err
 	}

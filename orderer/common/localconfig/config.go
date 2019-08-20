@@ -75,6 +75,7 @@ type Cluster struct {
 	ReplicationMaxRetries                int
 	SendBufferSize                       int
 	CertExpirationWarningThreshold       time.Duration
+	TLSHandshakeTimeShift                time.Duration
 }
 
 
@@ -104,7 +105,8 @@ type SASLPlain struct {
 
 
 type Authentication struct {
-	TimeWindow time.Duration
+	TimeWindow         time.Duration
+	NoExpirationChecks bool
 }
 
 

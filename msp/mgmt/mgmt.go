@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/msp"
@@ -138,12 +139,12 @@ func GetLocalMSP() msp.MSP {
 		return localMsp
 	}
 
-	localMsp = loadLocaMSP()
+	localMsp = loadLocaMSP(factory.GetDefault())
 
 	return localMsp
 }
 
-func loadLocaMSP() msp.MSP {
+func loadLocaMSP(bccsp bccsp.BCCSP) msp.MSP {
 	
 	mspType := viper.GetString("peer.localMspType")
 	if mspType == "" {
@@ -155,7 +156,7 @@ func loadLocaMSP() msp.MSP {
 		mspLogger.Panicf("msp type " + mspType + " unknown")
 	}
 
-	mspInst, err := msp.New(newOpts)
+	mspInst, err := msp.New(newOpts, bccsp)
 	if err != nil {
 		mspLogger.Fatalf("Failed to initialize local MSP, received err %+v", err)
 	}

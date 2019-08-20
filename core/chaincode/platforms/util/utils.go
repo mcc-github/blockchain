@@ -23,12 +23,10 @@ var logger = flogging.MustGetLogger("chaincode.platform.util")
 
 type DockerBuildOptions struct {
 	Image        string
-	Env          []string
 	Cmd          string
 	InputStream  io.Reader
 	OutputStream io.Writer
 }
-
 
 
 
@@ -82,7 +80,6 @@ func DockerBuild(opts DockerBuildOptions, client *docker.Client) error {
 	container, err := client.CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
 			Image:        opts.Image,
-			Env:          opts.Env,
 			Cmd:          []string{"/bin/sh", "-c", opts.Cmd},
 			AttachStdout: true,
 			AttachStderr: true,

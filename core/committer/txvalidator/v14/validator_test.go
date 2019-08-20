@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	ctxt "github.com/mcc-github/blockchain/common/configtx/test"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
@@ -43,10 +42,11 @@ import (
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
 	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/ledger/rwset"
+	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	mb "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protos/peer"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -69,10 +69,6 @@ func v13Capabilities() *mockconfig.MockApplicationCapabilities {
 	return &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, PrivateChannelDataRv: true, V1_3ValidationRv: true, KeyLevelEndorsementRv: true}
 }
 
-func fabTokenCapabilities() *mockconfig.MockApplicationCapabilities {
-	return &mockconfig.MockApplicationCapabilities{V1_2ValidationRv: true, FabTokenRv: true}
-}
-
 func setupLedgerAndValidatorExplicit(t *testing.T, cpb *mockconfig.MockApplicationCapabilities, plugin validation.Plugin) (ledger.PeerLedger, txvalidator.Validator, func()) {
 	return setupLedgerAndValidatorExplicitWithMSP(t, cpb, plugin, nil)
 }
@@ -87,10 +83,6 @@ func setupLedgerAndValidatorWithV12Capabilities(t *testing.T) (ledger.PeerLedger
 
 func setupLedgerAndValidatorWithV13Capabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator, func()) {
 	return setupLedgerAndValidatorWithCapabilities(t, v13Capabilities())
-}
-
-func setupLedgerAndValidatorWithFabTokenCapabilities(t *testing.T) (ledger.PeerLedger, txvalidator.Validator, func()) {
-	return setupLedgerAndValidatorWithCapabilities(t, fabTokenCapabilities())
 }
 
 func setupLedgerAndValidatorWithCapabilities(t *testing.T, c *mockconfig.MockApplicationCapabilities) (ledger.PeerLedger, txvalidator.Validator, func()) {
@@ -202,58 +194,6 @@ func getEnvWithSigner(ccID string, event []byte, res []byte, sig msp.SigningIden
 	assert.NoError(t, err)
 
 	return tx
-}
-
-func getTokenTx(t *testing.T) *common.Envelope {
-	transactionData := &token.TokenTransaction{
-		Action: &token.TokenTransaction_TokenAction{
-			TokenAction: &token.TokenAction{
-				Data: &token.TokenAction_Issue{
-					Issue: &token.Issue{
-						Outputs: []*token.Token{
-							{Owner: &token.TokenOwner{Raw: []byte("owner-1")}, Type: "TOK1", Quantity: ToHex(111)},
-							{Owner: &token.TokenOwner{Raw: []byte("owner-2")}, Type: "TOK2", Quantity: ToHex(222)},
-						},
-					},
-				},
-			},
-		},
-	}
-	tdBytes, err := proto.Marshal(transactionData)
-	assert.NoError(t, err)
-
-	signerBytes, err := signer.Serialize()
-	assert.NoError(t, err)
-	nonce := []byte{0, 1, 2, 3, 4}
-	txID, err := protoutil.ComputeTxID(nonce, signerBytes)
-	assert.NoError(t, err)
-
-	hdr := &common.Header{
-		SignatureHeader: protoutil.MarshalOrPanic(
-			&common.SignatureHeader{
-				Creator: signerBytes,
-				Nonce:   nonce,
-			},
-		),
-		ChannelHeader: protoutil.MarshalOrPanic(
-			&common.ChannelHeader{
-				Type: int32(common.HeaderType_TOKEN_TRANSACTION),
-				TxId: txID,
-			},
-		),
-	}
-
-	
-	payl := &common.Payload{Header: hdr, Data: tdBytes}
-	paylBytes, err := protoutil.GetBytesPayload(payl)
-	assert.NoError(t, err)
-
-	
-	sig, err := signer.Sign(paylBytes)
-	assert.NoError(t, err)
-
-	
-	return &common.Envelope{Payload: paylBytes, Signature: sig}
 }
 
 func putCCInfoWithVSCCAndVer(theLedger ledger.PeerLedger, ccname, vscc, ver string, policy []byte, t *testing.T) {
@@ -401,6 +341,64 @@ func testInvokeOK(t *testing.T, l ledger.PeerLedger, v txvalidator.Validator) {
 	err := v.Validate(b)
 	assert.NoError(t, err)
 	assertValid(b, t)
+}
+
+func TestInvokeNOKDuplicateNs(t *testing.T) {
+	t.Run("1.2Capability", func(t *testing.T) {
+		l, v, cleanup := setupLedgerAndValidatorWithV12Capabilities(t)
+		defer cleanup()
+
+		testInvokeNOKDuplicateNs(t, l, v)
+	})
+
+	t.Run("1.3Capability", func(t *testing.T) {
+		l, v, cleanup := setupLedgerAndValidatorWithV13Capabilities(t)
+		defer cleanup()
+
+		testInvokeNOKDuplicateNs(t, l, v)
+	})
+}
+
+func testInvokeNOKDuplicateNs(t *testing.T, l ledger.PeerLedger, v txvalidator.Validator) {
+	ccID := "mycc"
+
+	putCCInfo(l, ccID, signedByAnyMember([]string{"SampleOrg"}), t)
+
+	
+	txrws := &rwset.TxReadWriteSet{
+		DataModel: rwset.TxReadWriteSet_KV,
+		NsRwset: []*rwset.NsReadWriteSet{
+			{
+				Namespace: "mycc",
+				Rwset: protoutil.MarshalOrPanic(&kvrwset.KVRWSet{
+					Writes: []*kvrwset.KVWrite{
+						{
+							Key:   "foo",
+							Value: []byte("bar1"),
+						},
+					},
+				}),
+			},
+			{
+				Namespace: "mycc",
+				Rwset: protoutil.MarshalOrPanic(&kvrwset.KVRWSet{
+					Writes: []*kvrwset.KVWrite{
+						{
+							Key:   "foo",
+							Value: []byte("bar2"),
+						},
+					},
+				}),
+			},
+		},
+	}
+
+	tx := getEnv(ccID, nil, protoutil.MarshalOrPanic(txrws), t)
+	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 2}}
+
+	err := v.Validate(b)
+	assert.NoError(t, err)
+	assertInvalid(b, t, peer.TxValidationCode_ILLEGAL_WRITESET)
 }
 
 func TestInvokeNoRWSet(t *testing.T) {
@@ -1387,64 +1385,6 @@ func validateTxWithStateBasedEndorsement(t *testing.T, l ledger.PeerLedger, v tx
 	err := v.Validate(b)
 
 	return err, b
-}
-
-func TestTokenValidTransaction(t *testing.T) {
-	_, v, cleanup := setupLedgerAndValidatorWithFabTokenCapabilities(t)
-	defer cleanup()
-
-	tx := getTokenTx(t)
-	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 1}}
-
-	err := v.Validate(b)
-	assert.NoError(t, err)
-	assertValid(b, t)
-}
-
-func TestTokenCapabilityNotEnabled(t *testing.T) {
-	_, v, cleanup := setupLedgerAndValidatorWithPreV12Capabilities(t)
-	defer cleanup()
-
-	tx := getTokenTx(t)
-	b := &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(tx)}}, Header: &common.BlockHeader{Number: 1}}
-
-	err := v.Validate(b)
-
-	assertion := assert.New(t)
-	
-	assertion.NoError(err)
-
-	
-	txsfltr := lutils.TxValidationFlags(b.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	assertion.True(txsfltr.IsInvalid(0))
-	assertion.True(txsfltr.Flag(0) == peer.TxValidationCode_UNKNOWN_TX_TYPE)
-}
-
-func TestTokenDuplicateTxId(t *testing.T) {
-	theLedger := new(mockLedger)
-	pm := &mocks.Mapper{}
-	validator := txvalidatorv14.NewTxValidator(
-		"",
-		semaphore.New(10),
-		&mocktxvalidator.Support{LedgerVal: theLedger, ACVal: fabTokenCapabilities()},
-		pm,
-	)
-
-	tx := getTokenTx(t)
-	theLedger.On("GetTransactionByID", mock.Anything).Return(&peer.ProcessedTransaction{}, nil)
-
-	b := testutil.NewBlock([]*common.Envelope{tx}, 0, nil)
-
-	err := validator.Validate(b)
-
-	assertion := assert.New(t)
-	
-	assertion.NoError(err)
-
-	
-	txsfltr := lutils.TxValidationFlags(b.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	assertion.True(txsfltr.IsInvalid(0))
-	assertion.True(txsfltr.Flag(0) == peer.TxValidationCode_DUPLICATE_TXID)
 }
 
 

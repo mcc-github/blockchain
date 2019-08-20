@@ -12,6 +12,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/aclmgmt/mocks"
@@ -45,8 +46,13 @@ func setupTestLedger(chainid string, path string) (*shimtest.MockStub, *peer.Pee
 		ledgerMgr.Close()
 		os.RemoveAll(testDir)
 	}
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	peerInstance := &peer.Peer{
-		LedgerMgr: ledgerMgr,
+		LedgerMgr:      ledgerMgr,
+		CryptoProvider: cryptoProvider,
 	}
 	peer.CreateMockChannel(peerInstance, chainid)
 
@@ -319,7 +325,7 @@ func TestQueryGeneratedBlock(t *testing.T) {
 			if env, err := protoutil.GetEnvelopeFromBlock(ebytes); err != nil {
 				t.Fatalf("error getting envelope from block: %s", err)
 			} else if env != nil {
-				payload, err := protoutil.GetPayload(env)
+				payload, err := protoutil.UnmarshalPayload(env.Payload)
 				if err != nil {
 					t.Fatalf("error extracting payload from envelope: %s", err)
 				}

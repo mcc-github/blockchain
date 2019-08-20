@@ -9,7 +9,6 @@ package validation
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
@@ -45,7 +44,7 @@ func TestValidateConfigTx(t *testing.T) {
 		}),
 	}
 	updateResult.Signature, _ = signer.Sign(updateResult.Payload)
-	_, txResult := ValidateTransaction(updateResult, &config.MockApplicationCapabilities{})
+	_, txResult := ValidateTransaction(updateResult)
 	if txResult != peer.TxValidationCode_VALID {
 		t.Fatalf("ValidateTransaction failed, err %s", err)
 		return

@@ -19,8 +19,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -116,7 +116,7 @@ func (stub *MockStub) GetFunctionAndParameters() (function string, params []stri
 func (stub *MockStub) MockTransactionStart(txid string) {
 	stub.TxID = txid
 	stub.setSignedProposal(&pb.SignedProposal{})
-	stub.setTxTimestamp(util.CreateUtcTimestamp())
+	stub.setTxTimestamp(ptypes.TimestampNow())
 }
 
 

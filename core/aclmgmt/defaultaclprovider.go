@@ -95,9 +95,6 @@ func newDefaultACLProvider(policyChecker policy.PolicyChecker) defaultACLProvide
 	
 	d.cResourcePolicyMap[resources.Peer_Propose] = CHANNELWRITERS
 	d.cResourcePolicyMap[resources.Peer_ChaincodeToChaincode] = CHANNELWRITERS
-	d.cResourcePolicyMap[resources.Token_Issue] = CHANNELWRITERS
-	d.cResourcePolicyMap[resources.Token_Transfer] = CHANNELWRITERS
-	d.cResourcePolicyMap[resources.Token_List] = CHANNELREADERS
 
 	
 	d.cResourcePolicyMap[resources.Event_Block] = CHANNELREADERS

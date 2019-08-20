@@ -39,8 +39,8 @@ type SupportImpl struct {
 	identity.SignerSerializer
 	Peer             PeerOperations
 	ChaincodeSupport *chaincode.ChaincodeSupport
-	SysCCProvider    *scc.Provider
 	ACLProvider      aclmgmt.ACLProvider
+	BuiltinSCCs      scc.BuiltinSCCs
 }
 
 func (s *SupportImpl) NewQueryCreator(channel string) (QueryCreator, error) {
@@ -107,44 +107,23 @@ func (s *SupportImpl) GetLedgerHeight(channelID string) (uint64, error) {
 
 
 func (s *SupportImpl) IsSysCC(name string) bool {
-	return s.SysCCProvider.IsSysCC(name)
+	return s.BuiltinSCCs.IsSysCC(name)
 }
 
 
-func (s *SupportImpl) GetChaincodeDeploymentSpecFS(cds *pb.ChaincodeDeploymentSpec) (*pb.ChaincodeDeploymentSpec, error) {
-	ccpack, err := ccprovider.GetChaincodeFromFS(cds.ChaincodeSpec.ChaincodeId.Name, cds.ChaincodeSpec.ChaincodeId.Version)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not get chaincode from fs")
-	}
-
-	return ccpack.GetDepSpec(), nil
+func (s *SupportImpl) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, name, version string, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
+	return s.ChaincodeSupport.ExecuteLegacyInit(txParams, name, version, input)
 }
 
 
-func (s *SupportImpl) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, cid, name, version, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, cds *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error) {
-	cccid := &ccprovider.CCContext{
-		Name:    name,
-		Version: version,
-	}
-
-	return s.ChaincodeSupport.ExecuteLegacyInit(txParams, cccid, cds)
-}
-
-
-func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, cid, name, txid string, idBytes []byte, requiresInit bool, signedProp *pb.SignedProposal, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
-	cccid := &ccprovider.CCContext{
-		Name:         name,
-		InitRequired: requiresInit,
-		ID:           idBytes,
-	}
-
+func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, name string, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
 	
 	decorators := library.InitRegistry(library.Config{}).Lookup(library.Decoration).([]decoration.Decorator)
 	input.Decorations = make(map[string][]byte)
 	input = decoration.Apply(prop, input, decorators...)
 	txParams.ProposalDecorations = input.Decorations
 
-	return s.ChaincodeSupport.Execute(txParams, cccid, input)
+	return s.ChaincodeSupport.Execute(txParams, name, input)
 }
 
 
@@ -156,16 +135,6 @@ func (s *SupportImpl) GetChaincodeDefinition(channelID, chaincodeName string, tx
 
 func (s *SupportImpl) CheckACL(signedProp *pb.SignedProposal, chdr *common.ChannelHeader, shdr *common.SignatureHeader, hdrext *pb.ChaincodeHeaderExtension) error {
 	return s.ACLProvider.CheckACL(resources.Peer_Propose, chdr.ChannelId, signedProp)
-}
-
-
-
-
-func (s *SupportImpl) CheckInstantiationPolicy(name, version string, cd ccprovider.ChaincodeDefinition) error {
-	if cData, ok := cd.(*ccprovider.ChaincodeData); ok {
-		return ccprovider.CheckInstantiationPolicy(name, version, cData)
-	}
-	return nil
 }
 
 

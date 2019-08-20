@@ -25,6 +25,8 @@ type recoverable interface {
 	ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error)
 	
 	CommitLostBlock(block *ledger.BlockAndPvtData) error
+	
+	Name() string
 }
 
 type recoverer struct {

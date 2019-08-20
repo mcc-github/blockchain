@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	bccsp "github.com/mcc-github/blockchain/bccsp/utils"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/configtx"
@@ -518,9 +519,12 @@ func createSigner(t *testing.T) *signer {
 }
 
 func createMSP(t *testing.T, dir, mspID string) (msp.MSP, *msprotos.FabricMSPConfig) {
-	channelMSP, err := msp.New(&msp.BCCSPNewOpts{
-		NewBaseOpts: msp.NewBaseOpts{Version: msp.MSPv1_1},
-	})
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
+	channelMSP, err := msp.New(
+		&msp.BCCSPNewOpts{NewBaseOpts: msp.NewBaseOpts{Version: msp.MSPv1_1}},
+		cryptoProvider,
+	)
 	assert.NoError(t, err)
 
 	mspConf, err := msp.GetVerifyingMspConfig(dir, mspID, "bccsp")

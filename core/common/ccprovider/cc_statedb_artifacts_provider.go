@@ -25,13 +25,13 @@ type TarFileEntry struct {
 
 
 
-func ExtractStatedbArtifactsForChaincode(ccname, ccversion string) (installed bool, statedbArtifactsTar []byte, err error) {
-	ccpackage, err := GetChaincodeFromFS(ccname, ccversion)
+func ExtractStatedbArtifactsForChaincode(ccNameVersion string) (installed bool, statedbArtifactsTar []byte, err error) {
+	ccpackage, err := GetChaincodeFromFS(ccNameVersion)
 	if err != nil {
 		
 		
 		
-		ccproviderLogger.Infof("Error while loading installation package for ccname=%s, ccversion=%s. Err=%s", ccname, ccversion, err)
+		ccproviderLogger.Infof("Error while loading installation package for ccNameVersion=%s Err=%s", ccNameVersion, err)
 		return false, nil, nil
 	}
 

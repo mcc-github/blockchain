@@ -28,7 +28,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/chaincode/shim/shimtest"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	cutil "github.com/mcc-github/blockchain/core/container/util"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt/ledgermgmttest"
 	"github.com/mcc-github/blockchain/core/policy"
@@ -61,21 +60,41 @@ var testPolicyEnvelope = &common.SignaturePolicyEnvelope{
 	},
 }
 
-func constructDeploymentSpec(name string, path string, version string, initArgs [][]byte, createInvalidIndex bool, createFS bool, scc *LifeCycleSysCC) (*pb.ChaincodeDeploymentSpec, error) {
+func constructDeploymentSpec(name, path, version string, initArgs [][]byte, createInvalidIndex bool, createFS bool, scc *LifeCycleSysCC) (*pb.ChaincodeDeploymentSpec, error) {
 	spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_GOLANG, ChaincodeId: &pb.ChaincodeID{Name: name, Path: path, Version: version}, Input: &pb.ChaincodeInput{Args: initArgs}}
 
 	codePackageBytes := bytes.NewBuffer(nil)
 	gz := gzip.NewWriter(codePackageBytes)
 	tw := tar.NewWriter(gz)
 
-	err := cutil.WriteBytesToPackage("src/garbage.go", []byte(name+path+version), tw)
+	payload := []byte(name + path + version)
+	err := tw.WriteHeader(&tar.Header{
+		Name: "src/garbage.go",
+		Size: int64(len(payload)),
+		Mode: 0100644,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tw.Write(payload)
 	if err != nil {
 		return nil, err
 	}
 
 	
 	if createInvalidIndex {
-		err = cutil.WriteBytesToPackage("META-INF/statedb/couchdb/indexes/badIndex.json", []byte("invalid index definition"), tw)
+		payload := []byte("invalid index definition")
+		err := tw.WriteHeader(&tar.Header{
+			Name: "META-INF/statedb/couchdb/indexes/badIndex.json",
+			Size: int64(len(payload)),
+			Mode: 0100644,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = tw.Write(payload)
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +142,7 @@ func TestInstall(t *testing.T) {
 	ledgerMgr := ledgermgmt.NewLedgerMgr(ledgermgmttest.NewInitializer(tempdir))
 	defer ledgerMgr.Close()
 
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInit("1", nil)
@@ -146,7 +165,7 @@ func TestInstall(t *testing.T) {
 	testInstall(t, "example02", "0", path, false, "", "Alice", scc, stub, nil)
 	testInstall(t, "example02-2", "1.0", path, false, "", "Alice", scc, stub, nil)
 	testInstall(t, "example02.go", "0", path, false, InvalidChaincodeNameErr("example02.go").Error(), "Alice", scc, stub, nil)
-	testInstall(t, "", "0", path, false, EmptyChaincodeNameErr("").Error(), "Alice", scc, stub, nil)
+	testInstall(t, "", "0", path, false, InvalidChaincodeNameErr("").Error(), "Alice", scc, stub, nil)
 	testInstall(t, "example02", "1{}0", path, false, InvalidVersionErr("1{}0").Error(), "Alice", scc, stub, nil)
 	testInstall(t, "example02", "0", path, true, InvalidStatedbArtifactsErr("").Error(), "Alice", scc, stub, nil)
 	testInstall(t, "example02", "0", path, false, "access denied for [install]", "Bob", scc, stub, errors.New("authorization error"))
@@ -211,7 +230,7 @@ func TestNewLifecycleEnabled(t *testing.T) {
 		},
 	}).NewSystemChaincodeProvider().(*mscc.MocksccProviderImpl)
 
-	scc := New(mocksccProvider, mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, mocksccProvider, mockAclProvider, getMSPIDs, nil)
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInvokeWithSignedProposal("1", [][]byte{[]byte("deploy"), []byte("test"), nil}, nil)
 	assert.NotEqual(t, int32(shim.OK), res.Status)
@@ -225,13 +244,13 @@ func TestDeploy(t *testing.T) {
 	testDeploy(t, "example02", "0", path, false, false, true, "", nil, nil, nil)
 	testDeploy(t, "example02", "1.0", path, false, false, true, "", nil, nil, nil)
 	testDeploy(t, "example02", "1.0", path, false, false, false, "cannot get package for chaincode (example02:1.0)", nil, nil, nil)
-	testDeploy(t, "example02", "0", path, true, false, true, EmptyChaincodeNameErr("").Error(), nil, nil, nil)
-	testDeploy(t, "example02", "0", path, false, true, true, EmptyVersionErr("example02").Error(), nil, nil, nil)
+	testDeploy(t, "example02", "0", path, true, false, true, InvalidChaincodeNameErr("").Error(), nil, nil, nil)
+	testDeploy(t, "example02", "0", path, false, true, true, InvalidVersionErr("").Error(), nil, nil, nil)
 	testDeploy(t, "example02.go", "0", path, false, false, true, InvalidChaincodeNameErr("example02.go").Error(), nil, nil, nil)
 	testDeploy(t, "example02", "1{}0", path, false, false, true, InvalidVersionErr("1{}0").Error(), nil, nil, nil)
-	testDeploy(t, "example02", "0", path, true, true, true, EmptyChaincodeNameErr("").Error(), nil, nil, nil)
+	testDeploy(t, "example02", "0", path, true, true, true, InvalidChaincodeNameErr("").Error(), nil, nil, nil)
 
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInit("1", nil)
@@ -252,7 +271,7 @@ func TestDeploy(t *testing.T) {
 	testDeploy(t, "example02", "1.0", path, false, false, true, "", scc, stub, nil)
 	testDeploy(t, "example02", "1.0", path, false, false, true, "chaincode with name 'example02' already exists", scc, stub, nil)
 
-	scc = New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -261,7 +280,7 @@ func TestDeploy(t *testing.T) {
 
 	testDeploy(t, "example02", "1.0", path, false, false, true, "barf", scc, stub, nil)
 
-	scc = New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -270,7 +289,7 @@ func TestDeploy(t *testing.T) {
 
 	testDeploy(t, "example02", "1.0", path, false, false, true, "barf", scc, stub, nil)
 
-	scc = New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -291,7 +310,7 @@ func TestDeploy(t *testing.T) {
 		},
 	}).NewSystemChaincodeProvider().(*mscc.MocksccProviderImpl)
 
-	scc = New(mocksccProvider, mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, mocksccProvider, mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -318,7 +337,7 @@ func TestDeploy(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, ccpBytes)
 
-	scc = New(mocksccProvider, mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, mocksccProvider, mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -334,7 +353,7 @@ func TestDeploy(t *testing.T) {
 	assert.Equal(t, true, ok)
 	assert.Equal(t, ccpBytes, actualccpBytes)
 
-	scc = New(mocksccProvider, mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, mocksccProvider, mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -373,7 +392,7 @@ func createCollectionConfig(collectionName string, signaturePolicyEnvelope *comm
 
 func testDeploy(t *testing.T, ccname string, version string, path string, forceBlankCCName bool, forceBlankVersion bool, install bool, expectedErrorMsg string, scc *LifeCycleSysCC, stub *shimtest.MockStub, collectionConfigBytes []byte) {
 	if scc == nil {
-		scc = New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+		scc = New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 		scc.Support = &MockSupport{}
 		stub = shimtest.NewMockStub("lscc", scc)
 		res := stub.MockInit("1", nil)
@@ -481,14 +500,14 @@ func TestUpgrade(t *testing.T) {
 	path := "mychaincode"
 
 	testUpgrade(t, "example02", "0", "example02", "1", path, "", nil, nil, nil)
-	testUpgrade(t, "example02", "0", "example02", "", path, EmptyVersionErr("example02").Error(), nil, nil, nil)
+	testUpgrade(t, "example02", "0", "example02", "", path, InvalidVersionErr("").Error(), nil, nil, nil)
 	testUpgrade(t, "example02", "0", "example02", "0", path, IdenticalVersionErr("example02").Error(), nil, nil, nil)
 	testUpgrade(t, "example02", "0", "example03", "1", path, NotFoundErr("example03").Error(), nil, nil, nil)
 	testUpgrade(t, "example02", "0", "example02", "1{}0", path, InvalidVersionErr("1{}0").Error(), nil, nil, nil)
 	testUpgrade(t, "example02", "0", "example*02", "1{}0", path, InvalidChaincodeNameErr("example*02").Error(), nil, nil, nil)
-	testUpgrade(t, "example02", "0", "", "1", path, EmptyChaincodeNameErr("").Error(), nil, nil, nil)
+	testUpgrade(t, "example02", "0", "", "1", path, InvalidChaincodeNameErr("").Error(), nil, nil, nil)
 
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInit("1", nil)
@@ -498,7 +517,7 @@ func TestUpgrade(t *testing.T) {
 
 	testUpgrade(t, "example02", "0", "example02", "1", path, "barf", scc, stub, nil)
 
-	scc = New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -506,7 +525,7 @@ func TestUpgrade(t *testing.T) {
 
 	testUpgrade(t, "example02", "0", "example02", "1", path, "instantiation policy missing", scc, stub, nil)
 
-	scc = New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -517,7 +536,7 @@ func TestUpgrade(t *testing.T) {
 
 	testUpgrade(t, "example02", "0", "example02", "1", path, "barf", scc, stub, nil)
 
-	scc = New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -538,7 +557,7 @@ func TestUpgrade(t *testing.T) {
 		},
 	}).NewSystemChaincodeProvider().(*mscc.MocksccProviderImpl)
 
-	scc = New(mocksccProvider, mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, mocksccProvider, mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -571,7 +590,7 @@ func TestUpgrade(t *testing.T) {
 		},
 	}).NewSystemChaincodeProvider().(*mscc.MocksccProviderImpl)
 
-	scc = New(mocksccProvider, mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, mocksccProvider, mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -585,7 +604,7 @@ func TestUpgrade(t *testing.T) {
 	_, ok := stub.State["example02"]
 	assert.Equal(t, true, ok)
 
-	scc = New(mocksccProvider, mockAclProvider, getMSPIDs, nil)
+	scc = New(map[string]struct{}{"lscc": {}}, mocksccProvider, mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub = shimtest.NewMockStub("lscc", scc)
 	res = stub.MockInit("1", nil)
@@ -608,7 +627,7 @@ func TestUpgrade(t *testing.T) {
 func testUpgrade(t *testing.T, ccname string, version string, newccname string, newversion string, path string, expectedErrorMsg string, scc *LifeCycleSysCC, stub *shimtest.MockStub, collectionConfigBytes []byte) {
 	t.Run(ccname+":"+version+"->"+newccname+":"+newversion, func(t *testing.T) {
 		if scc == nil {
-			scc = New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+			scc = New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 			scc.Support = &MockSupport{}
 			stub = shimtest.NewMockStub("lscc", scc)
 			res := stub.MockInit("1", nil)
@@ -671,7 +690,7 @@ func testUpgrade(t *testing.T, ccname string, version string, newccname string, 
 }
 
 func TestFunctionsWithAliases(t *testing.T) {
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInit("1", nil)
@@ -721,7 +740,7 @@ func TestFunctionsWithAliases(t *testing.T) {
 }
 
 func TestGetChaincodes(t *testing.T) {
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub := shimtest.NewMockStub("lscc", scc)
 	stub.ChannelID = "test"
@@ -752,7 +771,7 @@ func TestGetChaincodes(t *testing.T) {
 }
 
 func TestGetChaincodesFilter(t *testing.T) {
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{GetChaincodeFromLocalStorageErr: errors.New("banana")}
 
 	sqi := &mock.StateQueryIterator{}
@@ -783,7 +802,7 @@ func TestGetChaincodesFilter(t *testing.T) {
 }
 
 func TestGetInstalledChaincodes(t *testing.T) {
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	scc.Support = &MockSupport{}
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInit("1", nil)
@@ -845,7 +864,7 @@ func TestGetInstalledChaincodes(t *testing.T) {
 }
 
 func TestNewLifeCycleSysCC(t *testing.T) {
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	assert.NotNil(t, scc)
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInit("1", nil)
@@ -857,7 +876,7 @@ func TestNewLifeCycleSysCC(t *testing.T) {
 }
 
 func TestGetChaincodeData(t *testing.T) {
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	assert.NotNil(t, scc)
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInit("1", nil)
@@ -872,7 +891,7 @@ func TestGetChaincodeData(t *testing.T) {
 }
 
 func TestExecuteInstall(t *testing.T) {
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	assert.NotNil(t, scc)
 	stub := shimtest.NewMockStub("lscc", scc)
 	res := stub.MockInit("1", nil)
@@ -931,7 +950,7 @@ func TestPutChaincodeCollectionData(t *testing.T) {
 }
 
 func TestGetChaincodeCollectionData(t *testing.T) {
-	scc := New(NewMockProvider(), mockAclProvider, getMSPIDs, nil)
+	scc := New(map[string]struct{}{"lscc": {}}, NewMockProvider(), mockAclProvider, getMSPIDs, nil)
 	stub := shimtest.NewMockStub("lscc", scc)
 	stub.ChannelID = "test"
 	scc.Support = &MockSupport{}
@@ -1159,32 +1178,56 @@ func TestCheckChaincodeName(t *testing.T) {
 	assert.NoError(t, err)
 
 	
+	err = lscc.isValidChaincodeName("")
+	assert.EqualError(t, err, "invalid chaincode name ''. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'")
 	err = lscc.isValidChaincodeName("-ab")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid chaincode name '-ab'")
+	assert.EqualError(t, err, "invalid chaincode name '-ab'. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'")
 	err = lscc.isValidChaincodeName("_ab")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid chaincode name '_ab'")
+	assert.EqualError(t, err, "invalid chaincode name '_ab'. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'")
 	err = lscc.isValidChaincodeName("ab-")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid chaincode name 'ab-'")
+	assert.EqualError(t, err, "invalid chaincode name 'ab-'. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'")
 	err = lscc.isValidChaincodeName("ab_")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid chaincode name 'ab_'")
+	assert.EqualError(t, err, "invalid chaincode name 'ab_'. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'")
 	err = lscc.isValidChaincodeName("a__b")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid chaincode name 'a__b'")
+	assert.EqualError(t, err, "invalid chaincode name 'a__b'. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'")
 	err = lscc.isValidChaincodeName("a--b")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid chaincode name 'a--b'")
+	assert.EqualError(t, err, "invalid chaincode name 'a--b'. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'")
 	err = lscc.isValidChaincodeName("a-_b")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid chaincode name 'a-_b'")
+	assert.EqualError(t, err, "invalid chaincode name 'a-_b'. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'")
+}
+
+func TestCheckChaincodeVersion(t *testing.T) {
+	lscc := &LifeCycleSysCC{}
+
+	validCCName := "ccname"
+	
+	err := lscc.isValidChaincodeVersion(validCCName, "a_b")
+	assert.NoError(t, err)
+	err = lscc.isValidChaincodeVersion(validCCName, "a.b")
+	assert.NoError(t, err)
+	err = lscc.isValidChaincodeVersion(validCCName, "a+b")
+	assert.NoError(t, err)
+	err = lscc.isValidChaincodeVersion(validCCName, "a-b")
+	assert.NoError(t, err)
+	err = lscc.isValidChaincodeVersion(validCCName, "-ab")
+	assert.NoError(t, err)
+	err = lscc.isValidChaincodeVersion(validCCName, "a.0")
+	assert.NoError(t, err)
+	err = lscc.isValidChaincodeVersion(validCCName, "a_b.c+d-e")
+	assert.NoError(t, err)
+	err = lscc.isValidChaincodeVersion(validCCName, "0")
+	assert.NoError(t, err)
+
+	
+	err = lscc.isValidChaincodeVersion(validCCName, "")
+	assert.EqualError(t, err, fmt.Sprintf("invalid chaincode version ''. Versions must not be empty and can only consist of alphanumerics, '_',  '-', '+', and '.'"))
+	err = lscc.isValidChaincodeVersion(validCCName, "$badversion")
+	assert.EqualError(t, err, "invalid chaincode version '$badversion'. Versions must not be empty and can only consist of alphanumerics, '_',  '-', '+', and '.'")
 }
 
 func TestLifecycleChaincodeRegularExpressionsMatch(t *testing.T) {
-	assert.Equal(t, chaincodeNameRegExp.String(), lifecycle.ChaincodeNameRegExp.String())
-	assert.Equal(t, chaincodeVersionRegExp.String(), lifecycle.ChaincodeVersionRegExp.String())
+	assert.Equal(t, ChaincodeNameRegExp.String(), lifecycle.ChaincodeNameRegExp.String())
+	assert.Equal(t, ChaincodeVersionRegExp.String(), lifecycle.ChaincodeVersionRegExp.String())
 }
 
 var id msp.SigningIdentity
@@ -1233,7 +1276,7 @@ func (s *MockSupport) PutChaincodeToLocalStorage(ccpack ccprovider.CCPackage) er
 	return s.PutChaincodeToLocalStorageErr
 }
 
-func (s *MockSupport) GetChaincodeFromLocalStorage(ccname string, ccversion string) (ccprovider.CCPackage, error) {
+func (s *MockSupport) GetChaincodeFromLocalStorage(ccNameVersion string) (ccprovider.CCPackage, error) {
 	return s.GetChaincodeFromLocalStorageRv, s.GetChaincodeFromLocalStorageErr
 }
 

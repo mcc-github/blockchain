@@ -80,7 +80,7 @@ func TestInstalledCCs(t *testing.T) {
 		{
 			name: "No permission on chaincode files",
 			ls:   ioutil.ReadDir,
-			extractCCFromPath: func(_ string, _ string, _ string) (ccprovider.CCPackage, error) {
+			extractCCFromPath: func(_ string, _ string) (ccprovider.CCPackage, error) {
 				return nil, errors.New("banana")
 			},
 			expected:      nil,
@@ -118,14 +118,9 @@ func TestChaincodeData(t *testing.T) {
 		Vscc:                "Vscc",
 	}
 
-	assert.Equal(t, cd.CCName(), "Name")
 	assert.Equal(t, cd.CCVersion(), "Version")
 	assert.Equal(t, cd.Endorsement(), "Escc")
-	assert.Equal(t, cd.Hash(), []byte("Id"))
 	assert.Equal(t, cd.RequiresInit(), false)
-	pl, po := cd.Validation()
-	assert.Equal(t, pl, "Vscc")
-	assert.Equal(t, po, []byte("Policy"))
 }
 
 func TestGetChaincodeInstallPath(t *testing.T) {

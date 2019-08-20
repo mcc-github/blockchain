@@ -26,19 +26,6 @@ type Support struct {
 	checkACLReturnsOnCall map[int]struct {
 		result1 error
 	}
-	CheckInstantiationPolicyStub        func(string, string, ccprovider.ChaincodeDefinition) error
-	checkInstantiationPolicyMutex       sync.RWMutex
-	checkInstantiationPolicyArgsForCall []struct {
-		arg1 string
-		arg2 string
-		arg3 ccprovider.ChaincodeDefinition
-	}
-	checkInstantiationPolicyReturns struct {
-		result1 error
-	}
-	checkInstantiationPolicyReturnsOnCall map[int]struct {
-		result1 error
-	}
 	EndorseWithPluginStub        func(endorser.Context) (*peer.ProposalResponse, error)
 	endorseWithPluginMutex       sync.RWMutex
 	endorseWithPluginArgsForCall []struct {
@@ -52,18 +39,13 @@ type Support struct {
 		result1 *peer.ProposalResponse
 		result2 error
 	}
-	ExecuteStub        func(*ccprovider.TransactionParams, string, string, string, []byte, bool, *peer.SignedProposal, *peer.Proposal, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)
+	ExecuteStub        func(*ccprovider.TransactionParams, string, *peer.Proposal, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)
 	executeMutex       sync.RWMutex
 	executeArgsForCall []struct {
 		arg1 *ccprovider.TransactionParams
 		arg2 string
-		arg3 string
-		arg4 string
-		arg5 []byte
-		arg6 bool
-		arg7 *peer.SignedProposal
-		arg8 *peer.Proposal
-		arg9 *peer.ChaincodeInput
+		arg3 *peer.Proposal
+		arg4 *peer.ChaincodeInput
 	}
 	executeReturns struct {
 		result1 *peer.Response
@@ -75,17 +57,13 @@ type Support struct {
 		result2 *peer.ChaincodeEvent
 		result3 error
 	}
-	ExecuteLegacyInitStub        func(*ccprovider.TransactionParams, string, string, string, string, *peer.SignedProposal, *peer.Proposal, *peer.ChaincodeDeploymentSpec) (*peer.Response, *peer.ChaincodeEvent, error)
+	ExecuteLegacyInitStub        func(*ccprovider.TransactionParams, string, string, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)
 	executeLegacyInitMutex       sync.RWMutex
 	executeLegacyInitArgsForCall []struct {
 		arg1 *ccprovider.TransactionParams
 		arg2 string
 		arg3 string
-		arg4 string
-		arg5 string
-		arg6 *peer.SignedProposal
-		arg7 *peer.Proposal
-		arg8 *peer.ChaincodeDeploymentSpec
+		arg4 *peer.ChaincodeInput
 	}
 	executeLegacyInitReturns struct {
 		result1 *peer.Response
@@ -110,19 +88,6 @@ type Support struct {
 	}
 	getChaincodeDefinitionReturnsOnCall map[int]struct {
 		result1 ccprovider.ChaincodeDefinition
-		result2 error
-	}
-	GetChaincodeDeploymentSpecFSStub        func(*peer.ChaincodeDeploymentSpec) (*peer.ChaincodeDeploymentSpec, error)
-	getChaincodeDeploymentSpecFSMutex       sync.RWMutex
-	getChaincodeDeploymentSpecFSArgsForCall []struct {
-		arg1 *peer.ChaincodeDeploymentSpec
-	}
-	getChaincodeDeploymentSpecFSReturns struct {
-		result1 *peer.ChaincodeDeploymentSpec
-		result2 error
-	}
-	getChaincodeDeploymentSpecFSReturnsOnCall map[int]struct {
-		result1 *peer.ChaincodeDeploymentSpec
 		result2 error
 	}
 	GetDeployedCCInfoProviderStub        func() ledger.DeployedChaincodeInfoProvider
@@ -292,68 +257,6 @@ func (fake *Support) CheckACLReturnsOnCall(i int, result1 error) {
 	}{result1}
 }
 
-func (fake *Support) CheckInstantiationPolicy(arg1 string, arg2 string, arg3 ccprovider.ChaincodeDefinition) error {
-	fake.checkInstantiationPolicyMutex.Lock()
-	ret, specificReturn := fake.checkInstantiationPolicyReturnsOnCall[len(fake.checkInstantiationPolicyArgsForCall)]
-	fake.checkInstantiationPolicyArgsForCall = append(fake.checkInstantiationPolicyArgsForCall, struct {
-		arg1 string
-		arg2 string
-		arg3 ccprovider.ChaincodeDefinition
-	}{arg1, arg2, arg3})
-	fake.recordInvocation("CheckInstantiationPolicy", []interface{}{arg1, arg2, arg3})
-	fake.checkInstantiationPolicyMutex.Unlock()
-	if fake.CheckInstantiationPolicyStub != nil {
-		return fake.CheckInstantiationPolicyStub(arg1, arg2, arg3)
-	}
-	if specificReturn {
-		return ret.result1
-	}
-	fakeReturns := fake.checkInstantiationPolicyReturns
-	return fakeReturns.result1
-}
-
-func (fake *Support) CheckInstantiationPolicyCallCount() int {
-	fake.checkInstantiationPolicyMutex.RLock()
-	defer fake.checkInstantiationPolicyMutex.RUnlock()
-	return len(fake.checkInstantiationPolicyArgsForCall)
-}
-
-func (fake *Support) CheckInstantiationPolicyCalls(stub func(string, string, ccprovider.ChaincodeDefinition) error) {
-	fake.checkInstantiationPolicyMutex.Lock()
-	defer fake.checkInstantiationPolicyMutex.Unlock()
-	fake.CheckInstantiationPolicyStub = stub
-}
-
-func (fake *Support) CheckInstantiationPolicyArgsForCall(i int) (string, string, ccprovider.ChaincodeDefinition) {
-	fake.checkInstantiationPolicyMutex.RLock()
-	defer fake.checkInstantiationPolicyMutex.RUnlock()
-	argsForCall := fake.checkInstantiationPolicyArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
-}
-
-func (fake *Support) CheckInstantiationPolicyReturns(result1 error) {
-	fake.checkInstantiationPolicyMutex.Lock()
-	defer fake.checkInstantiationPolicyMutex.Unlock()
-	fake.CheckInstantiationPolicyStub = nil
-	fake.checkInstantiationPolicyReturns = struct {
-		result1 error
-	}{result1}
-}
-
-func (fake *Support) CheckInstantiationPolicyReturnsOnCall(i int, result1 error) {
-	fake.checkInstantiationPolicyMutex.Lock()
-	defer fake.checkInstantiationPolicyMutex.Unlock()
-	fake.CheckInstantiationPolicyStub = nil
-	if fake.checkInstantiationPolicyReturnsOnCall == nil {
-		fake.checkInstantiationPolicyReturnsOnCall = make(map[int]struct {
-			result1 error
-		})
-	}
-	fake.checkInstantiationPolicyReturnsOnCall[i] = struct {
-		result1 error
-	}{result1}
-}
-
 func (fake *Support) EndorseWithPlugin(arg1 endorser.Context) (*peer.ProposalResponse, error) {
 	fake.endorseWithPluginMutex.Lock()
 	ret, specificReturn := fake.endorseWithPluginReturnsOnCall[len(fake.endorseWithPluginArgsForCall)]
@@ -417,29 +320,19 @@ func (fake *Support) EndorseWithPluginReturnsOnCall(i int, result1 *peer.Proposa
 	}{result1, result2}
 }
 
-func (fake *Support) Execute(arg1 *ccprovider.TransactionParams, arg2 string, arg3 string, arg4 string, arg5 []byte, arg6 bool, arg7 *peer.SignedProposal, arg8 *peer.Proposal, arg9 *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error) {
-	var arg5Copy []byte
-	if arg5 != nil {
-		arg5Copy = make([]byte, len(arg5))
-		copy(arg5Copy, arg5)
-	}
+func (fake *Support) Execute(arg1 *ccprovider.TransactionParams, arg2 string, arg3 *peer.Proposal, arg4 *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error) {
 	fake.executeMutex.Lock()
 	ret, specificReturn := fake.executeReturnsOnCall[len(fake.executeArgsForCall)]
 	fake.executeArgsForCall = append(fake.executeArgsForCall, struct {
 		arg1 *ccprovider.TransactionParams
 		arg2 string
-		arg3 string
-		arg4 string
-		arg5 []byte
-		arg6 bool
-		arg7 *peer.SignedProposal
-		arg8 *peer.Proposal
-		arg9 *peer.ChaincodeInput
-	}{arg1, arg2, arg3, arg4, arg5Copy, arg6, arg7, arg8, arg9})
-	fake.recordInvocation("Execute", []interface{}{arg1, arg2, arg3, arg4, arg5Copy, arg6, arg7, arg8, arg9})
+		arg3 *peer.Proposal
+		arg4 *peer.ChaincodeInput
+	}{arg1, arg2, arg3, arg4})
+	fake.recordInvocation("Execute", []interface{}{arg1, arg2, arg3, arg4})
 	fake.executeMutex.Unlock()
 	if fake.ExecuteStub != nil {
-		return fake.ExecuteStub(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+		return fake.ExecuteStub(arg1, arg2, arg3, arg4)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2, ret.result3
@@ -454,17 +347,17 @@ func (fake *Support) ExecuteCallCount() int {
 	return len(fake.executeArgsForCall)
 }
 
-func (fake *Support) ExecuteCalls(stub func(*ccprovider.TransactionParams, string, string, string, []byte, bool, *peer.SignedProposal, *peer.Proposal, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)) {
+func (fake *Support) ExecuteCalls(stub func(*ccprovider.TransactionParams, string, *peer.Proposal, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)) {
 	fake.executeMutex.Lock()
 	defer fake.executeMutex.Unlock()
 	fake.ExecuteStub = stub
 }
 
-func (fake *Support) ExecuteArgsForCall(i int) (*ccprovider.TransactionParams, string, string, string, []byte, bool, *peer.SignedProposal, *peer.Proposal, *peer.ChaincodeInput) {
+func (fake *Support) ExecuteArgsForCall(i int) (*ccprovider.TransactionParams, string, *peer.Proposal, *peer.ChaincodeInput) {
 	fake.executeMutex.RLock()
 	defer fake.executeMutex.RUnlock()
 	argsForCall := fake.executeArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4, argsForCall.arg5, argsForCall.arg6, argsForCall.arg7, argsForCall.arg8, argsForCall.arg9
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
 }
 
 func (fake *Support) ExecuteReturns(result1 *peer.Response, result2 *peer.ChaincodeEvent, result3 error) {
@@ -496,23 +389,19 @@ func (fake *Support) ExecuteReturnsOnCall(i int, result1 *peer.Response, result2
 	}{result1, result2, result3}
 }
 
-func (fake *Support) ExecuteLegacyInit(arg1 *ccprovider.TransactionParams, arg2 string, arg3 string, arg4 string, arg5 string, arg6 *peer.SignedProposal, arg7 *peer.Proposal, arg8 *peer.ChaincodeDeploymentSpec) (*peer.Response, *peer.ChaincodeEvent, error) {
+func (fake *Support) ExecuteLegacyInit(arg1 *ccprovider.TransactionParams, arg2 string, arg3 string, arg4 *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error) {
 	fake.executeLegacyInitMutex.Lock()
 	ret, specificReturn := fake.executeLegacyInitReturnsOnCall[len(fake.executeLegacyInitArgsForCall)]
 	fake.executeLegacyInitArgsForCall = append(fake.executeLegacyInitArgsForCall, struct {
 		arg1 *ccprovider.TransactionParams
 		arg2 string
 		arg3 string
-		arg4 string
-		arg5 string
-		arg6 *peer.SignedProposal
-		arg7 *peer.Proposal
-		arg8 *peer.ChaincodeDeploymentSpec
-	}{arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8})
-	fake.recordInvocation("ExecuteLegacyInit", []interface{}{arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8})
+		arg4 *peer.ChaincodeInput
+	}{arg1, arg2, arg3, arg4})
+	fake.recordInvocation("ExecuteLegacyInit", []interface{}{arg1, arg2, arg3, arg4})
 	fake.executeLegacyInitMutex.Unlock()
 	if fake.ExecuteLegacyInitStub != nil {
-		return fake.ExecuteLegacyInitStub(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+		return fake.ExecuteLegacyInitStub(arg1, arg2, arg3, arg4)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2, ret.result3
@@ -527,17 +416,17 @@ func (fake *Support) ExecuteLegacyInitCallCount() int {
 	return len(fake.executeLegacyInitArgsForCall)
 }
 
-func (fake *Support) ExecuteLegacyInitCalls(stub func(*ccprovider.TransactionParams, string, string, string, string, *peer.SignedProposal, *peer.Proposal, *peer.ChaincodeDeploymentSpec) (*peer.Response, *peer.ChaincodeEvent, error)) {
+func (fake *Support) ExecuteLegacyInitCalls(stub func(*ccprovider.TransactionParams, string, string, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)) {
 	fake.executeLegacyInitMutex.Lock()
 	defer fake.executeLegacyInitMutex.Unlock()
 	fake.ExecuteLegacyInitStub = stub
 }
 
-func (fake *Support) ExecuteLegacyInitArgsForCall(i int) (*ccprovider.TransactionParams, string, string, string, string, *peer.SignedProposal, *peer.Proposal, *peer.ChaincodeDeploymentSpec) {
+func (fake *Support) ExecuteLegacyInitArgsForCall(i int) (*ccprovider.TransactionParams, string, string, *peer.ChaincodeInput) {
 	fake.executeLegacyInitMutex.RLock()
 	defer fake.executeLegacyInitMutex.RUnlock()
 	argsForCall := fake.executeLegacyInitArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4, argsForCall.arg5, argsForCall.arg6, argsForCall.arg7, argsForCall.arg8
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
 }
 
 func (fake *Support) ExecuteLegacyInitReturns(result1 *peer.Response, result2 *peer.ChaincodeEvent, result3 error) {
@@ -630,69 +519,6 @@ func (fake *Support) GetChaincodeDefinitionReturnsOnCall(i int, result1 ccprovid
 	}
 	fake.getChaincodeDefinitionReturnsOnCall[i] = struct {
 		result1 ccprovider.ChaincodeDefinition
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *Support) GetChaincodeDeploymentSpecFS(arg1 *peer.ChaincodeDeploymentSpec) (*peer.ChaincodeDeploymentSpec, error) {
-	fake.getChaincodeDeploymentSpecFSMutex.Lock()
-	ret, specificReturn := fake.getChaincodeDeploymentSpecFSReturnsOnCall[len(fake.getChaincodeDeploymentSpecFSArgsForCall)]
-	fake.getChaincodeDeploymentSpecFSArgsForCall = append(fake.getChaincodeDeploymentSpecFSArgsForCall, struct {
-		arg1 *peer.ChaincodeDeploymentSpec
-	}{arg1})
-	fake.recordInvocation("GetChaincodeDeploymentSpecFS", []interface{}{arg1})
-	fake.getChaincodeDeploymentSpecFSMutex.Unlock()
-	if fake.GetChaincodeDeploymentSpecFSStub != nil {
-		return fake.GetChaincodeDeploymentSpecFSStub(arg1)
-	}
-	if specificReturn {
-		return ret.result1, ret.result2
-	}
-	fakeReturns := fake.getChaincodeDeploymentSpecFSReturns
-	return fakeReturns.result1, fakeReturns.result2
-}
-
-func (fake *Support) GetChaincodeDeploymentSpecFSCallCount() int {
-	fake.getChaincodeDeploymentSpecFSMutex.RLock()
-	defer fake.getChaincodeDeploymentSpecFSMutex.RUnlock()
-	return len(fake.getChaincodeDeploymentSpecFSArgsForCall)
-}
-
-func (fake *Support) GetChaincodeDeploymentSpecFSCalls(stub func(*peer.ChaincodeDeploymentSpec) (*peer.ChaincodeDeploymentSpec, error)) {
-	fake.getChaincodeDeploymentSpecFSMutex.Lock()
-	defer fake.getChaincodeDeploymentSpecFSMutex.Unlock()
-	fake.GetChaincodeDeploymentSpecFSStub = stub
-}
-
-func (fake *Support) GetChaincodeDeploymentSpecFSArgsForCall(i int) *peer.ChaincodeDeploymentSpec {
-	fake.getChaincodeDeploymentSpecFSMutex.RLock()
-	defer fake.getChaincodeDeploymentSpecFSMutex.RUnlock()
-	argsForCall := fake.getChaincodeDeploymentSpecFSArgsForCall[i]
-	return argsForCall.arg1
-}
-
-func (fake *Support) GetChaincodeDeploymentSpecFSReturns(result1 *peer.ChaincodeDeploymentSpec, result2 error) {
-	fake.getChaincodeDeploymentSpecFSMutex.Lock()
-	defer fake.getChaincodeDeploymentSpecFSMutex.Unlock()
-	fake.GetChaincodeDeploymentSpecFSStub = nil
-	fake.getChaincodeDeploymentSpecFSReturns = struct {
-		result1 *peer.ChaincodeDeploymentSpec
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *Support) GetChaincodeDeploymentSpecFSReturnsOnCall(i int, result1 *peer.ChaincodeDeploymentSpec, result2 error) {
-	fake.getChaincodeDeploymentSpecFSMutex.Lock()
-	defer fake.getChaincodeDeploymentSpecFSMutex.Unlock()
-	fake.GetChaincodeDeploymentSpecFSStub = nil
-	if fake.getChaincodeDeploymentSpecFSReturnsOnCall == nil {
-		fake.getChaincodeDeploymentSpecFSReturnsOnCall = make(map[int]struct {
-			result1 *peer.ChaincodeDeploymentSpec
-			result2 error
-		})
-	}
-	fake.getChaincodeDeploymentSpecFSReturnsOnCall[i] = struct {
-		result1 *peer.ChaincodeDeploymentSpec
 		result2 error
 	}{result1, result2}
 }
@@ -1191,8 +1017,6 @@ func (fake *Support) Invocations() map[string][][]interface{} {
 	defer fake.invocationsMutex.RUnlock()
 	fake.checkACLMutex.RLock()
 	defer fake.checkACLMutex.RUnlock()
-	fake.checkInstantiationPolicyMutex.RLock()
-	defer fake.checkInstantiationPolicyMutex.RUnlock()
 	fake.endorseWithPluginMutex.RLock()
 	defer fake.endorseWithPluginMutex.RUnlock()
 	fake.executeMutex.RLock()
@@ -1201,8 +1025,6 @@ func (fake *Support) Invocations() map[string][][]interface{} {
 	defer fake.executeLegacyInitMutex.RUnlock()
 	fake.getChaincodeDefinitionMutex.RLock()
 	defer fake.getChaincodeDefinitionMutex.RUnlock()
-	fake.getChaincodeDeploymentSpecFSMutex.RLock()
-	defer fake.getChaincodeDeploymentSpecFSMutex.RUnlock()
 	fake.getDeployedCCInfoProviderMutex.RLock()
 	defer fake.getDeployedCCInfoProviderMutex.RUnlock()
 	fake.getHistoryQueryExecutorMutex.RLock()

@@ -28,9 +28,6 @@ import (
 
 type SystemChaincodeProvider interface {
 	
-	IsSysCC(name string) bool
-
-	
 	
 	
 	

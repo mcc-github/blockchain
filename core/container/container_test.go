@@ -7,10 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package container_test
 
 import (
+	"bytes"
+	"io/ioutil"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/container/mock"
@@ -20,19 +23,31 @@ import (
 var _ = Describe("Container", func() {
 	Describe("Router", func() {
 		var (
-			fakeDockerVM   *mock.VM
-			fakeExternalVM *mock.VM
-			fakeInstance   *mock.Instance
-			router         *container.Router
+			fakeDockerVM        *mock.VM
+			fakeExternalVM      *mock.VM
+			fakePackageProvider *mock.PackageProvider
+			fakeInstance        *mock.Instance
+			router              *container.Router
 		)
 
 		BeforeEach(func() {
 			fakeDockerVM = &mock.VM{}
 			fakeExternalVM = &mock.VM{}
 			fakeInstance = &mock.Instance{}
+			fakePackageProvider = &mock.PackageProvider{}
+			fakePackageProvider.GetChaincodePackageReturns(
+				&persistence.ChaincodePackageMetadata{
+					Type: "package-type",
+					Path: "package-path",
+				},
+				ioutil.NopCloser(bytes.NewBuffer([]byte("code-bytes"))),
+				nil,
+			)
+
 			router = &container.Router{
-				DockerVM:   fakeDockerVM,
-				ExternalVM: fakeExternalVM,
+				DockerVM:        fakeDockerVM,
+				ExternalVM:      fakeExternalVM,
+				PackageProvider: fakePackageProvider,
 			}
 		})
 
@@ -42,28 +57,31 @@ var _ = Describe("Container", func() {
 			})
 
 			It("passes through to the external impl", func() {
-				err := router.Build(
-					&ccprovider.ChaincodeContainerInfo{
-						PackageID: "stop:name",
-						Type:      "type",
-						Path:      "path",
-						Name:      "name",
-						Version:   "version",
-					},
-					[]byte("code-bytes"),
-				)
+				err := router.Build("package-id")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(fakeDockerVM.BuildCallCount()).To(Equal(0))
 				Expect(fakeExternalVM.BuildCallCount()).To(Equal(1))
-				ccci, codePackage := fakeExternalVM.BuildArgsForCall(0)
-				Expect(ccci).To(Equal(&ccprovider.ChaincodeContainerInfo{
-					PackageID: "stop:name",
-					Type:      "type",
-					Path:      "path",
-					Name:      "name",
-					Version:   "version",
+				ccid, md, codeStream := fakeExternalVM.BuildArgsForCall(0)
+				Expect(ccid).To(Equal("package-id"))
+				Expect(md).To(Equal(&persistence.ChaincodePackageMetadata{
+					Type: "package-type",
+					Path: "package-path",
 				}))
+				codePackage, err := ioutil.ReadAll(codeStream)
+				Expect(err).NotTo(HaveOccurred())
 				Expect(codePackage).To(Equal([]byte("code-bytes")))
+			})
+
+			Context("when the package provider returns an error", func() {
+				BeforeEach(func() {
+					fakePackageProvider.GetChaincodePackageReturns(nil, nil, errors.New("fake-package-error"))
+				})
+
+				It("wraps and returns the error", func() {
+					err := router.Build("package-id")
+
+					Expect(err).To(MatchError("get chaincode package for external build failed: fake-package-error"))
+				})
 			})
 
 			Context("when the external impl returns an error", func() {
@@ -73,44 +91,40 @@ var _ = Describe("Container", func() {
 				})
 
 				It("falls back to the docker impl", func() {
-					err := router.Build(
-						&ccprovider.ChaincodeContainerInfo{
-							PackageID: "stop:name",
-							Type:      "type",
-							Path:      "path",
-							Name:      "name",
-							Version:   "version",
-						},
-						[]byte("code-bytes"),
-					)
+					err := router.Build("package-id")
 					Expect(err).To(MatchError("failed external (fake-external-error) and docker build: fake-docker-error"))
 					Expect(fakeExternalVM.BuildCallCount()).To(Equal(1))
 					Expect(fakeDockerVM.BuildCallCount()).To(Equal(1))
-					ccci, codePackage := fakeDockerVM.BuildArgsForCall(0)
-					Expect(ccci).To(Equal(&ccprovider.ChaincodeContainerInfo{
-						PackageID: "stop:name",
-						Type:      "type",
-						Path:      "path",
-						Name:      "name",
-						Version:   "version",
+					ccid, md, codeStream := fakeDockerVM.BuildArgsForCall(0)
+					Expect(ccid).To(Equal("package-id"))
+					Expect(md).To(Equal(&persistence.ChaincodePackageMetadata{
+						Type: "package-type",
+						Path: "package-path",
 					}))
+					codePackage, err := ioutil.ReadAll(codeStream)
+					Expect(err).NotTo(HaveOccurred())
 					Expect(codePackage).To(Equal([]byte("code-bytes")))
 				})
+
+				Context("when the package provider returns an error", func() {
+					BeforeEach(func() {
+						fakePackageProvider.GetChaincodePackageReturnsOnCall(1, nil, nil, errors.New("fake-package-error"))
+					})
+
+					It("wraps and returns the error", func() {
+						err := router.Build("package-id")
+
+						Expect(err).To(MatchError("get chaincode package for docker build failed: fake-package-error"))
+					})
+				})
+
 			})
 		})
 
 		Describe("Post-build operations", func() {
 			BeforeEach(func() {
 				fakeExternalVM.BuildReturns(fakeInstance, nil)
-				err := router.Build(&ccprovider.ChaincodeContainerInfo{
-					PackageID: "fake-id",
-					Type:      "type",
-					Path:      "path",
-					Name:      "name",
-					Version:   "version",
-				},
-					[]byte("code-bytes"),
-				)
+				err := router.Build("fake-id")
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -121,7 +135,7 @@ var _ = Describe("Container", func() {
 
 				It("passes through to the docker impl", func() {
 					err := router.Start(
-						ccintf.CCID("fake-id"),
+						"fake-id",
 						&ccintf.PeerConnection{
 							Address: "peer-address",
 							TLSConfig: &ccintf.TLSConfig{
@@ -147,7 +161,7 @@ var _ = Describe("Container", func() {
 				Context("when the chaincode has not yet been built", func() {
 					It("returns an error", func() {
 						err := router.Start(
-							ccintf.CCID("missing-name"),
+							"missing-name",
 							&ccintf.PeerConnection{
 								Address: "peer-address",
 							},
@@ -163,14 +177,14 @@ var _ = Describe("Container", func() {
 				})
 
 				It("passes through to the docker impl", func() {
-					err := router.Stop(ccintf.CCID("fake-id"))
+					err := router.Stop("fake-id")
 					Expect(err).To(MatchError("Boo"))
 					Expect(fakeInstance.StopCallCount()).To(Equal(1))
 				})
 
 				Context("when the chaincode has not yet been built", func() {
 					It("returns an error", func() {
-						err := router.Stop(ccintf.CCID("missing-name"))
+						err := router.Stop("missing-name")
 						Expect(err).To(MatchError("instance has not yet been built, cannot be stopped"))
 					})
 				})
@@ -183,7 +197,7 @@ var _ = Describe("Container", func() {
 
 				It("passes through to the docker impl", func() {
 					res, err := router.Wait(
-						ccintf.CCID("fake-id"),
+						"fake-id",
 					)
 					Expect(res).To(Equal(7))
 					Expect(err).To(MatchError("fake-wait-error"))
@@ -192,7 +206,7 @@ var _ = Describe("Container", func() {
 
 				Context("when the chaincode has not yet been built", func() {
 					It("returns an error", func() {
-						_, err := router.Wait(ccintf.CCID("missing-name"))
+						_, err := router.Wait("missing-name")
 						Expect(err).To(MatchError("instance has not yet been built, cannot wait"))
 					})
 				})

@@ -339,7 +339,7 @@ func TestGetTxCCInstance(t *testing.T) {
 	assert.NoError(t, err)
 
 	
-	payload, err := protoutil.GetPayload(env)
+	payload, err := protoutil.UnmarshalPayload(env.Payload)
 	assert.NoError(t, err)
 
 	expectInvokeCCIns := &sysccprovider.ChaincodeInstance{

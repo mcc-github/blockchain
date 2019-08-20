@@ -10,13 +10,14 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
+	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
-
 	"github.com/pkg/errors"
 )
 
@@ -51,17 +52,23 @@ func NewSystemChannel(support StandardChannelSupport, templator ChannelConfigTem
 
 
 func CreateSystemChannelFilters(
+	config localconfig.TopLevel,
 	chainCreator ChainCreator,
 	ledgerResources channelconfig.Resources,
 	validator MetadataValidator,
 ) *RuleSet {
-	return NewRuleSet([]Rule{
+	rules := []Rule{
 		EmptyRejectRule,
-		NewExpirationRejectRule(ledgerResources),
 		NewSizeFilter(ledgerResources),
 		NewSigFilter(policies.ChannelWriters, policies.ChannelOrdererWriters, ledgerResources),
 		NewSystemChannelFilter(ledgerResources, chainCreator, validator),
-	})
+	}
+	if !config.General.Authentication.NoExpirationChecks {
+		expirationRule := NewExpirationRejectRule(ledgerResources)
+		
+		rules = append(rules[:2], append([]Rule{expirationRule}, rules[2:]...)...)
+	}
+	return NewRuleSet(rules)
 }
 
 
@@ -362,7 +369,7 @@ func (dt *DefaultTemplator) NewChannelConfig(envConfigUpdate *cb.Envelope) (chan
 
 	bundle, err := channelconfig.NewBundle(channelHeader.ChannelId, &cb.Config{
 		ChannelGroup: channelGroup,
-	})
+	}, factory.GetDefault())
 
 	if err != nil {
 		return nil, err

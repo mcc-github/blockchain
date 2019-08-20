@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package ccprovider
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -18,7 +17,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
-	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger"
 	pb "github.com/mcc-github/blockchain/protos/peer"
@@ -90,8 +88,8 @@ func isPrintable(name string) bool {
 }
 
 
-func GetChaincodePackageFromPath(ccname string, ccversion string, ccInstallPath string) ([]byte, error) {
-	path := fmt.Sprintf("%s/%s.%s", ccInstallPath, ccname, ccversion)
+func GetChaincodePackageFromPath(ccNameVersion string, ccInstallPath string) ([]byte, error) {
+	path := fmt.Sprintf("%s/%s", ccInstallPath, strings.ReplaceAll(ccNameVersion, ":", "."))
 	var ccbytes []byte
 	var err error
 	if ccbytes, err = ioutil.ReadFile(path); err != nil {
@@ -113,7 +111,7 @@ func ChaincodePackageExists(ccname string, ccversion string) (bool, error) {
 
 type CCCacheSupport interface {
 	
-	GetChaincode(ccname string, ccversion string) (CCPackage, error)
+	GetChaincode(ccNameVersion string) (CCPackage, error)
 }
 
 
@@ -122,27 +120,35 @@ type CCInfoFSImpl struct{}
 
 
 
-func (cifs *CCInfoFSImpl) GetChaincode(ccname string, ccversion string) (CCPackage, error) {
-	return cifs.GetChaincodeFromPath(ccname, ccversion, chaincodeInstallPath)
+func (cifs *CCInfoFSImpl) GetChaincode(ccNameVersion string) (CCPackage, error) {
+	return cifs.GetChaincodeFromPath(ccNameVersion, chaincodeInstallPath)
 }
 
-func (cifs *CCInfoFSImpl) GetChaincodeCodePackage(ccname, ccversion string) ([]byte, error) {
-	ccpack, err := cifs.GetChaincode(ccname, ccversion)
+func (cifs *CCInfoFSImpl) GetChaincodeCodePackage(ccNameVersion string) ([]byte, error) {
+	ccpack, err := cifs.GetChaincode(ccNameVersion)
 	if err != nil {
 		return nil, err
 	}
 	return ccpack.GetDepSpec().CodePackage, nil
 }
 
+func (cifs *CCInfoFSImpl) GetChaincodeDepSpec(ccNameVersion string) (*pb.ChaincodeDeploymentSpec, error) {
+	ccpack, err := cifs.GetChaincode(ccNameVersion)
+	if err != nil {
+		return nil, err
+	}
+	return ccpack.GetDepSpec(), nil
+}
 
-func (*CCInfoFSImpl) GetChaincodeFromPath(ccname string, ccversion string, path string) (CCPackage, error) {
+
+func (*CCInfoFSImpl) GetChaincodeFromPath(ccNameVersion string, path string) (CCPackage, error) {
 	
 	cccdspack := &CDSPackage{}
-	_, _, err := cccdspack.InitFromPath(ccname, ccversion, path)
+	_, _, err := cccdspack.InitFromPath(ccNameVersion, path)
 	if err != nil {
 		
 		ccscdspack := &SignedCDSPackage{}
-		_, _, err = ccscdspack.InitFromPath(ccname, ccversion, path)
+		_, _, err = ccscdspack.InitFromPath(ccNameVersion, path)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +185,7 @@ func (*CCInfoFSImpl) PutChaincode(depSpec *pb.ChaincodeDeploymentSpec) (CCPackag
 type DirEnumerator func(string) ([]os.FileInfo, error)
 
 
-type ChaincodeExtractor func(ccname string, ccversion string, path string) (CCPackage, error)
+type ChaincodeExtractor func(ccNameVersion string, path string) (CCPackage, error)
 
 
 func (cifs *CCInfoFSImpl) ListInstalledChaincodes(dir string, ls DirEnumerator, ccFromPath ChaincodeExtractor) ([]chaincode.InstalledChaincode, error) {
@@ -208,7 +214,7 @@ func (cifs *CCInfoFSImpl) ListInstalledChaincodes(dir string, ls DirEnumerator, 
 		ccName := f.Name()[:i]      
 		ccVersion := f.Name()[i+1:] 
 
-		ccPackage, err := ccFromPath(ccName, ccVersion, dir)
+		ccPackage, err := ccFromPath(ccName+":"+ccVersion, dir)
 		if err != nil {
 			ccproviderLogger.Warning("Failed obtaining chaincode information about", ccName, ccVersion, ":", err)
 			return nil, errors.Wrapf(err, "failed obtaining information about %s, version %s", ccName, ccVersion)
@@ -232,8 +238,8 @@ var ccInfoFSProvider = &CCInfoFSImpl{}
 var ccInfoCache = NewCCInfoCache(ccInfoFSProvider)
 
 
-func GetChaincodeFromFS(ccname string, ccversion string) (CCPackage, error) {
-	return ccInfoFSProvider.GetChaincode(ccname, ccversion)
+func GetChaincodeFromFS(ccNameVersion string) (CCPackage, error) {
+	return ccInfoFSProvider.GetChaincode(ccNameVersion)
 }
 
 
@@ -245,36 +251,9 @@ func PutChaincodeIntoFS(depSpec *pb.ChaincodeDeploymentSpec) error {
 }
 
 
-func GetChaincodeData(ccname string, ccversion string) (*ChaincodeData, error) {
-	ccproviderLogger.Debugf("Getting chaincode data for <%s, %s> from cache", ccname, ccversion)
-	return ccInfoCache.GetChaincodeData(ccname, ccversion)
-}
-
-func CheckInstantiationPolicy(name, version string, cdLedger *ChaincodeData) error {
-	ccdata, err := GetChaincodeData(name, version)
-	if err != nil {
-		return err
-	}
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	if ccdata.InstantiationPolicy != nil {
-		if !bytes.Equal(ccdata.InstantiationPolicy, cdLedger.InstantiationPolicy) {
-			return fmt.Errorf("Instantiation policy mismatch for cc %s/%s", name, version)
-		}
-	}
-
-	return nil
+func GetChaincodeData(ccNameVersion string) (*ChaincodeData, error) {
+	ccproviderLogger.Debugf("Getting chaincode data for <%s> from cache", ccNameVersion)
+	return ccInfoCache.GetChaincodeData(ccNameVersion)
 }
 
 
@@ -342,7 +321,7 @@ func GetInstalledChaincodes() (*pb.ChaincodeQueryResponse, error) {
 		if len(fileNameArray) == 2 {
 			ccname := fileNameArray[0]
 			ccversion := fileNameArray[1]
-			ccpack, err := GetChaincodeFromFS(ccname, ccversion)
+			ccpack, err := GetChaincodeFromFS(ccname + ":" + ccversion)
 			if err != nil {
 				
 				
@@ -378,42 +357,11 @@ func GetInstalledChaincodes() (*pb.ChaincodeQueryResponse, error) {
 }
 
 
-type CCContext struct {
-	
-	Name string
-
-	
-	Version string
-
-	
-	ID []byte
-
-	
-	
-	InitRequired bool
-
-	
-	SystemCC bool
-}
-
-
 
 
 type ChaincodeDefinition interface {
 	
-	CCName() string
-
-	
-	Hash() []byte
-
-	
 	CCVersion() string
-
-	
-	
-	
-	
-	Validation() (string, []byte)
 
 	
 	
@@ -421,6 +369,9 @@ type ChaincodeDefinition interface {
 
 	
 	RequiresInit() bool
+
+	
+	ChaincodeID() string
 }
 
 
@@ -493,6 +444,11 @@ func (cd *ChaincodeData) RequiresInit() bool {
 }
 
 
+func (cd *ChaincodeData) ChaincodeID() string {
+	return cd.Name + ":" + cd.Version
+}
+
+
 
 
 func (cd *ChaincodeData) Reset() { *cd = ChaincodeData{} }
@@ -502,18 +458,6 @@ func (cd *ChaincodeData) String() string { return proto.CompactTextString(cd) }
 
 
 func (*ChaincodeData) ProtoMessage() {}
-
-
-type ChaincodeContainerInfo struct {
-	PackageID persistence.PackageID
-	Path      string
-	Type      string
-
-	
-	
-	Name    string
-	Version string
-}
 
 
 
@@ -530,15 +474,4 @@ type TransactionParams struct {
 
 	
 	ProposalDecorations map[string][]byte
-}
-
-func DeploymentSpecToChaincodeContainerInfo(cds *pb.ChaincodeDeploymentSpec, systemCC bool) *ChaincodeContainerInfo {
-	cci := &ChaincodeContainerInfo{
-		Name:      cds.ChaincodeSpec.ChaincodeId.Name,
-		Version:   cds.ChaincodeSpec.ChaincodeId.Version,
-		Path:      cds.ChaincodeSpec.ChaincodeId.Path,
-		Type:      cds.ChaincodeSpec.Type.String(),
-		PackageID: persistence.PackageID(cds.ChaincodeSpec.ChaincodeId.Name + ":" + cds.ChaincodeSpec.ChaincodeId.Version),
-	}
-	return cci
 }

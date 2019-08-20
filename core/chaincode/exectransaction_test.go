@@ -28,6 +28,7 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/bccsp/factory"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -36,9 +37,10 @@ import (
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
+	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
 	cm "github.com/mcc-github/blockchain/core/chaincode/mock"
-	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
+	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
@@ -47,7 +49,6 @@ import (
 	"github.com/mcc-github/blockchain/core/config"
 	"github.com/mcc-github/blockchain/core/container"
 	"github.com/mcc-github/blockchain/core/container/dockercontroller"
-	"github.com/mcc-github/blockchain/core/container/externalbuilders"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
@@ -72,12 +73,12 @@ import (
 
 
 func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSupport, func(), error) {
-	peerInstance := &peer.Peer{}
-	sccp := &scc.Provider{
-		Peer:      peerInstance,
-		Whitelist: scc.GlobalWhitelist(),
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create cryptoProvider %s", err)
 	}
 
+	peerInstance := &peer.Peer{CryptoProvider: cryptoProvider}
 	grpcServer := grpc.NewServer()
 
 	lis, err := net.Listen("tcp", ":0")
@@ -109,21 +110,20 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 	ca, _ := tlsgen.NewCA()
 	pr := platforms.NewRegistry(&golang.Platform{})
 	mockAclProvider := &mock.ACLProvider{}
-	lsccImpl := lscc.New(sccp, mockAclProvider, peerInstance.GetMSPIDs, newPolicyChecker(peerInstance))
+	builtinSCCs := map[string]struct{}{"lscc": {}}
+	lsccImpl := lscc.New(builtinSCCs, &lscc.PeerShim{Peer: peerInstance}, mockAclProvider, peerInstance.GetMSPIDs, newPolicyChecker(peerInstance))
 	ml := &cm.Lifecycle{}
-	ml.ChaincodeContainerInfoStub = func(_, name string, _ ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
+	ml.ChaincodeDefinitionStub = func(_, name string, _ ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error) {
 		switch name {
 		case "lscc":
-			return &ccprovider.ChaincodeContainerInfo{
-				Name:      "lscc",
-				Version:   util.GetSysCCVersion(),
-				PackageID: persistence.PackageID("lscc:" + util.GetSysCCVersion()),
+			return &lifecycle.LegacyDefinition{
+				Version:          "syscc",
+				ChaincodeIDField: "lscc.syscc",
 			}, nil
 		default:
-			return &ccprovider.ChaincodeContainerInfo{
-				Name:      name,
-				Version:   "0",
-				PackageID: persistence.PackageID(name + ":0"),
+			return &ccprovider.ChaincodeData{
+				Name:    name,
+				Version: "0",
 			}, nil
 		}
 	}
@@ -144,7 +144,6 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 	containerRuntime := &ContainerRuntime{
 		CACert: ca.CertBytes(),
 		ContainerRouter: &container.Router{
-			ExternalVM: &externalbuilders.Detector{},
 			DockerVM: &dockercontroller.DockerVM{
 				PeerID:       "",
 				NetworkID:    "",
@@ -155,6 +154,10 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 					Client:   client,
 				},
 			},
+			PackageProvider: &persistence.FallbackPackageLocator{
+				ChaincodePackageLocator: &persistence.ChaincodePackageLocator{},
+				LegacyCCPackageLocator:  &ccprovider.CCInfoFSImpl{},
+			},
 		},
 		PeerAddress: peerAddress,
 	}
@@ -162,11 +165,10 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 	metricsProviders := &disabled.Provider{}
 	chaincodeHandlerRegistry := NewHandlerRegistry(userRunsCC)
 	chaincodeLauncher := &RuntimeLauncher{
-		Metrics:         NewLaunchMetrics(metricsProviders),
-		PackageProvider: &PackageProviderWrapper{FS: &ccprovider.CCInfoFSImpl{}},
-		Registry:        chaincodeHandlerRegistry,
-		Runtime:         containerRuntime,
-		StartupTimeout:  globalConfig.StartupTimeout,
+		Metrics:        NewLaunchMetrics(metricsProviders),
+		Registry:       chaincodeHandlerRegistry,
+		Runtime:        containerRuntime,
+		StartupTimeout: globalConfig.StartupTimeout,
 	}
 	chaincodeSupport := &ChaincodeSupport{
 		ACLProvider: aclmgmt.NewACLProvider(
@@ -183,15 +185,13 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 		Lifecycle:              ml,
 		Peer:                   peerInstance,
 		Runtime:                containerRuntime,
-		SystemCCProvider:       sccp,
+		BuiltinSCCs:            builtinSCCs,
 		TotalQueryLimit:        globalConfig.TotalQueryLimit,
 		UserRunsCC:             userRunsCC,
 	}
 	pb.RegisterChaincodeSupportServer(grpcServer, chaincodeSupport)
 
-	sccp.RegisterSysCC(lsccImpl)
-
-	sccp.DeploySysCCs(chaincodeSupport)
+	scc.DeploySysCC(lsccImpl, chaincodeSupport)
 
 	for _, id := range chainIDs {
 		if err = peer.CreateMockChannel(peerInstance, id); err != nil {
@@ -252,8 +252,7 @@ func endTxSimulationCDS(peerInstance *peer.Peer, chainID string, txsim ledger.Tx
 
 	
 	lsccid := &pb.ChaincodeID{
-		Name:    "lscc",
-		Version: util.GetSysCCVersion(),
+		Name: "lscc",
 	}
 
 	
@@ -400,8 +399,6 @@ func getDeployLSCCSpec(chainID string, cds *pb.ChaincodeDeploymentSpec, ccp *com
 			return nil, err
 		}
 	}
-	sysCCVers := util.GetSysCCVersion()
-
 	invokeInput := &pb.ChaincodeInput{Args: [][]byte{
 		[]byte("deploy"), 
 		[]byte(chainID),  
@@ -417,7 +414,7 @@ func getDeployLSCCSpec(chainID string, cds *pb.ChaincodeDeploymentSpec, ccp *com
 	lsccSpec := &pb.ChaincodeInvocationSpec{
 		ChaincodeSpec: &pb.ChaincodeSpec{
 			Type:        pb.ChaincodeSpec_GOLANG,
-			ChaincodeId: &pb.ChaincodeID{Name: "lscc", Version: sysCCVers},
+			ChaincodeId: &pb.ChaincodeID{Name: "lscc"},
 			Input:       invokeInput,
 		}}
 
@@ -425,26 +422,26 @@ func getDeployLSCCSpec(chainID string, cds *pb.ChaincodeDeploymentSpec, ccp *com
 }
 
 
-func deploy(chainID string, cccid *ccprovider.CCContext, spec *pb.ChaincodeSpec, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (resp *pb.Response, err error) {
+func deploy(chainID string, ccContext *CCContext, spec *pb.ChaincodeSpec, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (resp *pb.Response, err error) {
 	
 	cdDeploymentSpec, err := getDeploymentSpec(spec)
 	if err != nil {
 		return nil, err
 	}
-	return deploy2(chainID, cccid, cdDeploymentSpec, nil, blockNumber, chaincodeSupport)
+	return deploy2(chainID, ccContext, cdDeploymentSpec, nil, blockNumber, chaincodeSupport)
 }
 
-func deployWithCollectionConfigs(chainID string, cccid *ccprovider.CCContext, spec *pb.ChaincodeSpec,
+func deployWithCollectionConfigs(chainID string, ccContext *CCContext, spec *pb.ChaincodeSpec,
 	collectionConfigPkg *common.CollectionConfigPackage, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (resp *pb.Response, err error) {
 	
 	cdDeploymentSpec, err := getDeploymentSpec(spec)
 	if err != nil {
 		return nil, err
 	}
-	return deploy2(chainID, cccid, cdDeploymentSpec, collectionConfigPkg, blockNumber, chaincodeSupport)
+	return deploy2(chainID, ccContext, cdDeploymentSpec, collectionConfigPkg, blockNumber, chaincodeSupport)
 }
 
-func deploy2(chainID string, cccid *ccprovider.CCContext, chaincodeDeploymentSpec *pb.ChaincodeDeploymentSpec,
+func deploy2(chainID string, ccContext *CCContext, chaincodeDeploymentSpec *pb.ChaincodeDeploymentSpec,
 	collectionConfigPkg *common.CollectionConfigPackage, blockNumber uint64, chaincodeSupport *ChaincodeSupport) (resp *pb.Response, err error) {
 	cis, err := getDeployLSCCSpec(chainID, chaincodeDeploymentSpec, collectionConfigPkg)
 	if err != nil {
@@ -480,18 +477,12 @@ func deploy2(chainID string, cccid *ccprovider.CCContext, chaincodeDeploymentSpe
 	
 	ccprovider.PutChaincodeIntoFS(chaincodeDeploymentSpec)
 
-	sysCCVers := util.GetSysCCVersion()
-	lsccid := &ccprovider.CCContext{
-		Name:    cis.ChaincodeSpec.ChaincodeId.Name,
-		Version: sysCCVers,
-	}
-
 	
-	if _, _, err = chaincodeSupport.Execute(txParams, lsccid, cis.ChaincodeSpec.Input); err != nil {
+	if _, _, err = chaincodeSupport.Execute(txParams, "lscc", cis.ChaincodeSpec.Input); err != nil {
 		return nil, fmt.Errorf("Error deploying chaincode (1): %s", err)
 	}
 
-	if resp, _, err = chaincodeSupport.ExecuteLegacyInit(txParams, cccid, chaincodeDeploymentSpec); err != nil {
+	if resp, _, err = chaincodeSupport.ExecuteLegacyInit(txParams, ccContext.Name, ccContext.Version, chaincodeDeploymentSpec.ChaincodeSpec.Input); err != nil {
 		return nil, fmt.Errorf("Error deploying chaincode(2): %s", err)
 	}
 
@@ -530,10 +521,6 @@ func invokeWithVersion(chainID string, version string, spec *pb.ChaincodeSpec, b
 		creator = []byte("Admin")
 	}
 	sprop, prop := protoutil.MockSignedEndorserProposalOrPanic(chainID, spec, creator, []byte("msg1"))
-	cccid := &ccprovider.CCContext{
-		Name:    cdInvocationSpec.ChaincodeSpec.ChaincodeId.Name,
-		Version: version,
-	}
 	var resp *pb.Response
 	txParams := &ccprovider.TransactionParams{
 		TxID:                 uuid,
@@ -544,7 +531,7 @@ func invokeWithVersion(chainID string, version string, spec *pb.ChaincodeSpec, b
 		Proposal:             prop,
 	}
 
-	resp, ccevt, err = chaincodeSupport.Execute(txParams, cccid, cdInvocationSpec.ChaincodeSpec.Input)
+	resp, ccevt, err = chaincodeSupport.Execute(txParams, cdInvocationSpec.ChaincodeSpec.ChaincodeId.Name, cdInvocationSpec.ChaincodeSpec.Input)
 	if err != nil {
 		return nil, uuid, nil, fmt.Errorf("Error invoking chaincode: %s", err)
 	}
@@ -563,7 +550,7 @@ func closeListenerAndSleep(l net.Listener) {
 }
 
 
-func checkFinalState(peerInstance *peer.Peer, chainID string, cccid *ccprovider.CCContext, a int, b int) error {
+func checkFinalState(peerInstance *peer.Peer, chainID string, ccContext *CCContext, a int, b int) error {
 	txid := util.GenerateUUID()
 	txsim, _, err := startTxSimulation(peerInstance, chainID, txid)
 	if err != nil {
@@ -572,11 +559,11 @@ func checkFinalState(peerInstance *peer.Peer, chainID string, cccid *ccprovider.
 
 	defer txsim.Done()
 
-	cName := cccid.Name + ":" + cccid.Version
+	cName := ccContext.Name + ":" + ccContext.Version
 
 	
 	var Aval, Bval int
-	resbytes, resErr := txsim.GetState(cccid.Name, "a")
+	resbytes, resErr := txsim.GetState(ccContext.Name, "a")
 	if resErr != nil {
 		return fmt.Errorf("Error retrieving state from ledger for <%s>: %s", cName, resErr)
 	}
@@ -588,7 +575,7 @@ func checkFinalState(peerInstance *peer.Peer, chainID string, cccid *ccprovider.
 		return fmt.Errorf("Incorrect result. Aval %d != %d <%s>", Aval, a, cName)
 	}
 
-	resbytes, resErr = txsim.GetState(cccid.Name, "b")
+	resbytes, resErr = txsim.GetState(ccContext.Name, "b")
 	if resErr != nil {
 		return fmt.Errorf("Error retrieving state from ledger for <%s>: %s", cName, resErr)
 	}
@@ -633,8 +620,21 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 	initialA, initialB := 100, 200
 
 	
-	ml.ChaincodeDefinitionReturns(&cm.ChaincodeDefinition{}, nil)
-	_, cccid1, err := deployChaincode(
+	ml.ChaincodeDefinitionStub = func(_, name string, _ ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error) {
+		switch name {
+		case "lscc":
+			return &lifecycle.LegacyDefinition{
+				Version:          "syscc",
+				ChaincodeIDField: "lscc.syscc",
+			}, nil
+		default:
+			return &ccprovider.ChaincodeData{
+				Name:    name,
+				Version: "0",
+			}, nil
+		}
+	}
+	_, ccContext1, err := deployChaincode(
 		chaincode1Name,
 		"0",
 		pb.ChaincodeSpec_GOLANG,
@@ -644,7 +644,7 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 		nextBlockNumber1,
 		chaincodeSupport,
 	)
-	defer stopChaincode(cccid1, chaincodeSupport)
+	defer stopChaincode(ccContext1, chaincodeSupport)
 	require.NoErrorf(t, err, "error initializing chaincode %s: %s", chaincode1Name, err)
 	nextBlockNumber1++
 	time.Sleep(time.Second)
@@ -655,7 +655,7 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 	chaincode2Path := chaincodePassthruGolangPath
 
 	
-	_, cccid2, err := deployChaincode(
+	_, ccContext2, err := deployChaincode(
 		chaincode2Name,
 		chaincode2Version,
 		chaincode2Type,
@@ -665,7 +665,7 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 		nextBlockNumber1,
 		chaincodeSupport,
 	)
-	defer stopChaincode(cccid2, chaincodeSupport)
+	defer stopChaincode(ccContext2, chaincodeSupport)
 	require.NoErrorf(t, err, "Error initializing chaincode %s: %s", chaincode2Name, err)
 	nextBlockNumber1++
 	time.Sleep(time.Second)
@@ -679,7 +679,7 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 			Version: chaincode2Version,
 		},
 		Input: &pb.ChaincodeInput{
-			Args: util.ToChaincodeArgs(cccid1.Name, "invoke", "a", "b", "10", ""),
+			Args: util.ToChaincodeArgs(ccContext1.Name, "invoke", "a", "b", "10", ""),
 		},
 	}
 	_, _, _, err = invoke(channel, chaincode2InvokeSpec, nextBlockNumber1, []byte("Alice"), chaincodeSupport)
@@ -687,7 +687,7 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 	nextBlockNumber1++
 
 	
-	err = checkFinalState(peerInstance, channel, cccid1, initialA-10, initialB+10)
+	err = checkFinalState(peerInstance, channel, ccContext1, initialA-10, initialB+10)
 	require.NoErrorf(t, err, "incorrect final state after transaction for %s: %s", chaincode1Name, err)
 
 	
@@ -705,7 +705,7 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 	}
 
 	
-	_, cccid3, err := deployChaincode(
+	_, ccContext3, err := deployChaincode(
 		chaincode2Name,
 		chaincode2Version,
 		chaincode2Type,
@@ -715,7 +715,7 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 		nextBlockNumber2,
 		chaincodeSupport,
 	)
-	defer stopChaincode(cccid3, chaincodeSupport)
+	defer stopChaincode(ccContext3, chaincodeSupport)
 	require.NoErrorf(t, err, "error initializing chaincode %s/%s: %s", chaincode2Name, channel2, err)
 	nextBlockNumber2++
 	time.Sleep(time.Second)
@@ -727,28 +727,23 @@ func TestChaincodeInvokeChaincode(t *testing.T) {
 			Version: chaincode2Version,
 		},
 		Input: &pb.ChaincodeInput{
-			Args: util.ToChaincodeArgs(cccid1.Name, "invoke", "a", "b", "10", channel),
+			Args: util.ToChaincodeArgs(ccContext1.Name, "invoke", "a", "b", "10", channel),
 		},
 	}
 
 	
 	_, _, _, err = invoke(channel2, chaincode2InvokeSpec, nextBlockNumber2, []byte("Bob"), chaincodeSupport)
-	require.Errorf(t, err, "as Bob, invoking <%s/%s> via <%s/%s> should fail, but it succeeded.", cccid1.Name, channel, chaincode2Name, channel2)
+	require.Errorf(t, err, "as Bob, invoking <%s/%s> via <%s/%s> should fail, but it succeeded.", ccContext1.Name, channel, chaincode2Name, channel2)
 	assert.True(t, strings.Contains(err.Error(), "[Creator not recognized [Bob]]"))
 
 	
 	_, _, _, err = invoke(channel2, chaincode2InvokeSpec, nextBlockNumber2, []byte("Alice"), chaincodeSupport)
-	require.NoError(t, err, "as Alice, invoking <%s/%s> via <%s/%s> should should of succeeded, but it failed: %s", cccid1.Name, channel, chaincode2Name, channel2, err)
+	require.NoError(t, err, "as Alice, invoking <%s/%s> via <%s/%s> should should of succeeded, but it failed: %s", ccContext1.Name, channel, chaincode2Name, channel2, err)
 	nextBlockNumber2++
 }
 
-func stopChaincode(chaincodeCtx *ccprovider.CCContext, chaincodeSupport *ChaincodeSupport) {
-	chaincodeSupport.Runtime.Stop(&ccprovider.ChaincodeContainerInfo{
-		PackageID: persistence.PackageID(chaincodeCtx.Name + ":" + chaincodeCtx.Version),
-		Name:      chaincodeCtx.Name,
-		Version:   chaincodeCtx.Version,
-		Type:      "GOLANG",
-	})
+func stopChaincode(chaincodeCtx *CCContext, chaincodeSupport *ChaincodeSupport) {
+	chaincodeSupport.Runtime.Stop(chaincodeCtx.Name + ":" + chaincodeCtx.Version)
 }
 
 
@@ -763,7 +758,20 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 	}
 	defer cleanup()
 
-	ml.ChaincodeDefinitionReturns(&cm.ChaincodeDefinition{}, nil)
+	ml.ChaincodeDefinitionStub = func(_, name string, _ ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error) {
+		switch name {
+		case "lscc":
+			return &lifecycle.LegacyDefinition{
+				Version:          "syscc",
+				ChaincodeIDField: "lscc.syscc",
+			}, nil
+		default:
+			return &ccprovider.ChaincodeData{
+				Name:    name,
+				Version: "0",
+			}, nil
+		}
+	}
 
 	
 	cID1 := &pb.ChaincodeID{Name: "example02", Path: chaincodeExample02GolangPath, Version: "0"}
@@ -772,21 +780,15 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 
 	spec1 := &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID1, Input: &pb.ChaincodeInput{Args: args}}
 
-	cccid1 := &ccprovider.CCContext{
+	ccContext1 := &CCContext{
 		Name:    "example02",
 		Version: "0",
 	}
 
 	var nextBlockNumber uint64 = 1
-	defer chaincodeSupport.Runtime.Stop(&ccprovider.ChaincodeContainerInfo{
-		PackageID: persistence.PackageID(cID1.Name + ":" + cID1.Version),
-		Name:      cID1.Name,
-		Version:   cID1.Version,
-		Path:      cID1.Path,
-		Type:      "GOLANG",
-	})
+	defer chaincodeSupport.Runtime.Stop(cID1.Name + ":" + cID1.Version)
 
-	_, err = deploy(chainID, cccid1, spec1, nextBlockNumber, chaincodeSupport)
+	_, err = deploy(chainID, ccContext1, spec1, nextBlockNumber, chaincodeSupport)
 	nextBlockNumber++
 	ccID1 := spec1.ChaincodeId.Name
 	if err != nil {
@@ -804,19 +806,13 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 
 	spec2 := &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID2, Input: &pb.ChaincodeInput{Args: args}}
 
-	cccid2 := &ccprovider.CCContext{
+	ccContext2 := &CCContext{
 		Name:    "pthru",
 		Version: "0",
 	}
 
-	defer chaincodeSupport.Runtime.Stop(&ccprovider.ChaincodeContainerInfo{
-		PackageID: persistence.PackageID(cID2.Name + ":" + cID2.Version),
-		Name:      cID2.Name,
-		Version:   cID2.Version,
-		Path:      cID2.Path,
-		Type:      "GOLANG",
-	})
-	_, err = deploy(chainID, cccid2, spec2, nextBlockNumber, chaincodeSupport)
+	defer chaincodeSupport.Runtime.Stop(cID2.Name + ":" + cID2.Version)
+	_, err = deploy(chainID, ccContext2, spec2, nextBlockNumber, chaincodeSupport)
 	nextBlockNumber++
 	ccID2 := spec2.ChaincodeId.Name
 	if err != nil {
@@ -867,21 +863,15 @@ func TestChaincodeInit(t *testing.T) {
 
 	spec := &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
 
-	cccid := &ccprovider.CCContext{
-		Name:    "tmap",
+	ccContext := &CCContext{
+		Name:    "init_pvtdata",
 		Version: "0",
 	}
 
-	defer chaincodeSupport.Runtime.Stop(&ccprovider.ChaincodeContainerInfo{
-		PackageID: persistence.PackageID(cID.Name + ":" + cID.Version),
-		Name:      cID.Name,
-		Version:   cID.Version,
-		Path:      cID.Path,
-		Type:      "GOLANG",
-	})
+	defer chaincodeSupport.Runtime.Stop(cID.Name + ":" + cID.Version)
 
 	var nextBlockNumber uint64 = 1
-	_, err = deploy(chainID, cccid, spec, nextBlockNumber, chaincodeSupport)
+	_, err = deploy(chainID, ccContext, spec, nextBlockNumber, chaincodeSupport)
 	assert.Contains(t, err.Error(), "private data APIs are not allowed in chaincode Init")
 
 	url = "github.com/mcc-github/blockchain/core/chaincode/testdata/src/chaincodes/init_public_data"
@@ -892,12 +882,12 @@ func TestChaincodeInit(t *testing.T) {
 
 	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
 
-	cccid = &ccprovider.CCContext{
-		Name:    "tmap",
+	ccContext = &CCContext{
+		Name:    "init_public_data",
 		Version: "0",
 	}
 
-	resp, err := deploy(chainID, cccid, spec, nextBlockNumber, chaincodeSupport)
+	resp, err := deploy(chainID, ccContext, spec, nextBlockNumber, chaincodeSupport)
 	assert.NoError(t, err)
 	
 	
@@ -927,21 +917,15 @@ func TestQueries(t *testing.T) {
 
 	spec := &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
 
-	cccid := &ccprovider.CCContext{
+	ccContext := &CCContext{
 		Name:    "tmap",
 		Version: "0",
 	}
 
-	defer chaincodeSupport.Runtime.Stop(&ccprovider.ChaincodeContainerInfo{
-		PackageID: persistence.PackageID(cID.Name + ":" + cID.Version),
-		Name:      cID.Name,
-		Version:   cID.Version,
-		Path:      cID.Path,
-		Type:      "GOLANG",
-	})
+	defer chaincodeSupport.Runtime.Stop(cID.Name + ":" + cID.Version)
 
 	var nextBlockNumber uint64 = 1
-	_, err = deploy(chainID, cccid, spec, nextBlockNumber, chaincodeSupport)
+	_, err = deploy(chainID, ccContext, spec, nextBlockNumber, chaincodeSupport)
 	nextBlockNumber++
 	ccID := spec.ChaincodeId.Name
 	if err != nil {
@@ -1212,7 +1196,7 @@ func setupTestConfig() {
 	}
 }
 
-func deployChaincode(name string, version string, chaincodeType pb.ChaincodeSpec_Type, path string, args [][]byte, channel string, nextBlockNumber uint64, chaincodeSupport *ChaincodeSupport) (*pb.Response, *ccprovider.CCContext, error) {
+func deployChaincode(name string, version string, chaincodeType pb.ChaincodeSpec_Type, path string, args [][]byte, channel string, nextBlockNumber uint64, chaincodeSupport *ChaincodeSupport) (*pb.Response, *CCContext, error) {
 	chaincodeSpec := &pb.ChaincodeSpec{
 		ChaincodeId: &pb.ChaincodeID{
 			Name:    name,
@@ -1225,7 +1209,7 @@ func deployChaincode(name string, version string, chaincodeType pb.ChaincodeSpec
 		},
 	}
 
-	chaincodeCtx := &ccprovider.CCContext{
+	chaincodeCtx := &CCContext{
 		Name:    name,
 		Version: version,
 	}

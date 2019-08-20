@@ -8,13 +8,16 @@ package channelconfig
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/msp"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestConsortiumConfig(t *testing.T) {
-	cc, err := NewConsortiumConfig(&cb.ConfigGroup{}, NewMSPConfigHandler(msp.MSPv1_0))
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
+	cc, err := NewConsortiumConfig(&cb.ConfigGroup{}, NewMSPConfigHandler(msp.MSPv1_0, cryptoProvider))
 	assert.NoError(t, err)
 	orgs := cc.Organizations()
 	assert.Equal(t, 0, len(orgs))

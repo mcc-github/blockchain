@@ -17,7 +17,6 @@ import (
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
-	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 
 	"github.com/pkg/errors"
 )
@@ -144,11 +143,11 @@ func (s *Store) Initialize() {
 
 
 
-func (s *Store) Save(label string, ccInstallPkg []byte) (persistence.PackageID, error) {
+func (s *Store) Save(label string, ccInstallPkg []byte) (string, error) {
 	hash := util.ComputeSHA256(ccInstallPkg)
 	packageID := packageID(label, hash)
 
-	ccInstallPkgFileName := packageID.String() + ".bin"
+	ccInstallPkgFileName := CCFileName(packageID)
 	ccInstallPkgFilePath := filepath.Join(s.Path, ccInstallPkgFileName)
 
 	if exists, _ := s.ReadWriter.Exists(ccInstallPkgFilePath); exists {
@@ -167,8 +166,8 @@ func (s *Store) Save(label string, ccInstallPkg []byte) (persistence.PackageID, 
 
 
 
-func (s *Store) Load(packageID persistence.PackageID) ([]byte, error) {
-	ccInstallPkgPath := filepath.Join(s.Path, packageID.String()+".bin")
+func (s *Store) Load(packageID string) ([]byte, error) {
+	ccInstallPkgPath := filepath.Join(s.Path, CCFileName(packageID))
 
 	exists, err := s.ReadWriter.Exists(ccInstallPkgPath)
 	if err != nil {
@@ -192,7 +191,7 @@ func (s *Store) Load(packageID persistence.PackageID) ([]byte, error) {
 
 
 type CodePackageNotFoundErr struct {
-	PackageID persistence.PackageID
+	PackageID string
 }
 
 func (e CodePackageNotFoundErr) Error() string {
@@ -222,11 +221,15 @@ func (s *Store) GetChaincodeInstallPath() string {
 	return s.Path
 }
 
-func packageID(label string, hash []byte) persistence.PackageID {
-	return persistence.PackageID(fmt.Sprintf("%s:%x", label, hash))
+func packageID(label string, hash []byte) string {
+	return fmt.Sprintf("%s:%x", label, hash)
 }
 
-var packageFileMatcher = regexp.MustCompile("^(.+):([0-9abcdef]+)[.]bin$")
+func CCFileName(packageID string) string {
+	return packageID + ".tar.gz"
+}
+
+var packageFileMatcher = regexp.MustCompile("^(.+):([0-9abcdef]+)[.]tar[.]gz$")
 
 func installedChaincodeFromFilename(fileName string) (chaincode.InstalledChaincode, bool) {
 	matches := packageFileMatcher.FindStringSubmatch(fileName)

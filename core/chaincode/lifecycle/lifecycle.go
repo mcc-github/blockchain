@@ -13,7 +13,6 @@ import (
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
-	p "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
@@ -175,9 +174,9 @@ func (cd *ChaincodeDefinition) String() string {
 
 
 type ChaincodeStore interface {
-	Save(label string, ccInstallPkg []byte) (p.PackageID, error)
+	Save(label string, ccInstallPkg []byte) (string, error)
 	ListInstalledChaincodes() ([]chaincode.InstalledChaincode, error)
-	Load(packageID p.PackageID) (ccInstallPkg []byte, err error)
+	Load(packageID string) (ccInstallPkg []byte, err error)
 }
 
 type PackageParser interface {
@@ -186,12 +185,13 @@ type PackageParser interface {
 
 
 type InstallListener interface {
-	HandleChaincodeInstalled(md *persistence.ChaincodePackageMetadata, packageID p.PackageID)
+	HandleChaincodeInstalled(md *persistence.ChaincodePackageMetadata, packageID string)
 }
 
 
 type InstalledChaincodesLister interface {
 	ListInstalledChaincodes() []*chaincode.InstalledChaincode
+	GetInstalledChaincode(packageID string) (*chaincode.InstalledChaincode, error)
 }
 
 
@@ -351,7 +351,7 @@ func (ef *ExternalFunctions) SetChaincodeDefinitionDefaults(chname string, cd *C
 
 
 
-func (ef *ExternalFunctions) ApproveChaincodeDefinitionForOrg(chname, ccname string, cd *ChaincodeDefinition, packageID p.PackageID, publicState ReadableState, orgState ReadWritableState) error {
+func (ef *ExternalFunctions) ApproveChaincodeDefinitionForOrg(chname, ccname string, cd *ChaincodeDefinition, packageID string, publicState ReadableState, orgState ReadWritableState) error {
 	
 	currentSequence, err := ef.Resources.Serializer.DeserializeFieldAsInt64(NamespacesName, ccname, "Sequence", publicState)
 	if err != nil {
@@ -407,7 +407,7 @@ func (ef *ExternalFunctions) ApproveChaincodeDefinitionForOrg(chname, ccname str
 	
 	
 	if err := ef.Resources.Serializer.Serialize(ChaincodeSourcesName, privateName, &ChaincodeLocalPackage{
-		PackageID: packageID.String(),
+		PackageID: packageID,
 	}, orgState); err != nil {
 		return errors.WithMessage(err, "could not serialize chaincode package info to state")
 	}
@@ -498,7 +498,7 @@ func (ef *ExternalFunctions) InstallChaincode(chaincodeInstallPackage []byte) (*
 
 
 
-func (ef *ExternalFunctions) GetInstalledChaincodePackage(packageID p.PackageID) ([]byte, error) {
+func (ef *ExternalFunctions) GetInstalledChaincodePackage(packageID string) ([]byte, error) {
 	pkgBytes, err := ef.Resources.ChaincodeStore.Load(packageID)
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not load cc install package")
@@ -506,7 +506,6 @@ func (ef *ExternalFunctions) GetInstalledChaincodePackage(packageID p.PackageID)
 
 	return pkgBytes, nil
 }
-
 
 
 
@@ -530,28 +529,8 @@ func (ef *ExternalFunctions) QueryNamespaceDefinitions(publicState RangeableStat
 }
 
 
-func (ef *ExternalFunctions) QueryInstalledChaincode(packageID p.PackageID) (*chaincode.InstalledChaincode, error) {
-	ccPackageBytes, err := ef.Resources.ChaincodeStore.Load(packageID)
-	if err != nil {
-		if _, ok := err.(persistence.CodePackageNotFoundErr); ok {
-			return nil, err
-		}
-		return nil, errors.WithMessagef(err, "could not load chaincode with package id '%s'", packageID)
-	}
-
-	parsedCCPackage, err := ef.Resources.PackageParser.Parse(ccPackageBytes)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "could not parse chaincode with package id '%s'", packageID)
-	}
-
-	if parsedCCPackage.Metadata == nil {
-		return nil, errors.Errorf("empty metadata for chaincode with package id '%s'", packageID)
-	}
-
-	return &chaincode.InstalledChaincode{
-		PackageID: packageID,
-		Label:     parsedCCPackage.Metadata.Label,
-	}, nil
+func (ef *ExternalFunctions) QueryInstalledChaincode(packageID string) (*chaincode.InstalledChaincode, error) {
+	return ef.InstalledChaincodesLister.GetInstalledChaincode(packageID)
 }
 
 

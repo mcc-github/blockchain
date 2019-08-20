@@ -69,7 +69,7 @@ func BlockDataHash(b *cb.BlockData) []byte {
 
 
 func GetChainIDFromBlockBytes(bytes []byte) (string, error) {
-	block, err := GetBlockFromBlockBytes(bytes)
+	block, err := UnmarshalBlock(bytes)
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +87,7 @@ func GetChainIDFromBlock(block *cb.Block) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	payload, err := GetPayload(envelope)
+	payload, err := UnmarshalPayload(envelope.Payload)
 	if err != nil {
 		return "", err
 	}
@@ -175,16 +175,6 @@ func GetLastConfigIndexFromBlockOrPanic(block *cb.Block) uint64 {
 		panic(err)
 	}
 	return index
-}
-
-
-func GetBlockFromBlockBytes(blockBytes []byte) (*cb.Block, error) {
-	block := &cb.Block{}
-	err := proto.Unmarshal(blockBytes, block)
-	if err != nil {
-		return block, errors.Wrap(err, "error unmarshaling block")
-	}
-	return block, nil
 }
 
 

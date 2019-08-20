@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/config"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -54,12 +55,7 @@ func New(
 }
 
 func (e *PeerConfiger) Name() string              { return "cscc" }
-func (e *PeerConfiger) Path() string              { return "github.com/mcc-github/blockchain/core/scc/cscc" }
-func (e *PeerConfiger) InitArgs() [][]byte        { return nil }
 func (e *PeerConfiger) Chaincode() shim.Chaincode { return e }
-func (e *PeerConfiger) InvokableExternal() bool   { return true }
-func (e *PeerConfiger) InvokableCC2CC() bool      { return false }
-func (e *PeerConfiger) Enabled() bool             { return true }
 
 
 
@@ -173,7 +169,7 @@ func (e *PeerConfiger) InvokeNoShim(args [][]byte, sp *pb.SignedProposal) pb.Res
 			return shim.Error("Cannot join the channel <nil> configuration block provided")
 		}
 
-		block, err := protoutil.GetBlockFromBlockBytes(args[1])
+		block, err := protoutil.UnmarshalBlock(args[1])
 		if err != nil {
 			return shim.Error(fmt.Sprintf("Failed to reconstruct the genesis block, %s", err))
 		}
@@ -256,7 +252,7 @@ func validateConfigBlock(block *common.Block) error {
 	}
 
 	
-	if err = channelconfig.ValidateCapabilities(block); err != nil {
+	if err = channelconfig.ValidateCapabilities(block, factory.GetDefault()); err != nil {
 		return errors.Errorf("Failed capabilities check: [%s]", err)
 	}
 

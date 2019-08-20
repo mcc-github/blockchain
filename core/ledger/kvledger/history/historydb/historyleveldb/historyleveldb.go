@@ -107,7 +107,7 @@ func (h *historyDB) Commit(block *common.Block) error {
 			return err
 		}
 
-		payload, err := protoutil.GetPayload(env)
+		payload, err := protoutil.UnmarshalPayload(env.Payload)
 		if err != nil {
 			return err
 		}
@@ -197,6 +197,11 @@ func (h *historyDB) ShouldRecover(lastAvailableBlock uint64) (bool, uint64, erro
 		return true, 0, nil
 	}
 	return savepoint.BlockNum != lastAvailableBlock, savepoint.BlockNum + 1, nil
+}
+
+
+func (historyDB *historyDB) Name() string {
+	return "history"
 }
 
 

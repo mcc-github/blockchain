@@ -12,7 +12,6 @@ import (
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/chaincode"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -61,18 +60,13 @@ type invoker interface {
 }
 
 
-type packageProvider interface {
-	chaincode.PackageProvider
-}
-
-
-type lifecycle interface {
+type lifecycle_ interface {
 	chaincode.Lifecycle
 }
 
 
-type chaincodeDefinition interface {
-	ccprovider.ChaincodeDefinition
+type legacyChaincodeDefinition interface {
+	chaincode.LegacyChaincodeDefinition
 }
 
 
@@ -86,23 +80,8 @@ type transactionRegistry interface {
 }
 
 
-type systemCCProvider interface {
-	chaincode.SystemCCProvider
-}
-
-
 type aclProvider interface {
 	chaincode.ACLProvider
-}
-
-
-type chaincodeDefinitionGetter interface {
-	chaincode.ChaincodeDefinitionGetter
-}
-
-
-type instantiationPolicyChecker interface {
-	chaincode.InstantiationPolicyChecker
 }
 
 

@@ -24,6 +24,7 @@ import (
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
@@ -40,19 +41,14 @@ type ACLProvider interface {
 
 type Registry interface {
 	Register(*Handler) error
-	Ready(ccintf.CCID)
-	Failed(ccintf.CCID, error)
-	Deregister(ccintf.CCID) error
+	Ready(string)
+	Failed(string, error)
+	Deregister(string) error
 }
 
 
 type Invoker interface {
-	Invoke(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, spec *pb.ChaincodeInput) (*pb.ChaincodeMessage, error)
-}
-
-
-type SystemCCProvider interface {
-	IsSysCC(name string) bool
+	Invoke(txParams *ccprovider.TransactionParams, chaincodeName string, spec *pb.ChaincodeInput) (*pb.ChaincodeMessage, error)
 }
 
 
@@ -70,28 +66,10 @@ type ContextRegistry interface {
 }
 
 
-type InstantiationPolicyChecker interface {
-	CheckInstantiationPolicy(name, version string, cd *ccprovider.ChaincodeData) error
-}
-
-
-type CheckInstantiationPolicyFunc func(name, version string, cd *ccprovider.ChaincodeData) error
-
-func (c CheckInstantiationPolicyFunc) CheckInstantiationPolicy(name, version string, cd *ccprovider.ChaincodeData) error {
-	return c(name, version, cd)
-}
-
-
 
 type QueryResponseBuilder interface {
 	BuildQueryResponse(txContext *TransactionContext, iter commonledger.ResultsIterator,
 		iterID string, isPaginated bool, totalReturnLimit int32) (*pb.QueryResponse, error)
-}
-
-
-
-type ChaincodeDefinitionGetter interface {
-	ChaincodeDefinition(channelID, chaincodeName string, txSim ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error)
 }
 
 
@@ -122,11 +100,6 @@ type Handler struct {
 	
 	TotalQueryLimit int
 	
-	SystemCCVersion string
-	
-	
-	DefinitionGetter ChaincodeDefinitionGetter
-	
 	Invoker Invoker
 	
 	Registry Registry
@@ -138,9 +111,7 @@ type Handler struct {
 	
 	ActiveTransactions TransactionRegistry
 	
-	SystemCCProvider SystemCCProvider
-	
-	InstantiationPolicyChecker InstantiationPolicyChecker
+	BuiltinSCCs scc.BuiltinSCCs
 	
 	QueryResponseBuilder QueryResponseBuilder
 	
@@ -156,7 +127,7 @@ type Handler struct {
 	
 	state State
 	
-	chaincodeID *pb.ChaincodeID
+	chaincodeID string
 
 	
 	serialLock sync.Mutex
@@ -258,11 +229,10 @@ func (h *Handler) HandleTransaction(msg *pb.ChaincodeMessage, delegate handleFun
 		txContext, err = h.isValidTxSim(msg.ChannelId, msg.Txid, "no ledger context")
 	}
 
-	chaincodeName := h.chaincodeID.Name + ":" + h.chaincodeID.Version
 	meterLabels := []string{
 		"type", msg.Type.String(),
 		"channel", msg.ChannelId,
-		"chaincode", chaincodeName,
+		"chaincode", h.chaincodeID,
 	}
 	h.Metrics.ShimRequestsReceived.With(meterLabels...).Add(1)
 
@@ -356,7 +326,7 @@ func (h *Handler) checkACL(signedProp *pb.SignedProposal, proposal *pb.Proposal,
 	
 	
 
-	if h.SystemCCProvider.IsSysCC(ccIns.ChaincodeName) {
+	if h.BuiltinSCCs.IsSysCC(ccIns.ChaincodeName) {
 		
 		return nil
 	}
@@ -370,11 +340,8 @@ func (h *Handler) checkACL(signedProp *pb.SignedProposal, proposal *pb.Proposal,
 }
 
 func (h *Handler) deregister() {
-	if h.chaincodeID != nil {
-		
-		
-		
-		h.Registry.Deregister(ccintf.CCID(h.chaincodeID.Name))
+	if h.chaincodeID != "" {
+		h.Registry.Deregister(h.chaincodeID)
 	}
 }
 
@@ -446,18 +413,18 @@ func (h *Handler) ProcessStream(stream ccintf.ChaincodeStream) error {
 
 
 func (h *Handler) sendReady() error {
-	chaincodeLogger.Debugf("sending READY for chaincode %+v", h.chaincodeID)
+	chaincodeLogger.Debugf("sending READY for chaincode %s", h.chaincodeID)
 	ccMsg := &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_READY}
 
 	
 	if err := h.serialSend(ccMsg); err != nil {
-		chaincodeLogger.Errorf("error sending READY (%s) for chaincode %+v", err, h.chaincodeID)
+		chaincodeLogger.Errorf("error sending READY (%s) for chaincode %s", err, h.chaincodeID)
 		return err
 	}
 
 	h.state = Ready
 
-	chaincodeLogger.Debugf("Changed to state ready for chaincode %+v", h.chaincodeID)
+	chaincodeLogger.Debugf("Changed to state ready for chaincode %s", h.chaincodeID)
 
 	return nil
 }
@@ -470,12 +437,12 @@ func (h *Handler) notifyRegistry(err error) {
 	}
 
 	if err != nil {
-		h.Registry.Failed(ccintf.CCID(h.chaincodeID.Name), err)
+		h.Registry.Failed(h.chaincodeID, err)
 		chaincodeLogger.Errorf("failed to start %s -- %s", h.chaincodeID, err)
 		return
 	}
 
-	h.Registry.Ready(ccintf.CCID(h.chaincodeID.Name))
+	h.Registry.Ready(h.chaincodeID)
 }
 
 
@@ -489,14 +456,17 @@ func (h *Handler) HandleRegister(msg *pb.ChaincodeMessage) {
 	}
 
 	
-	h.chaincodeID = chaincodeID
+	
+	
+	
+	h.chaincodeID = chaincodeID.Name
 	err = h.Registry.Register(h)
 	if err != nil {
 		h.notifyRegistry(err)
 		return
 	}
 
-	chaincodeLogger.Debugf("Got %s for chaincodeID = %s, sending back %s", pb.ChaincodeMessage_REGISTER, chaincodeID, pb.ChaincodeMessage_REGISTERED)
+	chaincodeLogger.Debugf("Got %s for chaincodeID = %s, sending back %s", pb.ChaincodeMessage_REGISTER, h.chaincodeID, pb.ChaincodeMessage_REGISTERED)
 	if err := h.serialSend(&pb.ChaincodeMessage{Type: pb.ChaincodeMessage_REGISTERED}); err != nil {
 		chaincodeLogger.Errorf("error sending %s: %s", pb.ChaincodeMessage_REGISTERED, err)
 		h.notifyRegistry(err)
@@ -505,7 +475,7 @@ func (h *Handler) HandleRegister(msg *pb.ChaincodeMessage) {
 
 	h.state = Established
 
-	chaincodeLogger.Debugf("Changed state to established for %+v", h.chaincodeID)
+	chaincodeLogger.Debugf("Changed state to established for %s", h.chaincodeID)
 
 	
 	h.notifyRegistry(nil)
@@ -542,11 +512,11 @@ func (h *Handler) registerTxid(msg *pb.ChaincodeMessage) bool {
 	}
 
 	
-	chaincodeName := "unknown"
-	if h.chaincodeID != nil {
-		chaincodeName = h.chaincodeID.Name
+	chaincodeID := "unknown"
+	if h.chaincodeID != "" {
+		chaincodeID = h.chaincodeID
 	}
-	chaincodeLogger.Errorf("[%s] Another request pending for this CC: %s, Txid: %s, ChannelID: %s. Cannot process.", shorttxid(msg.Txid), chaincodeName, msg.Txid, msg.ChannelId)
+	chaincodeLogger.Errorf("[%s] Another request pending for this CC: %s, Txid: %s, ChannelID: %s. Cannot process.", shorttxid(msg.Txid), chaincodeID, msg.Txid, msg.ChannelId)
 	return false
 }
 
@@ -1017,7 +987,7 @@ func (h *Handler) getTxContextForInvoke(channelID string, txid string, payload [
 	
 	
 	
-	if !h.SystemCCProvider.IsSysCC(targetInstance.ChaincodeName) {
+	if !h.BuiltinSCCs.IsSysCC(targetInstance.ChaincodeName) {
 		
 		return h.isValidTxSim("", txid, "could not get valid transaction")
 	}
@@ -1188,42 +1158,8 @@ func (h *Handler) HandleInvokeChaincode(msg *pb.ChaincodeMessage, txContext *Tra
 		txParams.HistoryQueryExecutor = hqe
 	}
 
-	chaincodeLogger.Debugf("[%s] getting chaincode data for %s on channel %s", shorttxid(msg.Txid), targetInstance.ChaincodeName, targetInstance.ChainID)
-
-	version := h.SystemCCVersion
-	var idBytes []byte
-	requiresInit := false
-	if !h.SystemCCProvider.IsSysCC(targetInstance.ChaincodeName) {
-		
-		cd, err := h.DefinitionGetter.ChaincodeDefinition(targetInstance.ChainID, targetInstance.ChaincodeName, txParams.TXSimulator)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-
-		version = cd.CCVersion()
-		idBytes = cd.Hash()
-		requiresInit = cd.RequiresInit()
-
-		if cData, ok := cd.(*ccprovider.ChaincodeData); ok {
-			err = h.InstantiationPolicyChecker.CheckInstantiationPolicy(targetInstance.ChaincodeName, version, cData)
-			if err != nil {
-				return nil, errors.WithStack(err)
-			}
-		}
-	}
-
 	
-	chaincodeLogger.Debugf("[%s] launching chaincode %s on channel %s", shorttxid(msg.Txid), targetInstance.ChaincodeName, targetInstance.ChainID)
-
-	cccid := &ccprovider.CCContext{
-		Name:         targetInstance.ChaincodeName,
-		Version:      version,
-		InitRequired: requiresInit,
-		ID:           idBytes,
-	}
-
-	
-	responseMessage, err := h.Invoker.Invoke(txParams, cccid, chaincodeSpec.Input)
+	responseMessage, err := h.Invoker.Invoke(txParams, targetInstance.ChaincodeName, chaincodeSpec.Input)
 	if err != nil {
 		return nil, errors.Wrap(err, "execute failed")
 	}
@@ -1238,13 +1174,13 @@ func (h *Handler) HandleInvokeChaincode(msg *pb.ChaincodeMessage, txContext *Tra
 	return &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: res, Txid: msg.Txid, ChannelId: msg.ChannelId}, nil
 }
 
-func (h *Handler) Execute(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, msg *pb.ChaincodeMessage, timeout time.Duration) (*pb.ChaincodeMessage, error) {
+func (h *Handler) Execute(txParams *ccprovider.TransactionParams, namespace string, msg *pb.ChaincodeMessage, timeout time.Duration) (*pb.ChaincodeMessage, error) {
 	chaincodeLogger.Debugf("Entry")
 	defer chaincodeLogger.Debugf("Exit")
 
 	txParams.CollectionStore = h.getCollectionStore(msg.ChannelId)
 	txParams.IsInitTransaction = (msg.Type == pb.ChaincodeMessage_INIT)
-	txParams.NamespaceID = cccid.Name
+	txParams.NamespaceID = namespace
 
 	txctx, err := h.TXContexts.Create(txParams)
 	if err != nil {
@@ -1265,9 +1201,8 @@ func (h *Handler) Execute(txParams *ccprovider.TransactionParams, cccid *ccprovi
 		
 	case <-time.After(timeout):
 		err = errors.New("timeout expired while executing transaction")
-		ccName := cccid.Name + ":" + cccid.Version
 		h.Metrics.ExecuteTimeouts.With(
-			"chaincode", ccName,
+			"chaincode", h.chaincodeID,
 		).Add(1)
 	}
 

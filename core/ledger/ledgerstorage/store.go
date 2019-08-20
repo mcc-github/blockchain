@@ -19,7 +19,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/pkg/errors"
 )
 
 const maxBlockFileSize = 64 * 1024 * 1024
@@ -127,7 +126,6 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		return err
 	}
 
-	writtenToPvtStore := false
 	if pvtBlkStoreHt < blockNum+1 { 
 		
 		
@@ -141,16 +139,14 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		
 		
 		pvtData, missingPvtData := constructPvtDataAndMissingData(blockAndPvtdata)
-		if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtData, missingPvtData); err != nil {
+		if err := s.pvtdataStore.Commit(blockAndPvtdata.Block.Header.Number, pvtData, missingPvtData); err != nil {
 			return err
 		}
-		writtenToPvtStore = true
 	} else {
 		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
 	}
 
 	if err := s.AddBlock(blockAndPvtdata.Block); err != nil {
-		s.pvtdataStore.Rollback()
 		return err
 	}
 
@@ -161,9 +157,6 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		s.isPvtstoreAheadOfBlockstore.Store(false)
 	}
 
-	if writtenToPvtStore {
-		return s.pvtdataStore.Commit()
-	}
 	return nil
 }
 
@@ -287,13 +280,20 @@ func (s *Store) IsPvtStoreAheadOfBlockStore() bool {
 
 
 
+
+
+
+
+
+
+
 func (s *Store) init() error {
 	var initialized bool
 	var err error
 	if initialized, err = s.initPvtdataStoreFromExistingBlockchain(); err != nil || initialized {
 		return err
 	}
-	return s.syncPvtdataStoreWithBlockStore()
+	return nil
 }
 
 
@@ -323,44 +323,7 @@ func (s *Store) initPvtdataStoreFromExistingBlockchain() (bool, error) {
 	return false, nil
 }
 
-
-
-
-
-
-
-
-func (s *Store) syncPvtdataStoreWithBlockStore() error {
-	var pendingPvtbatch bool
-	var err error
-	if pendingPvtbatch, err = s.pvtdataStore.HasPendingBatch(); err != nil {
-		return err
-	}
-	if !pendingPvtbatch {
-		return nil
-	}
-	var bcInfo *common.BlockchainInfo
-	var pvtdataStoreHt uint64
-
-	if bcInfo, err = s.GetBlockchainInfo(); err != nil {
-		return err
-	}
-	if pvtdataStoreHt, err = s.pvtdataStore.LastCommittedBlockHeight(); err != nil {
-		return err
-	}
-
-	if bcInfo.Height == pvtdataStoreHt {
-		return s.pvtdataStore.Rollback()
-	}
-
-	if bcInfo.Height == pvtdataStoreHt+1 {
-		return s.pvtdataStore.Commit()
-	}
-
-	return errors.Errorf("This is not expected. blockStoreHeight=%d, pvtdataStoreHeight=%d", bcInfo.Height, pvtdataStoreHt)
-}
-
-func constructPvtdataMap(pvtdata []*ledger.TxPvtData) map[uint64]*ledger.TxPvtData {
+func constructPvtdataMap(pvtdata []*ledger.TxPvtData) ledger.TxPvtDataMap {
 	if pvtdata == nil {
 		return nil
 	}

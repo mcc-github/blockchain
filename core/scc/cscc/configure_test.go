@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/genesis"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
@@ -23,7 +24,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/comm"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt/ledgermgmttest"
@@ -284,14 +284,6 @@ func TestConfigerInvokeJoinChainWrongParams(t *testing.T) {
 	)
 }
 
-type PackageProviderWrapper struct {
-	FS *ccprovider.CCInfoFSImpl
-}
-
-func (p *PackageProviderWrapper) GetChaincodeCodePackage(ccci *ccprovider.ChaincodeContainerInfo) ([]byte, error) {
-	return p.FS.GetChaincodeCodePackage(ccci.Name, ccci.Version)
-}
-
 func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	viper.Set("chaincode.executetimeout", "3s")
 
@@ -311,8 +303,11 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	socket, err := net.Listen("tcp", peerEndpoint)
 	require.NoError(t, err)
 
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
 	signer := mgmt.GetLocalSigningIdentityOrPanic()
-	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager())
+
+	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager(), cryptoProvider)
 	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager())
 	var defaultSecureDialOpts = func() []grpc.DialOption {
 		var dialOpts []grpc.DialOption
@@ -354,15 +349,17 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 	go grpcServer.Serve(socket)
 	defer grpcServer.Stop()
 
+	assert.NoError(t, err)
 	
 	mockACLProvider := &mocks.ACLProvider{}
 	cscc := &PeerConfiger{
 		policyChecker: &mocks.PolicyChecker{},
 		aclProvider:   mockACLProvider,
 		peer: &peer.Peer{
-			StoreProvider: &mocks.StoreProvider{},
-			GossipService: gossipService,
-			LedgerMgr:     ledgerMgr,
+			StoreProvider:  &mocks.StoreProvider{},
+			GossipService:  gossipService,
+			LedgerMgr:      ledgerMgr,
+			CryptoProvider: cryptoProvider,
 		},
 	}
 	mockStub := &mocks.ChaincodeStub{}

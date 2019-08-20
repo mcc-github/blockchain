@@ -45,7 +45,7 @@
 #   - docker-tag-stable - re-tags the images made by 'make docker' with the :stable tag
 #   - help-docs - generate the command reference docs
 
-ALPINE_VER ?= 3.9
+ALPINE_VER ?= 3.10
 BASE_VERSION = 2.0.0
 PREV_VERSION = 2.0.0-alpha
 BASEIMAGE_RELEASE = 0.4.15
@@ -81,7 +81,9 @@ METADATA_VAR += BaseDockerLabel=$(BASE_DOCKER_LABEL)
 METADATA_VAR += DockerNamespace=$(DOCKER_NS)
 METADATA_VAR += BaseDockerNamespace=$(BASE_DOCKER_NS)
 
-GO_VER = $(shell grep "GO_VER" ci.properties |cut -d'=' -f2-)
+# GO_VER = $(shell grep "GO_VER" ci.properties |cut -d'=' -f2-)
+# temporary override until CI support 1.12.7
+GO_VER = 1.12.7
 GO_LDFLAGS = $(patsubst %,-X $(PKGNAME)/common/metadata.%,$(METADATA_VAR))
 
 GO_TAGS ?=
@@ -95,7 +97,7 @@ PROTOS = $(shell git ls-files *.proto | grep -Ev 'vendor/|testdata/')
 PROJECT_FILES = $(shell git ls-files  | grep -Ev '^integration/|^vagrant/|.png$|^LICENSE|^vendor/')
 IMAGES = peer orderer baseos ccenv buildenv tools
 RELEASE_PLATFORMS = windows-amd64 darwin-amd64 linux-amd64 linux-s390x linux-ppc64le
-RELEASE_PKGS = configtxgen cryptogen idemixgen discover token configtxlator peer orderer
+RELEASE_PKGS = configtxgen cryptogen idemixgen discover configtxlator peer orderer
 RELEASE_IMAGES = peer orderer tools ccenv baseos
 
 pkgmap.cryptogen      := $(PKGNAME)/cmd/cryptogen
@@ -105,7 +107,6 @@ pkgmap.configtxlator  := $(PKGNAME)/cmd/configtxlator
 pkgmap.peer           := $(PKGNAME)/cmd/peer
 pkgmap.orderer        := $(PKGNAME)/orderer
 pkgmap.discover       := $(PKGNAME)/cmd/discover
-pkgmap.token          := $(PKGNAME)/cmd/token
 
 include docker-env.mk
 
@@ -188,9 +189,6 @@ idemixgen: $(BUILD_DIR)/bin/idemixgen
 discover: GO_LDFLAGS=-X $(pkgmap.$(@F))/metadata.Version=$(PROJECT_VERSION)
 discover: $(BUILD_DIR)/bin/discover
 
-token: GO_LDFLAGS=-X $(pkgmap.$(@F))/metadata.Version=$(PROJECT_VERSION)
-token: $(BUILD_DIR)/bin/token
-
 .PHONY: integration-test
 integration-test: gotool.ginkgo ccenv baseos docker-thirdparty
 	./scripts/run-integration-tests.sh
@@ -214,7 +212,7 @@ test-cmd:
 
 docker: $(patsubst %,$(BUILD_DIR)/images/%/$(DUMMY), $(IMAGES))
 
-native: peer orderer configtxgen cryptogen idemixgen configtxlator discover token
+native: peer orderer configtxgen cryptogen idemixgen configtxlator discover
 
 linter: check-deps buildenv
 	@echo "LINT: Running code checks.."
@@ -322,11 +320,6 @@ release/%/bin/idemixgen: $(PROJECT_FILES)
 	$(CGO_FLAGS) GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(abspath $@) -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
 
 release/%/bin/discover: $(PROJECT_FILES)
-	@echo "Building $@ for $(GOOS)-$(GOARCH)"
-	mkdir -p $(@D)
-	$(CGO_FLAGS) GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(abspath $@) -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
-
-release/%/bin/token: $(PROJECT_FILES)
 	@echo "Building $@ for $(GOOS)-$(GOARCH)"
 	mkdir -p $(@D)
 	$(CGO_FLAGS) GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(abspath $@) -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))

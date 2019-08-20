@@ -50,16 +50,7 @@ type Store interface {
 	
 	
 	
-	
-	
-	
-	
-	
-	Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error
-	
-	Commit() error
-	
-	Rollback() error
+	Commit(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error
 	
 	
 	
@@ -80,8 +71,6 @@ type Store interface {
 	IsEmpty() (bool, error)
 	
 	LastCommittedBlockHeight() (uint64, error)
-	
-	HasPendingBatch() (bool, error)
 	
 	Shutdown()
 }

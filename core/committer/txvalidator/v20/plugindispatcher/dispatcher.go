@@ -104,15 +104,15 @@ func (v *dispatcherImpl) Dispatch(seq int, payload *common.Payload, envBytes []b
 	logger.Debugf("[%s] Dispatch starts for bytes %p", chainID, envBytes)
 
 	
-	hdrExt, err := protoutil.GetChaincodeHeaderExtension(payload.Header)
-	if err != nil {
-		return err, peer.TxValidationCode_BAD_HEADER_EXTENSION
-	}
-
-	
 	chdr, err := protoutil.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 	if err != nil {
 		return err, peer.TxValidationCode_BAD_CHANNEL_HEADER
+	}
+
+	
+	hdrExt, err := protoutil.UnmarshalChaincodeHeaderExtension(chdr.Extension)
+	if err != nil {
+		return err, peer.TxValidationCode_BAD_HEADER_EXTENSION
 	}
 
 	
@@ -168,7 +168,16 @@ func (v *dispatcherImpl) Dispatch(seq int, payload *common.Payload, envBytes []b
 		}
 	}
 
+	namespaces := make(map[string]struct{})
 	for _, ns := range txRWSet.NsRwSets {
+		
+		if _, ok := namespaces[ns.NameSpace]; ok {
+			logger.Errorf("duplicate namespace '%s' in txRWSet", ns.NameSpace)
+			return errors.Errorf("duplicate namespace '%s' in txRWSet", ns.NameSpace),
+				peer.TxValidationCode_ILLEGAL_WRITESET
+		}
+		namespaces[ns.NameSpace] = struct{}{}
+
 		if v.txWritesToNamespace(ns) {
 			wrNamespace[ns.NameSpace] = true
 		}

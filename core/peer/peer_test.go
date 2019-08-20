@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/comm"
@@ -52,7 +53,10 @@ func NewTestPeer(t *testing.T) (*Peer, func()) {
 
 	
 	signer := mgmt.GetLocalSigningIdentityOrPanic()
-	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager())
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
+
+	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager(), cryptoProvider)
 	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager())
 	defaultSecureDialOpts := func() []grpc.DialOption { return []grpc.DialOption{grpc.WithInsecure()} }
 	defaultDeliverClientDialOpts := []grpc.DialOption{grpc.WithBlock()}
@@ -89,12 +93,14 @@ func NewTestPeer(t *testing.T) (*Peer, func()) {
 	ledgerMgr, err := constructLedgerMgrWithTestDefaults(filepath.Join(tempdir, "ledgersData"))
 	require.NoError(t, err, "failed to create ledger manager")
 
+	assert.NoError(t, err)
 	peerInstance := &Peer{
 		GossipService: gossipService,
 		StoreProvider: transientstore.NewStoreProvider(
 			filepath.Join(tempdir, "transientstore"),
 		),
-		LedgerMgr: ledgerMgr,
+		LedgerMgr:      ledgerMgr,
+		CryptoProvider: cryptoProvider,
 	}
 
 	cleanup := func() {

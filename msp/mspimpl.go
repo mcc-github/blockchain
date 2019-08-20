@@ -106,13 +106,12 @@ type bccspmsp struct {
 
 
 
-func newBccspMsp(version MSPVersion) (MSP, error) {
+func newBccspMsp(version MSPVersion, defaultBCCSP bccsp.BCCSP) (MSP, error) {
 	mspLogger.Debugf("Creating BCCSP-based MSP instance")
 
-	bccsp := factory.GetDefault()
 	theMsp := &bccspmsp{}
 	theMsp.version = version
-	theMsp.bccsp = bccsp
+	theMsp.bccsp = defaultBCCSP
 	switch version {
 	case MSPv1_0:
 		theMsp.internalSetupFunc = theMsp.setupV1
@@ -143,8 +142,8 @@ func newBccspMsp(version MSPVersion) (MSP, error) {
 
 
 
-func NewBccspMspWithKeyStore(version MSPVersion, keyStore bccsp.KeyStore) (MSP, error) {
-	thisMSP, err := newBccspMsp(version)
+func NewBccspMspWithKeyStore(version MSPVersion, keyStore bccsp.KeyStore, bccsp bccsp.BCCSP) (MSP, error) {
+	thisMSP, err := newBccspMsp(version, bccsp)
 	if err != nil {
 		return nil, err
 	}

@@ -7,10 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package container
 
 import (
+	"io"
 	"sync"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
+	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 
 	"github.com/pkg/errors"
@@ -22,7 +23,7 @@ var vmLogger = flogging.MustGetLogger("container")
 
 
 type VM interface {
-	Build(ccci *ccprovider.ChaincodeContainerInfo, codePackage []byte) (Instance, error)
+	Build(ccid string, metadata *persistence.ChaincodePackageMetadata, codePackageStream io.Reader) (Instance, error)
 }
 
 
@@ -50,14 +51,22 @@ func (UninitializedInstance) Wait() (int, error) {
 	return 0, errors.Errorf("instance has not yet been built, cannot wait")
 }
 
-type Router struct {
-	ExternalVM VM
-	DockerVM   VM
-	containers map[ccintf.CCID]Instance
-	mutex      sync.Mutex
+
+
+
+type PackageProvider interface {
+	GetChaincodePackage(packageID string) (*persistence.ChaincodePackageMetadata, io.ReadCloser, error)
 }
 
-func (r *Router) getInstance(ccid ccintf.CCID) Instance {
+type Router struct {
+	ExternalVM      VM
+	DockerVM        VM
+	containers      map[string]Instance
+	PackageProvider PackageProvider
+	mutex           sync.Mutex
+}
+
+func (r *Router) getInstance(ccid string) Instance {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	
@@ -65,7 +74,7 @@ func (r *Router) getInstance(ccid ccintf.CCID) Instance {
 	
 
 	if r.containers == nil {
-		r.containers = map[ccintf.CCID]Instance{}
+		r.containers = map[string]Instance{}
 	}
 
 	vm, ok := r.containers[ccid]
@@ -76,13 +85,30 @@ func (r *Router) getInstance(ccid ccintf.CCID) Instance {
 	return vm
 }
 
-func (r *Router) Build(ccci *ccprovider.ChaincodeContainerInfo, codePackage []byte) error {
-	instance, err := r.ExternalVM.Build(ccci, codePackage)
+func (r *Router) Build(ccid string) error {
+	
+	
+	packageID := ccid
 
-	externalErr := err
+	metadata, codeStream, err := r.PackageProvider.GetChaincodePackage(packageID)
 	if err != nil {
-		vmLogger.Debug("falling back to docker VM")
-		instance, err = r.DockerVM.Build(ccci, codePackage)
+		return errors.WithMessage(err, "get chaincode package for external build failed")
+	}
+
+	var instance Instance
+	var externalErr error
+	if r.ExternalVM != nil {
+		instance, externalErr = r.ExternalVM.Build(ccid, metadata, codeStream)
+		codeStream.Close()
+	}
+
+	if r.ExternalVM == nil || externalErr != nil {
+		_, codeStream, err = r.PackageProvider.GetChaincodePackage(ccid)
+		if err != nil {
+			return errors.WithMessage(err, "get chaincode package for docker build failed")
+		}
+		instance, err = r.DockerVM.Build(ccid, metadata, codeStream)
+		codeStream.Close()
 	}
 
 	if err != nil {
@@ -93,22 +119,22 @@ func (r *Router) Build(ccci *ccprovider.ChaincodeContainerInfo, codePackage []by
 	defer r.mutex.Unlock()
 
 	if r.containers == nil {
-		r.containers = map[ccintf.CCID]Instance{}
+		r.containers = map[string]Instance{}
 	}
 
-	r.containers[ccintf.CCID(ccci.PackageID)] = instance
+	r.containers[ccid] = instance
 
 	return nil
 }
 
-func (r *Router) Start(ccid ccintf.CCID, peerConnection *ccintf.PeerConnection) error {
+func (r *Router) Start(ccid string, peerConnection *ccintf.PeerConnection) error {
 	return r.getInstance(ccid).Start(peerConnection)
 }
 
-func (r *Router) Stop(ccid ccintf.CCID) error {
+func (r *Router) Stop(ccid string) error {
 	return r.getInstance(ccid).Stop()
 }
 
-func (r *Router) Wait(ccid ccintf.CCID) (int, error) {
+func (r *Router) Wait(ccid string) (int, error) {
 	return r.getInstance(ccid).Wait()
 }

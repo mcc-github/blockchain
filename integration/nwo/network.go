@@ -38,6 +38,7 @@ import (
 
 type Organization struct {
 	MSPID         string `yaml:"msp_id,omitempty"`
+	MSPType       string `yaml:"msp_type,omitempty"`
 	Name          string `yaml:"name,omitempty"`
 	Domain        string `yaml:"domain,omitempty"`
 	EnableNodeOUs bool   `yaml:"enable_node_organizational_units"`
@@ -398,6 +399,12 @@ func (n *Network) PeerUserMSPDir(p *Peer, user string) string {
 
 
 
+func (n *Network) IdemixUserMSPDir(o *Organization, user string) string {
+	return n.userCryptoDir(o, "peerOrganizations", user, "")
+}
+
+
+
 func (n *Network) OrdererUserMSPDir(o *Orderer, user string) string {
 	return n.ordererUserCryptoDir(o, user, "msp")
 }
@@ -521,6 +528,15 @@ func (n *Network) PeerOrgMSPDir(org *Organization) string {
 	)
 }
 
+func (n *Network) IdemixOrgMSPDir(org *Organization) string {
+	return filepath.Join(
+		n.RootDir,
+		"crypto",
+		"peerOrganizations",
+		org.Domain,
+	)
+}
+
 
 
 func (n *Network) OrdererOrgMSPDir(o *Organization) string {
@@ -641,6 +657,8 @@ func (n *Network) Bootstrap() {
 	Expect(err).NotTo(HaveOccurred())
 	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
+	n.bootstrapIdemix()
+
 	sess, err = n.ConfigTxGen(commands.OutputBlock{
 		ChannelID:   n.SystemChannel.Name,
 		Profile:     n.SystemChannel.Profile,
@@ -663,6 +681,33 @@ func (n *Network) Bootstrap() {
 	}
 
 	n.ConcatenateTLSCACertificates()
+}
+
+
+func (n *Network) bootstrapIdemix() {
+	for j, org := range n.IdemixOrgs() {
+
+		output := n.IdemixOrgMSPDir(org)
+		
+		sess, err := n.Idemixgen(commands.CAKeyGen{
+			Output: output,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+
+		
+		usersOutput := filepath.Join(n.IdemixOrgMSPDir(org), "users")
+		userOutput := filepath.Join(usersOutput, fmt.Sprintf("User%d@%s", 1, org.Domain))
+		sess, err = n.Idemixgen(commands.SignerConfig{
+			CAInput:          output,
+			Output:           userOutput,
+			OrgUnit:          org.Domain,
+			EnrollmentID:     "User" + string(1),
+			RevocationHandle: fmt.Sprintf("1%d%d", 1, j),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+	}
 }
 
 
@@ -910,6 +955,12 @@ func (n *Network) Cryptogen(command Command) (*gexec.Session, error) {
 }
 
 
+func (n *Network) Idemixgen(command Command) (*gexec.Session, error) {
+	cmd := NewCommand(n.Components.Idemixgen(), command)
+	return n.StartSession(cmd, command.SessionName())
+}
+
+
 func (n *Network) ConfigTxGen(command Command) (*gexec.Session, error) {
 	cmd := NewCommand(n.Components.ConfigTxGen(), command)
 	return n.StartSession(cmd, command.SessionName())
@@ -919,12 +970,6 @@ func (n *Network) ConfigTxGen(command Command) (*gexec.Session, error) {
 func (n *Network) Discover(command Command) (*gexec.Session, error) {
 	cmd := NewCommand(n.Components.Discover(), command)
 	cmd.Args = append(cmd.Args, "--peerTLSCA", n.CACertsBundlePath())
-	return n.StartSession(cmd, command.SessionName())
-}
-
-
-func (n *Network) Token(command Command) (*gexec.Session, error) {
-	cmd := NewCommand(n.Components.Token(), command)
 	return n.StartSession(cmd, command.SessionName())
 }
 
@@ -1135,6 +1180,20 @@ func (n *Network) PeerUserSession(p *Peer, user string, command Command) (*gexec
 
 
 
+
+func (n *Network) IdemixUserSession(p *Peer, idemixOrg *Organization, user string, command Command) (*gexec.Session, error) {
+	cmd := n.peerCommand(
+		command,
+		fmt.Sprintf("FABRIC_CFG_PATH=%s", n.PeerDir(p)),
+		fmt.Sprintf("CORE_PEER_MSPCONFIGPATH=%s", n.IdemixUserMSPDir(idemixOrg, user)),
+		fmt.Sprintf("CORE_PEER_LOCALMSPTYPE=%s", "idemix"),
+		fmt.Sprintf("CORE_PEER_LOCALMSPID=%s", idemixOrg.MSPID),
+	)
+	return n.StartSession(cmd, command.SessionName())
+}
+
+
+
 func (n *Network) OrdererAdminSession(o *Orderer, p *Peer, command Command) (*gexec.Session, error) {
 	cmd := n.peerCommand(
 		command,
@@ -1202,12 +1261,25 @@ func (n *Network) Consortium(name string) *Consortium {
 func (n *Network) PeerOrgs() []*Organization {
 	orgsByName := map[string]*Organization{}
 	for _, p := range n.Peers {
-		orgsByName[p.Organization] = n.Organization(p.Organization)
+		if n.Organization(p.Organization).MSPType != "idemix" {
+			orgsByName[p.Organization] = n.Organization(p.Organization)
+		}
 	}
 
 	orgs := []*Organization{}
 	for _, org := range orgsByName {
 		orgs = append(orgs, org)
+	}
+	return orgs
+}
+
+
+func (n *Network) IdemixOrgs() []*Organization {
+	orgs := []*Organization{}
+	for _, org := range n.Organizations {
+		if org.MSPType == "idemix" {
+			orgs = append(orgs, org)
+		}
 	}
 	return orgs
 }

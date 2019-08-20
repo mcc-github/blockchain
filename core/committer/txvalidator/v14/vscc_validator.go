@@ -12,7 +12,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
-	coreUtil "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
@@ -40,13 +39,24 @@ func newVSCCValidator(chainID string, cr ChannelResources, pluginValidator *Plug
 	}
 }
 
+func getChaincodeHeaderExtension(hdr *common.Header) (*peer.ChaincodeHeaderExtension, error) {
+	chdr, err := protoutil.UnmarshalChannelHeader(hdr.ChannelHeader)
+	if err != nil {
+		return nil, err
+	}
+
+	chaincodeHdrExt := &peer.ChaincodeHeaderExtension{}
+	err = proto.Unmarshal(chdr.Extension, chaincodeHdrExt)
+	return chaincodeHdrExt, errors.Wrap(err, "error unmarshaling ChaincodeHeaderExtension")
+}
+
 
 func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode) {
 	chainID := v.chainID
 	logger.Debugf("[%s] VSCCValidateTx starts for bytes %p", chainID, envBytes)
 
 	
-	hdrExt, err := protoutil.GetChaincodeHeaderExtension(payload.Header)
+	hdrExt, err := getChaincodeHeaderExtension(payload.Header)
 	if err != nil {
 		return err, peer.TxValidationCode_BAD_HEADER_EXTENSION
 	}
@@ -115,7 +125,15 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 		}
 	}
 
+	namespaces := make(map[string]struct{})
 	for _, ns := range txRWSet.NsRwSets {
+		
+		if _, ok := namespaces[ns.NameSpace]; ok {
+			return errors.Errorf("duplicate namespace '%s' in txRWSet", ns.NameSpace),
+				peer.TxValidationCode_ILLEGAL_WRITESET
+		}
+		namespaces[ns.NameSpace] = struct{}{}
+
 		if !v.txWritesToNamespace(ns) {
 			continue
 		}
@@ -264,7 +282,7 @@ func (v *VsccValidatorImpl) VSCCValidateTxForCC(ctx *Context) error {
 	return &commonerrors.VSCCEndorsementPolicyError{Err: err}
 }
 
-func (v *VsccValidatorImpl) getCDataForCC(chid, ccid string) (ccprovider.ChaincodeDefinition, error) {
+func (v *VsccValidatorImpl) getCDataForCC(chid, ccid string) (*ccprovider.ChaincodeData, error) {
 	l := v.cr.Ledger()
 	if l == nil {
 		return nil, errors.New("nil ledger instance")
@@ -307,14 +325,12 @@ func (v *VsccValidatorImpl) getCDataForCC(chid, ccid string) (ccprovider.Chainco
 
 func (v *VsccValidatorImpl) GetInfoForValidate(chdr *common.ChannelHeader, ccID string) (*sysccprovider.ChaincodeInstance, *sysccprovider.ChaincodeInstance, []byte, error) {
 	cc := &sysccprovider.ChaincodeInstance{
-		ChainID:          chdr.ChannelId,
-		ChaincodeName:    ccID,
-		ChaincodeVersion: coreUtil.GetSysCCVersion(),
+		ChainID:       chdr.ChannelId,
+		ChaincodeName: ccID,
 	}
 	vscc := &sysccprovider.ChaincodeInstance{
-		ChainID:          chdr.ChannelId,
-		ChaincodeName:    "vscc",                     
-		ChaincodeVersion: coreUtil.GetSysCCVersion(), 
+		ChainID:       chdr.ChannelId,
+		ChaincodeName: "vscc", 
 	}
 	var policy []byte
 	var err error
@@ -330,9 +346,9 @@ func (v *VsccValidatorImpl) GetInfoForValidate(chdr *common.ChannelHeader, ccID 
 			logger.Errorf(msg)
 			return nil, nil, nil, err
 		}
-		cc.ChaincodeName = cd.CCName()
-		cc.ChaincodeVersion = cd.CCVersion()
-		vscc.ChaincodeName, policy = cd.Validation()
+		cc.ChaincodeName = cd.Name
+		cc.ChaincodeVersion = cd.Version
+		vscc.ChaincodeName, policy = cd.Vscc, cd.Policy
 	} else {
 		
 		

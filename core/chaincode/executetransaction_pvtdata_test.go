@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/common/util"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/spf13/viper"
@@ -44,7 +43,7 @@ func TestQueriesPrivateData(t *testing.T) {
 
 	spec := &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
 
-	cccid := &ccprovider.CCContext{
+	ccContext := &CCContext{
 		Name:    "tmap",
 		Version: "0",
 	}
@@ -53,13 +52,8 @@ func TestQueriesPrivateData(t *testing.T) {
 	
 	collectionConfig := []*common.StaticCollectionConfig{{Name: "c1"}, {Name: "c2"}, {Name: "c3"}, {Name: "c4"}}
 	collectionConfigPkg := constructCollectionConfigPkg(collectionConfig)
-	defer chaincodeSupport.Runtime.Stop(&ccprovider.ChaincodeContainerInfo{
-		Name:    cID.Name,
-		Version: cID.Version,
-		Path:    cID.Path,
-		Type:    "GOLANG",
-	})
-	_, err = deployWithCollectionConfigs(chainID, cccid, spec, collectionConfigPkg, nextBlockNumber, chaincodeSupport)
+	defer chaincodeSupport.Runtime.Stop(cID.Name + ":" + cID.Version)
+	_, err = deployWithCollectionConfigs(chainID, ccContext, spec, collectionConfigPkg, nextBlockNumber, chaincodeSupport)
 	nextBlockNumber++
 	ccID := spec.ChaincodeId.Name
 	if err != nil {

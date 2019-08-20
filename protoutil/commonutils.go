@@ -14,9 +14,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	"github.com/mcc-github/blockchain/protos/common"
 	cb "github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 )
 
@@ -49,57 +47,6 @@ func CreateNonceOrPanic() []byte {
 func CreateNonce() ([]byte, error) {
 	nonce, err := getRandomNonce()
 	return nonce, errors.WithMessage(err, "error generating random nonce")
-}
-
-
-
-func UnmarshalPayloadOrPanic(encoded []byte) *cb.Payload {
-	payload, err := UnmarshalPayload(encoded)
-	if err != nil {
-		panic(err)
-	}
-	return payload
-}
-
-
-func UnmarshalPayload(encoded []byte) (*cb.Payload, error) {
-	payload := &cb.Payload{}
-	err := proto.Unmarshal(encoded, payload)
-	return payload, errors.Wrap(err, "error unmarshaling Payload")
-}
-
-
-
-func UnmarshalEnvelopeOrPanic(encoded []byte) *cb.Envelope {
-	envelope, err := UnmarshalEnvelope(encoded)
-	if err != nil {
-		panic(err)
-	}
-	return envelope
-}
-
-
-func UnmarshalEnvelope(encoded []byte) (*cb.Envelope, error) {
-	envelope := &cb.Envelope{}
-	err := proto.Unmarshal(encoded, envelope)
-	return envelope, errors.Wrap(err, "error unmarshaling Envelope")
-}
-
-
-
-func UnmarshalBlockOrPanic(encoded []byte) *cb.Block {
-	block, err := UnmarshalBlock(encoded)
-	if err != nil {
-		panic(err)
-	}
-	return block
-}
-
-
-func UnmarshalBlock(encoded []byte) (*cb.Block, error) {
-	block := &cb.Block{}
-	err := proto.Unmarshal(encoded, block)
-	return block, errors.Wrap(err, "error unmarshaling Block")
 }
 
 
@@ -156,24 +103,6 @@ func ExtractEnvelope(block *cb.Block, index int) (*cb.Envelope, error) {
 }
 
 
-
-func ExtractPayloadOrPanic(envelope *cb.Envelope) *cb.Payload {
-	payload, err := ExtractPayload(envelope)
-	if err != nil {
-		panic(err)
-	}
-	return payload
-}
-
-
-func ExtractPayload(envelope *cb.Envelope) (*cb.Payload, error) {
-	payload := &cb.Payload{}
-	err := proto.Unmarshal(envelope.Payload, payload)
-	err = errors.Wrap(err, "no payload in envelope")
-	return payload, err
-}
-
-
 func MakeChannelHeader(headerType cb.HeaderType, version int32, chainID string, epoch uint64) *cb.ChannelHeader {
 	return &cb.ChannelHeader{
 		Type:    int32(headerType),
@@ -197,16 +126,11 @@ func MakeSignatureHeader(serializedCreatorCertChain []byte, nonce []byte) *cb.Si
 
 
 
-func SetTxID(channelHeader *cb.ChannelHeader, signatureHeader *cb.SignatureHeader) error {
-	txid, err := ComputeTxID(
+func SetTxID(channelHeader *cb.ChannelHeader, signatureHeader *cb.SignatureHeader) {
+	channelHeader.TxId = ComputeTxID(
 		signatureHeader.Nonce,
 		signatureHeader.Creator,
 	)
-	if err != nil {
-		return err
-	}
-	channelHeader.TxId = txid
-	return nil
 }
 
 
@@ -262,52 +186,6 @@ func SignOrPanic(signer identity.Signer, msg []byte) []byte {
 }
 
 
-func UnmarshalChannelHeader(bytes []byte) (*cb.ChannelHeader, error) {
-	chdr := &cb.ChannelHeader{}
-	err := proto.Unmarshal(bytes, chdr)
-	return chdr, errors.Wrap(err, "error unmarshaling ChannelHeader")
-}
-
-
-
-func UnmarshalChannelHeaderOrPanic(bytes []byte) *cb.ChannelHeader {
-	chdr, err := UnmarshalChannelHeader(bytes)
-	if err != nil {
-		panic(err)
-	}
-	return chdr
-}
-
-
-func UnmarshalChaincodeID(bytes []byte) (*pb.ChaincodeID, error) {
-	ccid := &pb.ChaincodeID{}
-	err := proto.Unmarshal(bytes, ccid)
-	if err != nil {
-		return nil, errors.Wrap(err, "error unmarshaling ChaincodeID")
-	}
-
-	return ccid, nil
-}
-
-
-func UnmarshalSignatureHeader(bytes []byte) (*cb.SignatureHeader, error) {
-	sh := &common.SignatureHeader{}
-	if err := proto.Unmarshal(bytes, sh); err != nil {
-		return nil, errors.Wrap(err, "error unmarshaling SignatureHeader")
-	}
-	return sh, nil
-}
-
-
-func UnmarshalSignatureHeaderOrPanic(bytes []byte) *cb.SignatureHeader {
-	sighdr, err := UnmarshalSignatureHeader(bytes)
-	if err != nil {
-		panic(err)
-	}
-	return sighdr
-}
-
-
 
 func IsConfigBlock(block *cb.Block) bool {
 	envelope, err := ExtractEnvelope(block, 0)
@@ -315,7 +193,7 @@ func IsConfigBlock(block *cb.Block) bool {
 		return false
 	}
 
-	payload, err := GetPayload(envelope)
+	payload, err := UnmarshalPayload(envelope.Payload)
 	if err != nil {
 		return false
 	}

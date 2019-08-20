@@ -20,8 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle/mock"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
-	p "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
-	persistenceintf "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/dispatcher"
 	"github.com/mcc-github/blockchain/msp"
@@ -88,39 +86,9 @@ var _ = Describe("SCC", func() {
 		})
 	})
 
-	Describe("Path", func() {
-		It("returns the path", func() {
-			Expect(scc.Path()).To(Equal("github.com/mcc-github/blockchain/core/chaincode/lifecycle"))
-		})
-	})
-
-	Describe("InitArgs", func() {
-		It("returns no args", func() {
-			Expect(scc.InitArgs()).To(BeNil())
-		})
-	})
-
 	Describe("Chaincode", func() {
 		It("returns a reference to itself", func() {
 			Expect(scc.Chaincode()).To(Equal(scc))
-		})
-	})
-
-	Describe("InvokableExternal", func() {
-		It("is invokable externally", func() {
-			Expect(scc.InvokableExternal()).To(BeTrue())
-		})
-	})
-
-	Describe("InvokableCC2CC", func() {
-		It("is invokable chaincode to chaincode", func() {
-			Expect(scc.InvokableCC2CC()).To(BeTrue())
-		})
-	})
-
-	Describe("Enabled", func() {
-		It("is enabled", func() {
-			Expect(scc.Enabled()).To(BeTrue())
 		})
 	})
 
@@ -201,7 +169,7 @@ var _ = Describe("SCC", func() {
 
 				fakeSCCFuncs.InstallChaincodeReturns(&chaincode.InstalledChaincode{
 					Label:     "label",
-					PackageID: persistenceintf.PackageID("packageid"),
+					PackageID: "packageid",
 				}, nil)
 			})
 
@@ -249,8 +217,16 @@ var _ = Describe("SCC", func() {
 				fakeStub.GetArgsReturns([][]byte{[]byte("QueryInstalledChaincode"), marshaledArg})
 
 				fakeSCCFuncs.QueryInstalledChaincodeReturns(&chaincode.InstalledChaincode{
-					PackageID: persistenceintf.PackageID("awesome_package"),
+					PackageID: "awesome_package",
 					Label:     "awesome_package_label",
+					References: map[string][]*chaincode.Metadata{
+						"test-channel": {
+							&chaincode.Metadata{
+								Name:    "cc0",
+								Version: "cc0-version",
+							},
+						},
+					},
 				}, nil)
 			})
 
@@ -261,15 +237,26 @@ var _ = Describe("SCC", func() {
 				err := proto.Unmarshal(res.Payload, payload)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(payload.Label).To(Equal("awesome_package_label"))
+				Expect(payload.PackageId).To(Equal("awesome_package"))
+				Expect(payload.References).To(Equal(map[string]*lb.QueryInstalledChaincodeResult_References{
+					"test-channel": {
+						Chaincodes: []*lb.QueryInstalledChaincodeResult_Chaincode{
+							{
+								Name:    "cc0",
+								Version: "cc0-version",
+							},
+						},
+					},
+				}))
 
 				Expect(fakeSCCFuncs.QueryInstalledChaincodeCallCount()).To(Equal(1))
 				name := fakeSCCFuncs.QueryInstalledChaincodeArgsForCall(0)
-				Expect(name).To(Equal(persistenceintf.PackageID("awesome_package")))
+				Expect(name).To(Equal("awesome_package"))
 			})
 
 			Context("when the code package cannot be found", func() {
 				BeforeEach(func() {
-					fakeSCCFuncs.QueryInstalledChaincodeReturns(nil, persistence.CodePackageNotFoundErr{PackageID: persistenceintf.PackageID("less_awesome_package")})
+					fakeSCCFuncs.QueryInstalledChaincodeReturns(nil, persistence.CodePackageNotFoundErr{PackageID: "less_awesome_package"})
 				})
 
 				It("returns 404 Not Found", func() {
@@ -322,7 +309,7 @@ var _ = Describe("SCC", func() {
 
 				Expect(fakeSCCFuncs.GetInstalledChaincodePackageCallCount()).To(Equal(1))
 				packageID := fakeSCCFuncs.GetInstalledChaincodePackageArgsForCall(0)
-				Expect(packageID).To(Equal(p.PackageID("package-id")))
+				Expect(packageID).To(Equal("package-id"))
 			})
 
 			Context("when the underlying function implementation fails", func() {
@@ -356,7 +343,7 @@ var _ = Describe("SCC", func() {
 				fakeSCCFuncs.QueryInstalledChaincodesReturns([]*chaincode.InstalledChaincode{
 					{
 						Label:     "cc0-label",
-						PackageID: persistenceintf.PackageID("cc0-package-id"),
+						PackageID: "cc0-package-id",
 						References: map[string][]*chaincode.Metadata{
 							"test-channel": {
 								&chaincode.Metadata{
@@ -368,7 +355,7 @@ var _ = Describe("SCC", func() {
 					},
 					{
 						Label:     "cc1-label",
-						PackageID: persistenceintf.PackageID("cc1-package-id"),
+						PackageID: "cc1-package-id",
 					},
 				})
 			})
@@ -517,7 +504,7 @@ var _ = Describe("SCC", func() {
 					collConfigs.toProtoCollectionConfigPackage(),
 				)).Should(BeTrue())
 
-				Expect(packageID).To(Equal(persistenceintf.PackageID("hash")))
+				Expect(packageID).To(Equal("hash"))
 				Expect(pubState).To(Equal(fakeStub))
 				Expect(privState).To(BeAssignableToTypeOf(&lifecycle.ChaincodePrivateLedgerShim{}))
 				Expect(privState.(*lifecycle.ChaincodePrivateLedgerShim).Collection).To(Equal("_implicit_org_fake-mspid"))

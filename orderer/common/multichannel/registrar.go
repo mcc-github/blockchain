@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -20,6 +21,7 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
+	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	cb "github.com/mcc-github/blockchain/protos/common"
@@ -68,7 +70,7 @@ type configResources struct {
 }
 
 func (cr *configResources) CreateBundle(channelID string, config *cb.Config) (*channelconfig.Bundle, error) {
-	return channelconfig.NewBundle(channelID, config)
+	return channelconfig.NewBundle(channelID, config, factory.GetDefault())
 }
 
 func (cr *configResources) Update(bndl *channelconfig.Bundle) {
@@ -91,6 +93,7 @@ type ledgerResources struct {
 
 
 type Registrar struct {
+	config localconfig.TopLevel
 	lock   sync.RWMutex
 	chains map[string]*ChainSupport
 
@@ -126,12 +129,14 @@ func configTx(reader blockledger.Reader) *cb.Envelope {
 
 
 func NewRegistrar(
+	config localconfig.TopLevel,
 	ledgerFactory blockledger.Factory,
 	signer identity.SignerSerializer,
 	metricsProvider metrics.Provider,
 	callbacks ...channelconfig.BundleActor,
 ) *Registrar {
 	r := &Registrar{
+		config:             config,
 		chains:             make(map[string]*ChainSupport),
 		ledgerFactory:      ledgerFactory,
 		signer:             signer,
@@ -174,7 +179,7 @@ func (r *Registrar) Initialize(consenters map[string]consensus.Consenter) {
 			chain.Processor = msgprocessor.NewSystemChannel(
 				chain,
 				r.templator,
-				msgprocessor.CreateSystemChannelFilters(r, chain, chain.MetadataValidator),
+				msgprocessor.CreateSystemChannelFilters(r.config, r, chain, chain.MetadataValidator),
 			)
 
 			
@@ -275,7 +280,7 @@ func (r *Registrar) newLedgerResources(configTx *cb.Envelope) *ledgerResources {
 		logger.Panicf("Error umarshaling config envelope from payload data: %s", err)
 	}
 
-	bundle, err := channelconfig.NewBundle(chdr.ChannelId, configEnvelope.Config)
+	bundle, err := channelconfig.NewBundle(chdr.ChannelId, configEnvelope.Config, factory.GetDefault())
 	if err != nil {
 		logger.Panicf("Error creating channelconfig bundle: %s", err)
 	}
@@ -352,5 +357,5 @@ func (r *Registrar) NewChannelConfig(envConfigUpdate *cb.Envelope) (channelconfi
 
 
 func (r *Registrar) CreateBundle(channelID string, config *cb.Config) (channelconfig.Resources, error) {
-	return channelconfig.NewBundle(channelID, config)
+	return channelconfig.NewBundle(channelID, config, factory.GetDefault())
 }

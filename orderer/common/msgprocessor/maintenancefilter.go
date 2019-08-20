@@ -10,6 +10,7 @@ import (
 	"bytes"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	cb "github.com/mcc-github/blockchain/protos/common"
@@ -78,7 +79,7 @@ func (mf *MaintenanceFilter) inspect(configEnvelope *cb.ConfigEnvelope, ordererC
 		return errors.Errorf("updated config does not include a config update")
 	}
 
-	bundle, err := channelconfig.NewBundle(mf.support.ChainID(), configEnvelope.Config)
+	bundle, err := channelconfig.NewBundle(mf.support.ChainID(), configEnvelope.Config, factory.GetDefault())
 	if err != nil {
 		return errors.Wrap(err, "failed to parse config")
 	}

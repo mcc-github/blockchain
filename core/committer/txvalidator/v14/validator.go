@@ -298,7 +298,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 		var txsChaincodeName *sysccprovider.ChaincodeInstance
 		var txsUpgradedChaincode *sysccprovider.ChaincodeInstance
 
-		if payload, txResult = validation.ValidateTransaction(env, v.ChannelResources.Capabilities()); txResult != peer.TxValidationCode_VALID {
+		if payload, txResult = validation.ValidateTransaction(env); txResult != peer.TxValidationCode_VALID {
 			logger.Errorf("Invalid transaction with index %d", tIdx)
 			results <- &blockValidationResult{
 				tIdx:           tIdx,
@@ -380,26 +380,6 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 			if upgradeCC != nil {
 				logger.Infof("Find chaincode upgrade transaction for chaincode %s on channel %s with new version %s", upgradeCC.ChaincodeName, upgradeCC.ChainID, upgradeCC.ChaincodeVersion)
 				txsUpgradedChaincode = upgradeCC
-			}
-		} else if common.HeaderType(chdr.Type) == common.HeaderType_TOKEN_TRANSACTION {
-
-			txID = chdr.TxId
-			if !v.ChannelResources.Capabilities().FabToken() {
-				logger.Debugf("Unsupported transaction type [%s] in block number [%d] transaction index [%d]: FabToken capability is not enabled",
-					common.HeaderType(chdr.Type), block.Header.Number, tIdx)
-				results <- &blockValidationResult{
-					tIdx:           tIdx,
-					validationCode: peer.TxValidationCode_UNKNOWN_TX_TYPE,
-				}
-				return
-			}
-
-			
-			
-			erroneousResultEntry := v.checkTxIdDupsLedger(tIdx, chdr, v.ChannelResources.Ledger())
-			if erroneousResultEntry != nil {
-				results <- erroneousResultEntry
-				return
 			}
 		} else if common.HeaderType(chdr.Type) == common.HeaderType_CONFIG {
 			configEnvelope, err := configtx.UnmarshalConfigEnvelope(payload.Data)
@@ -558,7 +538,7 @@ func (v *TxValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upg
 	chainID := chdr.ChannelId 
 
 	
-	hdrExt, err := protoutil.GetChaincodeHeaderExtension(payload.Header)
+	hdrExt, err := protoutil.UnmarshalChaincodeHeaderExtension(chdr.Extension)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -566,21 +546,21 @@ func (v *TxValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upg
 	invokeIns := &sysccprovider.ChaincodeInstance{ChainID: chainID, ChaincodeName: invokeCC.Name, ChaincodeVersion: invokeCC.Version}
 
 	
-	tx, err := protoutil.GetTransaction(payload.Data)
+	tx, err := protoutil.UnmarshalTransaction(payload.Data)
 	if err != nil {
 		logger.Errorf("GetTransaction failed: %+v", err)
 		return invokeIns, nil, nil
 	}
 
 	
-	cap, err := protoutil.GetChaincodeActionPayload(tx.Actions[0].Payload)
+	cap, err := protoutil.UnmarshalChaincodeActionPayload(tx.Actions[0].Payload)
 	if err != nil {
 		logger.Errorf("GetChaincodeActionPayload failed: %+v", err)
 		return invokeIns, nil, nil
 	}
 
 	
-	cpp, err := protoutil.GetChaincodeProposalPayload(cap.ChaincodeProposalPayload)
+	cpp, err := protoutil.UnmarshalChaincodeProposalPayload(cap.ChaincodeProposalPayload)
 	if err != nil {
 		logger.Errorf("GetChaincodeProposalPayload failed: %+v", err)
 		return invokeIns, nil, nil
@@ -608,7 +588,7 @@ func (v *TxValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upg
 }
 
 func (v *TxValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sysccprovider.ChaincodeInstance, error) {
-	cds, err := protoutil.GetChaincodeDeploymentSpec(cdsBytes)
+	cds, err := protoutil.UnmarshalChaincodeDeploymentSpec(cdsBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -652,11 +632,6 @@ func (ds *dynamicCapabilities) CollectionUpgrade() bool {
 
 func (ds *dynamicCapabilities) StorePvtDataOfInvalidTx() bool {
 	return ds.cr.Capabilities().StorePvtDataOfInvalidTx()
-}
-
-
-func (ds *dynamicCapabilities) FabToken() bool {
-	return ds.cr.Capabilities().FabToken()
 }
 
 func (ds *dynamicCapabilities) ForbidDuplicateTXIdInBlock() bool {

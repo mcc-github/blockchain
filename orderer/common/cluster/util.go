@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -233,7 +234,7 @@ func ConfigFromBlock(block *common.Block) (*common.ConfigEnvelope, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	payload, err := protoutil.GetPayload(env)
+	payload, err := protoutil.UnmarshalPayload(env.Payload)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -313,7 +314,7 @@ func SignatureSetFromBlock(block *common.Block) ([]*protoutil.SignedData, error)
 
 	var signatureSet []*protoutil.SignedData
 	for _, metadataSignature := range metadata.Signatures {
-		sigHdr, err := protoutil.GetSignatureHeader(metadataSignature.SignatureHeader)
+		sigHdr, err := protoutil.UnmarshalSignatureHeader(metadataSignature.SignatureHeader)
 		if err != nil {
 			return nil, errors.Errorf("failed unmarshaling signature header for block with id %d: %v",
 				block.Header.Number, err)
@@ -356,7 +357,7 @@ func EndpointconfigFromConfigBlock(block *common.Block) ([]EndpointCriteria, err
 		return nil, err
 	}
 
-	bundle, err := channelconfig.NewBundleFromEnvelope(envelopeConfig)
+	bundle, err := channelconfig.NewBundleFromEnvelope(envelopeConfig, factory.GetDefault())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed extracting bundle from envelope")
 	}
@@ -524,7 +525,7 @@ type BlockVerifierAssembler struct {
 
 
 func (bva *BlockVerifierAssembler) VerifierFromConfig(configuration *common.ConfigEnvelope, channel string) (BlockVerifier, error) {
-	bundle, err := channelconfig.NewBundle(channel, configuration.Config)
+	bundle, err := channelconfig.NewBundle(channel, configuration.Config, factory.GetDefault())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed extracting bundle from envelope")
 	}
@@ -549,7 +550,7 @@ func (bv *BlockValidationPolicyVerifier) VerifyBlockSignature(sd []*protoutil.Si
 	policyMgr := bv.PolicyMgr
 	
 	if envelope != nil {
-		bundle, err := channelconfig.NewBundle(bv.Channel, envelope.Config)
+		bundle, err := channelconfig.NewBundle(bv.Channel, envelope.Config, factory.GetDefault())
 		if err != nil {
 			buff := &bytes.Buffer{}
 			protolator.DeepMarshalJSON(buff, envelope.Config)

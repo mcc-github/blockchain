@@ -61,21 +61,14 @@ func (f InvalidChannelNameErr) Error() string {
 type InvalidChaincodeNameErr string
 
 func (f InvalidChaincodeNameErr) Error() string {
-	return fmt.Sprintf("invalid chaincode name '%s'. Names can only consist of alphanumerics, '_', and '-'", string(f))
-}
-
-
-type EmptyChaincodeNameErr string
-
-func (f EmptyChaincodeNameErr) Error() string {
-	return fmt.Sprint("chaincode name not provided")
+	return fmt.Sprintf("invalid chaincode name '%s'. Names must start with an alphanumeric character and can only consist of alphanumerics, '_', and '-'", string(f))
 }
 
 
 type InvalidVersionErr string
 
 func (f InvalidVersionErr) Error() string {
-	return fmt.Sprintf("invalid chaincode version '%s'. Versions can only consist of alphanumerics, '_',  '-', '+', and '.'", string(f))
+	return fmt.Sprintf("invalid chaincode version '%s'. Versions must not be empty and can only consist of alphanumerics, '_',  '-', '+', and '.'", string(f))
 }
 
 
@@ -90,13 +83,6 @@ type ChaincodeMismatchErr string
 
 func (f ChaincodeMismatchErr) Error() string {
 	return fmt.Sprintf("chaincode name mismatch: %s", string(f))
-}
-
-
-type EmptyVersionErr string
-
-func (f EmptyVersionErr) Error() string {
-	return fmt.Sprintf("version not provided for chaincode with name '%s'", string(f))
 }
 
 

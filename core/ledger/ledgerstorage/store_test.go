@@ -174,7 +174,7 @@ func TestStoreWithExistingBlockchain(t *testing.T) {
 	assert.Equal(t, uint64(10), pvtdataBlockHt)
 }
 
-func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
+func TestCrashAfterPvtdataStoreCommit(t *testing.T) {
 	storeDir, err := ioutil.TempDir("", "lstore")
 	if err != nil {
 		t.Fatalf("Failed to create ledger storage directory: %s", err)
@@ -195,13 +195,13 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	for _, sampleDatum := range dataBeforeCrash {
 		assert.NoError(t, store.CommitWithPvtData(sampleDatum))
 	}
-	blokNumAtCrash := dataAtCrash.Block.Header.Number
+	blockNumAtCrash := dataAtCrash.Block.Header.Number
 	var pvtdataAtCrash []*ledger.TxPvtData
 	for _, p := range dataAtCrash.PvtData {
 		pvtdataAtCrash = append(pvtdataAtCrash, p)
 	}
 	
-	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
+	store.pvtdataStore.Commit(blockNumAtCrash, pvtdataAtCrash, nil)
 	store.Shutdown()
 	provider.Close()
 	provider = NewProvider(storeDir, conf, metricsProvider)
@@ -210,70 +210,51 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	store.Init(btlPolicyForSampleData())
 
 	
-	_, err = store.GetPvtDataByNum(blokNumAtCrash, nil)
-	_, ok := err.(*pvtdatastorage.ErrOutOfRange)
-	assert.True(t, ok)
+	testVerifyPvtData(t, store, blockNumAtCrash, dataAtCrash.PvtData)
+	bcInfo, err := store.GetBlockchainInfo()
+	assert.NoError(t, err)
+	assert.Equal(t, blockNumAtCrash, bcInfo.Height)
 
 	
+	
+	
+	expectedPvtData := dataAtCrash.PvtData
+	dataAtCrash.PvtData = make(ledger.TxPvtDataMap)
+	dataAtCrash.PvtData[0] = &ledger.TxPvtData{
+		SeqInBlock: 0,
+		WriteSet: &rwset.TxPvtReadWriteSet{
+			NsPvtRwset: []*rwset.NsPvtReadWriteSet{
+				{
+					Namespace: "ns-1",
+					CollectionPvtRwset: []*rwset.CollectionPvtReadWriteSet{
+						{
+							CollectionName: "coll-1",
+							Rwset:          []byte("pvtdata"),
+						},
+					},
+				},
+			},
+		},
+	}
 	assert.NoError(t, store.CommitWithPvtData(dataAtCrash))
-	pvtdata, err := store.GetPvtDataByNum(blokNumAtCrash, nil)
+	testVerifyPvtData(t, store, blockNumAtCrash, expectedPvtData)
+	bcInfo, err = store.GetBlockchainInfo()
+	assert.NoError(t, err)
+	assert.Equal(t, blockNumAtCrash+1, bcInfo.Height)
+
+}
+
+func testVerifyPvtData(t *testing.T, store *Store, blockNum uint64, expectedPvtData ledger.TxPvtDataMap) {
+	pvtdata, err := store.GetPvtDataByNum(blockNum, nil)
 	assert.NoError(t, err)
 	constructed := constructPvtdataMap(pvtdata)
-	for k, v := range dataAtCrash.PvtData {
+	assert.Equal(t, len(expectedPvtData), len(constructed))
+	for k, v := range expectedPvtData {
 		ov, ok := constructed[k]
 		assert.True(t, ok)
 		assert.Equal(t, v.SeqInBlock, ov.SeqInBlock)
 		assert.True(t, proto.Equal(v.WriteSet, ov.WriteSet))
 	}
-	for k, v := range constructed {
-		ov, ok := dataAtCrash.PvtData[k]
-		assert.True(t, ok)
-		assert.Equal(t, v.SeqInBlock, ov.SeqInBlock)
-		assert.True(t, proto.Equal(v.WriteSet, ov.WriteSet))
-	}
-}
-
-func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
-	storeDir, err := ioutil.TempDir("", "lstore")
-	if err != nil {
-		t.Fatalf("Failed to create ledger storage directory: %s", err)
-	}
-	defer os.RemoveAll(storeDir)
-	conf := buildPrivateDataConfig(storeDir)
-	provider := NewProvider(storeDir, conf, metricsProvider)
-	defer provider.Close()
-	store, err := provider.Open("testLedger")
-	store.Init(btlPolicyForSampleData())
-	defer store.Shutdown()
-	assert.NoError(t, err)
-
-	sampleData := sampleDataWithPvtdataForAllTxs(t)
-	dataBeforeCrash := sampleData[0:3]
-	dataAtCrash := sampleData[3]
-
-	for _, sampleDatum := range dataBeforeCrash {
-		assert.NoError(t, store.CommitWithPvtData(sampleDatum))
-	}
-	blokNumAtCrash := dataAtCrash.Block.Header.Number
-	var pvtdataAtCrash []*ledger.TxPvtData
-	for _, p := range dataAtCrash.PvtData {
-		pvtdataAtCrash = append(pvtdataAtCrash, p)
-	}
-
-	
-	
-	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
-	store.BlockStore.AddBlock(dataAtCrash.Block)
-	store.Shutdown()
-	provider.Close()
-	provider = NewProvider(storeDir, conf, metricsProvider)
-	store, err = provider.Open("testLedger")
-	assert.NoError(t, err)
-	store.Init(btlPolicyForSampleData())
-	blkAndPvtdata, err := store.GetPvtDataAndBlockByNum(blokNumAtCrash, nil)
-	assert.NoError(t, err)
-	assert.Equal(t, dataAtCrash.MissingPvtData, blkAndPvtdata.MissingPvtData)
-	assert.True(t, proto.Equal(dataAtCrash.Block, blkAndPvtdata.Block))
 }
 
 func TestAddAfterPvtdataStoreError(t *testing.T) {
@@ -302,19 +283,12 @@ func TestAddAfterPvtdataStoreError(t *testing.T) {
 	pvtStoreCommitHt, err := store.pvtdataStore.LastCommittedBlockHeight()
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(9), pvtStoreCommitHt)
-	pvtStorePndingBatch, err := store.pvtdataStore.HasPendingBatch()
-	assert.NoError(t, err)
-	assert.False(t, pvtStorePndingBatch)
 
 	
 	assert.NoError(t, store.CommitWithPvtData(sampleData[9]))
 	pvtStoreCommitHt, err = store.pvtdataStore.LastCommittedBlockHeight()
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(10), pvtStoreCommitHt)
-
-	pvtStorePndingBatch, err = store.pvtdataStore.HasPendingBatch()
-	assert.NoError(t, err)
-	assert.False(t, pvtStorePndingBatch)
 }
 
 func TestAddAfterBlkStoreError(t *testing.T) {
@@ -343,11 +317,7 @@ func TestAddAfterBlkStoreError(t *testing.T) {
 	
 	pvtStoreCommitHt, err := store.pvtdataStore.LastCommittedBlockHeight()
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(9), pvtStoreCommitHt)
-
-	pvtStorePndingBatch, err := store.pvtdataStore.HasPendingBatch()
-	assert.NoError(t, err)
-	assert.False(t, pvtStorePndingBatch)
+	assert.Equal(t, uint64(10), pvtStoreCommitHt)
 }
 
 func TestPvtStoreAheadOfBlockStore(t *testing.T) {
@@ -394,9 +364,7 @@ func TestPvtStoreAheadOfBlockStore(t *testing.T) {
 	
 	
 	validTxPvtData, validTxMissingPvtData := constructPvtDataAndMissingData(lastBlkAndPvtData)
-	err = store.pvtdataStore.Prepare(lastBlkAndPvtData.Block.Header.Number, validTxPvtData, validTxMissingPvtData)
-	assert.NoError(t, err)
-	err = store.pvtdataStore.Commit()
+	err = store.pvtdataStore.Commit(lastBlkAndPvtData.Block.Header.Number, validTxPvtData, validTxMissingPvtData)
 	assert.NoError(t, err)
 
 	

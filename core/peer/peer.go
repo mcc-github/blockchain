@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	cc "github.com/mcc-github/blockchain/common/config"
 	"github.com/mcc-github/blockchain/common/configtx"
@@ -178,6 +179,7 @@ type Peer struct {
 	StoreProvider     transientstore.StoreProvider
 	GossipService     *gossipservice.GossipService
 	LedgerMgr         *ledgermgmt.LedgerMgr
+	CryptoProvider    bccsp.BCCSP
 
 	
 	
@@ -250,7 +252,7 @@ func (p *Peer) createChannel(
 
 	var bundle *channelconfig.Bundle
 	if chanConf != nil {
-		bundle, err = channelconfig.NewBundle(cid, chanConf)
+		bundle, err = channelconfig.NewBundle(cid, chanConf, p.CryptoProvider)
 		if err != nil {
 			return err
 		}
@@ -262,7 +264,7 @@ func (p *Peer) createChannel(
 			return err
 		}
 
-		bundle, err = channelconfig.NewBundleFromEnvelope(envelopeConfig)
+		bundle, err = channelconfig.NewBundleFromEnvelope(envelopeConfig, p.CryptoProvider)
 		if err != nil {
 			return err
 		}
@@ -304,8 +306,9 @@ func (p *Peer) createChannel(
 	}
 
 	channel := &Channel{
-		ledger:    l,
-		resources: bundle,
+		ledger:         l,
+		resources:      bundle,
+		cryptoProvider: p.CryptoProvider,
 	}
 
 	channel.bundleSource = channelconfig.NewBundleSource(

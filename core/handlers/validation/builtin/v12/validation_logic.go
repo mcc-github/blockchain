@@ -35,7 +35,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("vscc")
+var (
+	logger = flogging.MustGetLogger("vscc")
+
+	
+	
+	systemChaincodeNames = map[string]struct{}{
+		"cscc": {},
+		"escc": {},
+		"lscc": {},
+		"qscc": {},
+		"vscc": {},
+	}
+)
 
 const (
 	DUPLICATED_IDENTITY_ERROR = "Endorsement policy evaluation failure might be caused by duplicated identities"
@@ -112,7 +124,7 @@ func (vscc *Validator) Validate(
 	}
 
 	
-	payl, err := protoutil.GetPayload(env)
+	payl, err := protoutil.UnmarshalPayload(env.Payload)
 	if err != nil {
 		logger.Errorf("VSCC error: GetPayload failed, err %s", err)
 		return policyErr(err)
@@ -130,13 +142,13 @@ func (vscc *Validator) Validate(
 	}
 
 	
-	tx, err := protoutil.GetTransaction(payl.Data)
+	tx, err := protoutil.UnmarshalTransaction(payl.Data)
 	if err != nil {
 		logger.Errorf("VSCC error: GetTransaction failed, err %s", err)
 		return policyErr(err)
 	}
 
-	cap, err := protoutil.GetChaincodeActionPayload(tx.Actions[actionPosition].Payload)
+	cap, err := protoutil.UnmarshalChaincodeActionPayload(tx.Actions[actionPosition].Payload)
 	if err != nil {
 		logger.Errorf("VSCC error: GetChaincodeActionPayload failed, err %s", err)
 		return policyErr(err)
@@ -174,7 +186,7 @@ func (vscc *Validator) Validate(
 
 func (vscc *Validator) checkInstantiationPolicy(chainName string, env *common.Envelope, instantiationPolicy []byte, payl *common.Payload) commonerrors.TxValidationError {
 	
-	shdr, err := protoutil.GetSignatureHeader(payl.Header.SignatureHeader)
+	shdr, err := protoutil.UnmarshalSignatureHeader(payl.Header.SignatureHeader)
 	if err != nil {
 		return policyErr(err)
 	}
@@ -481,7 +493,7 @@ func (vscc *Validator) ValidateLSCCInvocation(
 	payl *common.Payload,
 	ac vc.Capabilities,
 ) commonerrors.TxValidationError {
-	cpp, err := protoutil.GetChaincodeProposalPayload(cap.ChaincodeProposalPayload)
+	cpp, err := protoutil.UnmarshalChaincodeProposalPayload(cap.ChaincodeProposalPayload)
 	if err != nil {
 		logger.Errorf("VSCC error: GetChaincodeProposalPayload failed, err %s", err)
 		return policyErr(err)
@@ -519,9 +531,14 @@ func (vscc *Validator) ValidateLSCCInvocation(
 			return policyErr(fmt.Errorf("Wrong number of arguments for invocation lscc(%s): received %d", lsccFunc, len(lsccArgs)))
 		}
 
-		cdsArgs, err := protoutil.GetChaincodeDeploymentSpec(lsccArgs[1])
+		cdsArgs, err := protoutil.UnmarshalChaincodeDeploymentSpec(lsccArgs[1])
 		if err != nil {
 			return policyErr(fmt.Errorf("GetChaincodeDeploymentSpec error %s", err))
+		}
+
+		if cdsArgs == nil || cdsArgs.ChaincodeSpec == nil || cdsArgs.ChaincodeSpec.ChaincodeId == nil ||
+			cap.Action == nil || cap.Action.ProposalResponsePayload == nil {
+			return policyErr(fmt.Errorf("VSCC error: invocation of lscc(%s) does not have appropriate arguments", lsccFunc))
 		}
 
 		err = packaging.NewRegistry(
@@ -538,20 +555,33 @@ func (vscc *Validator) ValidateLSCCInvocation(
 			return policyErr(fmt.Errorf("failed to validate deployment spec: %s", err))
 		}
 
-		if cdsArgs == nil || cdsArgs.ChaincodeSpec == nil || cdsArgs.ChaincodeSpec.ChaincodeId == nil ||
-			cap.Action == nil || cap.Action.ProposalResponsePayload == nil {
-			return policyErr(fmt.Errorf("VSCC error: invocation of lscc(%s) does not have appropriate arguments", lsccFunc))
+		
+		ccName := cdsArgs.ChaincodeSpec.ChaincodeId.Name
+		
+		if !lscc.ChaincodeNameRegExp.MatchString(ccName) {
+			return policyErr(errors.Errorf("invalid chaincode name '%s'", ccName))
+		}
+		
+		if _, in := systemChaincodeNames[ccName]; in {
+			return policyErr(errors.Errorf("chaincode name '%s' is reserved for system chaincodes", ccName))
 		}
 
 		
-		pRespPayload, err := protoutil.GetProposalResponsePayload(cap.Action.ProposalResponsePayload)
+		ccVersion := cdsArgs.ChaincodeSpec.ChaincodeId.Version
+		
+		if !lscc.ChaincodeVersionRegExp.MatchString(ccVersion) {
+			return policyErr(errors.Errorf("invalid chaincode version '%s'", ccVersion))
+		}
+
+		
+		pRespPayload, err := protoutil.UnmarshalProposalResponsePayload(cap.Action.ProposalResponsePayload)
 		if err != nil {
 			return policyErr(fmt.Errorf("GetProposalResponsePayload error %s", err))
 		}
 		if pRespPayload.Extension == nil {
 			return policyErr(fmt.Errorf("nil pRespPayload.Extension"))
 		}
-		respPayload, err := protoutil.GetChaincodeAction(pRespPayload.Extension)
+		respPayload, err := protoutil.UnmarshalChaincodeAction(pRespPayload.Extension)
 		if err != nil {
 			return policyErr(fmt.Errorf("GetChaincodeAction error %s", err))
 		}

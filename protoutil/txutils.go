@@ -21,7 +21,7 @@ import (
 func GetPayloads(txActions *peer.TransactionAction) (*peer.ChaincodeActionPayload, *peer.ChaincodeAction, error) {
 	
 	
-	ccPayload, err := GetChaincodeActionPayload(txActions.Payload)
+	ccPayload, err := UnmarshalChaincodeActionPayload(txActions.Payload)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -29,7 +29,7 @@ func GetPayloads(txActions *peer.TransactionAction) (*peer.ChaincodeActionPayloa
 	if ccPayload.Action == nil || ccPayload.Action.ProposalResponsePayload == nil {
 		return nil, nil, errors.New("no payload in ChaincodeActionPayload")
 	}
-	pRespPayload, err := GetProposalResponsePayload(ccPayload.Action.ProposalResponsePayload)
+	pRespPayload, err := UnmarshalProposalResponsePayload(ccPayload.Action.ProposalResponsePayload)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -38,7 +38,7 @@ func GetPayloads(txActions *peer.TransactionAction) (*peer.ChaincodeActionPayloa
 		return nil, nil, errors.New("response payload is missing extension")
 	}
 
-	respPayload, err := GetChaincodeAction(pRespPayload.Extension)
+	respPayload, err := UnmarshalChaincodeAction(pRespPayload.Extension)
 	if err != nil {
 		return ccPayload, nil, err
 	}
@@ -142,13 +142,13 @@ func CreateSignedTx(
 	}
 
 	
-	hdr, err := GetHeader(proposal.Header)
+	hdr, err := UnmarshalHeader(proposal.Header)
 	if err != nil {
 		return nil, err
 	}
 
 	
-	pPayl, err := GetChaincodeProposalPayload(proposal.Payload)
+	pPayl, err := UnmarshalChaincodeProposalPayload(proposal.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func CreateSignedTx(
 		return nil, err
 	}
 
-	shdr, err := GetSignatureHeader(hdr.SignatureHeader)
+	shdr, err := UnmarshalSignatureHeader(hdr.SignatureHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,11 @@ func CreateSignedTx(
 	}
 
 	
-	hdrExt, err := GetChaincodeHeaderExtension(hdr)
+	chdr, err := UnmarshalChannelHeader(hdr.ChannelHeader)
+	if err != nil {
+		return nil, err
+	}
+	hdrExt, err := UnmarshalChaincodeHeaderExtension(chdr.Extension)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +258,7 @@ func CreateProposalResponse(
 	visibility []byte,
 	signingEndorser identity.SignerSerializer,
 ) (*peer.ProposalResponse, error) {
-	hdr, err := GetHeader(hdrbytes)
+	hdr, err := UnmarshalHeader(hdrbytes)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +318,7 @@ func CreateProposalResponseFailure(
 	ccid *peer.ChaincodeID,
 	visibility []byte,
 ) (*peer.ProposalResponse, error) {
-	hdr, err := GetHeader(hdrbytes)
+	hdr, err := UnmarshalHeader(hdrbytes)
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +482,7 @@ func GetProposalHash1(header *common.Header, ccPropPayl []byte, visibility []byt
 	}
 
 	
-	cpp, err := GetChaincodeProposalPayload(ccPropPayl)
+	cpp, err := UnmarshalChaincodeProposalPayload(ccPropPayl)
 	if err != nil {
 		return nil, err
 	}
@@ -530,5 +534,6 @@ func GetOrComputeTxIDFromEnvelope(txEnvelopBytes []byte) (string, error) {
 		return "", errors.WithMessage(err, "error getting nonce and creator for computing txID")
 	}
 
-	return ComputeTxID(sighdr.Nonce, sighdr.Creator)
+	txid := ComputeTxID(sighdr.Nonce, sighdr.Creator)
+	return txid, nil
 }

@@ -7,19 +7,21 @@ SPDX-License-Identifier: Apache-2.0
 package lifecycle
 
 import (
-	"strings"
-
-	"github.com/mcc-github/blockchain/common/util"
-	corechaincode "github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/scc"
 
 	"github.com/pkg/errors"
 )
 
 
+
+
+
+
+
 type LegacyLifecycle interface {
-	corechaincode.Lifecycle
+	ChaincodeDefinition(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error)
 }
 
 
@@ -31,39 +33,15 @@ type ChaincodeInfoCache interface {
 
 
 type LegacyDefinition struct {
-	Name                string
-	Version             string
-	HashField           []byte
-	EndorsementPlugin   string
-	ValidationPlugin    string
-	ValidationParameter []byte
-	RequiresInitField   bool
-}
-
-
-func (ld *LegacyDefinition) CCName() string {
-	return ld.Name
-}
-
-
-
-
-
-func (ld *LegacyDefinition) Hash() []byte {
-	return util.ComputeSHA256([]byte(ld.Name + ":" + ld.Version))
+	Version           string
+	EndorsementPlugin string
+	RequiresInitField bool
+	ChaincodeIDField  string
 }
 
 
 func (ld *LegacyDefinition) CCVersion() string {
 	return ld.Version
-}
-
-
-
-
-
-func (ld *LegacyDefinition) Validation() (string, []byte) {
-	return ld.ValidationPlugin, ld.ValidationParameter
 }
 
 
@@ -77,10 +55,16 @@ func (ld *LegacyDefinition) RequiresInit() bool {
 	return ld.RequiresInitField
 }
 
+
+func (ld *LegacyDefinition) ChaincodeID() string {
+	return ld.ChaincodeIDField
+}
+
 type ChaincodeEndorsementInfo struct {
-	Resources  *Resources
-	Cache      ChaincodeInfoCache
-	LegacyImpl LegacyLifecycle
+	Resources   *Resources
+	Cache       ChaincodeInfoCache
+	LegacyImpl  LegacyLifecycle
+	BuiltinSCCs scc.BuiltinSCCs
 }
 
 func (cei *ChaincodeEndorsementInfo) CachedChaincodeInfo(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (*LocalChaincodeInfo, bool, error) {
@@ -134,6 +118,15 @@ func (cei *ChaincodeEndorsementInfo) CachedChaincodeInfo(channelID, chaincodeNam
 
 
 func (cei *ChaincodeEndorsementInfo) ChaincodeDefinition(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error) {
+	if cei.BuiltinSCCs.IsSysCC(chaincodeName) {
+		return &LegacyDefinition{
+			Version:           scc.SysCCVersion,
+			EndorsementPlugin: "escc",
+			RequiresInitField: false,
+			ChaincodeIDField:  scc.ChaincodeID(chaincodeName),
+		}, nil
+	}
+
 	chaincodeInfo, ok, err := cei.CachedChaincodeInfo(channelID, chaincodeName, qe)
 	if err != nil {
 		return nil, err
@@ -145,30 +138,11 @@ func (cei *ChaincodeEndorsementInfo) ChaincodeDefinition(channelID, chaincodeNam
 	chaincodeDefinition := chaincodeInfo.Definition
 
 	return &LegacyDefinition{
-		Name:                chaincodeName,
-		Version:             chaincodeDefinition.EndorsementInfo.Version,
-		EndorsementPlugin:   chaincodeDefinition.EndorsementInfo.EndorsementPlugin,
-		RequiresInitField:   chaincodeDefinition.EndorsementInfo.InitRequired,
-		ValidationPlugin:    chaincodeDefinition.ValidationInfo.ValidationPlugin,
-		ValidationParameter: chaincodeDefinition.ValidationInfo.ValidationParameter,
-	}, nil
-}
+		Version:           chaincodeDefinition.EndorsementInfo.Version,
+		EndorsementPlugin: chaincodeDefinition.EndorsementInfo.EndorsementPlugin,
+		RequiresInitField: chaincodeDefinition.EndorsementInfo.InitRequired,
 
-
-func (cei *ChaincodeEndorsementInfo) ChaincodeContainerInfo(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error) {
-	chaincodeInfo, ok, err := cei.CachedChaincodeInfo(channelID, chaincodeName, qe)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return cei.LegacyImpl.ChaincodeContainerInfo(channelID, chaincodeName, qe)
-	}
-
-	return &ccprovider.ChaincodeContainerInfo{
-		Name:      chaincodeName,
-		Version:   chaincodeInfo.Definition.EndorsementInfo.Version,
-		Path:      chaincodeInfo.InstallInfo.Path,
-		Type:      strings.ToUpper(chaincodeInfo.InstallInfo.Type),
-		PackageID: chaincodeInfo.InstallInfo.PackageID,
+		
+		ChaincodeIDField: string(chaincodeInfo.InstallInfo.PackageID),
 	}, nil
 }

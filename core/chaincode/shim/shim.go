@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 	"unicode/utf8"
 
 	"github.com/golang/protobuf/proto"
@@ -27,8 +26,9 @@ const (
 	maxUnicodeRuneValue   = utf8.MaxRune 
 	compositeKeyNamespace = "\x00"
 	emptyKeySubstitute    = "\x01"
-	connectTimeout        = 3 * time.Second
 )
+
+var peerAddress = flag.String("peer.address", "", "peer address")
 
 
 
@@ -39,8 +39,6 @@ var streamGetter peerStreamGetter
 
 
 func userChaincodeStreamGetter(name string) (PeerChaincodeStream, error) {
-	peerAddress := flag.String("peer.address", "", "peer address")
-	flag.Parse()
 	if *peerAddress == "" {
 		return nil, errors.New("flag 'peer.address' must be set")
 	}
@@ -50,7 +48,7 @@ func userChaincodeStreamGetter(name string) (PeerChaincodeStream, error) {
 		return nil, err
 	}
 
-	conn, err := internal.NewClientConn(*peerAddress, conf.TLS, conf.KaOpts, connectTimeout)
+	conn, err := internal.NewClientConn(*peerAddress, conf.TLS, conf.KaOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +58,7 @@ func userChaincodeStreamGetter(name string) (PeerChaincodeStream, error) {
 
 
 func Start(cc Chaincode) error {
+	flag.Parse()
 	chaincodename := os.Getenv("CORE_CHAINCODE_ID_NAME")
 	if chaincodename == "" {
 		return errors.New("'CORE_CHAINCODE_ID_NAME' must be set")
@@ -123,8 +122,7 @@ func chatWithPeer(chaincodename string, stream PeerChaincodeStream, cc Chaincode
 		case rmsg := <-msgAvail:
 			switch {
 			case rmsg.err == io.EOF:
-				err = fmt.Errorf("received EOF, ending chaincode stream: %s", rmsg.err)
-				return err
+				return errors.New("received EOF, ending chaincode stream")
 			case rmsg.err != nil:
 				err := fmt.Errorf("receive failed: %s", rmsg.err)
 				return err

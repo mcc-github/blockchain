@@ -21,7 +21,12 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"gopkg.in/alecthomas/kingpin.v2"
+
 	"github.com/mcc-github/blockchain-lib-go/healthz"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	floggingmetrics "github.com/mcc-github/blockchain/common/flogging/metrics"
@@ -49,9 +54,6 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
-	"go.uber.org/zap/zapcore"
-	"google.golang.org/grpc"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var logger = flogging.MustGetLogger("orderer.common.server")
@@ -102,22 +104,9 @@ func Main() {
 	sysChanLastConfigBlock := extractSysChanLastConfig(lf, bootstrapBlock)
 	clusterBootBlock := selectClusterBootBlock(bootstrapBlock, sysChanLastConfigBlock)
 
-	clusterType := isClusterType(clusterBootBlock)
-
 	signer, signErr := loadLocalMSP(conf).GetDefaultSigningIdentity()
 	if signErr != nil {
 		logger.Panicf("Failed to get local MSP identity: %s", signErr)
-	}
-
-	clusterClientConfig := initializeClusterClientConfig(conf, clusterType, bootstrapBlock)
-	clusterDialer := &cluster.PredicateDialer{
-		Config: clusterClientConfig,
-	}
-
-	r := createReplicator(lf, bootstrapBlock, conf, clusterClientConfig.SecOpts, signer)
-	
-	if clusterType && conf.General.GenesisMethod == "file" {
-		r.replicateIfNeeded(bootstrapBlock)
 	}
 
 	logObserver := floggingmetrics.NewObserver(metricsProvider)
@@ -131,30 +120,54 @@ func Main() {
 		clientRootCAs:         serverConfig.SecOpts.ClientRootCAs,
 	}
 
+	
+	var r *replicationInitiator
 	clusterServerConfig := serverConfig
-	clusterGRPCServer := grpcServer
+	clusterGRPCServer := grpcServer 
+	var clusterClientConfig comm.ClientConfig
+	var clusterDialer *cluster.PredicateDialer
+
+	var reuseGrpcListener bool
+	typ := consensusType(bootstrapBlock)
+	var serversToUpdate []*comm.GRPCServer
+
+	clusterType := isClusterType(clusterBootBlock)
 	if clusterType {
-		clusterServerConfig, clusterGRPCServer = configureClusterListener(conf, serverConfig, grpcServer, ioutil.ReadFile)
+		logger.Infof("Setting up cluster for orderer type %s", typ)
+		clusterClientConfig = initializeClusterClientConfig(conf)
+		clusterDialer = &cluster.PredicateDialer{
+			Config: clusterClientConfig,
+		}
+
+		r = createReplicator(lf, bootstrapBlock, conf, clusterClientConfig.SecOpts, signer)
+		
+		if conf.General.GenesisMethod == "file" {
+			r.replicateIfNeeded(bootstrapBlock)
+		}
+
+		if reuseGrpcListener = reuseListener(conf, typ); !reuseGrpcListener {
+			clusterServerConfig, clusterGRPCServer = configureClusterListener(conf, serverConfig, ioutil.ReadFile)
+		}
+
+		
+		
+		serversToUpdate = append(serversToUpdate, clusterGRPCServer)
 	}
 
-	var servers = []*comm.GRPCServer{grpcServer}
 	
 	
-	if clusterGRPCServer != grpcServer {
-		servers = append(servers, clusterGRPCServer)
+	if grpcServer.MutualTLSRequired() && !reuseGrpcListener {
+		serversToUpdate = append(serversToUpdate, grpcServer)
 	}
 
 	tlsCallback := func(bundle *channelconfig.Bundle) {
-		
-		if grpcServer.MutualTLSRequired() || clusterType {
-			logger.Debug("Executing callback to update root CAs")
-			caMgr.updateTrustedRoots(bundle, servers...)
-			if clusterType {
-				caMgr.updateClusterDialer(
-					clusterDialer,
-					clusterClientConfig.SecOpts.ServerRootCAs,
-				)
-			}
+		logger.Debug("Executing callback to update root CAs")
+		caMgr.updateTrustedRoots(bundle, serversToUpdate...)
+		if clusterType {
+			caMgr.updateClusterDialer(
+				clusterDialer,
+				clusterClientConfig.SecOpts.ServerRootCAs,
+			)
 		}
 	}
 
@@ -173,7 +186,14 @@ func Main() {
 	)
 
 	mutualTLS := serverConfig.SecOpts.UseTLS && serverConfig.SecOpts.RequireClientCert
-	server := NewServer(manager, metricsProvider, &conf.Debug, conf.General.Authentication.TimeWindow, mutualTLS)
+	server := NewServer(
+		manager,
+		metricsProvider,
+		&conf.Debug,
+		conf.General.Authentication.TimeWindow,
+		mutualTLS,
+		conf.General.Authentication.NoExpirationChecks,
+	)
 
 	logger.Infof("Starting %s", metadata.GetVersionInfo())
 	go handleSignals(addPlatformSignals(map[os.Signal]func(){
@@ -185,7 +205,7 @@ func Main() {
 		},
 	}))
 
-	if clusterGRPCServer != grpcServer {
+	if !reuseGrpcListener && clusterType {
 		logger.Info("Starting cluster listener on", clusterGRPCServer.Address())
 		go clusterGRPCServer.Start()
 	}
@@ -194,6 +214,29 @@ func Main() {
 	ab.RegisterAtomicBroadcastServer(grpcServer.Server(), server)
 	logger.Info("Beginning to serve requests")
 	grpcServer.Start()
+}
+
+func reuseListener(conf *localconfig.TopLevel, typ string) bool {
+	clusterConf := conf.General.Cluster
+	
+	
+	if clusterConf.ListenPort == 0 && clusterConf.ServerCertificate == "" && clusterConf.ListenAddress == "" && clusterConf.ServerPrivateKey == "" {
+		logger.Info("Cluster listener is not configured, defaulting to use the general listener on port", conf.General.ListenPort)
+
+		if !conf.General.TLS.Enabled {
+			logger.Panicf("TLS is required for running ordering nodes of type %s.", typ)
+		}
+
+		return true
+	}
+
+	
+	if clusterConf.ListenPort == 0 || clusterConf.ServerCertificate == "" || clusterConf.ListenAddress == "" || clusterConf.ServerPrivateKey == "" {
+		logger.Panic("Options: General.Cluster.ListenPort, General.Cluster.ListenAddress, General.Cluster.ServerCertificate," +
+			" General.Cluster.ServerPrivateKey, should be defined altogether.")
+	}
+
+	return false
 }
 
 
@@ -328,22 +371,8 @@ func handleSignals(handlers map[os.Signal]func()) {
 type loadPEMFunc func(string) ([]byte, error)
 
 
-
-
-func configureClusterListener(conf *localconfig.TopLevel, generalConf comm.ServerConfig, generalSrv *comm.GRPCServer, loadPEM loadPEMFunc) (comm.ServerConfig, *comm.GRPCServer) {
+func configureClusterListener(conf *localconfig.TopLevel, generalConf comm.ServerConfig, loadPEM loadPEMFunc) (comm.ServerConfig, *comm.GRPCServer) {
 	clusterConf := conf.General.Cluster
-	
-	
-	if clusterConf.ListenPort == 0 && clusterConf.ServerCertificate == "" && clusterConf.ListenAddress == "" && clusterConf.ServerPrivateKey == "" {
-		logger.Info("Cluster listener is not configured, defaulting to use the general listener on port", conf.General.ListenPort)
-		return generalConf, generalSrv
-	}
-
-	
-	if clusterConf.ListenPort == 0 || clusterConf.ServerCertificate == "" || clusterConf.ListenAddress == "" || clusterConf.ServerPrivateKey == "" {
-		logger.Panic("Options: General.Cluster.ListenPort, General.Cluster.ListenAddress, General.Cluster.ServerCertificate," +
-			" General.Cluster.ServerPrivateKey, should be defined altogether.")
-	}
 
 	cert, err := loadPEM(clusterConf.ServerCertificate)
 	if err != nil {
@@ -376,6 +405,7 @@ func configureClusterListener(conf *localconfig.TopLevel, generalConf comm.Serve
 		Logger:             generalConf.Logger,
 		KaOpts:             generalConf.KaOpts,
 		SecOpts: comm.SecureOptions{
+			TimeShift:         conf.General.Cluster.TLSHandshakeTimeShift,
 			CipherSuites:      comm.DefaultTLSCipherSuites,
 			ClientRootCAs:     clientRootCAs,
 			RequireClientCert: true,
@@ -393,10 +423,7 @@ func configureClusterListener(conf *localconfig.TopLevel, generalConf comm.Serve
 	return serverConf, srv
 }
 
-func initializeClusterClientConfig(conf *localconfig.TopLevel, clusterType bool, bootstrapBlock *cb.Block) comm.ClientConfig {
-	if clusterType && !conf.General.TLS.Enabled {
-		logger.Panicf("TLS is required for running ordering nodes of type %s.", consensusType(bootstrapBlock))
-	}
+func initializeClusterClientConfig(conf *localconfig.TopLevel) comm.ClientConfig {
 	cc := comm.ClientConfig{
 		AsyncConnect: true,
 		KaOpts:       comm.DefaultKeepaliveOptions,
@@ -404,7 +431,7 @@ func initializeClusterClientConfig(conf *localconfig.TopLevel, clusterType bool,
 		SecOpts:      comm.SecureOptions{},
 	}
 
-	if (!conf.General.TLS.Enabled) || conf.General.Cluster.ClientCertificate == "" {
+	if conf.General.Cluster.ClientCertificate == "" {
 		return cc
 	}
 
@@ -424,13 +451,13 @@ func initializeClusterClientConfig(conf *localconfig.TopLevel, clusterType bool,
 	for _, serverRoot := range conf.General.Cluster.RootCAs {
 		rootCACert, err := ioutil.ReadFile(serverRoot)
 		if err != nil {
-			logger.Fatalf("Failed to load ServerRootCAs file '%s' (%s)",
-				err, serverRoot)
+			logger.Fatalf("Failed to load ServerRootCAs file '%s' (%s)", serverRoot, err)
 		}
 		serverRootCAs = append(serverRootCAs, rootCACert)
 	}
 
 	cc.SecOpts = comm.SecureOptions{
+		TimeShift:         conf.General.Cluster.TLSHandshakeTimeShift,
 		RequireClientCert: true,
 		CipherSuites:      comm.DefaultTLSCipherSuites,
 		ServerRootCAs:     serverRootCAs,
@@ -574,7 +601,7 @@ func consensusType(genesisBlock *cb.Block) string {
 	if err := proto.Unmarshal(genesisBlock.Data.Data[0], env); err != nil {
 		logger.Fatalf("Failed to unmarshal the genesis block's envelope: %v", err)
 	}
-	bundle, err := channelconfig.NewBundleFromEnvelope(env)
+	bundle, err := channelconfig.NewBundleFromEnvelope(env, factory.GetDefault())
 	if err != nil {
 		logger.Fatalf("Failed creating bundle from the genesis block: %v", err)
 	}
@@ -614,7 +641,7 @@ func loadLocalMSP(conf *localconfig.TopLevel) msp.MSP {
 		logger.Panicf("MSP option for type %s is not found", typ)
 	}
 
-	localmsp, err := msp.New(opts)
+	localmsp, err := msp.New(opts, factory.GetDefault())
 	if err != nil {
 		logger.Panicf("Failed to load local MSP: %v", err)
 	}
@@ -656,7 +683,7 @@ func initializeMultichannelRegistrar(
 
 	consenters := make(map[string]consensus.Consenter)
 
-	registrar := multichannel.NewRegistrar(lf, signer, metricsProvider, callbacks...)
+	registrar := multichannel.NewRegistrar(*conf, lf, signer, metricsProvider, callbacks...)
 
 	consenters["solo"] = solo.New()
 	var kafkaMetrics *kafka.Metrics

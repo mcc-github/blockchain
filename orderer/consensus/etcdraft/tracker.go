@@ -3,6 +3,8 @@
 package etcdraft
 
 import (
+	"sync/atomic"
+
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
@@ -16,8 +18,8 @@ type Tracker struct {
 	id     uint64
 	sender *Disseminator
 	gauge  metrics.Gauge
+	active *atomic.Value
 
-	active  []uint64
 	counter int
 
 	logger *flogging.FabricLogger
@@ -27,6 +29,7 @@ func (t *Tracker) Check(status *raft.Status) {
 	
 	if status.Lead == raft.None {
 		t.gauge.Set(0)
+		t.active.Store([]uint64{})
 		return
 	}
 
@@ -51,9 +54,11 @@ func (t *Tracker) Check(status *raft.Status) {
 		}
 	}
 
-	if len(current) != len(t.active) {
+	last := t.active.Load().([]uint64)
+	t.active.Store(current)
+
+	if len(current) != len(last) {
 		t.counter = 0
-		t.active = current
 		return
 	}
 

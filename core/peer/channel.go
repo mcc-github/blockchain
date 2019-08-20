@@ -9,6 +9,7 @@ package peer
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger/fileledger"
@@ -21,8 +22,9 @@ import (
 
 
 type Channel struct {
-	ledger ledger.PeerLedger
-	store  transientstore.Store
+	ledger         ledger.PeerLedger
+	store          transientstore.Store
+	cryptoProvider bccsp.BCCSP
 
 	
 	applyLock sync.Mutex
@@ -48,7 +50,7 @@ func (c *Channel) Apply(configtx *common.ConfigEnvelope) error {
 		return err
 	}
 
-	bundle, err := channelconfig.NewBundle(configTxValidator.ChainID(), configtx.Config)
+	bundle, err := channelconfig.NewBundle(configTxValidator.ChainID(), configtx.Config, c.cryptoProvider)
 	if err != nil {
 		return err
 	}

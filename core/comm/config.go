@@ -108,6 +108,8 @@ type SecureOptions struct {
 	RequireClientCert bool
 	
 	CipherSuites []uint16
+	
+	TimeShift time.Duration
 }
 
 

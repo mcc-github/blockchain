@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
@@ -346,7 +347,7 @@ func ValidateBootstrapBlock(block *common.Block) error {
 		return errors.Wrap(err, "failed extracting envelope from block")
 	}
 
-	bundle, err := channelconfig.NewBundleFromEnvelope(firstTransaction)
+	bundle, err := channelconfig.NewBundleFromEnvelope(firstTransaction, factory.GetDefault())
 	if err != nil {
 		return err
 	}

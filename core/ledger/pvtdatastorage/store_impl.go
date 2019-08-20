@@ -8,7 +8,6 @@ package pvtdatastorage
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,7 +38,6 @@ type store struct {
 
 	isEmpty            bool
 	lastCommittedBlock uint64
-	batchPending       bool
 	purgerLock         sync.Mutex
 	collElgProcSync    *collElgProcSync
 	
@@ -135,8 +133,8 @@ func (p *provider) OpenStore(ledgerid string) (Store, error) {
 		return nil, err
 	}
 	s.launchCollElgProc()
-	logger.Debugf("Pvtdata store opened. Initial state: isEmpty [%t], lastCommittedBlock [%d], batchPending [%t]",
-		s.isEmpty, s.lastCommittedBlock, s.batchPending)
+	logger.Debugf("Pvtdata store opened. Initial state: isEmpty [%t], lastCommittedBlock [%d]",
+		s.isEmpty, s.lastCommittedBlock)
 	return s, nil
 }
 
@@ -154,9 +152,27 @@ func (s *store) initState() error {
 	if s.isEmpty, s.lastCommittedBlock, err = s.getLastCommittedBlockNum(); err != nil {
 		return err
 	}
-	if s.batchPending, err = s.hasPendingCommit(); err != nil {
+
+	
+	
+	
+	batchPending, err := s.hasPendingCommit()
+	if err != nil {
 		return err
 	}
+
+	if batchPending {
+		committingBlockNum := s.nextBlockNum()
+		batch := leveldbhelper.NewUpdateBatch()
+		batch.Put(lastCommittedBlkkey, encodeLastCommittedBlockVal(committingBlockNum))
+		batch.Delete(pendingCommitKey)
+		if err := s.db.WriteBatch(batch, true); err != nil {
+			return err
+		}
+		s.isEmpty = false
+		s.lastCommittedBlock = committingBlockNum
+	}
+
 	if blist, err = s.getLastUpdatedOldBlocksList(); err != nil {
 		return err
 	}
@@ -172,11 +188,7 @@ func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 }
 
 
-func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error {
-	if s.batchPending {
-		return &ErrIllegalCall{`A pending batch exists as result of last invoke to "Prepare" call.
-			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`}
-	}
+func (s *store) Commit(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error {
 	expectedBlockNum := s.nextBlockNum()
 	if expectedBlockNum != blockNum {
 		return &ErrIllegalArgs{fmt.Sprintf("Expected block number=%d, received block number=%d", expectedBlockNum, blockNum)}
@@ -215,65 +227,17 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvt
 		batch.Put(keyBytes, valBytes)
 	}
 
-	batch.Put(pendingCommitKey, emptyValue)
-	if err := s.db.WriteBatch(batch, true); err != nil {
-		return err
-	}
-	s.batchPending = true
-	logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
-	return nil
-}
-
-
-func (s *store) Commit() error {
-	if !s.batchPending {
-		return &ErrIllegalCall{"No pending batch to commit"}
-	}
 	committingBlockNum := s.nextBlockNum()
 	logger.Debugf("Committing private data for block [%d]", committingBlockNum)
-	batch := leveldbhelper.NewUpdateBatch()
-	batch.Delete(pendingCommitKey)
 	batch.Put(lastCommittedBlkkey, encodeLastCommittedBlockVal(committingBlockNum))
 	if err := s.db.WriteBatch(batch, true); err != nil {
 		return err
 	}
-	s.batchPending = false
+
 	s.isEmpty = false
 	atomic.StoreUint64(&s.lastCommittedBlock, committingBlockNum)
 	logger.Debugf("Committed private data for block [%d]", committingBlockNum)
 	s.performPurgeIfScheduled(committingBlockNum)
-	return nil
-}
-
-
-
-
-
-
-
-
-
-func (s *store) Rollback() error {
-	if !s.batchPending {
-		return &ErrIllegalCall{"No pending batch to rollback"}
-	}
-	blkNum := s.nextBlockNum()
-	batch := leveldbhelper.NewUpdateBatch()
-	itr := s.db.GetIterator(datakeyRange(blkNum))
-	for itr.Next() {
-		batch.Delete(itr.Key())
-	}
-	itr.Release()
-	itr = s.db.GetIterator(eligibleMissingdatakeyRange(blkNum))
-	for itr.Next() {
-		batch.Delete(itr.Key())
-	}
-	itr.Release()
-	batch.Delete(pendingCommitKey)
-	if err := s.db.WriteBatch(batch, true); err != nil {
-		return err
-	}
-	s.batchPending = false
 	return nil
 }
 
@@ -314,7 +278,6 @@ func (s *store) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPv
 	if err := s.commitBatch(batch); err != nil {
 		return err
 	}
-	s.isLastUpdatedOldBlocksSet = true
 
 	return nil
 }
@@ -466,9 +429,6 @@ func constructUpdateBatchFromUpdateEntries(updateEntries *entriesForPvtDataOfOld
 		return nil, err
 	}
 
-	
-	addLastUpdatedOldBlocksList(batch, updateEntries)
-
 	return batch, nil
 }
 
@@ -516,36 +476,6 @@ func addUpdatedMissingDataEntriesToUpdateBatch(batch *leveldbhelper.UpdateBatch,
 	return nil
 }
 
-func addLastUpdatedOldBlocksList(batch *leveldbhelper.UpdateBatch, entries *entriesForPvtDataOfOldBlocks) {
-	
-	
-	
-	
-	updatedBlksListMap := make(map[uint64]bool)
-
-	for dataKey := range entries.dataEntries {
-		updatedBlksListMap[dataKey.blkNum] = true
-	}
-
-	var updatedBlksList lastUpdatedOldBlocksList
-	for blkNum := range updatedBlksListMap {
-		updatedBlksList = append(updatedBlksList, blkNum)
-	}
-
-	
-	sort.SliceStable(updatedBlksList, func(i, j int) bool {
-		return updatedBlksList[i] < updatedBlksList[j]
-	})
-
-	buf := proto.NewBuffer(nil)
-	buf.EncodeVarint(uint64(len(updatedBlksList)))
-	for _, blkNum := range updatedBlksList {
-		buf.EncodeVarint(blkNum)
-	}
-
-	batch.Put(lastUpdatedOldBlocksKey, buf.Bytes())
-}
-
 func (s *store) commitBatch(batch *leveldbhelper.UpdateBatch) error {
 	
 	if err := s.db.WriteBatch(batch, true); err != nil {
@@ -554,6 +484,11 @@ func (s *store) commitBatch(batch *leveldbhelper.UpdateBatch) error {
 
 	return nil
 }
+
+
+
+
+
 
 
 func (s *store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error) {
@@ -600,6 +535,11 @@ func (s *store) getLastUpdatedOldBlocksList() ([]uint64, error) {
 	}
 	return updatedBlksList, nil
 }
+
+
+
+
+
 
 
 func (s *store) ResetLastUpdatedOldBlocksList() error {
@@ -680,8 +620,15 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 }
 
 
+
+
+
+
+
+
+
 func (s *store) InitLastCommittedBlock(blockNum uint64) error {
-	if !(s.isEmpty && !s.batchPending) {
+	if !s.isEmpty {
 		return &ErrIllegalCall{"The private data store is not empty. InitLastCommittedBlock() function call is not allowed"}
 	}
 	batch := leveldbhelper.NewUpdateBatch()
@@ -932,11 +879,6 @@ func (s *store) LastCommittedBlockHeight() (uint64, error) {
 }
 
 
-func (s *store) HasPendingBatch() (bool, error) {
-	return s.batchPending, nil
-}
-
-
 func (s *store) IsEmpty() (bool, error) {
 	return s.isEmpty, nil
 }
@@ -952,6 +894,9 @@ func (s *store) nextBlockNum() uint64 {
 	}
 	return atomic.LoadUint64(&s.lastCommittedBlock) + 1
 }
+
+
+
 
 func (s *store) hasPendingCommit() (bool, error) {
 	var v []byte

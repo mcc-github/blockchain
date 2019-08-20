@@ -43,10 +43,6 @@ func (c *Components) Peer() string {
 	return c.build("github.com/mcc-github/blockchain/cmd/peer")
 }
 
-func (c *Components) Token() string {
-	return c.build("github.com/mcc-github/blockchain/cmd/token")
-}
-
 func (c *Components) Cleanup() {}
 
 func (c *Components) build(path string) string {

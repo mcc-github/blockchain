@@ -293,10 +293,7 @@ var _ = Describe("DiscoveryService", func() {
 		nwo.PackageChaincode(network, chaincode, org1Peer0)
 
 		
-		filebytes, err := ioutil.ReadFile(chaincode.PackageFile)
-		Expect(err).NotTo(HaveOccurred())
-		hashStr := fmt.Sprintf("%x", util.ComputeSHA256(filebytes))
-		chaincode.PackageID = chaincode.Label + ":" + hashStr
+		chaincode.SetPackageIDFromPackageFile()
 
 		By("installing chaincode to org1.peer0 and org2.peer0")
 		nwo.InstallChaincode(network, chaincode, org1Peer0, org2Peer0)

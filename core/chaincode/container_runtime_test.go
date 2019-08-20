@@ -11,9 +11,6 @@ import (
 
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
-	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/container/ccintf"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -27,31 +24,16 @@ func TestContainerRuntimeStart(t *testing.T) {
 		PeerAddress:     "peer-address",
 	}
 
-	ccci := &ccprovider.ChaincodeContainerInfo{
-		Type:      "GOLANG",
-		Path:      "chaincode-path",
-		Name:      "chaincode-name",
-		Version:   "chaincode-version",
-		PackageID: "chaincode-name:chaincode-version",
-	}
-
-	err := cr.Start(ccci, []byte("code-package"))
+	err := cr.Start("chaincode-name:chaincode-version")
 	assert.NoError(t, err)
 
 	assert.Equal(t, 1, fakeRouter.BuildCallCount())
-	ccci, codePackage := fakeRouter.BuildArgsForCall(0)
-	assert.Equal(t, &ccprovider.ChaincodeContainerInfo{
-		PackageID: "chaincode-name:chaincode-version",
-		Type:      "GOLANG",
-		Path:      "chaincode-path",
-		Name:      "chaincode-name",
-		Version:   "chaincode-version",
-	}, ccci)
-	assert.Equal(t, []byte("code-package"), codePackage)
+	packageID := fakeRouter.BuildArgsForCall(0)
+	assert.Equal(t, "chaincode-name:chaincode-version", packageID)
 
 	assert.Equal(t, 1, fakeRouter.StartCallCount())
 	ccid, peerConnection := fakeRouter.StartArgsForCall(0)
-	assert.Equal(t, ccintf.CCID("chaincode-name:chaincode-version"), ccid)
+	assert.Equal(t, "chaincode-name:chaincode-version", ccid)
 	assert.Equal(t, "peer-address", peerConnection.Address)
 	assert.Nil(t, peerConnection.TLSConfig)
 }
@@ -77,13 +59,7 @@ func TestContainerRuntimeStartErrors(t *testing.T) {
 			ContainerRouter: fakeRouter,
 		}
 
-		ccci := &ccprovider.ChaincodeContainerInfo{
-			Type:    tc.chaincodeType,
-			Name:    "chaincode-id-name",
-			Version: "chaincode-version",
-		}
-
-		err := cr.Start(ccci, nil)
+		err := cr.Start("ccid")
 		assert.EqualError(t, err, tc.errValue)
 	}
 }
@@ -95,17 +71,12 @@ func TestContainerRuntimeStop(t *testing.T) {
 		ContainerRouter: fakeRouter,
 	}
 
-	ccci := &ccprovider.ChaincodeContainerInfo{
-		Type:      pb.ChaincodeSpec_GOLANG.String(),
-		PackageID: "chaincode-id-name:chaincode-version",
-	}
-
-	err := cr.Stop(ccci)
+	err := cr.Stop("chaincode-id-name:chaincode-version")
 	assert.NoError(t, err)
 
 	assert.Equal(t, 1, fakeRouter.StopCallCount())
 	ccid := fakeRouter.StopArgsForCall(0)
-	assert.Equal(t, ccintf.CCID("chaincode-id-name:chaincode-version"), ccid)
+	assert.Equal(t, "chaincode-id-name:chaincode-version", ccid)
 }
 
 func TestContainerRuntimeStopErrors(t *testing.T) {
@@ -124,13 +95,7 @@ func TestContainerRuntimeStopErrors(t *testing.T) {
 			ContainerRouter: fakeRouter,
 		}
 
-		ccci := &ccprovider.ChaincodeContainerInfo{
-			Type:    pb.ChaincodeSpec_GOLANG.String(),
-			Name:    "chaincode-id-name",
-			Version: "chaincode-version",
-		}
-
-		assert.EqualError(t, cr.Stop(ccci), tc.errValue)
+		assert.EqualError(t, cr.Stop("ccid"), tc.errValue)
 	}
 }
 
@@ -141,21 +106,14 @@ func TestContainerRuntimeWait(t *testing.T) {
 		ContainerRouter: fakeRouter,
 	}
 
-	ccci := &ccprovider.ChaincodeContainerInfo{
-		Type:      pb.ChaincodeSpec_GOLANG.String(),
-		Name:      "chaincode-id-name",
-		Version:   "chaincode-version",
-		PackageID: persistence.PackageID("chaincode-id-name:chaincode-version"),
-	}
-
-	exitCode, err := cr.Wait(ccci)
+	exitCode, err := cr.Wait("chaincode-id-name:chaincode-version")
 	assert.NoError(t, err)
 	assert.Equal(t, 0, exitCode)
 	assert.Equal(t, 1, fakeRouter.WaitCallCount())
-	assert.Equal(t, ccintf.CCID("chaincode-id-name:chaincode-version"), fakeRouter.WaitArgsForCall(0))
+	assert.Equal(t, "chaincode-id-name:chaincode-version", fakeRouter.WaitArgsForCall(0))
 
 	fakeRouter.WaitReturns(3, errors.New("moles-and-trolls"))
-	code, err := cr.Wait(ccci)
+	code, err := cr.Wait("chaincode-id-name:chaincode-version")
 	assert.EqualError(t, err, "moles-and-trolls")
 	assert.Equal(t, code, 3)
 }

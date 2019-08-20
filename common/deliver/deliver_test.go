@@ -8,11 +8,14 @@ package deliver_test
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"io"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/deliver"
 	"github.com/mcc-github/blockchain/common/deliver/mock"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
@@ -20,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics/metricsfakes"
 	"github.com/mcc-github/blockchain/common/util"
 	cb "github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/protos/msp"
 	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/ginkgo"
@@ -40,9 +44,22 @@ var (
 var _ = Describe("Deliver", func() {
 	Describe("NewHandler", func() {
 		var fakeChainManager *mock.ChainManager
-
+		var cert *x509.Certificate
+		var certBytes []byte
+		var serializedIdentity []byte
 		BeforeEach(func() {
 			fakeChainManager = &mock.ChainManager{}
+
+			ca, err := tlsgen.NewCA()
+			Expect(err).NotTo(HaveOccurred())
+
+			certBytes = ca.CertBytes()
+
+			der, _ := pem.Decode(ca.CertBytes())
+			cert, err = x509.ParseCertificate(der.Bytes)
+			Expect(err).NotTo(HaveOccurred())
+
+			serializedIdentity = protoutil.MarshalOrPanic(&msp.SerializedIdentity{IdBytes: certBytes})
 		})
 
 		It("returns a new handler", func() {
@@ -51,13 +68,39 @@ var _ = Describe("Deliver", func() {
 				time.Second,
 				false,
 				deliver.NewMetrics(&disabled.Provider{}),
-			)
+				false)
 			Expect(handler).NotTo(BeNil())
 
 			Expect(handler.ChainManager).To(Equal(fakeChainManager))
 			Expect(handler.TimeWindow).To(Equal(time.Second))
 			
 			Expect(handler.BindingInspector).NotTo(BeNil())
+		})
+
+		Context("Handler is initialized with expiration checks", func() {
+			It("Returns exactly what is found in the certificate", func() {
+				handler := deliver.NewHandler(
+					fakeChainManager,
+					time.Second,
+					false,
+					deliver.NewMetrics(&disabled.Provider{}),
+					false)
+
+				Expect(handler.ExpirationCheckFunc(serializedIdentity)).To(Equal(cert.NotAfter))
+			})
+		})
+
+		Context("Handler is initialized without expiration checks", func() {
+			It("Doesn't parse the NotAfter time of the certificate", func() {
+				handler := deliver.NewHandler(
+					fakeChainManager,
+					time.Second,
+					false,
+					deliver.NewMetrics(&disabled.Provider{}),
+					true)
+
+				Expect(handler.ExpirationCheckFunc(serializedIdentity)).NotTo(Equal(cert.NotAfter))
+			})
 		})
 	})
 
@@ -163,6 +206,9 @@ var _ = Describe("Deliver", func() {
 				TimeWindow:       time.Second,
 				BindingInspector: fakeInspector,
 				Metrics:          deliverMetrics,
+				ExpirationCheckFunc: func([]byte) time.Time {
+					return time.Time{}
+				},
 			}
 			server = &deliver.Server{
 				Receiver:       fakeReceiver,

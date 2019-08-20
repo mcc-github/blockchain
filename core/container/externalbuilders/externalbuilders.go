@@ -7,18 +7,19 @@ SPDX-License-Identifier: Apache-2.0
 package externalbuilders
 
 import (
-	"bytes"
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/container"
+	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 
 	"github.com/pkg/errors"
@@ -36,12 +37,10 @@ func (i *Instance) Start(peerConnection *ccintf.PeerConnection) error {
 }
 
 func (i *Instance) Stop() error {
-	
 	return errors.Errorf("stop is not implemented for external builders yet")
 }
 
 func (i *Instance) Wait() (int, error) {
-	
 	
 	select {}
 }
@@ -54,6 +53,7 @@ func (d *Detector) Detect(buildContext *BuildContext) *Builder {
 	for _, builderLocation := range d.Builders {
 		builder := &Builder{
 			Location: builderLocation,
+			Logger:   logger.Named(filepath.Base(builderLocation)),
 		}
 		if builder.Detect(buildContext) {
 			return builder
@@ -63,7 +63,7 @@ func (d *Detector) Detect(buildContext *BuildContext) *Builder {
 	return nil
 }
 
-func (d *Detector) Build(ccci *ccprovider.ChaincodeContainerInfo, codePackage []byte) (container.Instance, error) {
+func (d *Detector) Build(ccid string, md *persistence.ChaincodePackageMetadata, codeStream io.Reader) (*Instance, error) {
 	if len(d.Builders) == 0 {
 		
 		
@@ -71,7 +71,7 @@ func (d *Detector) Build(ccci *ccprovider.ChaincodeContainerInfo, codePackage []
 		return nil, errors.Errorf("no builders defined")
 	}
 
-	buildContext, err := NewBuildContext(ccci, bytes.NewBuffer(codePackage))
+	buildContext, err := NewBuildContext(string(ccid), md, codeStream)
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not create build context")
 	}
@@ -94,16 +94,18 @@ func (d *Detector) Build(ccci *ccprovider.ChaincodeContainerInfo, codePackage []
 }
 
 type BuildContext struct {
-	CCCI       *ccprovider.ChaincodeContainerInfo
+	CCID       string
+	Metadata   *persistence.ChaincodePackageMetadata
 	ScratchDir string
 	SourceDir  string
 	OutputDir  string
 	LaunchDir  string
 }
 
-func NewBuildContext(ccci *ccprovider.ChaincodeContainerInfo, codePackage io.Reader) (*BuildContext, error) {
-	
-	scratchDir, err := ioutil.TempDir("", "blockchain-"+strings.ReplaceAll(string(ccci.PackageID), string(os.PathListSeparator), "-"))
+var pkgIDreg = regexp.MustCompile("[^a-zA-Z0-9]+")
+
+func NewBuildContext(ccid string, md *persistence.ChaincodePackageMetadata, codePackage io.Reader) (*BuildContext, error) {
+	scratchDir, err := ioutil.TempDir("", "blockchain-"+pkgIDreg.ReplaceAllString(ccid, "-"))
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not create temp dir")
 	}
@@ -140,7 +142,8 @@ func NewBuildContext(ccci *ccprovider.ChaincodeContainerInfo, codePackage io.Rea
 		SourceDir:  sourceDir,
 		OutputDir:  outputDir,
 		LaunchDir:  launchDir,
-		CCCI:       ccci,
+		Metadata:   md,
+		CCID:       ccid,
 	}, nil
 }
 
@@ -150,28 +153,20 @@ func (bc *BuildContext) Cleanup() {
 
 type Builder struct {
 	Location string
+	Logger   *flogging.FabricLogger
 }
 
 func (b *Builder) Detect(buildContext *BuildContext) bool {
 	detect := filepath.Join(b.Location, "bin", "detect")
-	cmd := exec.Cmd{
-		Path: detect,
-		Args: []string{
-			"detect", 
-			"--package-id", string(buildContext.CCCI.PackageID),
-			
-			
-			
-			"--path", buildContext.CCCI.Path,
-			"--type", buildContext.CCCI.Type,
-			"--source", buildContext.SourceDir,
-		},
+	cmd := NewCommand(
+		detect,
+		"--package-id", buildContext.CCID,
+		"--path", buildContext.Metadata.Path,
+		"--type", buildContext.Metadata.Type,
+		"--source", buildContext.SourceDir,
+	)
 
-		
-		
-	}
-
-	err := cmd.Run()
+	err := RunCommand(b.Logger, cmd)
 	if err != nil {
 		logger.Debugf("Detection for builder '%s' failed: %s", b.Name(), err)
 		
@@ -184,21 +179,18 @@ func (b *Builder) Detect(buildContext *BuildContext) bool {
 
 func (b *Builder) Build(buildContext *BuildContext) error {
 	build := filepath.Join(b.Location, "bin", "build")
-	cmd := exec.Cmd{
-		Path: build,
-		Args: []string{
-			"build", 
-			"--package-id", string(buildContext.CCCI.PackageID),
-			"--path", buildContext.CCCI.Path,
-			"--type", buildContext.CCCI.Type,
-			"--source", buildContext.SourceDir,
-			"--output", buildContext.OutputDir,
-		},
-	}
+	cmd := NewCommand(
+		build,
+		"--package-id", buildContext.CCID,
+		"--path", buildContext.Metadata.Path,
+		"--type", buildContext.Metadata.Type,
+		"--source", buildContext.SourceDir,
+		"--output", buildContext.OutputDir,
+	)
 
-	err := cmd.Run()
+	err := RunCommand(b.Logger, cmd)
 	if err != nil {
-		return errors.Errorf("builder '%s' failed: %s", b.Name(), err)
+		return errors.Wrapf(err, "builder '%s' failed", b.Name())
 	}
 
 	return nil
@@ -233,22 +225,19 @@ func (b *Builder) Launch(buildContext *BuildContext, peerConnection *ccintf.Peer
 	}
 
 	launch := filepath.Join(b.Location, "bin", "launch")
-	cmd := exec.Cmd{
-		Path: launch,
-		Args: []string{
-			"launch", 
-			"--package-id", string(buildContext.CCCI.PackageID),
-			"--path", buildContext.CCCI.Path,
-			"--type", buildContext.CCCI.Type,
-			"--source", buildContext.SourceDir,
-			"--output", buildContext.OutputDir,
-			"--artifacts", buildContext.LaunchDir,
-		},
-	}
+	cmd := NewCommand(
+		launch,
+		"--package-id", buildContext.CCID,
+		"--path", buildContext.Metadata.Path,
+		"--type", buildContext.Metadata.Type,
+		"--source", buildContext.SourceDir,
+		"--output", buildContext.OutputDir,
+		"--artifacts", buildContext.LaunchDir,
+	)
 
-	err = cmd.Run()
+	err = RunCommand(b.Logger, cmd)
 	if err != nil {
-		return errors.Errorf("builder '%s' failed: %s", b.Name(), err)
+		return errors.Wrapf(err, "builder '%s' failed", b.Name())
 	}
 
 	return nil
@@ -258,4 +247,48 @@ func (b *Builder) Launch(buildContext *BuildContext, peerConnection *ccintf.Peer
 
 func (b *Builder) Name() string {
 	return filepath.Base(b.Location)
+}
+
+
+
+
+func NewCommand(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	for _, key := range []string{"LD_LIBRARY_PATH", "LIBPATH", "PATH", "TMPDIR"} {
+		if val, ok := os.LookupEnv(key); ok {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
+		}
+	}
+	return cmd
+}
+
+func RunCommand(logger *flogging.FabricLogger, cmd *exec.Cmd) error {
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	is := bufio.NewReader(stderr)
+	for done := false; !done; {
+		
+		line, err := is.ReadString('\n')
+		switch err {
+		case nil:
+			logger.Info(strings.TrimSuffix(line, "\n"))
+		case io.EOF:
+			if len(line) > 0 {
+				logger.Info(line)
+			}
+			done = true
+		default:
+			logger.Error("error reading command output", err)
+			return err
+		}
+	}
+
+	return cmd.Wait()
 }

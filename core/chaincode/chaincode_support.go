@@ -13,12 +13,11 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/util"
-	persistence "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/peer"
+	"github.com/mcc-github/blockchain/core/scc"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 )
@@ -34,29 +33,35 @@ const (
 
 
 type Runtime interface {
-	Start(ccci *ccprovider.ChaincodeContainerInfo, codePackage []byte) error
-	Stop(ccci *ccprovider.ChaincodeContainerInfo) error
-	Wait(ccci *ccprovider.ChaincodeContainerInfo) (int, error)
+	Start(ccid string) error
+	Stop(ccid string) error
+	Wait(ccid string) (int, error)
 }
 
 
 type Launcher interface {
-	Launch(ccci *ccprovider.ChaincodeContainerInfo) error
+	Launch(ccid string) error
 }
 
 
 type Lifecycle interface {
 	
 	ChaincodeDefinition(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error)
+}
 
-	
-	ChaincodeContainerInfo(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (*ccprovider.ChaincodeContainerInfo, error)
+
+
+
+
+type LegacyChaincodeDefinition interface {
+	ExecuteLegacySecurityChecks() error
 }
 
 
 type ChaincodeSupport struct {
 	ACLProvider            ACLProvider
 	AppConfig              ApplicationConfigRetriever
+	BuiltinSCCs            scc.BuiltinSCCs
 	DeployedCCInfoProvider ledger.DeployedChaincodeInfoProvider
 	ExecuteTimeout         time.Duration
 	HandlerMetrics         *HandlerMetrics
@@ -66,7 +71,6 @@ type ChaincodeSupport struct {
 	Lifecycle              Lifecycle
 	Peer                   *peer.Peer
 	Runtime                Runtime
-	SystemCCProvider       sysccprovider.SystemChaincodeProvider
 	TotalQueryLimit        int
 	UserRunsCC             bool
 }
@@ -74,38 +78,25 @@ type ChaincodeSupport struct {
 
 
 
-func (cs *ChaincodeSupport) LaunchInit(ccci *ccprovider.ChaincodeContainerInfo) error {
-	if cs.HandlerRegistry.Handler(ccintf.New(ccci.PackageID)) != nil {
-		return nil
-	}
-
-	return cs.Launcher.Launch(ccci)
-}
-
-
-
-
-func (cs *ChaincodeSupport) Launch(channelID string, ccci *ccprovider.ChaincodeContainerInfo) (*Handler, error) {
-	ccid := ccintf.New(ccci.PackageID)
-
+func (cs *ChaincodeSupport) Launch(ccid string) (*Handler, error) {
 	if h := cs.HandlerRegistry.Handler(ccid); h != nil {
 		return h, nil
 	}
 
-	if err := cs.Launcher.Launch(ccci); err != nil {
-		return nil, errors.Wrapf(err, "[channel %s] could not launch chaincode %s", channelID, ccci.PackageID)
+	if err := cs.Launcher.Launch(ccid); err != nil {
+		return nil, errors.Wrapf(err, "could not launch chaincode %s", ccid)
 	}
 
 	h := cs.HandlerRegistry.Handler(ccid)
 	if h == nil {
-		return nil, errors.Errorf("[channel %s] claimed to start chaincode container for %s but could not find handler", channelID, ccci.PackageID)
+		return nil, errors.Errorf("claimed to start chaincode container for %s but could not find handler", ccid)
 	}
 
 	return h, nil
 }
 
 
-func (cs *ChaincodeSupport) LaunchInProc(ccid ccintf.CCID) <-chan struct{} {
+func (cs *ChaincodeSupport) LaunchInProc(ccid string) <-chan struct{} {
 	launchStatus, ok := cs.HandlerRegistry.Launching(ccid)
 	if ok {
 		chaincodeLogger.Panicf("attempted to launch a system chaincode which has already been launched")
@@ -117,23 +108,20 @@ func (cs *ChaincodeSupport) LaunchInProc(ccid ccintf.CCID) <-chan struct{} {
 
 func (cs *ChaincodeSupport) HandleChaincodeStream(stream ccintf.ChaincodeStream) error {
 	handler := &Handler{
-		Invoker:                    cs,
-		DefinitionGetter:           cs.Lifecycle,
-		Keepalive:                  cs.Keepalive,
-		Registry:                   cs.HandlerRegistry,
-		ACLProvider:                cs.ACLProvider,
-		TXContexts:                 NewTransactionContexts(),
-		ActiveTransactions:         NewActiveTransactions(),
-		SystemCCProvider:           cs.SystemCCProvider,
-		SystemCCVersion:            util.GetSysCCVersion(),
-		InstantiationPolicyChecker: CheckInstantiationPolicyFunc(ccprovider.CheckInstantiationPolicy),
-		QueryResponseBuilder:       &QueryResponseGenerator{MaxResultLimit: 100},
-		UUIDGenerator:              UUIDGeneratorFunc(util.GenerateUUID),
-		LedgerGetter:               cs.Peer,
-		DeployedCCInfoProvider:     cs.DeployedCCInfoProvider,
-		AppConfig:                  cs.AppConfig,
-		Metrics:                    cs.HandlerMetrics,
-		TotalQueryLimit:            cs.TotalQueryLimit,
+		Invoker:                cs,
+		Keepalive:              cs.Keepalive,
+		Registry:               cs.HandlerRegistry,
+		ACLProvider:            cs.ACLProvider,
+		TXContexts:             NewTransactionContexts(),
+		ActiveTransactions:     NewActiveTransactions(),
+		BuiltinSCCs:            cs.BuiltinSCCs,
+		QueryResponseBuilder:   &QueryResponseGenerator{MaxResultLimit: 100},
+		UUIDGenerator:          UUIDGeneratorFunc(util.GenerateUUID),
+		LedgerGetter:           cs.Peer,
+		DeployedCCInfoProvider: cs.DeployedCCInfoProvider,
+		AppConfig:              cs.AppConfig,
+		Metrics:                cs.HandlerMetrics,
+		TotalQueryLimit:        cs.TotalQueryLimit,
 	}
 
 	return handler.ProcessStream(stream)
@@ -148,33 +136,26 @@ func (cs *ChaincodeSupport) Register(stream pb.ChaincodeSupport_RegisterServer) 
 
 
 
-func (cs *ChaincodeSupport) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, spec *pb.ChaincodeDeploymentSpec) (*pb.Response, *pb.ChaincodeEvent, error) {
-	ccci := ccprovider.DeploymentSpecToChaincodeContainerInfo(spec, cccid.SystemCC)
-	ccci.Version = cccid.Version
+func (cs *ChaincodeSupport) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, ccName, ccVersion string, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
 	
 	
 	
 	
-	ccci.PackageID = persistence.PackageID(ccci.Name + ":" + ccci.Version)
+	ccid := ccName + ":" + ccVersion
 
-	err := cs.LaunchInit(ccci)
+	h, err := cs.Launch(ccid)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	h := cs.HandlerRegistry.Handler(ccintf.New(ccci.PackageID))
-	if h == nil {
-		return nil, nil, errors.Wrapf(err, "[channel %s] claimed to start chaincode container for %s but could not find handler", txParams.ChannelID, ccci.PackageID)
-	}
-
-	resp, err := cs.execute(pb.ChaincodeMessage_INIT, txParams, cccid, spec.GetChaincodeSpec().Input, h)
-	return processChaincodeExecutionResult(txParams.TxID, cccid.Name, resp, err)
+	resp, err := cs.execute(pb.ChaincodeMessage_INIT, txParams, ccName, input, h)
+	return processChaincodeExecutionResult(txParams.TxID, ccName, resp, err)
 }
 
 
-func (cs *ChaincodeSupport) Execute(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
-	resp, err := cs.Invoke(txParams, cccid, input)
-	return processChaincodeExecutionResult(txParams.TxID, cccid.Name, resp, err)
+func (cs *ChaincodeSupport) Execute(txParams *ccprovider.TransactionParams, chaincodeName string, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
+	resp, err := cs.Invoke(txParams, chaincodeName, input)
+	return processChaincodeExecutionResult(txParams.TxID, chaincodeName, resp, err)
 }
 
 func processChaincodeExecutionResult(txid, ccName string, resp *pb.ChaincodeMessage, err error) (*pb.Response, *pb.ChaincodeEvent, error) {
@@ -209,105 +190,81 @@ func processChaincodeExecutionResult(txid, ccName string, resp *pb.ChaincodeMess
 
 
 
-func (cs *ChaincodeSupport) Invoke(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput) (*pb.ChaincodeMessage, error) {
-	if cs.SystemCCProvider.IsSysCC(cccid.Name) {
-		return cs.invokeSystem(txParams, cccid, input)
+func (cs *ChaincodeSupport) Invoke(txParams *ccprovider.TransactionParams, chaincodeName string, input *pb.ChaincodeInput) (*pb.ChaincodeMessage, error) {
+	ccid, cctype, err := cs.CheckInvocation(txParams, chaincodeName, input)
+	if err != nil {
+		return nil, errors.WithMessage(err, "invalid invocation")
 	}
 
-	
-	ccci, err := cs.Lifecycle.ChaincodeContainerInfo(txParams.ChannelID, cccid.Name, txParams.TXSimulator)
+	h, err := cs.Launch(ccid)
+	if err != nil {
+		return nil, err
+	}
+
+	return cs.execute(cctype, txParams, chaincodeName, input, h)
+}
+
+
+
+
+
+func (cs *ChaincodeSupport) CheckInvocation(txParams *ccprovider.TransactionParams, chaincodeName string, input *pb.ChaincodeInput) (ccid string, cctype pb.ChaincodeMessage_Type, err error) {
+	chaincodeLogger.Debugf("[%s] getting chaincode data for %s on channel %s", shorttxid(txParams.TxID), chaincodeName, txParams.ChannelID)
+	cd, err := cs.Lifecycle.ChaincodeDefinition(txParams.ChannelID, chaincodeName, txParams.TXSimulator)
 	if err != nil {
 		logDevModeError(cs.UserRunsCC)
-		return nil, errors.Wrapf(err, "[channel %s] failed to get chaincode container info for %s", txParams.ChannelID, cccid.Name)
+		return "", 0, errors.Wrapf(err, "[channel %s] failed to get chaincode container info for %s", txParams.ChannelID, chaincodeName)
 	}
 
-	
-	
-	cccid.Version = ccci.Version
-
-	h, err := cs.Launch(txParams.ChannelID, ccci)
-	if err != nil {
-		return nil, err
-	}
-
-	isInit, err := cs.CheckInit(txParams, cccid, input)
-	if err != nil {
-		return nil, err
-	}
-
-	cctype := pb.ChaincodeMessage_TRANSACTION
-	if isInit {
-		cctype = pb.ChaincodeMessage_INIT
-	}
-
-	return cs.execute(cctype, txParams, cccid, input, h)
-}
-
-func (cs *ChaincodeSupport) invokeSystem(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput) (*pb.ChaincodeMessage, error) {
-	
-	ccci := &ccprovider.ChaincodeContainerInfo{
-		Version:   util.GetSysCCVersion(),
-		Name:      cccid.Name,
-		PackageID: persistence.PackageID(cccid.Name + ":" + util.GetSysCCVersion()),
-	}
-
-	h, err := cs.Launch(txParams.ChannelID, ccci)
-	if err != nil {
-		return nil, err
-	}
-
-	return cs.execute(pb.ChaincodeMessage_TRANSACTION, txParams, cccid, input, h)
-}
-
-func (cs *ChaincodeSupport) CheckInit(txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput) (bool, error) {
-	if txParams.ChannelID == "" {
-		
-		return false, nil
-	}
-
-	ac, ok := cs.AppConfig.GetApplicationConfig(txParams.ChannelID)
-	if !ok {
-		return false, errors.Errorf("could not retrieve application config for channel '%s'", txParams.ChannelID)
-	}
-
-	if !ac.Capabilities().LifecycleV20() {
-		return false, nil
-	}
-
-	if !cccid.InitRequired {
-		
-		
-		return false, nil
-	}
-
-	
-
-	value, err := txParams.TXSimulator.GetState(cccid.Name, InitializedKeyName)
-	if err != nil {
-		return false, errors.WithMessage(err, "could not get 'initialized' key")
-	}
-
-	needsInitialization := !bytes.Equal(value, []byte(cccid.Version))
-
-	switch {
-	case !input.IsInit && !needsInitialization:
-		return false, nil
-	case !input.IsInit && needsInitialization:
-		return false, errors.Errorf("chaincode '%s' has not been initialized for this version, must call as init first", cccid.Name)
-	case input.IsInit && !needsInitialization:
-		return false, errors.Errorf("chaincode '%s' is already initialized but called as init", cccid.Name)
-	default:
-		
-		err = txParams.TXSimulator.SetState(cccid.Name, InitializedKeyName, []byte(cccid.Version))
+	if legacyDefinition, ok := cd.(LegacyChaincodeDefinition); ok {
+		err = legacyDefinition.ExecuteLegacySecurityChecks()
 		if err != nil {
-			return false, errors.WithMessage(err, "could not set 'initialized' key")
+			return "", 0, errors.WithMessagef(err, "[channel %s] failed the chaincode security checks for %s", txParams.ChannelID, chaincodeName)
 		}
-		return true, nil
 	}
+
+	needsInitialization := false
+	if cd.RequiresInit() {
+		
+		
+
+		value, err := txParams.TXSimulator.GetState(chaincodeName, InitializedKeyName)
+		if err != nil {
+			return "", 0, errors.WithMessage(err, "could not get 'initialized' key")
+		}
+
+		needsInitialization = !bytes.Equal(value, []byte(cd.CCVersion()))
+	}
+
+	
+	
+	
+	if input.IsInit {
+		if !cd.RequiresInit() {
+			return "", 0, errors.Errorf("chaincode '%s' does not require initialization but called as init", chaincodeName)
+		}
+
+		if !needsInitialization {
+			return "", 0, errors.Errorf("chaincode '%s' is already initialized but called as init", chaincodeName)
+		}
+
+		err = txParams.TXSimulator.SetState(chaincodeName, InitializedKeyName, []byte(cd.CCVersion()))
+		if err != nil {
+			return "", 0, errors.WithMessage(err, "could not set 'initialized' key")
+		}
+
+		return cd.ChaincodeID(), pb.ChaincodeMessage_INIT, nil
+	}
+
+	if needsInitialization {
+		return "", 0, errors.Errorf("chaincode '%s' has not been initialized for this version, must call as init first", chaincodeName)
+	}
+
+	return cd.ChaincodeID(), pb.ChaincodeMessage_TRANSACTION, nil
 }
 
 
-func (cs *ChaincodeSupport) execute(cctyp pb.ChaincodeMessage_Type, txParams *ccprovider.TransactionParams, cccid *ccprovider.CCContext, input *pb.ChaincodeInput, h *Handler) (*pb.ChaincodeMessage, error) {
+func (cs *ChaincodeSupport) execute(cctyp pb.ChaincodeMessage_Type, txParams *ccprovider.TransactionParams, namespace string, input *pb.ChaincodeInput, h *Handler) (*pb.ChaincodeMessage, error) {
 	input.Decorations = txParams.ProposalDecorations
 
 	payload, err := proto.Marshal(input)
@@ -322,7 +279,7 @@ func (cs *ChaincodeSupport) execute(cctyp pb.ChaincodeMessage_Type, txParams *cc
 		ChannelId: txParams.ChannelID,
 	}
 
-	ccresp, err := h.Execute(txParams, cccid, ccMsg, cs.ExecuteTimeout)
+	ccresp, err := h.Execute(txParams, namespace, ccMsg, cs.ExecuteTimeout)
 	if err != nil {
 		return nil, errors.WithMessage(err, "error sending")
 	}

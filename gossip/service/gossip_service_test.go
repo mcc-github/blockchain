@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/core/comm"
@@ -85,7 +86,10 @@ func TestInitGossipService(t *testing.T) {
 	msptesttools.LoadMSPSetupForTesting()
 	signer := mgmt.GetLocalSigningIdentityOrPanic()
 
-	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager())
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
+
+	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager(), cryptoProvider)
 	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager())
 	dialOpts := defaultDeliverClientDialOpts()
 	gossipConfig, err := gossip.GlobalConfig(endpoint, nil)

@@ -32,6 +32,14 @@ type SimpleCollectionPersistenceConfigs struct {
 }
 
 
+
+func NewSimpleCollection(collectionConfig *common.StaticCollectionConfig, deserializer msp.IdentityDeserializer) (*SimpleCollection, error) {
+	sc := &SimpleCollection{}
+	err := sc.Setup(collectionConfig, deserializer)
+	return sc, err
+}
+
+
 func (sc *SimpleCollection) CollectionID() string {
 	return sc.name
 }

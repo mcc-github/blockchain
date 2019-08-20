@@ -15,7 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/common/util"
 	lgr "github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	"github.com/mcc-github/blockchain/protos/peer"
@@ -108,7 +107,7 @@ func TestKVLedgerBlockStorage(t *testing.T) {
 	txEnvBytes2 := block1.Data.Data[0]
 	txEnv2, err := protoutil.GetEnvelopeFromBlock(txEnvBytes2)
 	assert.NoError(t, err, "Error upon GetEnvelopeFromBlock")
-	payload2, err := protoutil.GetPayload(txEnv2)
+	payload2, err := protoutil.UnmarshalPayload(txEnv2.Payload)
 	assert.NoError(t, err, "Error upon GetPayload")
 	chdr, err := protoutil.UnmarshalChannelHeader(payload2.Header.ChannelHeader)
 	assert.NoError(t, err, "Error upon GetChannelHeaderFromBytes")
@@ -247,11 +246,6 @@ func TestKVLedgerBlockStorageWithPvtdata(t *testing.T) {
 }
 
 func TestKVLedgerDBRecovery(t *testing.T) {
-	testSyncStateAndHistoryDBWithBlockstore(t)
-	testSyncStateDBWithPvtdatastore(t)
-}
-
-func testSyncStateAndHistoryDBWithBlockstore(t *testing.T) {
 	conf, cleanup := testConfig(t)
 	defer cleanup()
 	provider := testutilNewProviderWithCollectionConfig(
@@ -446,151 +440,6 @@ func testSyncStateAndHistoryDBWithBlockstore(t *testing.T) {
 			historyVals:        []string{"value1.1", "value1.2", "value1.3", "value1.4"},
 		},
 	)
-}
-
-func testSyncStateDBWithPvtdatastore(t *testing.T) {
-	conf, cleanup := testConfig(t)
-	defer cleanup()
-	provider := testutilNewProviderWithCollectionConfig(
-		t,
-		"ns",
-		map[string]uint64{"coll": 0},
-		conf,
-	)
-	testLedgerid := "testLedger"
-	bg, gb := testutil.NewBlockGenerator(t, testLedgerid, false)
-	ledger, _ := provider.Create(gb)
-
-	
-	blockAndPvtdata1, pvtdata1 := prepareNextBlockWithMissingPvtDataForTest(t, ledger, bg, "SimulateForBlk1",
-		map[string]string{"key1": "value1.1", "key2": "value2.1", "key3": "value3.1"},
-		map[string]string{"key1": "pvtValue1.1", "key2": "pvtValue2.1", "key3": "pvtValue3.1"})
-
-	assert.NoError(t, ledger.CommitLegacy(blockAndPvtdata1, &lgr.CommitOptions{}))
-
-	blockAndPvtdata2, pvtdata2 := prepareNextBlockWithMissingPvtDataForTest(t, ledger, bg, "SimulateForBlk2",
-		map[string]string{"key1": "value1.2", "key2": "value2.2", "key3": "value3.2"},
-		map[string]string{"key1": "pvtValue1.2", "key2": "pvtValue2.2", "key3": "pvtValue3.2"})
-
-	assert.NoError(t, ledger.CommitLegacy(blockAndPvtdata2, &lgr.CommitOptions{}))
-
-	blockAndPvtdata3, pvtdata3 := prepareNextBlockWithMissingPvtDataForTest(t, ledger, bg, "SimulateForBlk3",
-		map[string]string{"key1": "value1.3", "key2": "value2.3", "key3": "value3.3"},
-		map[string]string{"key1": "pvtValue1.3", "key2": "pvtValue2.3", "key3": "pvtValue3.3"})
-
-	
-	
-	blockAndPvtdata3.Block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER][0] = byte(peer.TxValidationCode_MVCC_READ_CONFLICT)
-	assert.NoError(t, ledger.CommitLegacy(blockAndPvtdata3, &lgr.CommitOptions{}))
-
-	blockAndPvtdata4, pvtdata4 := prepareNextBlockWithMissingPvtDataForTest(t, ledger, bg, "SimulateForBlk4",
-		map[string]string{"key4": "value4"},
-		map[string]string{"key4": "pvtValue4"})
-
-	assert.NoError(t, ledger.CommitLegacy(blockAndPvtdata4, &lgr.CommitOptions{}))
-
-	blockAndPvtdata5, pvtdata5 := prepareNextBlockWithMissingPvtDataForTest(t, ledger, bg, "SimulateForBlk5",
-		map[string]string{"key5": "value5"},
-		map[string]string{"key5": "pvtValue5"})
-
-	assert.NoError(t, ledger.CommitLegacy(blockAndPvtdata5, &lgr.CommitOptions{}))
-
-	txSim, err := ledger.NewTxSimulator("test")
-	assert.NoError(t, err)
-	value, err := txSim.GetPrivateData("ns", "coll", "key1")
-	_, ok := err.(*txmgr.ErrPvtdataNotAvailable)
-	assert.True(t, ok)
-	assert.Nil(t, value)
-
-	value, err = txSim.GetPrivateData("ns", "coll", "key4")
-	_, ok = err.(*txmgr.ErrPvtdataNotAvailable)
-	assert.True(t, ok)
-	assert.Nil(t, value)
-
-	value, err = txSim.GetPrivateData("ns", "coll", "key5")
-	_, ok = err.(*txmgr.ErrPvtdataNotAvailable)
-	assert.True(t, ok)
-	assert.Nil(t, value)
-
-	blocksPvtData := map[uint64][]*lgr.TxPvtData{
-		1: {
-			pvtdata1,
-		},
-		2: {
-			pvtdata2,
-		},
-		3: {
-			pvtdata3,
-		},
-		4: {
-			pvtdata4,
-		},
-		5: {
-			pvtdata5,
-		},
-	}
-
-	assert.NoError(t, ledger.(*kvLedger).blockStore.CommitPvtDataOfOldBlocks(blocksPvtData))
-	
-	
-	pvtdata, _ := ledger.GetPvtDataByNum(3, nil)
-	assert.NotNil(t, pvtdata)
-	assert.Equal(t, 1, len(pvtdata))
-	assert.True(t, pvtdata[0].Has("ns", "coll"))
-
-	
-	ledger.Close()
-	provider.Close()
-
-	
-	RollbackKVLedger(conf.RootFSPath, testLedgerid, 3)
-
-	
-	
-	provider = testutilNewProviderWithCollectionConfig(
-		t,
-		"ns",
-		map[string]uint64{"coll": 0},
-		conf,
-	)
-	defer provider.Close()
-
-	ledger, err = provider.Open(testLedgerid)
-	assert.NoError(t, err)
-	defer ledger.Close()
-
-	txSim, err = ledger.NewTxSimulator("test")
-	assert.NoError(t, err)
-	value, err = txSim.GetPrivateData("ns", "coll", "key1")
-	assert.NoError(t, err)
-	
-	
-	assert.Equal(t, value, []byte("pvtValue1.2"))
-
-	
-	value, err = txSim.GetPrivateData("ns", "coll", "key4")
-	assert.Nil(t, err)
-	assert.Nil(t, value)
-
-	
-	value, err = txSim.GetPrivateData("ns", "coll", "key5")
-	assert.Nil(t, err)
-	assert.Nil(t, value)
-	txSim.Done()
-
-	
-	assert.NoError(t, ledger.CommitLegacy(blockAndPvtdata4, &lgr.CommitOptions{FetchPvtDataFromLedger: true}))
-	assert.NoError(t, ledger.CommitLegacy(blockAndPvtdata5, &lgr.CommitOptions{FetchPvtDataFromLedger: true}))
-
-	txSim, err = ledger.NewTxSimulator("test")
-	assert.NoError(t, err)
-	value, err = txSim.GetPrivateData("ns", "coll", "key4")
-	assert.NoError(t, err)
-	assert.Equal(t, value, []byte("pvtValue4"))
-
-	value, err = txSim.GetPrivateData("ns", "coll", "key5")
-	assert.NoError(t, err)
-	assert.Equal(t, value, []byte("pvtValue5"))
 }
 
 func TestLedgerWithCouchDbEnabledWithBinaryAndJSONData(t *testing.T) {

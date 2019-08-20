@@ -26,18 +26,8 @@ type osFileInfo interface {
 }
 
 
-type storePackageProvider interface {
-	persistence.StorePackageProvider
-}
-
-
 type legacyPackageProvider interface {
 	persistence.LegacyPackageProvider
-}
-
-
-type packageParser interface {
-	persistence.PackageParser
 }
 
 

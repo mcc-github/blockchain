@@ -56,7 +56,7 @@ func GetConfig(n *Network, peer *Peer, orderer *Orderer, channel string) *common
 	Expect(err).NotTo(HaveOccurred())
 
 	
-	payload, err := protoutil.GetPayload(envelope)
+	payload, err := protoutil.UnmarshalPayload(envelope.Payload)
 	Expect(err).NotTo(HaveOccurred())
 
 	
@@ -199,7 +199,7 @@ func UpdateOrdererConfig(n *Network, orderer *Orderer, channel string, current, 
 	defer os.RemoveAll(tempDir)
 
 	currentBlockNumber := CurrentConfigBlockNumber(n, submitter, orderer, channel)
-	computeUpdateOrdererConfig(updateFile, n, channel, current, updated, submitter, additionalSigners...)
+	ComputeUpdateOrdererConfig(updateFile, n, channel, current, updated, submitter, additionalSigners...)
 
 	Eventually(func() bool {
 		sess, err := n.OrdererAdminSession(orderer, submitter, commands.ChannelUpdate{
@@ -231,7 +231,7 @@ func UpdateOrdererConfigSession(n *Network, orderer *Orderer, channel string, cu
 	updateFile := filepath.Join(tempDir, "update.pb")
 	defer os.RemoveAll(tempDir)
 
-	computeUpdateOrdererConfig(updateFile, n, channel, current, updated, submitter, additionalSigners...)
+	ComputeUpdateOrdererConfig(updateFile, n, channel, current, updated, submitter, additionalSigners...)
 
 	
 	sess, err := n.OrdererAdminSession(orderer, submitter, commands.ChannelUpdate{
@@ -244,7 +244,7 @@ func UpdateOrdererConfigSession(n *Network, orderer *Orderer, channel string, cu
 	return sess
 }
 
-func computeUpdateOrdererConfig(updateFile string, n *Network, channel string, current, updated *common.Config, submitter *Peer, additionalSigners ...*Orderer) {
+func ComputeUpdateOrdererConfig(updateFile string, n *Network, channel string, current, updated *common.Config, submitter *Peer, additionalSigners ...*Orderer) {
 	
 	configUpdate, err := update.Compute(current, updated)
 	Expect(err).NotTo(HaveOccurred())
@@ -302,6 +302,67 @@ func RemoveConsenter(n *Network, peer *Peer, orderer *Orderer, channel string, c
 
 		metadata.Consenters = newConsenters
 	})
+}
+
+
+func ConsenterRemover(n *Network, peer *Peer, orderer *Orderer, channel string, certificate []byte) (current, updated *common.Config) {
+	config := GetConfig(n, peer, orderer, channel)
+	updatedConfig := proto.Clone(config).(*common.Config)
+
+	consensusTypeConfigValue := updatedConfig.ChannelGroup.Groups["Orderer"].Values["ConsensusType"]
+	consensusTypeValue := &protosorderer.ConsensusType{}
+	err := proto.Unmarshal(consensusTypeConfigValue.Value, consensusTypeValue)
+	Expect(err).NotTo(HaveOccurred())
+
+	metadata := &ectdraft_protos.ConfigMetadata{}
+	err = proto.Unmarshal(consensusTypeValue.Metadata, metadata)
+	Expect(err).NotTo(HaveOccurred())
+
+	var newConsenters []*ectdraft_protos.Consenter
+	for _, consenter := range metadata.Consenters {
+		if bytes.Equal(consenter.ClientTlsCert, certificate) || bytes.Equal(consenter.ServerTlsCert, certificate) {
+			continue
+		}
+		newConsenters = append(newConsenters, consenter)
+	}
+
+	metadata.Consenters = newConsenters
+	consensusTypeValue.Metadata, err = proto.Marshal(metadata)
+	Expect(err).NotTo(HaveOccurred())
+
+	updatedConfig.ChannelGroup.Groups["Orderer"].Values["ConsensusType"] = &common.ConfigValue{
+		ModPolicy: "Admins",
+		Value:     protoutil.MarshalOrPanic(consensusTypeValue),
+	}
+
+	return config, updatedConfig
+}
+
+
+func ConsenterAdder(n *Network, peer *Peer, orderer *Orderer, channel string, consenter ectdraft_protos.Consenter) (current, updated *common.Config) {
+	config := GetConfig(n, peer, orderer, channel)
+	updatedConfig := proto.Clone(config).(*common.Config)
+
+	consensusTypeConfigValue := updatedConfig.ChannelGroup.Groups["Orderer"].Values["ConsensusType"]
+	consensusTypeValue := &protosorderer.ConsensusType{}
+	err := proto.Unmarshal(consensusTypeConfigValue.Value, consensusTypeValue)
+	Expect(err).NotTo(HaveOccurred())
+
+	metadata := &ectdraft_protos.ConfigMetadata{}
+	err = proto.Unmarshal(consensusTypeValue.Metadata, metadata)
+	Expect(err).NotTo(HaveOccurred())
+
+	metadata.Consenters = append(metadata.Consenters, &consenter)
+
+	consensusTypeValue.Metadata, err = proto.Marshal(metadata)
+	Expect(err).NotTo(HaveOccurred())
+
+	updatedConfig.ChannelGroup.Groups["Orderer"].Values["ConsensusType"] = &common.ConfigValue{
+		ModPolicy: "Admins",
+		Value:     protoutil.MarshalOrPanic(consensusTypeValue),
+	}
+
+	return config, updatedConfig
 }
 
 

@@ -134,11 +134,6 @@ func (ap *ApplicationProvider) KeyLevelEndorsement() bool {
 }
 
 
-func (ap *ApplicationProvider) FabToken() bool {
-	return ap.v20
-}
-
-
 
 func (ap *ApplicationProvider) StorePvtDataOfInvalidTx() bool {
 	return ap.v142 || ap.v20

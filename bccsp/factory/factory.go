@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package factory
 
 import (
@@ -25,7 +26,7 @@ import (
 
 var (
 	
-	defaultBCCSP bccsp.BCCSP
+	DefaultBCCSP bccsp.BCCSP
 
 	
 	
@@ -57,19 +58,26 @@ type BCCSPFactory interface {
 
 
 func GetDefault() bccsp.BCCSP {
-	if defaultBCCSP == nil {
+	if DefaultBCCSP == nil {
 		logger.Debug("Before using BCCSP, please call InitFactories(). Falling back to bootBCCSP.")
 		bootBCCSPInitOnce.Do(func() {
 			var err error
 			f := &SWFactory{}
-			bootBCCSP, err = f.Get(GetDefaultOpts())
+			bootBCCSP, err = f.Get(&FactoryOpts{
+				ProviderName: "SW",
+				SwOpts: &SwOpts{
+					HashFamily: "SHA2",
+					SecLevel:   256,
+
+					Ephemeral: true,
+				}})
 			if err != nil {
 				panic("BCCSP Internal error, failed initialization with GetDefaultOpts!")
 			}
 		})
 		return bootBCCSP
 	}
-	return defaultBCCSP
+	return DefaultBCCSP
 }
 
 func initBCCSP(f BCCSPFactory, config *FactoryOpts) error {

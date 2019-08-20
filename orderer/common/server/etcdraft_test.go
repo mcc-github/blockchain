@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,7 +21,14 @@ import (
 	"github.com/onsi/gomega/gexec"
 )
 
+var basePort = int32(8000)
+
+func nextPort() int32 {
+	return atomic.AddInt32(&basePort, 1)
+}
+
 func TestSpawnEtcdRaft(t *testing.T) {
+
 	gt := NewGomegaWithT(t)
 
 	cwd, err := filepath.Abs(".")
@@ -49,8 +57,12 @@ func TestSpawnEtcdRaft(t *testing.T) {
 		testEtcdRaftOSNFailureInvalidBootstrapBlock(gt, tempDir, orderer, blockchainRootDir)
 	})
 
-	t.Run("No TLS", func(t *testing.T) {
-		testEtcdRaftOSNNoTLS(gt, tempDir, orderer, blockchainRootDir, configtxgen)
+	t.Run("No TLS single listener", func(t *testing.T) {
+		testEtcdRaftOSNNoTLSSingleListener(gt, tempDir, orderer, blockchainRootDir, configtxgen)
+	})
+
+	t.Run("No TLS dual listener", func(t *testing.T) {
+		testEtcdRaftOSNNoTLSDualListener(gt, tempDir, orderer, blockchainRootDir, configtxgen)
 	})
 
 	t.Run("EtcdRaft launch success", func(t *testing.T) {
@@ -94,7 +106,6 @@ func testEtcdRaftOSNSuccess(gt *GomegaWithT, tempDir, configtxgen, cwd, orderer,
 	
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("EvictionSuspicion not set, defaulting to 10m"))
 	
-	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("Starting cluster listener on 127.0.0.1:5612"))
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("Beginning to serve requests"))
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("becomeLeader"))
 }
@@ -118,7 +129,7 @@ func testEtcdRaftOSNFailureInvalidBootstrapBlock(gt *GomegaWithT, tempDir, order
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say(expectedErr))
 }
 
-func testEtcdRaftOSNNoTLS(gt *GomegaWithT, tempDir, orderer, blockchainRootDir string, configtxgen string) {
+func testEtcdRaftOSNNoTLSSingleListener(gt *GomegaWithT, tempDir, orderer, blockchainRootDir string, configtxgen string) {
 	cwd, err := filepath.Abs(".")
 	gt.Expect(err).NotTo(HaveOccurred())
 
@@ -126,7 +137,7 @@ func testEtcdRaftOSNNoTLS(gt *GomegaWithT, tempDir, orderer, blockchainRootDir s
 
 	cmd := exec.Command(orderer)
 	cmd.Env = []string{
-		"ORDERER_GENERAL_LISTENPORT=5611",
+		fmt.Sprintf("ORDERER_GENERAL_LISTENPORT=%d", nextPort()),
 		"ORDERER_GENERAL_GENESISMETHOD=file",
 		"ORDERER_GENERAL_SYSTEMCHANNEL=system",
 		fmt.Sprintf("ORDERER_FILELEDGER_LOCATION=%s", filepath.Join(tempDir, "ledger")),
@@ -141,6 +152,41 @@ func testEtcdRaftOSNNoTLS(gt *GomegaWithT, tempDir, orderer, blockchainRootDir s
 	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say(expectedErr))
 }
 
+func testEtcdRaftOSNNoTLSDualListener(gt *GomegaWithT, tempDir, orderer, blockchainRootDir string, configtxgen string) {
+	cwd, err := filepath.Abs(".")
+	gt.Expect(err).NotTo(HaveOccurred())
+
+	genesisBlockPath := createBootstrapBlock(gt, tempDir, configtxgen, cwd)
+
+	cmd := exec.Command(orderer)
+	cmd.Env = []string{
+		fmt.Sprintf("ORDERER_GENERAL_LISTENPORT=%d", nextPort()),
+		"ORDERER_GENERAL_GENESISMETHOD=file",
+		"ORDERER_GENERAL_SYSTEMCHANNEL=system",
+		"ORDERER_GENERAL_TLS_ENABLED=false",
+		"ORDERER_OPERATIONS_TLS_ENABLED=false",
+		fmt.Sprintf("ORDERER_FILELEDGER_LOCATION=%s", filepath.Join(tempDir, "ledger")),
+		fmt.Sprintf("ORDERER_GENERAL_GENESISFILE=%s", genesisBlockPath),
+		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_LISTENPORT=%d", nextPort()),
+		"ORDERER_GENERAL_CLUSTER_LISTENADDRESS=127.0.0.1",
+		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_SERVERCERTIFICATE=%s", filepath.Join(cwd, "testdata", "tls", "server.crt")),
+		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_SERVERPRIVATEKEY=%s", filepath.Join(cwd, "testdata", "tls", "server.key")),
+		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=%s", filepath.Join(cwd, "testdata", "tls", "server.crt")),
+		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=%s", filepath.Join(cwd, "testdata", "tls", "server.key")),
+		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_ROOTCAS=[%s]", filepath.Join(cwd, "testdata", "tls", "ca.crt")),
+		fmt.Sprintf("ORDERER_CONSENSUS_WALDIR=%s", filepath.Join(tempDir, "wal")),
+		fmt.Sprintf("ORDERER_CONSENSUS_SNAPDIR=%s", filepath.Join(tempDir, "snapshot")),
+		fmt.Sprintf("FABRIC_CFG_PATH=%s", filepath.Join(blockchainRootDir, "sampleconfig")),
+		fmt.Sprintf("ORDERER_OPERATIONS_LISTENADDRESS=127.0.0.1:%d", nextPort()),
+	}
+	ordererProcess, err := gexec.Start(cmd, nil, nil)
+	gt.Expect(err).NotTo(HaveOccurred())
+	defer ordererProcess.Kill()
+
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("Beginning to serve requests"))
+	gt.Eventually(ordererProcess.Err, time.Minute).Should(gbytes.Say("becomeLeader"))
+}
+
 func launchOrderer(gt *GomegaWithT, orderer, tempDir, genesisBlockPath, blockchainRootDir string) *gexec.Session {
 	cwd, err := filepath.Abs(".")
 	gt.Expect(err).NotTo(HaveOccurred())
@@ -148,7 +194,7 @@ func launchOrderer(gt *GomegaWithT, orderer, tempDir, genesisBlockPath, blockcha
 	
 	cmd := exec.Command(orderer)
 	cmd.Env = []string{
-		"ORDERER_GENERAL_LISTENPORT=5611",
+		fmt.Sprintf("ORDERER_GENERAL_LISTENPORT=%d", nextPort()),
 		"ORDERER_GENERAL_GENESISMETHOD=file",
 		"ORDERER_GENERAL_SYSTEMCHANNEL=system",
 		"ORDERER_GENERAL_TLS_CLIENTAUTHREQUIRED=true",
@@ -156,7 +202,7 @@ func launchOrderer(gt *GomegaWithT, orderer, tempDir, genesisBlockPath, blockcha
 		"ORDERER_OPERATIONS_TLS_ENABLED=false",
 		fmt.Sprintf("ORDERER_FILELEDGER_LOCATION=%s", filepath.Join(tempDir, "ledger")),
 		fmt.Sprintf("ORDERER_GENERAL_GENESISFILE=%s", genesisBlockPath),
-		"ORDERER_GENERAL_CLUSTER_LISTENPORT=5612",
+		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_LISTENPORT=%d", nextPort()),
 		"ORDERER_GENERAL_CLUSTER_LISTENADDRESS=127.0.0.1",
 		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_SERVERCERTIFICATE=%s", filepath.Join(cwd, "testdata", "tls", "server.crt")),
 		fmt.Sprintf("ORDERER_GENERAL_CLUSTER_SERVERPRIVATEKEY=%s", filepath.Join(cwd, "testdata", "tls", "server.key")),

@@ -72,6 +72,9 @@ func EnvelopeToGossipMessage(e *gossip.Envelope) (*SignedGossipMessage, error) {
 
 
 func InternalEndpoint(s *gossip.SecretEnvelope) string {
+	if s == nil {
+		return ""
+	}
 	secret := &gossip.Secret{}
 	if err := proto.Unmarshal(s.Payload, secret); err != nil {
 		return ""

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/idemix"
 	m "github.com/mcc-github/blockchain/msp"
 	"github.com/pkg/errors"
@@ -108,8 +109,15 @@ func writeSignerToFile(signerBytes []byte) error {
 
 
 func setupMSP() error {
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	if err != nil {
+		return err
+	}
 	
-	msp, err := m.New(&m.IdemixNewOpts{NewBaseOpts: m.NewBaseOpts{Version: m.MSPv1_1}})
+	msp, err := m.New(
+		&m.IdemixNewOpts{NewBaseOpts: m.NewBaseOpts{Version: m.MSPv1_1}},
+		cryptoProvider,
+	)
 	if err != nil {
 		return errors.Wrap(err, "Getting MSP failed")
 	}

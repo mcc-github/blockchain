@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain/bccsp"
-	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/util"
@@ -29,6 +28,11 @@ import (
 var mcsLogger = flogging.MustGetLogger("peer.gossip.mcs")
 
 
+type Hasher interface {
+	Hash(msg []byte, opts bccsp.HashOpts) (hash []byte, err error)
+}
+
+
 
 
 
@@ -41,6 +45,7 @@ type MSPMessageCryptoService struct {
 	channelPolicyManagerGetter policies.ChannelPolicyManagerGetter
 	localSigner                identity.SignerSerializer
 	deserializer               mgmt.DeserializersManager
+	hasher                     Hasher
 }
 
 
@@ -53,11 +58,13 @@ func NewMCS(
 	channelPolicyManagerGetter policies.ChannelPolicyManagerGetter,
 	localSigner identity.SignerSerializer,
 	deserializer mgmt.DeserializersManager,
+	hasher Hasher,
 ) *MSPMessageCryptoService {
 	return &MSPMessageCryptoService{
 		channelPolicyManagerGetter: channelPolicyManagerGetter,
 		localSigner:                localSigner,
 		deserializer:               deserializer,
+		hasher:                     hasher,
 	}
 }
 
@@ -98,14 +105,13 @@ func (s *MSPMessageCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityTy
 	
 	
 
-	mspIdRaw := []byte(sid.Mspid)
-	raw := append(mspIdRaw, sid.IdBytes...)
+	mspIDRaw := []byte(sid.Mspid)
+	raw := append(mspIDRaw, sid.IdBytes...)
 
 	
-	digest, err := factory.GetDefault().Hash(raw, &bccsp.SHA256Opts{})
+	digest, err := s.hasher.Hash(raw, &bccsp.SHA256Opts{})
 	if err != nil {
 		mcsLogger.Errorf("Failed computing digest of serialized identity [% x]: [%s]", peerIdentity, err)
-
 		return nil
 	}
 
@@ -117,7 +123,7 @@ func (s *MSPMessageCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityTy
 
 func (s *MSPMessageCryptoService) VerifyBlock(chainID common.ChannelID, seqNum uint64, signedBlock []byte) error {
 	
-	block, err := protoutil.GetBlockFromBlockBytes(signedBlock)
+	block, err := protoutil.UnmarshalBlock(signedBlock)
 	if err != nil {
 		return fmt.Errorf("Failed unmarshalling block bytes on channel [%s]: [%s]", chainID, err)
 	}
@@ -174,7 +180,7 @@ func (s *MSPMessageCryptoService) VerifyBlock(chainID common.ChannelID, seqNum u
 	
 	signatureSet := []*protoutil.SignedData{}
 	for _, metadataSignature := range metadata.Signatures {
-		shdr, err := protoutil.GetSignatureHeader(metadataSignature.SignatureHeader)
+		shdr, err := protoutil.UnmarshalSignatureHeader(metadataSignature.SignatureHeader)
 		if err != nil {
 			return fmt.Errorf("Failed unmarshalling signature header for block with id [%d] on channel [%s]: [%s]", block.Header.Number, chainID, err)
 		}

@@ -14,7 +14,6 @@ import (
 
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
-	p "github.com/mcc-github/blockchain/core/chaincode/persistence/intf"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence/mock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -228,11 +227,11 @@ var _ = Describe("Persistence", func() {
 		It("saves a new code package successfully", func() {
 			packageID, err := store.Save("testcc", pkgBytes)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(packageID).To(Equal(p.PackageID("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d")))
+			Expect(packageID).To(Equal("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d"))
 			Expect(mockReadWriter.WriteFileCallCount()).To(Equal(1))
 			pkgDataFilePath, pkgDataFileName, pkgData := mockReadWriter.WriteFileArgsForCall(0)
 			Expect(pkgDataFilePath).To(Equal(""))
-			Expect(pkgDataFileName).To(Equal("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d.bin"))
+			Expect(pkgDataFileName).To(Equal("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d.tar.gz"))
 			Expect(pkgData).To(Equal([]byte("testpkg")))
 		})
 
@@ -244,7 +243,7 @@ var _ = Describe("Persistence", func() {
 			It("does nothing and returns the packageID", func() {
 				packageID, err := store.Save("testcc", pkgBytes)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(packageID).To(Equal(p.PackageID("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d")))
+				Expect(packageID).To(Equal("testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d"))
 				Expect(mockReadWriter.WriteFileCallCount()).To(Equal(0))
 			})
 		})
@@ -256,9 +255,9 @@ var _ = Describe("Persistence", func() {
 
 			It("returns an error", func() {
 				packageID, err := store.Save("testcc", pkgBytes)
-				Expect(packageID).To(Equal(p.PackageID("")))
+				Expect(packageID).To(Equal(""))
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("error writing chaincode install package to testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d.bin: soccer"))
+				Expect(err.Error()).To(ContainSubstring("error writing chaincode install package to testcc:3fec0187440286d404241e871b44725310b11aaf43d100b053eae712fcabc66d.tar.gz: soccer"))
 			})
 		})
 	})
@@ -279,7 +278,7 @@ var _ = Describe("Persistence", func() {
 		})
 
 		It("loads successfully and returns the chaincode names/versions", func() {
-			ccInstallPkgBytes, err := store.Load(p.PackageID("hash"))
+			ccInstallPkgBytes, err := store.Load("hash")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ccInstallPkgBytes).To(Equal([]byte("cornerkick")))
 		})
@@ -290,9 +289,9 @@ var _ = Describe("Persistence", func() {
 			})
 
 			It("returns an error", func() {
-				ccInstallPkgBytes, err := store.Load(p.PackageID("hash"))
+				ccInstallPkgBytes, err := store.Load("hash")
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(&persistence.CodePackageNotFoundErr{PackageID: p.PackageID("hash")}))
+				Expect(err).To(Equal(&persistence.CodePackageNotFoundErr{PackageID: "hash"}))
 				Expect(err.Error()).To(Equal("chaincode install package 'hash' not found"))
 				Expect(len(ccInstallPkgBytes)).To(Equal(0))
 			})
@@ -304,7 +303,7 @@ var _ = Describe("Persistence", func() {
 			})
 
 			It("returns an error", func() {
-				ccInstallPkgBytes, err := store.Load(p.PackageID("hash"))
+				ccInstallPkgBytes, err := store.Load("hash")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("could not determine whether chaincode install package 'hash' exists: goodness me!"))
 				Expect(len(ccInstallPkgBytes)).To(Equal(0))
@@ -317,7 +316,7 @@ var _ = Describe("Persistence", func() {
 			})
 
 			It("returns an error", func() {
-				ccInstallPkgBytes, err := store.Load(p.PackageID("hash"))
+				ccInstallPkgBytes, err := store.Load("hash")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("error reading chaincode install package"))
 				Expect(len(ccInstallPkgBytes)).To(Equal(0))
@@ -334,9 +333,9 @@ var _ = Describe("Persistence", func() {
 		BeforeEach(func() {
 			mockReadWriter = &mock.IOReadWriter{}
 			mockFileInfo := &mock.OSFileInfo{}
-			mockFileInfo.NameReturns(fmt.Sprintf("%s:%x.bin", "label1", []byte("hash1")))
+			mockFileInfo.NameReturns(fmt.Sprintf("%s:%x.tar.gz", "label1", []byte("hash1")))
 			mockFileInfo2 := &mock.OSFileInfo{}
-			mockFileInfo2.NameReturns(fmt.Sprintf("%s:%x.bin", "label2", []byte("hash2")))
+			mockFileInfo2.NameReturns(fmt.Sprintf("%s:%x.tar.gz", "label2", []byte("hash2")))
 			mockReadWriter.ReadDirReturns([]os.FileInfo{mockFileInfo, mockFileInfo2}, nil)
 			store = &persistence.Store{
 				ReadWriter: mockReadWriter,
@@ -350,25 +349,25 @@ var _ = Describe("Persistence", func() {
 			Expect(installedChaincodes[0]).To(Equal(chaincode.InstalledChaincode{
 				Hash:      []byte("hash1"),
 				Label:     "label1",
-				PackageID: p.PackageID("label1:6861736831"),
+				PackageID: "label1:6861736831",
 			}))
 			Expect(installedChaincodes[1]).To(Equal(chaincode.InstalledChaincode{
 				Hash:      []byte("hash2"),
 				Label:     "label2",
-				PackageID: p.PackageID("label2:6861736832"),
+				PackageID: "label2:6861736832",
 			}))
 		})
 
 		Context("when extraneous files are present", func() {
 			BeforeEach(func() {
 				mockFileInfo := &mock.OSFileInfo{}
-				mockFileInfo.NameReturns(fmt.Sprintf("%s:%x.bin", "label1", []byte("hash1")))
+				mockFileInfo.NameReturns(fmt.Sprintf("%s:%x.tar.gz", "label1", []byte("hash1")))
 				mockFileInfo2 := &mock.OSFileInfo{}
-				mockFileInfo2.NameReturns(fmt.Sprintf("%s:%x.bin", "label2", []byte("hash2")))
+				mockFileInfo2.NameReturns(fmt.Sprintf("%s:%x.tar.gz", "label2", []byte("hash2")))
 				mockFileInfo3 := &mock.OSFileInfo{}
-				mockFileInfo3.NameReturns(fmt.Sprintf("%s:%x.bin", "", "Musha rain dum a doo, dum a da"))
+				mockFileInfo3.NameReturns(fmt.Sprintf("%s:%x.tar.gz", "", "Musha rain dum a doo, dum a da"))
 				mockFileInfo4 := &mock.OSFileInfo{}
-				mockFileInfo4.NameReturns(fmt.Sprintf("%s:%x.bin", "", "barfity:barf.bin"))
+				mockFileInfo4.NameReturns(fmt.Sprintf("%s:%x.tar.gz", "", "barfity:barf.tar.gz"))
 				mockReadWriter.ReadDirReturns([]os.FileInfo{mockFileInfo, mockFileInfo2, mockFileInfo3}, nil)
 			})
 
@@ -379,12 +378,12 @@ var _ = Describe("Persistence", func() {
 				Expect(installedChaincodes[0]).To(Equal(chaincode.InstalledChaincode{
 					Hash:      []byte("hash1"),
 					Label:     "label1",
-					PackageID: p.PackageID("label1:6861736831"),
+					PackageID: "label1:6861736831",
 				}))
 				Expect(installedChaincodes[1]).To(Equal(chaincode.InstalledChaincode{
 					Hash:      []byte("hash2"),
 					Label:     "label2",
-					PackageID: p.PackageID("label2:6861736832"),
+					PackageID: "label2:6861736832",
 				}))
 			})
 		})

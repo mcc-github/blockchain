@@ -10,13 +10,11 @@ import (
 	"bytes"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/msp"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/token"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
@@ -24,15 +22,15 @@ import (
 var putilsLogger = flogging.MustGetLogger("protoutils")
 
 
-func validateChaincodeProposalMessage(prop *pb.Proposal, hdr *common.Header) (*pb.ChaincodeHeaderExtension, error) {
-	if prop == nil || hdr == nil {
+func validateChaincodeProposalMessage(prop *pb.Proposal, hdr *common.Header, chdr *common.ChannelHeader) (*pb.ChaincodeHeaderExtension, error) {
+	if prop == nil || hdr == nil || chdr == nil {
 		return nil, errors.New("nil arguments")
 	}
 
 	putilsLogger.Debugf("validateChaincodeProposalMessage starts for proposal %p, header %p", prop, hdr)
 
 	
-	chaincodeHdrExt, err := protoutil.GetChaincodeHeaderExtension(hdr)
+	chaincodeHdrExt, err := protoutil.UnmarshalChaincodeHeaderExtension(chdr.Extension)
 	if err != nil {
 		return nil, errors.New("invalid header extension for type CHAINCODE")
 	}
@@ -72,13 +70,13 @@ func ValidateProposalMessage(signedProp *pb.SignedProposal) (*pb.Proposal, *comm
 	putilsLogger.Debugf("ValidateProposalMessage starts for signed proposal %p", signedProp)
 
 	
-	prop, err := protoutil.GetProposal(signedProp.ProposalBytes)
+	prop, err := protoutil.UnmarshalProposal(signedProp.ProposalBytes)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	
-	hdr, err := protoutil.GetHeader(prop.Header)
+	hdr, err := protoutil.UnmarshalHeader(prop.Header)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -126,7 +124,7 @@ func ValidateProposalMessage(signedProp *pb.SignedProposal) (*pb.Proposal, *comm
 		fallthrough
 	case common.HeaderType_ENDORSER_TRANSACTION:
 		
-		chaincodeHdrExt, err := validateChaincodeProposalMessage(prop, hdr)
+		chaincodeHdrExt, err := validateChaincodeProposalMessage(prop, hdr, chdr)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -213,7 +211,6 @@ func validateChannelHeader(cHdr *common.ChannelHeader) error {
 	case common.HeaderType_ENDORSER_TRANSACTION:
 	case common.HeaderType_CONFIG_UPDATE:
 	case common.HeaderType_CONFIG:
-	case common.HeaderType_TOKEN_TRANSACTION:
 	default:
 		return errors.Errorf("invalid header type %s", common.HeaderType(cHdr.Type))
 	}
@@ -246,7 +243,7 @@ func validateCommonHeader(hdr *common.Header) (*common.ChannelHeader, *common.Si
 		return nil, nil, err
 	}
 
-	shdr, err := protoutil.GetSignatureHeader(hdr.SignatureHeader)
+	shdr, err := protoutil.UnmarshalSignatureHeader(hdr.SignatureHeader)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -290,7 +287,7 @@ func validateEndorserTransaction(data []byte, hdr *common.Header) error {
 	}
 
 	
-	tx, err := protoutil.GetTransaction(data)
+	tx, err := protoutil.UnmarshalTransaction(data)
 	if err != nil {
 		return err
 	}
@@ -318,7 +315,7 @@ func validateEndorserTransaction(data []byte, hdr *common.Header) error {
 		}
 
 		
-		sHdr, err := protoutil.GetSignatureHeader(act.Header)
+		sHdr, err := protoutil.UnmarshalSignatureHeader(act.Header)
 		if err != nil {
 			return err
 		}
@@ -333,13 +330,13 @@ func validateEndorserTransaction(data []byte, hdr *common.Header) error {
 		putilsLogger.Debugf("validateEndorserTransaction info: signature header is valid")
 
 		
-		ccActionPayload, err := protoutil.GetChaincodeActionPayload(act.Payload)
+		ccActionPayload, err := protoutil.UnmarshalChaincodeActionPayload(act.Payload)
 		if err != nil {
 			return err
 		}
 
 		
-		prp, err := protoutil.GetProposalResponsePayload(ccActionPayload.Action.ProposalResponsePayload)
+		prp, err := protoutil.UnmarshalProposalResponsePayload(ccActionPayload.Action.ProposalResponsePayload)
 		if err != nil {
 			return err
 		}
@@ -364,24 +361,7 @@ func validateEndorserTransaction(data []byte, hdr *common.Header) error {
 }
 
 
-func validateTokenTransaction(data []byte) error {
-	
-	if data == nil {
-		return errors.New("nil payload data")
-	}
-
-	
-	tx := &token.TokenTransaction{}
-	if err := proto.Unmarshal(data, tx); err != nil {
-		return errors.Wrap(err, "error unmarshaling the token Transaction")
-	}
-
-	
-	return nil
-}
-
-
-func ValidateTransaction(e *common.Envelope, c channelconfig.ApplicationCapabilities) (*common.Payload, pb.TxValidationCode) {
+func ValidateTransaction(e *common.Envelope) (*common.Payload, pb.TxValidationCode) {
 	putilsLogger.Debugf("ValidateTransactionEnvelope starts for envelope %p", e)
 
 	
@@ -391,7 +371,7 @@ func ValidateTransaction(e *common.Envelope, c channelconfig.ApplicationCapabili
 	}
 
 	
-	payload, err := protoutil.GetPayload(e)
+	payload, err := protoutil.UnmarshalPayload(e.Payload)
 	if err != nil {
 		putilsLogger.Errorf("GetPayload returns err %s", err)
 		return nil, pb.TxValidationCode_BAD_PAYLOAD
@@ -452,26 +432,6 @@ func ValidateTransaction(e *common.Envelope, c channelconfig.ApplicationCapabili
 		} else {
 			return payload, pb.TxValidationCode_VALID
 		}
-	case common.HeaderType_TOKEN_TRANSACTION:
-		
-		
-		
-		err = protoutil.CheckTxID(
-			chdr.TxId,
-			shdr.Nonce,
-			shdr.Creator)
-
-		if err != nil {
-			putilsLogger.Errorf("CheckTxID returns err %s", err)
-			return nil, pb.TxValidationCode_BAD_PROPOSAL_TXID
-		}
-
-		err = validateTokenTransaction(payload.Data)
-		if err != nil {
-			putilsLogger.Errorf("validateTokenTransaction returns err %s", err)
-			return payload, pb.TxValidationCode_BAD_PAYLOAD
-		}
-		return payload, pb.TxValidationCode_VALID
 	default:
 		return nil, pb.TxValidationCode_UNSUPPORTED_TX_PAYLOAD
 	}

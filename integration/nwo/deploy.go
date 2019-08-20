@@ -46,6 +46,13 @@ type Chaincode struct {
 	ChannelConfigPolicy string
 }
 
+func (c *Chaincode) SetPackageIDFromPackageFile() {
+	fileBytes, err := ioutil.ReadFile(c.PackageFile)
+	Expect(err).NotTo(HaveOccurred())
+	hashStr := fmt.Sprintf("%x", util.ComputeSHA256(fileBytes))
+	c.PackageID = c.Label + ":" + hashStr
+}
+
 
 
 
@@ -127,10 +134,7 @@ func PackageAndInstallChaincode(n *Network, chaincode Chaincode, peers ...*Peer)
 	}
 
 	
-	filebytes, err := ioutil.ReadFile(chaincode.PackageFile)
-	Expect(err).NotTo(HaveOccurred())
-	hashStr := fmt.Sprintf("%x", util.ComputeSHA256(filebytes))
-	chaincode.PackageID = chaincode.Label + ":" + hashStr
+	chaincode.SetPackageIDFromPackageFile()
 
 	
 	InstallChaincode(n, chaincode, peers...)

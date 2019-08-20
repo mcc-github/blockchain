@@ -14,7 +14,6 @@ import (
 	"syscall"
 
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/integration/nwo"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
 
@@ -272,10 +271,7 @@ var _ = Describe("Network", func() {
 			nwo.PackageChaincode(network, chaincode, testPeers[0])
 
 			
-			filebytes, err := ioutil.ReadFile(chaincode.PackageFile)
-			Expect(err).NotTo(HaveOccurred())
-			hashStr := fmt.Sprintf("%x", util.ComputeSHA256(filebytes))
-			chaincode.PackageID = chaincode.Label + ":" + hashStr
+			chaincode.SetPackageIDFromPackageFile()
 
 			nwo.InstallChaincode(network, chaincode, testPeers...)
 
