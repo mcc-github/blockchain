@@ -16,8 +16,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/confighistory"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb"
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb/historyleveldb"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/history"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/ledgerstorage"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
@@ -44,7 +43,7 @@ type Provider struct {
 	idStore             *idStore
 	ledgerStoreProvider *ledgerstorage.Provider
 	vdbProvider         privacyenabledstate.DBProvider
-	historydbProvider   historydb.HistoryDBProvider
+	historydbProvider   *history.DBProvider
 	configHistoryMgr    confighistory.Mgr
 	stateListeners      []ledger.StateListener
 	bookkeepingProvider bookkeeping.Provider
@@ -83,7 +82,7 @@ func NewProvider(initializer *ledger.Initializer) (*Provider, error) {
 	p.ledgerStoreProvider = ledgerStoreProvider
 	if initializer.Config.HistoryDBConfig.Enabled {
 		
-		historydbProvider := historyleveldb.NewHistoryDBProvider(
+		historydbProvider := history.NewDBProvider(
 			filepath.Join(p.initializer.Config.RootFSPath, "historyLeveldb"),
 		)
 		p.historydbProvider = historydbProvider
@@ -194,7 +193,7 @@ func (p *Provider) openInternal(ledgerID string) (ledger.PeerLedger, error) {
 	}
 
 	
-	var historyDB historydb.HistoryDB
+	var historyDB *history.DB
 	if p.historydbProvider != nil {
 		historyDB, err = p.historydbProvider.GetDBHandle(ledgerID)
 		if err != nil {

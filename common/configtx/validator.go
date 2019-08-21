@@ -194,7 +194,7 @@ func (vi *ValidatorImpl) Validate(configEnv *cb.ConfigEnvelope) error {
 }
 
 
-func (vi *ValidatorImpl) ChainID() string {
+func (vi *ValidatorImpl) ChannelID() string {
 	return vi.channelID
 }
 

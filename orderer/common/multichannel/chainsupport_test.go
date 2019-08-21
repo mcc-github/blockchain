@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/deliver/mock"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger/mocks"
@@ -68,21 +69,24 @@ func TestVerifyBlockSignature(t *testing.T) {
 	}
 	ms := &mutableResourcesMock{
 		Resources: config.Resources{
-			ConfigtxValidatorVal: &mockconfigtx.Validator{ChainIDVal: "mychannel"},
+			ConfigtxValidatorVal: &mockconfigtx.Validator{ChannelIDVal: "mychannel"},
 			PolicyManagerVal:     policyMgr,
 		},
 	}
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
 	cs := &ChainSupport{
 		ledgerResources: &ledgerResources{
 			configResources: &configResources{
 				mutableResources: ms,
+				bccsp:            cryptoProvider,
 			},
 		},
 	}
 
 	
 	
-	err := cs.VerifyBlockSignature([]*protoutil.SignedData{}, nil)
+	err = cs.VerifyBlockSignature([]*protoutil.SignedData{}, nil)
 	assert.EqualError(t, err, "policy /Channel/Orderer/BlockValidation wasn't found")
 
 	
@@ -114,7 +118,7 @@ func TestConsensusMetadataValidation(t *testing.T) {
 	ms := &mutableResourcesMock{
 		Resources: config.Resources{
 			ConfigtxValidatorVal: &mockconfigtx.Validator{
-				ChainIDVal:             "mychannel",
+				ChannelIDVal:           "mychannel",
 				ProposeConfigUpdateVal: testConfigEnvelope(t),
 			},
 			OrdererConfigVal: &config.Orderer{
@@ -123,18 +127,21 @@ func TestConsensusMetadataValidation(t *testing.T) {
 		},
 		newConsensusMetadataVal: newConsensusMetadata,
 	}
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
 	mv := &msgprocessormocks.FakeMetadataValidator{}
 	cs := &ChainSupport{
 		ledgerResources: &ledgerResources{
 			configResources: &configResources{
 				mutableResources: ms,
+				bccsp:            cryptoProvider,
 			},
 		},
 		MetadataValidator: mv,
 	}
 
 	
-	_, err := cs.ProposeConfigUpdate(&common.Envelope{})
+	_, err = cs.ProposeConfigUpdate(&common.Envelope{})
 	assert.NoError(t, err)
 
 	

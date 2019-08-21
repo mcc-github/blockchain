@@ -35,7 +35,7 @@ type ConsenterSupport struct {
 	Blocks chan *cb.Block
 
 	
-	ChainIDVal string
+	ChannelIDVal string
 
 	
 	HeightVal uint64
@@ -117,8 +117,8 @@ func (mcs *ConsenterSupport) WriteConfigBlock(block *cb.Block, encodedMetadataVa
 }
 
 
-func (mcs *ConsenterSupport) ChainID() string {
-	return mcs.ChainIDVal
+func (mcs *ConsenterSupport) ChannelID() string {
+	return mcs.ChannelIDVal
 }
 
 

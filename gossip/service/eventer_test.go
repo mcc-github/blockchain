@@ -15,7 +15,7 @@ import (
 	"github.com/mcc-github/blockchain/protos/peer"
 )
 
-const testChainID = "foo"
+const testChannelID = "foo"
 
 func init() {
 	util.SetupTestLogging()
@@ -49,8 +49,8 @@ func (mc *mockConfig) Organizations() map[string]channelconfig.ApplicationOrg {
 	return mc.orgs
 }
 
-func (mc *mockConfig) ChainID() string {
-	return testChainID
+func (mc *mockConfig) ChannelID() string {
+	return testChannelID
 }
 
 const testOrgID = "testID"

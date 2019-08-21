@@ -8,13 +8,11 @@ package rest
 
 import (
 	"bytes"
-	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mcc-github/blockchain/internal/configtxlator/sanitycheck"
 	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
@@ -142,29 +140,6 @@ func TestProtolatorCorruptProtos(t *testing.T) {
 	assert.NoError(t, err)
 
 	req.Header.Set("Content-Type", mpw.FormDataContentType())
-	rec := httptest.NewRecorder()
-	r := NewRouter()
-	r.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestConfigtxlatorSanityCheckConfig(t *testing.T) {
-	req, _ := http.NewRequest("POST", "/configtxlator/config/verify", bytes.NewReader(protoutil.MarshalOrPanic(&cb.Config{})))
-	rec := httptest.NewRecorder()
-	r := NewRouter()
-	r.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	outputMsg := &sanitycheck.Messages{}
-
-	err := json.Unmarshal(rec.Body.Bytes(), outputMsg)
-	assert.NoError(t, err)
-}
-
-func TestConfigtxlatorSanityCheckMalformedConfig(t *testing.T) {
-	req, _ := http.NewRequest("POST", "/configtxlator/config/verify", bytes.NewReader([]byte("Garbage")))
 	rec := httptest.NewRecorder()
 	r := NewRouter()
 	r.ServeHTTP(rec, req)

@@ -15,6 +15,7 @@ import (
 	"unicode"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/common/privdata"
@@ -143,7 +144,7 @@ func (cifs *CCInfoFSImpl) GetChaincodeDepSpec(ccNameVersion string) (*pb.Chainco
 
 func (*CCInfoFSImpl) GetChaincodeFromPath(ccNameVersion string, path string) (CCPackage, error) {
 	
-	cccdspack := &CDSPackage{}
+	cccdspack := &CDSPackage{GetHasher: factory.GetDefault()}
 	_, _, err := cccdspack.InitFromPath(ccNameVersion, path)
 	if err != nil {
 		
@@ -169,7 +170,7 @@ func (*CCInfoFSImpl) PutChaincode(depSpec *pb.ChaincodeDeploymentSpec) (CCPackag
 	if err != nil {
 		return nil, err
 	}
-	cccdspack := &CDSPackage{}
+	cccdspack := &CDSPackage{GetHasher: factory.GetDefault()}
 	if _, err := cccdspack.InitFromBuffer(buf); err != nil {
 		return nil, err
 	}
@@ -260,7 +261,7 @@ func GetChaincodeData(ccNameVersion string) (*ChaincodeData, error) {
 
 func GetCCPackage(buf []byte) (CCPackage, error) {
 	
-	cds := &CDSPackage{}
+	cds := &CDSPackage{GetHasher: factory.GetDefault()}
 	if ccdata, err := cds.InitFromBuffer(buf); err != nil {
 		cds = nil
 	} else {

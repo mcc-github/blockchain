@@ -19,7 +19,7 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/confighistory"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/bookkeeping"
-	"github.com/mcc-github/blockchain/core/ledger/kvledger/history/historydb"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/history"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr"
@@ -40,7 +40,7 @@ type kvLedger struct {
 	ledgerID               string
 	blockStore             *ledgerstorage.Store
 	txtmgmt                txmgr.TxMgr
-	historyDB              historydb.HistoryDB
+	historyDB              *history.DB
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
 	stats                  *ledgerStats
@@ -52,7 +52,7 @@ func newKVLedger(
 	ledgerID string,
 	blockStore *ledgerstorage.Store,
 	versionedDB privacyenabledstate.DB,
-	historyDB historydb.HistoryDB,
+	historyDB *history.DB,
 	configHistoryMgr confighistory.Mgr,
 	stateListeners []ledger.StateListener,
 	bookkeeperProvider bookkeeping.Provider,
@@ -402,7 +402,7 @@ func (l *kvLedger) NewQueryExecutor() (ledger.QueryExecutor, error) {
 
 func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error) {
 	if l.historyDB != nil {
-		return l.historyDB.NewHistoryQueryExecutor(l.blockStore)
+		return l.historyDB.NewQueryExecutor(l.blockStore)
 	}
 	return nil, nil
 }

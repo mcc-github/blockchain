@@ -66,7 +66,7 @@ func TestChain(t *testing.T) {
 				SetMessage(mockChannel.topic(), mockChannel.partition(), newestOffset, message),
 		})
 		mockSupport = &mockmultichannel.ConsenterSupport{
-			ChainIDVal:      mockChannel.topic(),
+			ChannelIDVal:    mockChannel.topic(),
 			HeightVal:       uint64(3),
 			SharedConfigVal: &mockconfig.Orderer{KafkaBrokersVal: []string{mockBroker.Addr()}},
 			ChannelConfigVal: &mockconfig.Channel{
@@ -732,7 +732,7 @@ func TestCloseKafkaObjects(t *testing.T) {
 	mockChannel := newChannel(channelNameForTest(t), defaultPartition)
 
 	mockSupport := &mockmultichannel.ConsenterSupport{
-		ChainIDVal: mockChannel.topic(),
+		ChannelIDVal: mockChannel.topic(),
 	}
 
 	oldestOffset := int64(0)
@@ -991,7 +991,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:          make(chan *cb.Block), 
 				BlockCutterVal:  mockblockcutter.NewReceiver(),
-				ChainIDVal:      mockChannel.topic(),
+				ChannelIDVal:    mockChannel.topic(),
 				HeightVal:       lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{BatchTimeoutVal: shortTimeout / 2},
 			}
@@ -1066,7 +1066,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 			}
 			defer close(mockSupport.BlockCutterVal.Block)
@@ -1127,7 +1127,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 			}
 			defer close(mockSupport.BlockCutterVal.Block)
@@ -1177,7 +1177,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 			}
 			defer close(mockSupport.BlockCutterVal.Block)
@@ -1227,7 +1227,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 			}
 			defer close(mockSupport.BlockCutterVal.Block)
@@ -1275,7 +1275,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			haltChan := make(chan struct{})
 
 			mockSupport := &mockmultichannel.ConsenterSupport{
-				ChainIDVal: mockChannel.topic(),
+				ChannelIDVal: mockChannel.topic(),
 			}
 
 			bareMinimumChain := &chainImpl{
@@ -1319,7 +1319,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			haltChan := make(chan struct{})
 
 			mockSupport := &mockmultichannel.ConsenterSupport{
-				ChainIDVal: mockChannel.topic(),
+				ChannelIDVal: mockChannel.topic(),
 			}
 
 			bareMinimumChain := &chainImpl{
@@ -1367,7 +1367,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -1423,7 +1423,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -1496,7 +1496,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -1579,7 +1579,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:              make(chan *cb.Block), 
 					BlockCutterVal:      mockblockcutter.NewReceiver(),
-					ChainIDVal:          mockChannel.topic(),
+					ChannelIDVal:        mockChannel.topic(),
 					HeightVal:           lastCutBlockNumber, 
 					ClassifyMsgVal:      msgprocessor.ConfigMsg,
 					ProcessConfigMsgErr: fmt.Errorf("Invalid config message"),
@@ -1635,7 +1635,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:              make(chan *cb.Block), 
 					BlockCutterVal:      mockblockcutter.NewReceiver(),
-					ChainIDVal:          mockChannel.topic(),
+					ChannelIDVal:        mockChannel.topic(),
 					HeightVal:           lastCutBlockNumber, 
 					ClassifyMsgVal:      msgprocessor.ConfigMsg,
 					ProcessConfigMsgErr: fmt.Errorf("Invalid config message"),
@@ -1691,7 +1691,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -1742,7 +1742,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -1805,7 +1805,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -1863,7 +1863,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: extraShortTimeout, 
@@ -1939,7 +1939,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: extraShortTimeout, 
@@ -2010,7 +2010,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -2100,7 +2100,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -2164,7 +2164,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					SharedConfigVal: &mockconfig.Orderer{
 						BatchTimeoutVal: longTimeout,
@@ -2258,7 +2258,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 				mockSupport := &mockmultichannel.ConsenterSupport{
 					Blocks:         make(chan *cb.Block), 
 					BlockCutterVal: mockblockcutter.NewReceiver(),
-					ChainIDVal:     mockChannel.topic(),
+					ChannelIDVal:   mockChannel.topic(),
 					HeightVal:      lastCutBlockNumber, 
 					ClassifyMsgVal: msgprocessor.ConfigMsg,
 					SharedConfigVal: &mockconfig.Orderer{
@@ -2335,7 +2335,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			haltChan := make(chan struct{})
 
 			mockSupport := &mockmultichannel.ConsenterSupport{
-				ChainIDVal: mockChannel.topic(),
+				ChannelIDVal: mockChannel.topic(),
 			}
 
 			bareMinimumChain := &chainImpl{
@@ -2403,7 +2403,7 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 			haltChan := make(chan struct{})
 
 			mockSupport := &mockmultichannel.ConsenterSupport{
-				ChainIDVal: mockChannel.topic(),
+				ChannelIDVal: mockChannel.topic(),
 			}
 
 			bareMinimumChain := &chainImpl{
@@ -2517,7 +2517,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -2591,7 +2591,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -2673,7 +2673,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -2751,7 +2751,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -2884,7 +2884,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -2955,7 +2955,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -3063,7 +3063,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -3146,7 +3146,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -3224,7 +3224,7 @@ func TestResubmission(t *testing.T) {
 			mockSupport := &mockmultichannel.ConsenterSupport{
 				Blocks:         make(chan *cb.Block), 
 				BlockCutterVal: mockblockcutter.NewReceiver(),
-				ChainIDVal:     mockChannel.topic(),
+				ChannelIDVal:   mockChannel.topic(),
 				HeightVal:      lastCutBlockNumber, 
 				SharedConfigVal: &mockconfig.Orderer{
 					BatchTimeoutVal: longTimeout,
@@ -3436,7 +3436,7 @@ func TestDeliverSession(t *testing.T) {
 		
 		support := &mockConsenterSupport{}
 		support.On("Height").Return(uint64(height))
-		support.On("ChainID").Return(topic)
+		support.On("ChannelID").Return(topic)
 		support.On("Sequence").Return(uint64(0))
 		support.On("SharedConfig").Return(&mockconfig.Orderer{KafkaBrokersVal: []string{broker0.Addr()}})
 		support.On("ClassifyMsg", mock.Anything).Return(msgprocessor.NormalMsg, nil)
@@ -3828,7 +3828,7 @@ func (c *mockConsenterSupport) Sequence() uint64 {
 	return args.Get(0).(uint64)
 }
 
-func (c *mockConsenterSupport) ChainID() string {
+func (c *mockConsenterSupport) ChannelID() string {
 	args := c.Called()
 	return args.String(0)
 }

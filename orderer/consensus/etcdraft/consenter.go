@@ -14,6 +14,7 @@ import (
 
 	"code.cloudfoundry.org/clock"
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/core/comm"
@@ -159,10 +160,10 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 
 	id, err := c.detectSelfID(consenters)
 	if err != nil {
-		c.InactiveChainRegistry.TrackChain(support.ChainID(), support.Block(0), func() {
-			c.CreateChain(support.ChainID())
+		c.InactiveChainRegistry.TrackChain(support.ChannelID(), support.Block(0), func() {
+			c.CreateChain(support.ChannelID())
 		})
-		return &inactive.Chain{Err: errors.Errorf("channel %s is not serviced by me", support.ChainID())}, nil
+		return &inactive.Chain{Err: errors.Errorf("channel %s is not serviced by me", support.ChannelID())}, nil
 	}
 
 	var evictionSuspicion time.Duration
@@ -199,8 +200,8 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 
 		MigrationInit: isMigration,
 
-		WALDir:            path.Join(c.EtcdRaftConfig.WALDir, support.ChainID()),
-		SnapDir:           path.Join(c.EtcdRaftConfig.SnapDir, support.ChainID()),
+		WALDir:            path.Join(c.EtcdRaftConfig.WALDir, support.ChannelID()),
+		SnapDir:           path.Join(c.EtcdRaftConfig.SnapDir, support.ChannelID()),
 		EvictionSuspicion: evictionSuspicion,
 		Cert:              c.Cert,
 		Metrics:           c.Metrics,
@@ -209,7 +210,7 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 	rpc := &cluster.RPC{
 		Timeout:       c.OrdererConfig.General.Cluster.RPCTimeout,
 		Logger:        c.Logger,
-		Channel:       support.ChainID(),
+		Channel:       support.ChannelID(),
 		Comm:          c.Communication,
 		StreamsByType: cluster.NewStreamsByType(),
 	}
@@ -218,7 +219,9 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		opts,
 		c.Communication,
 		rpc,
-		func() (BlockPuller, error) { return newBlockPuller(support, c.Dialer, c.OrdererConfig.General.Cluster) },
+		func() (BlockPuller, error) {
+			return newBlockPuller(support, c.Dialer, c.OrdererConfig.General.Cluster, factory.GetDefault())
+		},
 		nil,
 	)
 }

@@ -96,7 +96,7 @@ func (p *Peer) updateTrustedRoots(cm channelconfig.Resources) {
 	}
 
 	
-	peerLogger.Debugf("Updating trusted root authorities for channel %s", cm.ConfigtxValidator().ChainID())
+	peerLogger.Debugf("Updating trusted root authorities for channel %s", cm.ConfigtxValidator().ChannelID())
 
 	p.CredentialSupport.BuildTrustedRootsForChain(cm)
 
@@ -113,7 +113,7 @@ func (p *Peer) updateTrustedRoots(cm channelconfig.Resources) {
 	if err != nil {
 		msg := "Failed to update trusted roots from latest config block. " +
 			"This peer may not be able to communicate with members of channel %s (%s)"
-		peerLogger.Warningf(msg, cm.ConfigtxValidator().ChainID(), err)
+		peerLogger.Warningf(msg, cm.ConfigtxValidator().ChannelID(), err)
 	}
 }
 
@@ -203,16 +203,13 @@ func (p *Peer) openStore(cid string) (transientstore.Store, error) {
 }
 
 func (p *Peer) CreateChannel(
+	cid string,
 	cb *common.Block,
 	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
 	legacyLifecycleValidation plugindispatcher.LifecycleResources,
 	newLifecycleValidation plugindispatcher.CollectionAndLifecycleResources,
 ) error {
-	cid, err := protoutil.GetChainIDFromBlock(cb)
-	if err != nil {
-		return err
-	}
-	l, err := p.LedgerMgr.CreateLedger(cb)
+	l, err := p.LedgerMgr.CreateLedger(cid, cb)
 	if err != nil {
 		return errors.WithMessage(err, "cannot create ledger from genesis block")
 	}
@@ -339,7 +336,7 @@ func (p *Peer) createChannel(
 			},
 			&CollectionInfoShim{
 				CollectionAndLifecycleResources: newLifecycleValidation,
-				ChannelID:                       bundle.ConfigtxValidator().ChainID(),
+				ChannelID:                       bundle.ConfigtxValidator().ChannelID(),
 			},
 			p.pluginMapper,
 			policies.PolicyManagerGetterFunc(p.GetPolicyManager),
@@ -352,14 +349,14 @@ func (p *Peer) createChannel(
 	}
 
 	
-	store, err := p.openStore(bundle.ConfigtxValidator().ChainID())
+	store, err := p.openStore(bundle.ConfigtxValidator().ChannelID())
 	if err != nil {
-		return errors.Wrapf(err, "[channel %s] failed opening transient store", bundle.ConfigtxValidator().ChainID())
+		return errors.Wrapf(err, "[channel %s] failed opening transient store", bundle.ConfigtxValidator().ChannelID())
 	}
 	channel.store = store
 
 	simpleCollectionStore := privdata.NewSimpleCollectionStore(l, deployedCCInfoProvider)
-	p.GossipService.InitializeChannel(bundle.ConfigtxValidator().ChainID(), ordererAddresses, gossipservice.Support{
+	p.GossipService.InitializeChannel(bundle.ConfigtxValidator().ChannelID(), ordererAddresses, gossipservice.Support{
 		Validator:       validator,
 		Committer:       committer,
 		Store:           store,

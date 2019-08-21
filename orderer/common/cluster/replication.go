@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"time"
 
+	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
@@ -349,12 +350,12 @@ type VerifierRetriever interface {
 }
 
 
-func BlockPullerFromConfigBlock(conf PullerConfig, block *common.Block, verifierRetriever VerifierRetriever) (*BlockPuller, error) {
+func BlockPullerFromConfigBlock(conf PullerConfig, block *common.Block, verifierRetriever VerifierRetriever, bccsp bccsp.BCCSP) (*BlockPuller, error) {
 	if block == nil {
 		return nil, errors.New("nil block")
 	}
 
-	endpoints, err := EndpointconfigFromConfigBlock(block)
+	endpoints, err := EndpointconfigFromConfigBlock(block, bccsp)
 	if err != nil {
 		return nil, err
 	}

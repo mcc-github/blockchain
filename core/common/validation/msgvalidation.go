@@ -9,132 +9,15 @@ package validation
 import (
 	"bytes"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/msp"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
 var putilsLogger = flogging.MustGetLogger("protoutils")
-
-
-func validateChaincodeProposalMessage(prop *pb.Proposal, hdr *common.Header, chdr *common.ChannelHeader) (*pb.ChaincodeHeaderExtension, error) {
-	if prop == nil || hdr == nil || chdr == nil {
-		return nil, errors.New("nil arguments")
-	}
-
-	putilsLogger.Debugf("validateChaincodeProposalMessage starts for proposal %p, header %p", prop, hdr)
-
-	
-	chaincodeHdrExt, err := protoutil.UnmarshalChaincodeHeaderExtension(chdr.Extension)
-	if err != nil {
-		return nil, errors.New("invalid header extension for type CHAINCODE")
-	}
-
-	if chaincodeHdrExt.ChaincodeId == nil {
-		return nil, errors.New("ChaincodeHeaderExtension.ChaincodeId is nil")
-	}
-
-	putilsLogger.Debugf("validateChaincodeProposalMessage info: header extension references chaincode %s", chaincodeHdrExt.ChaincodeId)
-
-	
-	
-
-	
-	
-	
-	
-	
-	
-	
-	
-	if chaincodeHdrExt.PayloadVisibility != nil {
-		return nil, errors.New("invalid payload visibility field")
-	}
-
-	return chaincodeHdrExt, nil
-}
-
-
-
-
-func ValidateProposalMessage(signedProp *pb.SignedProposal) (*pb.Proposal, *common.Header, *pb.ChaincodeHeaderExtension, error) {
-	if signedProp == nil {
-		return nil, nil, nil, errors.New("nil arguments")
-	}
-
-	putilsLogger.Debugf("ValidateProposalMessage starts for signed proposal %p", signedProp)
-
-	
-	prop, err := protoutil.UnmarshalProposal(signedProp.ProposalBytes)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	
-	hdr, err := protoutil.UnmarshalHeader(prop.Header)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	
-	chdr, shdr, err := validateCommonHeader(hdr)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	
-	err = checkSignatureFromCreator(shdr.Creator, signedProp.Signature, signedProp.ProposalBytes, chdr.ChannelId)
-	if err != nil {
-		
-		
-		putilsLogger.Warningf("channel [%s]: %s", chdr.ChannelId, err)
-		sId := &msp.SerializedIdentity{}
-		err := proto.Unmarshal(shdr.Creator, sId)
-		if err != nil {
-			
-			err = errors.Wrap(err, "could not deserialize a SerializedIdentity")
-			putilsLogger.Warningf("channel [%s]: %s", chdr.ChannelId, err)
-		}
-		return nil, nil, nil, errors.Errorf("access denied: channel [%s] creator org [%s]", chdr.ChannelId, sId.Mspid)
-	}
-
-	
-	
-	
-	err = protoutil.CheckTxID(
-		chdr.TxId,
-		shdr.Nonce,
-		shdr.Creator)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	
-	switch common.HeaderType(chdr.Type) {
-	case common.HeaderType_CONFIG:
-		
-		
-		
-		
-		fallthrough
-	case common.HeaderType_ENDORSER_TRANSACTION:
-		
-		chaincodeHdrExt, err := validateChaincodeProposalMessage(prop, hdr, chdr)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		return prop, hdr, chaincodeHdrExt, err
-	default:
-		
-		return nil, nil, nil, errors.Errorf("unsupported proposal type %d", common.HeaderType(chdr.Type))
-	}
-}
 
 
 

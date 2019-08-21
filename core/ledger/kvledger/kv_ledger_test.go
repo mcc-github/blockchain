@@ -328,7 +328,7 @@ func TestKVLedgerDBRecovery(t *testing.T) {
 
 			historyDBSavePoint: uint64(2),
 			historyKey:         "key1",
-			historyVals:        []string{"value1.1", "value1.2"},
+			historyVals:        []string{"value1.2", "value1.1"},
 		},
 	)
 
@@ -359,7 +359,7 @@ func TestKVLedgerDBRecovery(t *testing.T) {
 
 			historyDBSavePoint: uint64(2),
 			historyKey:         "key1",
-			historyVals:        []string{"value1.1", "value1.2"},
+			historyVals:        []string{"value1.2", "value1.1"},
 		},
 	)
 	ledger.Close()
@@ -383,7 +383,7 @@ func TestKVLedgerDBRecovery(t *testing.T) {
 
 			historyDBSavePoint: uint64(3),
 			historyKey:         "key1",
-			historyVals:        []string{"value1.1", "value1.2", "value1.3"},
+			historyVals:        []string{"value1.3", "value1.2", "value1.1"},
 		},
 	)
 
@@ -414,7 +414,7 @@ func TestKVLedgerDBRecovery(t *testing.T) {
 
 			historyDBSavePoint: uint64(4),
 			historyKey:         "key1",
-			historyVals:        []string{"value1.1", "value1.2", "value1.3", "value1.4"},
+			historyVals:        []string{"value1.4", "value1.3", "value1.2", "value1.1"},
 		},
 	)
 	ledger.Close()
@@ -437,7 +437,7 @@ func TestKVLedgerDBRecovery(t *testing.T) {
 
 			historyDBSavePoint: uint64(4),
 			historyKey:         "key1",
-			historyVals:        []string{"value1.1", "value1.2", "value1.3", "value1.4"},
+			historyVals:        []string{"value1.4", "value1.3", "value1.2", "value1.1"},
 		},
 	)
 }
@@ -545,7 +545,7 @@ func TestLedgerWithCouchDbEnabledWithBinaryAndJSONData(t *testing.T) {
 		}
 		assert.Equal(t, 3, count)
 		
-		expectedValue := []byte("{\"shipmentID\":\"161003PKC7600\",\"customsInvoice\":{\"methodOfTransport\":\"TRAIN\",\"invoiceNumber\":\"00091624\"},\"weightUnitOfMeasure\":\"KGM\",\"volumeUnitOfMeasure\": \"CO\",\"dimensionUnitOfMeasure\":\"CM\",\"currency\":\"USD\"}")
+		expectedValue := []byte("{\"shipmentID\":\"161003PKC7600\",\"customsInvoice\":{\"methodOfTransport\":\"AIR MAYBE\",\"invoiceNumber\":\"00091624\"},\"weightUnitOfMeasure\":\"KGM\",\"volumeUnitOfMeasure\": \"CO\",\"dimensionUnitOfMeasure\":\"CM\",\"currency\":\"USD\"}")
 		assert.Equal(t, expectedValue, retrievedValue)
 
 	}

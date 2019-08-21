@@ -117,7 +117,7 @@ type ConsenterSupport interface {
 	Sequence() uint64
 
 	
-	ChainID() string
+	ChannelID() string
 
 	
 	Height() uint64

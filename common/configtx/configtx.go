@@ -20,7 +20,7 @@ type Validator interface {
 	ProposeConfigUpdate(configtx *cb.Envelope) (*cb.ConfigEnvelope, error)
 
 	
-	ChainID() string
+	ChannelID() string
 
 	
 	ConfigProto() *cb.Config

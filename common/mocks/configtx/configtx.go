@@ -13,7 +13,7 @@ import (
 
 type Validator struct {
 	
-	ChainIDVal string
+	ChannelIDVal string
 
 	
 	SequenceVal uint64
@@ -43,8 +43,8 @@ func (cm *Validator) ConfigProto() *cb.Config {
 }
 
 
-func (cm *Validator) ChainID() string {
-	return cm.ChainIDVal
+func (cm *Validator) ChannelID() string {
+	return cm.ChannelIDVal
 }
 
 

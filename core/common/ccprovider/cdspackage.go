@@ -19,6 +19,7 @@ package ccprovider
 import (
 	"bytes"
 	"fmt"
+	"hash"
 	"io/ioutil"
 	"os"
 
@@ -58,19 +59,25 @@ func (data *CDSData) Equals(other *CDSData) bool {
 }
 
 
+type GetHasher interface {
+	GetHash(opts bccsp.HashOpts) (h hash.Hash, err error)
+}
+
+
 
 
 type CDSPackage struct {
-	buf     []byte
-	depSpec *pb.ChaincodeDeploymentSpec
-	data    *CDSData
-	datab   []byte
-	id      []byte
+	buf       []byte
+	depSpec   *pb.ChaincodeDeploymentSpec
+	data      *CDSData
+	datab     []byte
+	id        []byte
+	GetHasher GetHasher
 }
 
 
 func (ccpack *CDSPackage) reset() {
-	*ccpack = CDSPackage{}
+	*ccpack = CDSPackage{GetHasher: factory.GetDefault()}
 }
 
 
@@ -136,7 +143,8 @@ func (ccpack *CDSPackage) getCDSData(cds *pb.ChaincodeDeploymentSpec) ([]byte, [
 	}
 
 	
-	hash, err := factory.GetDefault().GetHash(&bccsp.SHAOpts{})
+	
+	hash, err := ccpack.GetHasher.GetHash(&bccsp.SHAOpts{})
 	if err != nil {
 		return nil, nil, nil, err
 	}

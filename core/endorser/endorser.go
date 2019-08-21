@@ -17,7 +17,6 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/common/validation"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/protos/common"
@@ -150,7 +149,7 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, input *
 			
 			meterLabels := []string{
 				"channel", txParams.ChannelID,
-				"chaincode", cds.ChaincodeSpec.ChaincodeId.Name + ":" + cds.ChaincodeSpec.ChaincodeId.Version,
+				"chaincode", cds.ChaincodeSpec.ChaincodeId.Name,
 			}
 			e.Metrics.InitFailed.With(meterLabels...).Add(1)
 			return nil, nil, err
@@ -271,8 +270,7 @@ func (e *Endorser) endorseProposal(chainID string, txid string, signedProp *pb.S
 func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, error) {
 	vr := &validateResult{}
 	
-	prop, hdr, hdrExt, err := validation.ValidateProposalMessage(signedProp)
-
+	prop, hdr, hdrExt, err := ValidateProposalMessage(signedProp)
 	if err != nil {
 		e.Metrics.ProposalValidationFailed.Add(1)
 		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
@@ -299,7 +297,7 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, e
 		
 		meterLabels := []string{
 			"channel", chainID,
-			"chaincode", hdrExt.ChaincodeId.Name + ":" + hdrExt.ChaincodeId.Version,
+			"chaincode", hdrExt.ChaincodeId.Name,
 		}
 
 		
@@ -354,7 +352,7 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 		if hdrExt != nil {
 			meterLabels := []string{
 				"channel", chainID,
-				"chaincode", hdrExt.ChaincodeId.Name + ":" + hdrExt.ChaincodeId.Version,
+				"chaincode", hdrExt.ChaincodeId.Name,
 				"success", strconv.FormatBool(success),
 			}
 			e.Metrics.ProposalDuration.With(meterLabels...).Observe(time.Since(startTime).Seconds())
@@ -454,7 +452,7 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 		
 		meterLabels := []string{
 			"channel", chainID,
-			"chaincode", hdrExt.ChaincodeId.Name + ":" + hdrExt.ChaincodeId.Version,
+			"chaincode", hdrExt.ChaincodeId.Name,
 		}
 
 		if err != nil {

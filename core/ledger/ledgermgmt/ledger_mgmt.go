@@ -17,7 +17,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger"
 	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -85,13 +84,9 @@ func NewLedgerMgr(initializer *Initializer) *LedgerMgr {
 
 
 
-func (m *LedgerMgr) CreateLedger(genesisBlock *common.Block) (ledger.PeerLedger, error) {
+func (m *LedgerMgr) CreateLedger(id string, genesisBlock *common.Block) (ledger.PeerLedger, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	id, err := protoutil.GetChainIDFromBlock(genesisBlock)
-	if err != nil {
-		return nil, err
-	}
 	logger.Infof("Creating ledger [%s] with genesis block", id)
 	l, err := m.ledgerProvider.Create(genesisBlock)
 	if err != nil {

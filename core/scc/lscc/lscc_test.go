@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/mocks/config"
 	mscc "github.com/mcc-github/blockchain/common/mocks/scc"
@@ -110,7 +111,12 @@ func constructDeploymentSpec(name, path, version string, initArgs [][]byte, crea
 		if err != nil {
 			return nil, err
 		}
-		cccdspack := &ccprovider.CDSPackage{}
+
+		cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+		if err != nil {
+			return nil, err
+		}
+		cccdspack := &ccprovider.CDSPackage{GetHasher: cryptoProvider}
 		if _, err := cccdspack.InitFromBuffer(buf); err != nil {
 			return nil, err
 		}
@@ -473,7 +479,8 @@ func testDeploy(t *testing.T, ccname string, version string, path string, forceB
 				assert.Equal(t, "invalid deployment spec: barf", res.Message)
 				scc.Support.(*MockSupport).GetChaincodeFromLocalStorageErr = nil
 				bkpCCFromLSRv := scc.Support.(*MockSupport).GetChaincodeFromLocalStorageRv
-				scc.Support.(*MockSupport).GetChaincodeFromLocalStorageRv = &ccprovider.CDSPackage{}
+				cryptoProvider, _ := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+				scc.Support.(*MockSupport).GetChaincodeFromLocalStorageRv = &ccprovider.CDSPackage{GetHasher: cryptoProvider}
 				res = stub.MockInvokeWithSignedProposal("1", args, sProp)
 				assert.NotEqual(t, int32(shim.OK), res.Status)
 				assert.Contains(t, res.Message, "chaincode fingerprint mismatch")

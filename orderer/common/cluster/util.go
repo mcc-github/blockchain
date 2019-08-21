@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
@@ -348,7 +349,7 @@ type EndpointCriteria struct {
 
 
 
-func EndpointconfigFromConfigBlock(block *common.Block) ([]EndpointCriteria, error) {
+func EndpointconfigFromConfigBlock(block *common.Block, bccsp bccsp.BCCSP) ([]EndpointCriteria, error) {
 	if block == nil {
 		return nil, errors.New("nil block")
 	}
@@ -357,7 +358,7 @@ func EndpointconfigFromConfigBlock(block *common.Block) ([]EndpointCriteria, err
 		return nil, err
 	}
 
-	bundle, err := channelconfig.NewBundleFromEnvelope(envelopeConfig, factory.GetDefault())
+	bundle, err := channelconfig.NewBundleFromEnvelope(envelopeConfig, bccsp)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed extracting bundle from envelope")
 	}
@@ -521,11 +522,12 @@ func (interceptor *LedgerInterceptor) Append(block *common.Block) error {
 
 type BlockVerifierAssembler struct {
 	Logger *flogging.FabricLogger
+	BCCSP  bccsp.BCCSP
 }
 
 
 func (bva *BlockVerifierAssembler) VerifierFromConfig(configuration *common.ConfigEnvelope, channel string) (BlockVerifier, error) {
-	bundle, err := channelconfig.NewBundle(channel, configuration.Config, factory.GetDefault())
+	bundle, err := channelconfig.NewBundle(channel, configuration.Config, bva.BCCSP)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed extracting bundle from envelope")
 	}

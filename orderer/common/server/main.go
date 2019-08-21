@@ -89,7 +89,7 @@ func Main() {
 	prettyPrintStruct(conf)
 
 	bootstrapBlock := extractBootstrapBlock(conf)
-	if err := ValidateBootstrapBlock(bootstrapBlock); err != nil {
+	if err := ValidateBootstrapBlock(bootstrapBlock, factory.GetDefault()); err != nil {
 		logger.Panicf("Failed validating bootstrap block: %v", err)
 	}
 
@@ -292,7 +292,7 @@ func createReplicator(
 	logger := flogging.MustGetLogger("orderer.common.cluster")
 
 	vl := &verifierLoader{
-		verifierFactory: &cluster.BlockVerifierAssembler{Logger: logger},
+		verifierFactory: &cluster.BlockVerifierAssembler{Logger: logger, BCCSP: factory.GetDefault()},
 		onFailure: func(block *cb.Block) {
 			protolator.DeepMarshalJSON(os.Stdout, block)
 		},
@@ -314,7 +314,7 @@ func createReplicator(
 		LoadVerifier:       vl.loadVerifier,
 		Logger:             logger,
 		VerifiersByChannel: verifiersByChannel,
-		VerifierFactory:    &cluster.BlockVerifierAssembler{Logger: logger},
+		VerifierFactory:    &cluster.BlockVerifierAssembler{Logger: logger, BCCSP: factory.GetDefault()},
 	}
 
 	ledgerFactory := &ledgerFactory{
@@ -818,7 +818,7 @@ func (mgr *caManager) updateTrustedRoots(
 		}
 	}
 
-	cid := cm.ConfigtxValidator().ChainID()
+	cid := cm.ConfigtxValidator().ChannelID()
 	logger.Debugf("updating root CAs for channel [%s]", cid)
 	msps, err := cm.MSPManager().GetMSPs()
 	if err != nil {
@@ -877,7 +877,7 @@ func (mgr *caManager) updateTrustedRoots(
 			msg := "Failed to update trusted roots for orderer from latest config " +
 				"block.  This orderer may not be able to communicate " +
 				"with members of channel %s (%s)"
-			logger.Warningf(msg, cm.ConfigtxValidator().ChainID(), err)
+			logger.Warningf(msg, cm.ConfigtxValidator().ChannelID(), err)
 		}
 	}
 }

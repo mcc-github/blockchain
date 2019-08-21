@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
@@ -56,7 +57,7 @@ func checkResources(res channelconfig.Resources) error {
 
 func checkResourcesOrPanic(res channelconfig.Resources) {
 	if err := checkResources(res); err != nil {
-		logger.Panicf("[channel %s] %s", res.ConfigtxValidator().ChainID(), err)
+		logger.Panicf("[channel %s] %s", res.ConfigtxValidator().ChannelID(), err)
 	}
 }
 
@@ -67,10 +68,11 @@ type mutableResources interface {
 
 type configResources struct {
 	mutableResources
+	bccsp bccsp.BCCSP
 }
 
 func (cr *configResources) CreateBundle(channelID string, config *cb.Config) (*channelconfig.Bundle, error) {
-	return channelconfig.NewBundle(channelID, config, factory.GetDefault())
+	return channelconfig.NewBundle(channelID, config, cr.bccsp)
 }
 
 func (cr *configResources) Update(bndl *channelconfig.Bundle) {
@@ -81,7 +83,7 @@ func (cr *configResources) Update(bndl *channelconfig.Bundle) {
 func (cr *configResources) SharedConfig() channelconfig.Orderer {
 	oc, ok := cr.OrdererConfig()
 	if !ok {
-		logger.Panicf("[channel %s] has no orderer configuration", cr.ConfigtxValidator().ChainID())
+		logger.Panicf("[channel %s] has no orderer configuration", cr.ConfigtxValidator().ChannelID())
 	}
 	return oc
 }
@@ -161,7 +163,7 @@ func (r *Registrar) Initialize(consenters map[string]consensus.Consenter) {
 			logger.Panic("Programming error, configTx should never be nil here")
 		}
 		ledgerResources := r.newLedgerResources(configTx)
-		chainID := ledgerResources.ConfigtxValidator().ChainID()
+		chainID := ledgerResources.ConfigtxValidator().ChannelID()
 
 		if _, ok := ledgerResources.ConsortiumsConfig(); ok {
 			if r.systemChannelID != "" {
@@ -295,6 +297,7 @@ func (r *Registrar) newLedgerResources(configTx *cb.Envelope) *ledgerResources {
 	return &ledgerResources{
 		configResources: &configResources{
 			mutableResources: channelconfig.NewBundleSource(bundle, r.callbacks...),
+			bccsp:            factory.GetDefault(),
 		},
 		ReadWriter: ledger,
 	}
@@ -332,11 +335,11 @@ func (r *Registrar) newChain(configtx *cb.Envelope) {
 	}
 
 	cs := newChainSupport(r, ledgerResources, r.consenters, r.signer, r.blockcutterMetrics)
-	chainID := ledgerResources.ConfigtxValidator().ChainID()
+	channelID := ledgerResources.ConfigtxValidator().ChannelID()
 
-	logger.Infof("Created and starting new chain %s", chainID)
+	logger.Infof("Created and starting new channel %s", channelID)
 
-	newChains[string(chainID)] = cs
+	newChains[string(channelID)] = cs
 	cs.start()
 
 	r.chains = newChains

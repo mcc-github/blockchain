@@ -30,7 +30,7 @@ type StandardChannelSupport interface {
 	Sequence() uint64
 
 	
-	ChainID() string
+	ChannelID() string
 
 	
 	Signer() identity.SignerSerializer
@@ -117,7 +117,7 @@ func (s *StandardChannel) ProcessNormalMsg(env *cb.Envelope) (configSeq uint64, 
 
 
 func (s *StandardChannel) ProcessConfigUpdateMsg(env *cb.Envelope) (config *cb.Envelope, configSeq uint64, err error) {
-	logger.Debugf("Processing config update message for channel %s", s.support.ChainID())
+	logger.Debugf("Processing config update message for channel %s", s.support.ChannelID())
 
 	
 	
@@ -129,10 +129,10 @@ func (s *StandardChannel) ProcessConfigUpdateMsg(env *cb.Envelope) (config *cb.E
 
 	configEnvelope, err := s.support.ProposeConfigUpdate(env)
 	if err != nil {
-		return nil, 0, errors.WithMessagef(err, "error applying config update to existing channel '%s'", s.support.ChainID())
+		return nil, 0, errors.WithMessagef(err, "error applying config update to existing channel '%s'", s.support.ChannelID())
 	}
 
-	config, err = protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG, s.support.ChainID(), s.support.Signer(), configEnvelope, msgVersion, epoch)
+	config, err = protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG, s.support.ChannelID(), s.support.Signer(), configEnvelope, msgVersion, epoch)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -158,7 +158,7 @@ func (s *StandardChannel) ProcessConfigUpdateMsg(env *cb.Envelope) (config *cb.E
 
 
 func (s *StandardChannel) ProcessConfigMsg(env *cb.Envelope) (config *cb.Envelope, configSeq uint64, err error) {
-	logger.Debugf("Processing config message for channel %s", s.support.ChainID())
+	logger.Debugf("Processing config message for channel %s", s.support.ChannelID())
 
 	configEnvelope := &cb.ConfigEnvelope{}
 	_, err = protoutil.UnmarshalEnvelopeOfType(env, cb.HeaderType_CONFIG, configEnvelope)

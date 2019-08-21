@@ -16,7 +16,7 @@ import (
 
 type Config interface {
 	
-	ChainID() string
+	ChannelID() string
 
 	
 	Organizations() map[string]channelconfig.ApplicationOrg
@@ -60,10 +60,10 @@ func newConfigEventer(receiver configEventReceiver) *configEventer {
 
 
 func (ce *configEventer) ProcessConfigUpdate(config Config) {
-	logger.Debugf("Processing new config for channel %s", config.ChainID())
+	logger.Debugf("Processing new config for channel %s", config.ChannelID())
 	orgMap := cloneOrgConfig(config.Organizations())
 	if ce.lastConfig != nil && reflect.DeepEqual(ce.lastConfig.orgMap, orgMap) {
-		logger.Debugf("Ignoring new config for channel %s because it contained no anchor peer updates", config.ChainID())
+		logger.Debugf("Ignoring new config for channel %s because it contained no anchor peer updates", config.ChannelID())
 	} else {
 
 		var newAnchorPeers []*peer.AnchorPeer
@@ -77,10 +77,10 @@ func (ce *configEventer) ProcessConfigUpdate(config Config) {
 		}
 		ce.lastConfig = newConfig
 
-		logger.Debugf("Calling out because config was updated for channel %s", config.ChainID())
+		logger.Debugf("Calling out because config was updated for channel %s", config.ChannelID())
 		ce.receiver.updateAnchors(config)
 	}
-	ce.receiver.updateEndpoints(config.ChainID(), config.OrdererAddresses())
+	ce.receiver.updateEndpoints(config.ChannelID(), config.OrdererAddresses())
 }
 
 func cloneOrgConfig(src map[string]channelconfig.ApplicationOrg) map[string]channelconfig.ApplicationOrg {
