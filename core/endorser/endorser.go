@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/common/util"
@@ -19,7 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protoutil"
@@ -54,7 +54,7 @@ type Support interface {
 	IsSysCC(name string) bool
 
 	
-	Execute(txParams *ccprovider.TransactionParams, name string, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error)
+	Execute(txParams *ccprovider.TransactionParams, name string, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error)
 
 	
 	ExecuteLegacyInit(txParams *ccprovider.TransactionParams, name, version string, spec *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error)
@@ -64,7 +64,7 @@ type Support interface {
 
 	
 	
-	CheckACL(signedProp *pb.SignedProposal, chdr *common.ChannelHeader, shdr *common.SignatureHeader, hdrext *pb.ChaincodeHeaderExtension) error
+	CheckACL(channelID string, signedProp *pb.SignedProposal) error
 
 	
 	EndorseWithPlugin(ctx Context) (*pb.ProposalResponse, error)
@@ -113,7 +113,7 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, input *
 		logger.Infof("[%s][%s] Exit chaincode: %s (%dms)", txParams.ChannelID, shorttxid(txParams.TxID), chaincodeName, elapsedMilliseconds)
 	}(time.Now())
 
-	res, ccevent, err := e.s.Execute(txParams, chaincodeName, txParams.Proposal, input)
+	res, ccevent, err := e.s.Execute(txParams, chaincodeName, input)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -161,19 +161,12 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, input *
 }
 
 
-func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, chaincodeName string) (*pb.Response, []byte, *pb.ChaincodeEvent, error) {
+func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, chaincodeName string, chaincodeInput *pb.ChaincodeInput) (*pb.Response, []byte, *pb.ChaincodeEvent, error) {
 	endorserLogger.Debugf("[%s][%s] Entry chaincode: %s", txParams.ChannelID, shorttxid(txParams.TxID), chaincodeName)
 	defer endorserLogger.Debugf("[%s][%s] Exit", txParams.ChannelID, shorttxid(txParams.TxID))
-	
-	
-	
-	cis, err := protoutil.GetChaincodeInvocationSpec(txParams.Proposal)
-	if err != nil {
-		return nil, nil, nil, err
-	}
 
 	
-	res, ccevent, err := e.callChaincode(txParams, cis.ChaincodeSpec.Input, chaincodeName)
+	res, ccevent, err := e.callChaincode(txParams, chaincodeInput, chaincodeName)
 	if err != nil {
 		endorserLogger.Errorf("[%s][%s] failed to invoke chaincode %s, error: %+v", txParams.ChannelID, shorttxid(txParams.TxID), chaincodeName, err)
 		return nil, nil, nil, err
@@ -230,23 +223,13 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, chai
 }
 
 
-func (e *Endorser) endorseProposal(chainID string, txid string, signedProp *pb.SignedProposal, proposal *pb.Proposal, response *pb.Response, simRes []byte, event *pb.ChaincodeEvent, visibility []byte, chaincodeName string, txsim ledger.TxSimulator, cd ccprovider.ChaincodeDefinition) (*pb.ProposalResponse, error) {
+func (e *Endorser) endorseProposal(chainID string, txid string, signedProp *pb.SignedProposal, proposal *pb.Proposal, response *pb.Response, simRes, eventBytes []byte, chaincodeName string, cd ccprovider.ChaincodeDefinition) (*pb.ProposalResponse, error) {
 	endorserLogger.Debugf("[%s][%s] Entry chaincode: %s", chainID, shorttxid(txid), chaincodeName)
 	defer endorserLogger.Debugf("[%s][%s] Exit", chainID, shorttxid(txid))
 
 	escc := cd.Endorsement()
 
 	endorserLogger.Debugf("[%s][%s] escc for chaincode %s is %s", chainID, shorttxid(txid), chaincodeName, escc)
-
-	
-	var err error
-	var eventBytes []byte
-	if event != nil {
-		eventBytes, err = protoutil.GetBytesChaincodeEvent(event)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal event bytes")
-		}
-	}
 
 	ctx := Context{
 		PluginName:     escc,
@@ -256,80 +239,67 @@ func (e *Endorser) endorseProposal(chainID string, txid string, signedProp *pb.S
 			Name:    chaincodeName,
 			Version: cd.CCVersion(),
 		},
-		Event:      eventBytes,
-		SimRes:     simRes,
-		Response:   response,
-		Visibility: visibility,
-		Proposal:   proposal,
-		TxID:       txid,
+		Event:    eventBytes,
+		SimRes:   simRes,
+		Response: response,
+		
+		Proposal: proposal,
+		TxID:     txid,
 	}
 	return e.s.EndorseWithPlugin(ctx)
 }
 
 
-func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, error) {
-	vr := &validateResult{}
+func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*UnpackedProposal, error) {
 	
-	prop, hdr, hdrExt, err := ValidateProposalMessage(signedProp)
+	up, err := UnpackProposal(signedProp)
 	if err != nil {
 		e.Metrics.ProposalValidationFailed.Add(1)
-		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
-		return vr, err
+		return nil, err
 	}
 
-	chdr, err := protoutil.UnmarshalChannelHeader(hdr.ChannelHeader)
+	err = ValidateUnpackedProposal(up)
 	if err != nil {
-		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
-		return vr, err
+		e.Metrics.ProposalValidationFailed.Add(1)
+		return nil, err
 	}
 
-	shdr, err := protoutil.UnmarshalSignatureHeader(hdr.SignatureHeader)
-	if err != nil {
-		vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
-		return vr, err
+	endorserLogger.Debugf("[%s][%s] processing txid: %s", up.ChannelHeader.ChannelId, shorttxid(up.ChannelHeader.TxId), up.ChannelHeader.TxId)
+
+	if up.ChannelHeader.ChannelId == "" {
+		
+		
+		
+		
+		return up, nil
 	}
 
-	chainID := chdr.ChannelId
-	txid := chdr.TxId
-	endorserLogger.Debugf("[%s][%s] processing txid: %s", chainID, shorttxid(txid), txid)
-
-	if chainID != "" {
-		
-		meterLabels := []string{
-			"channel", chainID,
-			"chaincode", hdrExt.ChaincodeId.Name,
-		}
-
-		
-		
-		if _, err = e.s.GetTransactionByID(chainID, txid); err == nil {
-			
-			
-			e.Metrics.DuplicateTxsFailure.With(meterLabels...).Add(1)
-			err = errors.Errorf("duplicate transaction found [%s]. Creator [%x]", txid, shdr.Creator)
-			vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
-			return vr, err
-		}
-
-		
-		
-		if !e.s.IsSysCC(hdrExt.ChaincodeId.Name) {
-			
-			if err = e.s.CheckACL(signedProp, chdr, shdr, hdrExt); err != nil {
-				e.Metrics.ProposalACLCheckFailed.With(meterLabels...).Add(1)
-				vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
-				return vr, err
-			}
-		}
-	} else {
-		
-		
-		
-		
+	
+	meterLabels := []string{
+		"channel", up.ChannelHeader.ChannelId,
+		"chaincode", up.ChaincodeName,
 	}
 
-	vr.prop, vr.hdrExt, vr.chainID, vr.txid = prop, hdrExt, chainID, txid
-	return vr, nil
+	
+	
+	if _, err = e.s.GetTransactionByID(up.ChannelHeader.ChannelId, up.ChannelHeader.TxId); err == nil {
+		
+		
+		e.Metrics.DuplicateTxsFailure.With(meterLabels...).Add(1)
+		return nil, errors.Errorf("duplicate transaction found [%s]. Creator [%x]", up.ChannelHeader.TxId, up.SignatureHeader.Creator)
+	}
+
+	
+	
+	if !e.s.IsSysCC(up.ChaincodeName) {
+		
+		if err = e.s.CheckACL(up.ChannelHeader.ChannelId, up.SignedProposal); err != nil {
+			e.Metrics.ProposalACLCheckFailed.With(meterLabels...).Add(1)
+			return nil, err
+		}
+	}
+
+	return up, nil
 }
 
 
@@ -342,17 +312,16 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 	endorserLogger.Debug("Entering: request from", addr)
 
 	
-	var chainID string
-	var hdrExt *pb.ChaincodeHeaderExtension
+	var up *UnpackedProposal
 	var success bool
 	defer func() {
 		
 		
 		
-		if hdrExt != nil {
+		if up != nil {
 			meterLabels := []string{
-				"channel", chainID,
-				"chaincode", hdrExt.ChaincodeId.Name,
+				"channel", up.ChannelHeader.ChannelId,
+				"chaincode", up.ChaincodeName,
 				"success", strconv.FormatBool(success),
 			}
 			e.Metrics.ProposalDuration.With(meterLabels...).Observe(time.Since(startTime).Seconds())
@@ -362,80 +331,67 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 	}()
 
 	
-	vr, err := e.preProcess(signedProp)
+	var err error
+	up, err = e.preProcess(signedProp)
 	if err != nil {
-		resp := vr.resp
-		return resp, err
-	}
-
-	prop, hdrExt, chainID, txid := vr.prop, vr.hdrExt, vr.chainID, vr.txid
-
-	
-	
-	
-	var txsim ledger.TxSimulator
-	var historyQueryExecutor ledger.HistoryQueryExecutor
-	if acquireTxSimulator(chainID, vr.hdrExt.ChaincodeId.Name) {
-		if txsim, err = e.s.GetTxSimulator(chainID, txid); err != nil {
-			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
-		}
-
-		
-		
-		
-		
-		
-		
-		
-		defer txsim.Done()
-
-		if historyQueryExecutor, err = e.s.GetHistoryQueryExecutor(chainID); err != nil {
-			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
-		}
+		return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, err
 	}
 
 	txParams := &ccprovider.TransactionParams{
-		ChannelID:            chainID,
-		TxID:                 txid,
-		SignedProp:           signedProp,
-		Proposal:             prop,
-		TXSimulator:          txsim,
-		HistoryQueryExecutor: historyQueryExecutor,
+		ChannelID:  up.ChannelHeader.ChannelId,
+		TxID:       up.ChannelHeader.TxId,
+		SignedProp: up.SignedProposal,
+		Proposal:   up.Proposal,
 	}
-	
 
-	
-	
-	
-	
+	if acquireTxSimulator(up.ChannelHeader.ChannelId, up.ChaincodeName) {
+		txSim, err := e.s.GetTxSimulator(up.ChannelHeader.ChannelId, up.ChannelHeader.TxId)
+		if err != nil {
+			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
+		}
 
-	cdLedger, err := e.s.GetChaincodeDefinition(chainID, hdrExt.ChaincodeId.Name, txsim)
+		
+		
+		
+		
+		
+		
+		
+		defer txSim.Done()
+
+		hqe, err := e.s.GetHistoryQueryExecutor(up.ChannelHeader.ChannelId)
+		if err != nil {
+			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
+		}
+
+		txParams.TXSimulator = txSim
+		txParams.HistoryQueryExecutor = hqe
+	}
+
+	cdLedger, err := e.s.GetChaincodeDefinition(up.ChannelHeader.ChannelId, up.ChaincodeName, txParams.TXSimulator)
 	if err != nil {
-		return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: fmt.Sprintf("make sure the chaincode %s has been successfully defined on channel %s and try again: %s", hdrExt.ChaincodeId.Name, chainID, err)}}, nil
+		return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: fmt.Sprintf("make sure the chaincode %s has been successfully defined on channel %s and try again: %s", up.ChaincodeName, up.ChannelID(), err)}}, nil
 	}
 
 	
-	res, simulationResult, ccevent, err := e.SimulateProposal(txParams, hdrExt.ChaincodeId.Name)
+	res, simulationResult, ccevent, err := e.SimulateProposal(txParams, up.ChaincodeName, up.Input)
 	if err != nil {
 		return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
 	}
-	if res != nil {
-		if res.Status >= shim.ERROR {
-			endorserLogger.Errorf("[%s][%s] simulateProposal() resulted in chaincode %s response status %d for txid: %s", chainID, shorttxid(txid), hdrExt.ChaincodeId, res.Status, txid)
-			var cceventBytes []byte
-			if ccevent != nil {
-				cceventBytes, err = protoutil.GetBytesChaincodeEvent(ccevent)
-				if err != nil {
-					return nil, errors.Wrap(err, "failed to marshal event bytes")
-				}
-			}
-			pResp, err := protoutil.CreateProposalResponseFailure(prop.Header, prop.Payload, res, simulationResult, cceventBytes, hdrExt.ChaincodeId, hdrExt.PayloadVisibility)
-			if err != nil {
-				return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
-			}
 
-			return pResp, nil
+	cceventBytes, err := CreateCCEventBytes(ccevent)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal chaincode event")
+	}
+
+	if res.Status >= shim.ERROR {
+		endorserLogger.Errorf("[%s][%s] simulateProposal() resulted in chaincode %s response status %d for txid: %s", up.ChannelID(), shorttxid(up.TxID()), up.ChaincodeName, res.Status, up.TxID())
+		pResp, err := protoutil.CreateProposalResponseFailure(up.Proposal.Header, up.Proposal.Payload, res, simulationResult, cceventBytes, up.ChaincodeName)
+		if err != nil {
+			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
 		}
+
+		return pResp, nil
 	}
 
 	
@@ -443,16 +399,15 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 
 	
 	
-	if chainID == "" {
-		pResp = &pb.ProposalResponse{Response: res}
+	if up.ChannelID() == "" {
+		pResp = &pb.ProposalResponse{}
 	} else {
-		
-		pResp, err = e.endorseProposal(chainID, txid, signedProp, prop, res, simulationResult, ccevent, hdrExt.PayloadVisibility, hdrExt.ChaincodeId.Name, txsim, cdLedger)
+		pResp, err = e.endorseProposal(up.ChannelID(), up.TxID(), signedProp, up.Proposal, res, simulationResult, cceventBytes, up.ChaincodeName, cdLedger)
 
 		
 		meterLabels := []string{
-			"channel", chainID,
-			"chaincode", hdrExt.ChaincodeId.Name,
+			"channel", up.ChannelID(),
+			"chaincode", up.ChaincodeName,
 		}
 
 		if err != nil {
@@ -465,7 +420,7 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 			
 			meterLabels = append(meterLabels, "chaincodeerror", strconv.FormatBool(true))
 			e.Metrics.EndorsementsFailed.With(meterLabels...).Add(1)
-			endorserLogger.Debugf("[%s][%s] endorseProposal() resulted in chaincode %s error for txid: %s", chainID, shorttxid(txid), hdrExt.ChaincodeId, txid)
+			endorserLogger.Debugf("[%s][%s] endorseProposal() resulted in chaincode %s error for txid: %s", up.ChannelID(), shorttxid(up.TxID()), up.ChaincodeName, up.TxID())
 			return pResp, nil
 		}
 	}
@@ -508,4 +463,12 @@ func shorttxid(txid string) string {
 		return txid
 	}
 	return txid[0:8]
+}
+
+func CreateCCEventBytes(ccevent *pb.ChaincodeEvent) ([]byte, error) {
+	if ccevent == nil {
+		return nil, nil
+	}
+
+	return proto.Marshal(ccevent)
 }

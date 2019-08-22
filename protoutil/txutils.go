@@ -170,16 +170,6 @@ func CreateSignedTx(
 	}
 
 	
-	chdr, err := UnmarshalChannelHeader(hdr.ChannelHeader)
-	if err != nil {
-		return nil, err
-	}
-	hdrExt, err := UnmarshalChaincodeHeaderExtension(chdr.Extension)
-	if err != nil {
-		return nil, err
-	}
-
-	
 	var a1 []byte
 	for n, r := range resps {
 		if r.Response.Status < 200 || r.Response.Status >= 400 {
@@ -206,7 +196,7 @@ func CreateSignedTx(
 	cea := &peer.ChaincodeEndorsedAction{ProposalResponsePayload: resps[0].Payload, Endorsements: endorsements}
 
 	
-	propPayloadBytes, err := GetBytesProposalPayloadForTx(pPayl, hdrExt.PayloadVisibility)
+	propPayloadBytes, err := GetBytesProposalPayloadForTx(pPayl)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +245,6 @@ func CreateProposalResponse(
 	results []byte,
 	events []byte,
 	ccid *peer.ChaincodeID,
-	visibility []byte,
 	signingEndorser identity.SignerSerializer,
 ) (*peer.ProposalResponse, error) {
 	hdr, err := UnmarshalHeader(hdrbytes)
@@ -265,7 +254,7 @@ func CreateProposalResponse(
 
 	
 	
-	pHashBytes, err := GetProposalHash1(hdr, payl, visibility)
+	pHashBytes, err := GetProposalHash1(hdr, payl)
 	if err != nil {
 		return nil, errors.WithMessage(err, "error computing proposal hash")
 	}
@@ -315,8 +304,7 @@ func CreateProposalResponseFailure(
 	response *peer.Response,
 	results []byte,
 	events []byte,
-	ccid *peer.ChaincodeID,
-	visibility []byte,
+	chaincodeName string,
 ) (*peer.ProposalResponse, error) {
 	hdr, err := UnmarshalHeader(hdrbytes)
 	if err != nil {
@@ -324,13 +312,13 @@ func CreateProposalResponseFailure(
 	}
 
 	
-	pHashBytes, err := GetProposalHash1(hdr, payl, visibility)
+	pHashBytes, err := GetProposalHash1(hdr, payl)
 	if err != nil {
 		return nil, errors.WithMessage(err, "error computing proposal hash")
 	}
 
 	
-	prpBytes, err := GetBytesProposalResponsePayload(pHashBytes, response, results, events, ccid)
+	prpBytes, err := GetBytesProposalResponsePayload(pHashBytes, response, results, events, &peer.ChaincodeID{Name: chaincodeName})
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +409,6 @@ func MockSignedEndorserProposal2OrPanic(
 
 func GetBytesProposalPayloadForTx(
 	payload *peer.ChaincodeProposalPayload,
-	visibility []byte,
 ) ([]byte, error) {
 	
 	if payload == nil {
@@ -429,20 +416,11 @@ func GetBytesProposalPayloadForTx(
 	}
 
 	
-	
 	cppNoTransient := &peer.ChaincodeProposalPayload{Input: payload.Input, TransientMap: nil}
 	cppBytes, err := GetBytesChaincodeProposalPayload(cppNoTransient)
 	if err != nil {
 		return nil, err
 	}
-
-	
-	
-	
-	
-	
-	
-	
 
 	return cppBytes, nil
 }
@@ -472,7 +450,7 @@ func GetProposalHash2(header *common.Header, ccPropPayl []byte) ([]byte, error) 
 
 
 
-func GetProposalHash1(header *common.Header, ccPropPayl []byte, visibility []byte) ([]byte, error) {
+func GetProposalHash1(header *common.Header, ccPropPayl []byte) ([]byte, error) {
 	
 	if header == nil ||
 		header.ChannelHeader == nil ||
@@ -487,7 +465,7 @@ func GetProposalHash1(header *common.Header, ccPropPayl []byte, visibility []byt
 		return nil, err
 	}
 
-	ppBytes, err := GetBytesProposalPayloadForTx(cpp, visibility)
+	ppBytes, err := GetBytesProposalPayloadForTx(cpp)
 	if err != nil {
 		return nil, err
 	}

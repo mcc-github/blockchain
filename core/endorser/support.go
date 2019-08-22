@@ -20,7 +20,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 )
@@ -116,11 +115,11 @@ func (s *SupportImpl) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, 
 }
 
 
-func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, name string, prop *pb.Proposal, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
+func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, name string, input *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
 	
 	decorators := library.InitRegistry(library.Config{}).Lookup(library.Decoration).([]decoration.Decorator)
 	input.Decorations = make(map[string][]byte)
-	input = decoration.Apply(prop, input, decorators...)
+	input = decoration.Apply(txParams.Proposal, input, decorators...)
 	txParams.ProposalDecorations = input.Decorations
 
 	return s.ChaincodeSupport.Execute(txParams, name, input)
@@ -133,8 +132,8 @@ func (s *SupportImpl) GetChaincodeDefinition(channelID, chaincodeName string, tx
 
 
 
-func (s *SupportImpl) CheckACL(signedProp *pb.SignedProposal, chdr *common.ChannelHeader, shdr *common.SignatureHeader, hdrext *pb.ChaincodeHeaderExtension) error {
-	return s.ACLProvider.CheckACL(resources.Peer_Propose, chdr.ChannelId, signedProp)
+func (s *SupportImpl) CheckACL(channelID string, signedProp *pb.SignedProposal) error {
+	return s.ACLProvider.CheckACL(resources.Peer_Propose, channelID, signedProp)
 }
 
 

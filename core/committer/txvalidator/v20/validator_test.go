@@ -94,7 +94,7 @@ func getEnvWithType(ccID string, event []byte, res []byte, pType common.HeaderTy
 	response := &peer.Response{Status: 200}
 
 	
-	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response, res, event, &peer.ChaincodeID{Name: ccID, Version: ccVersion}, nil, signer)
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response, res, event, &peer.ChaincodeID{Name: ccID, Version: ccVersion}, signer)
 	assert.NoError(t, err)
 
 	
@@ -127,7 +127,7 @@ func getEnvWithSigner(ccID string, event []byte, res []byte, sig msp.SigningIden
 	response := &peer.Response{Status: 200}
 
 	
-	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response, res, event, &peer.ChaincodeID{Name: ccID, Version: ccVersion}, nil, sig)
+	presp, err := protoutil.CreateProposalResponse(prop.Header, prop.Payload, response, res, event, &peer.ChaincodeID{Name: ccID, Version: ccVersion}, sig)
 	assert.NoError(t, err)
 
 	

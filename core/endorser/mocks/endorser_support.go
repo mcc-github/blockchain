@@ -11,7 +11,6 @@ import (
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/endorser"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/protos/common"
 	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/mock"
 )
@@ -98,7 +97,7 @@ func (s *MockSupport) ExecuteLegacyInit(txParams *ccprovider.TransactionParams, 
 	return s.ExecuteCDSResp, s.ExecuteCDSEvent, s.ExecuteCDSError
 }
 
-func (s *MockSupport) Execute(txParams *ccprovider.TransactionParams, name string, prop *pb.Proposal, spec *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
+func (s *MockSupport) Execute(txParams *ccprovider.TransactionParams, name string, spec *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error) {
 	return s.ExecuteResp, s.ExecuteEvent, s.ExecuteError
 }
 
@@ -110,7 +109,7 @@ func (s *MockSupport) GetChaincodeDefinition(channelID, chaincodeName string, tx
 	return s.ChaincodeDefinitionRv, s.ChaincodeDefinitionError
 }
 
-func (s *MockSupport) CheckACL(signedProp *pb.SignedProposal, chdr *common.ChannelHeader, shdr *common.SignatureHeader, hdrext *pb.ChaincodeHeaderExtension) error {
+func (s *MockSupport) CheckACL(channelID string, signedProp *pb.SignedProposal) error {
 	return s.CheckACLErr
 }
 

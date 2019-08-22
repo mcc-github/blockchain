@@ -232,35 +232,6 @@ func (n *Network) AddOrg(o *Organization, peers ...*Peer) {
 
 
 
-func (n *Network) GenerateOrgUpdateMaterials(peers ...*Peer) {
-	orgUpdateNetwork := *n
-	orgUpdateNetwork.Peers = peers
-	orgUpdateNetwork.Templates = &Templates{
-		ConfigTx: OrgUpdateConfigTxTemplate,
-		Crypto:   OrgUpdateCryptoTemplate,
-		Core:     n.Templates.CoreTemplate(),
-	}
-
-	orgUpdateNetwork.GenerateConfigTxConfig()
-	for _, peer := range peers {
-		orgUpdateNetwork.GenerateCoreConfig(peer)
-	}
-
-	orgUpdateNetwork.GenerateCryptoConfig()
-	sess, err := orgUpdateNetwork.Cryptogen(commands.Generate{
-		Config: orgUpdateNetwork.CryptoConfigPath(),
-		Output: orgUpdateNetwork.CryptoPath(),
-	})
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, orgUpdateNetwork.EventuallyTimeout).Should(gexec.Exit(0))
-
-	
-	
-	n.ConcatenateTLSCACertificates()
-}
-
-
-
 func (n *Network) ConfigTxConfigPath() string {
 	return filepath.Join(n.RootDir, "configtx.yaml")
 }
