@@ -331,9 +331,9 @@ func TestLedgerBackup(t *testing.T) {
 
 	
 	
-	assert.NoError(t, os.RemoveAll(filepath.Join(originalPath, "stateLeveldb")))
-	assert.NoError(t, os.RemoveAll(filepath.Join(originalPath, "historyLeveldb")))
-	assert.NoError(t, os.RemoveAll(filepath.Join(originalPath, "chains", fsblkstorage.IndexDir)))
+	assert.NoError(t, os.RemoveAll(StateDBPath(originalPath)))
+	assert.NoError(t, os.RemoveAll(HistoryDBPath(originalPath)))
+	assert.NoError(t, os.RemoveAll(filepath.Join(BlockStorePath(originalPath), fsblkstorage.IndexDir)))
 	assert.NoError(t, os.Rename(originalPath, restorePath))
 
 	

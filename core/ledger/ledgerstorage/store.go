@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package ledgerstorage
 
 import (
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 
@@ -50,12 +49,12 @@ var attrsToIndex = []blkstorage.IndexableAttr{
 }
 
 
-func NewProvider(storeDir string, conf *pvtdatastorage.PrivateDataConfig, metricsProvider metrics.Provider) *Provider {
+func NewProvider(blockStoreDir string, conf *pvtdatastorage.PrivateDataConfig, metricsProvider metrics.Provider) *Provider {
 	
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
 	blockStoreProvider := fsblkstorage.NewProvider(
 		fsblkstorage.NewConf(
-			filepath.Join(storeDir, "chains"),
+			blockStoreDir,
 			maxBlockFileSize,
 		),
 		indexConfig,

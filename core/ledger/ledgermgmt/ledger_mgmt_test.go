@@ -56,17 +56,17 @@ func TestLedgerMgmt(t *testing.T) {
 	
 	assert.NotPanics(t, l.Close)
 
-	l, err = ledgerMgr.OpenLedger(ledgerID)
+	_, err = ledgerMgr.OpenLedger(ledgerID)
 	assert.NoError(t, err)
 
-	l, err = ledgerMgr.OpenLedger(ledgerID)
+	_, err = ledgerMgr.OpenLedger(ledgerID)
 	assert.Equal(t, ErrLedgerAlreadyOpened, err)
 	
 	ledgerMgr.Close()
 
 	
 	ledgerMgr = NewLedgerMgr(initializer)
-	l, err = ledgerMgr.OpenLedger(ledgerID)
+	_, err = ledgerMgr.OpenLedger(ledgerID)
 	assert.NoError(t, err)
 	ledgerMgr.Close()
 }

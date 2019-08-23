@@ -9,7 +9,6 @@ package kvledger
 import (
 	"bytes"
 	"fmt"
-	"path/filepath"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
@@ -56,7 +55,7 @@ type Provider struct {
 
 
 func NewProvider(initializer *ledger.Initializer) (*Provider, error) {
-	fileLockPath := filepath.Join(initializer.Config.RootFSPath, "fileLock")
+	fileLockPath := fileLockPath(initializer.Config.RootFSPath)
 	fileLock := leveldbhelper.NewFileLock(fileLockPath)
 	if err := fileLock.Lock(); err != nil {
 		return nil, errors.Wrap(err, "as another peer node command is executing,"+
@@ -67,15 +66,15 @@ func NewProvider(initializer *ledger.Initializer) (*Provider, error) {
 	p.initializer = initializer
 	p.fileLock = fileLock
 	
-	idStore := openIDStore(filepath.Join(p.initializer.Config.RootFSPath, "ledgerProvider"))
+	idStore := openIDStore(ledgerProviderPath(p.initializer.Config.RootFSPath))
 	p.idStore = idStore
 	
 	privateData := &pvtdatastorage.PrivateDataConfig{
 		PrivateDataConfig: initializer.Config.PrivateDataConfig,
-		StorePath:         filepath.Join(initializer.Config.RootFSPath, "pvtdataStore"),
+		StorePath:         PvtDataStorePath(p.initializer.Config.RootFSPath),
 	}
 	ledgerStoreProvider := ledgerstorage.NewProvider(
-		p.initializer.Config.RootFSPath,
+		BlockStorePath(p.initializer.Config.RootFSPath),
 		privateData,
 		p.initializer.MetricsProvider,
 	)
@@ -83,13 +82,13 @@ func NewProvider(initializer *ledger.Initializer) (*Provider, error) {
 	if initializer.Config.HistoryDBConfig.Enabled {
 		
 		historydbProvider := history.NewDBProvider(
-			filepath.Join(p.initializer.Config.RootFSPath, "historyLeveldb"),
+			HistoryDBPath(p.initializer.Config.RootFSPath),
 		)
 		p.historydbProvider = historydbProvider
 	}
 	
 	configHistoryMgr := confighistory.NewMgr(
-		filepath.Join(p.initializer.Config.RootFSPath, "configHistory"),
+		ConfigHistoryDBPath(p.initializer.Config.RootFSPath),
 		initializer.DeployedChaincodeInfoProvider,
 	)
 	p.configHistoryMgr = configHistoryMgr
@@ -108,12 +107,12 @@ func NewProvider(initializer *ledger.Initializer) (*Provider, error) {
 	p.stateListeners = stateListeners
 
 	p.bookkeepingProvider = bookkeeping.NewProvider(
-		filepath.Join(p.initializer.Config.RootFSPath, "bookkeeper"),
+		BookkeeperDBPath(p.initializer.Config.RootFSPath),
 	)
 	var err error
 	stateDB := &privacyenabledstate.StateDBConfig{
 		StateDBConfig: initializer.Config.StateDBConfig,
-		LevelDBPath:   filepath.Join(initializer.Config.RootFSPath, "stateLeveldb"),
+		LevelDBPath:   StateDBPath(p.initializer.Config.RootFSPath),
 	}
 	p.vdbProvider, err = privacyenabledstate.NewCommonStorageDBProvider(
 		p.bookkeepingProvider,
