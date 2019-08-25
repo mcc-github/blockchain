@@ -11,17 +11,14 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain/common/mocks/ledger"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/endorser"
 	"github.com/mcc-github/blockchain/core/endorser/mocks"
 	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
 	. "github.com/mcc-github/blockchain/core/handlers/endorsement/api/state"
 	"github.com/mcc-github/blockchain/core/transientstore"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/mcc-github/blockchain/protos/peer"
 	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
-	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -38,21 +35,13 @@ func TestPluginEndorserNotFound(t *testing.T) {
 	pluginEndorser := endorser.NewPluginEndorser(&endorser.PluginSupport{
 		PluginMapper: pluginMapper,
 	})
-	resp, err := pluginEndorser.EndorseWithPlugin(endorser.Context{
-		Response:   &peer.Response{},
-		PluginName: "notfound",
-	})
-	assert.Nil(t, resp)
+	endorsement, prpBytes, err := pluginEndorser.EndorseWithPlugin("notfound", "", nil, nil)
+	assert.Nil(t, endorsement)
+	assert.Nil(t, prpBytes)
 	assert.Contains(t, err.Error(), "plugin with name notfound wasn't found")
 }
 
 func TestPluginEndorserGreenPath(t *testing.T) {
-	proposal, _, err := protoutil.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, "mychannel", &peer.ChaincodeInvocationSpec{
-		ChaincodeSpec: &peer.ChaincodeSpec{
-			ChaincodeId: &peer.ChaincodeID{Name: "mycc"},
-		},
-	}, []byte{1, 2, 3})
-	assert.NoError(t, err)
 	expectedSignature := []byte{5, 4, 3, 2, 1}
 	expectedProposalResponsePayload := []byte{1, 2, 3}
 	pluginMapper := &mocks.PluginMapper{}
@@ -73,22 +62,12 @@ func TestPluginEndorserGreenPath(t *testing.T) {
 		PluginMapper:            pluginMapper,
 		TransientStoreRetriever: mockTransientStoreRetriever,
 	})
-	ctx := endorser.Context{
-		Response:   &peer.Response{},
-		PluginName: "plugin",
-		Proposal:   proposal,
-		ChaincodeID: &peer.ChaincodeID{
-			Name: "mycc",
-		},
-		Channel: "mychannel",
-	}
 
 	
-	resp, err := pluginEndorser.EndorseWithPlugin(ctx)
+	endorsement, prpBytes, err := pluginEndorser.EndorseWithPlugin("plugin", "mychannel", nil, nil)
 	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, expectedSignature, resp.Endorsement.Signature)
-	assert.Equal(t, expectedProposalResponsePayload, resp.Payload)
+	assert.Equal(t, expectedSignature, endorsement.Signature)
+	assert.Equal(t, expectedProposalResponsePayload, prpBytes)
 	
 	plugin.AssertCalled(t, "Init", &endorser.ChannelState{QueryCreator: queryCreator, Store: mockTransientStore}, sif)
 
@@ -96,25 +75,22 @@ func TestPluginEndorserGreenPath(t *testing.T) {
 	
 	
 	
-	resp, err = pluginEndorser.EndorseWithPlugin(ctx)
+	endorsement, prpBytes, err = pluginEndorser.EndorseWithPlugin("plugin", "mychannel", nil, nil)
 	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, expectedSignature, resp.Endorsement.Signature)
-	assert.Equal(t, expectedProposalResponsePayload, resp.Payload)
+	assert.Equal(t, expectedSignature, endorsement.Signature)
+	assert.Equal(t, expectedProposalResponsePayload, prpBytes)
 	pluginFactory.AssertNumberOfCalls(t, "New", 1)
 	plugin.AssertNumberOfCalls(t, "Init", 1)
 
 	
 	
 	
-	ctx.Channel = ""
 	pluginFactory.On("New").Return(plugin).Once()
 	plugin.On("Init", mock.Anything).Return(nil).Once()
-	resp, err = pluginEndorser.EndorseWithPlugin(ctx)
+	endorsement, prpBytes, err = pluginEndorser.EndorseWithPlugin("plugin", "", nil, nil)
 	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, expectedSignature, resp.Endorsement.Signature)
-	assert.Equal(t, expectedProposalResponsePayload, resp.Payload)
+	assert.Equal(t, expectedSignature, endorsement.Signature)
+	assert.Equal(t, expectedProposalResponsePayload, prpBytes)
 	plugin.AssertCalled(t, "Init", sif)
 }
 
@@ -139,70 +115,12 @@ func TestPluginEndorserErrors(t *testing.T) {
 	
 	t.Run("PluginInitializationFailure", func(t *testing.T) {
 		plugin.On("Init", mock.Anything, mock.Anything).Return(errors.New("plugin initialization failed")).Once()
-		resp, err := pluginEndorser.EndorseWithPlugin(endorser.Context{
-			PluginName: "plugin",
-			Channel:    "mychannel",
-			Response:   &peer.Response{},
-		})
-		assert.Nil(t, resp)
+		endorsement, prpBytes, err := pluginEndorser.EndorseWithPlugin("plugin", "mychannel", nil, nil)
+		assert.Nil(t, endorsement)
+		assert.Nil(t, prpBytes)
 		assert.Contains(t, err.Error(), "plugin initialization failed")
 	})
 
-	
-	t.Run("EmptyProposal", func(t *testing.T) {
-		plugin.On("Init", mock.Anything, mock.Anything).Return(nil).Once()
-		ctx := endorser.Context{
-			Response:   &peer.Response{},
-			PluginName: "plugin",
-			ChaincodeID: &peer.ChaincodeID{
-				Name: "mycc",
-			},
-			Proposal: &peer.Proposal{},
-			Channel:  "mychannel",
-		}
-		resp, err := pluginEndorser.EndorseWithPlugin(ctx)
-		assert.Nil(t, resp)
-		assert.Contains(t, err.Error(), "could not compute proposal hash")
-	})
-
-	
-	t.Run("InvalidHeader in the proposal", func(t *testing.T) {
-		ctx := endorser.Context{
-			Response:   &peer.Response{},
-			PluginName: "plugin",
-			ChaincodeID: &peer.ChaincodeID{
-				Name: "mycc",
-			},
-			Proposal: &peer.Proposal{
-				Header: []byte{1, 2, 3},
-			},
-			Channel: "mychannel",
-		}
-		resp, err := pluginEndorser.EndorseWithPlugin(ctx)
-		assert.Nil(t, resp)
-		assert.Contains(t, err.Error(), "failed parsing header")
-	})
-
-	
-	t.Run("ResponseStatusContainsError", func(t *testing.T) {
-		r := &peer.Response{
-			Status:  shim.ERRORTHRESHOLD,
-			Payload: []byte{1, 2, 3},
-			Message: "bla bla",
-		}
-		resp, err := pluginEndorser.EndorseWithPlugin(endorser.Context{
-			Response: r,
-		})
-		assert.Equal(t, &peer.ProposalResponse{Response: r}, resp)
-		assert.NoError(t, err)
-	})
-
-	
-	t.Run("ResponseIsNil", func(t *testing.T) {
-		resp, err := pluginEndorser.EndorseWithPlugin(endorser.Context{})
-		assert.Nil(t, resp)
-		assert.Contains(t, err.Error(), "response is nil")
-	})
 }
 
 func transientStoreRetriever() *mocks.TransientStoreRetriever {
@@ -281,22 +199,6 @@ func TestTransientStore(t *testing.T) {
 		TransientStoreRetriever: storeRetriever,
 	})
 
-	proposal, _, err := protoutil.CreateChaincodeProposal(common.HeaderType_ENDORSER_TRANSACTION, "mychannel", &peer.ChaincodeInvocationSpec{
-		ChaincodeSpec: &peer.ChaincodeSpec{
-			ChaincodeId: &peer.ChaincodeID{Name: "mycc"},
-		},
-	}, []byte{1, 2, 3})
-	assert.NoError(t, err)
-	ctx := endorser.Context{
-		Response:   &peer.Response{},
-		PluginName: "plugin",
-		Proposal:   proposal,
-		ChaincodeID: &peer.ChaincodeID{
-			Name: "mycc",
-		},
-		Channel: "mychannel",
-	}
-
 	rws := &rwset.TxPvtReadWriteSet{
 		NsPvtRwset: []*rwset.NsPvtReadWriteSet{
 			{
@@ -316,11 +218,11 @@ func TestTransientStore(t *testing.T) {
 
 	transientStore.On("GetTxPvtRWSetByTxid", mock.Anything, mock.Anything).Return(scanner, nil)
 
-	resp, err := pluginEndorser.EndorseWithPlugin(ctx)
+	_, prpBytes, err := pluginEndorser.EndorseWithPlugin("plugin", "mychannel", nil, nil)
 	assert.NoError(t, err)
 
 	txrws := &rwset.TxPvtReadWriteSet{}
-	err = proto.Unmarshal(resp.Payload, txrws)
+	err = proto.Unmarshal(prpBytes, txrws)
 	assert.NoError(t, err)
 	assert.True(t, proto.Equal(rws, txrws))
 	scanner.AssertCalled(t, "Close")

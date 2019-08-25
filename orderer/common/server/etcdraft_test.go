@@ -35,11 +35,6 @@ func TestSpawnEtcdRaft(t *testing.T) {
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	tempDir, err := ioutil.TempDir("", "etcdraft-orderer-launch")
-	gt.Expect(err).NotTo(HaveOccurred())
-	defer os.RemoveAll(tempDir)
-
-	
 	blockchainRootDir, err := filepath.Abs(filepath.Join("..", "..", ".."))
 	gt.Expect(err).NotTo(HaveOccurred())
 
@@ -53,20 +48,38 @@ func TestSpawnEtcdRaft(t *testing.T) {
 
 	defer gexec.CleanupBuildArtifacts()
 
-	t.Run("Invalid bootstrap block", func(t *testing.T) {
-		testEtcdRaftOSNFailureInvalidBootstrapBlock(gt, tempDir, orderer, blockchainRootDir)
+	t.Run("Bad", func(t *testing.T) {
+		tempDir, err := ioutil.TempDir("", "etcdraft-orderer-launch")
+		gt.Expect(err).NotTo(HaveOccurred())
+		defer os.RemoveAll(tempDir)
+
+		t.Run("Invalid bootstrap block", func(t *testing.T) {
+			testEtcdRaftOSNFailureInvalidBootstrapBlock(gt, tempDir, orderer, blockchainRootDir)
+		})
+
+		t.Run("TLS disabled single listener", func(t *testing.T) {
+			testEtcdRaftOSNNoTLSSingleListener(gt, tempDir, orderer, blockchainRootDir, configtxgen)
+		})
 	})
 
-	t.Run("No TLS single listener", func(t *testing.T) {
-		testEtcdRaftOSNNoTLSSingleListener(gt, tempDir, orderer, blockchainRootDir, configtxgen)
-	})
+	t.Run("Good", func(t *testing.T) {
+		
+		
+		t.Run("TLS disabled dual listener", func(t *testing.T) {
+			tempDir, err := ioutil.TempDir("", "etcdraft-orderer-launch")
+			gt.Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(tempDir)
 
-	t.Run("No TLS dual listener", func(t *testing.T) {
-		testEtcdRaftOSNNoTLSDualListener(gt, tempDir, orderer, blockchainRootDir, configtxgen)
-	})
+			testEtcdRaftOSNNoTLSDualListener(gt, tempDir, orderer, blockchainRootDir, configtxgen)
+		})
 
-	t.Run("EtcdRaft launch success", func(t *testing.T) {
-		testEtcdRaftOSNSuccess(gt, tempDir, configtxgen, cwd, orderer, blockchainRootDir)
+		t.Run("TLS enabled single listener", func(t *testing.T) {
+			tempDir, err := ioutil.TempDir("", "etcdraft-orderer-launch")
+			gt.Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(tempDir)
+
+			testEtcdRaftOSNSuccess(gt, tempDir, configtxgen, cwd, orderer, blockchainRootDir)
+		})
 	})
 }
 
@@ -177,7 +190,7 @@ func testEtcdRaftOSNNoTLSDualListener(gt *GomegaWithT, tempDir, orderer, blockch
 		fmt.Sprintf("ORDERER_CONSENSUS_WALDIR=%s", filepath.Join(tempDir, "wal")),
 		fmt.Sprintf("ORDERER_CONSENSUS_SNAPDIR=%s", filepath.Join(tempDir, "snapshot")),
 		fmt.Sprintf("FABRIC_CFG_PATH=%s", filepath.Join(blockchainRootDir, "sampleconfig")),
-		fmt.Sprintf("ORDERER_OPERATIONS_LISTENADDRESS=127.0.0.1:%d", nextPort()),
+		"ORDERER_OPERATIONS_LISTENADDRESS=127.0.0.1:0",
 	}
 	ordererProcess, err := gexec.Start(cmd, nil, nil)
 	gt.Expect(err).NotTo(HaveOccurred())
