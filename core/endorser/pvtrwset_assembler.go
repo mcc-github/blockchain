@@ -34,14 +34,11 @@ type CollectionConfigRetriever interface {
 	GetState(namespace string, key string) ([]byte, error)
 }
 
-type rwSetAssembler struct {
-}
 
 
 
 
-
-func (as *rwSetAssembler) AssemblePvtRWSet(channelName string,
+func AssemblePvtRWSet(channelName string,
 	privData *rwset.TxPvtReadWriteSet,
 	txsim ledger.SimpleQueryExecutor,
 	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider) (
@@ -66,11 +63,11 @@ func (as *rwSetAssembler) AssemblePvtRWSet(channelName string,
 			txPvtRwSetWithConfig.CollectionConfigs[namespace] = colCP
 		}
 	}
-	as.trimCollectionConfigs(txPvtRwSetWithConfig)
+	trimCollectionConfigs(txPvtRwSetWithConfig)
 	return txPvtRwSetWithConfig, nil
 }
 
-func (as *rwSetAssembler) trimCollectionConfigs(pvtData *transientstore.TxPvtReadWriteSetWithConfigInfo) {
+func trimCollectionConfigs(pvtData *transientstore.TxPvtReadWriteSetWithConfigInfo) {
 	flags := make(map[string]map[string]struct{})
 	for _, pvtRWset := range pvtData.PvtRwset.NsPvtRwset {
 		namespace := pvtRWset.Namespace

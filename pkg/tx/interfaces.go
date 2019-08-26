@@ -215,20 +215,27 @@ func (i *KeyValueItr) Close() {
 }
 
 
+
+
+
+
+
 type Envelope struct {
-	Payload   *Payload
+	
+	SignedBytes []byte
+	
 	Signature []byte
-}
-
-
-type Payload struct {
-	Header *Header
-	Data   []byte
-}
-
-
-type Header struct {
-	ChannelHeader   *common.ChannelHeader
+	
+	Data []byte
+	
+	HeaderBytes []byte
+	
+	ChannelHeaderBytes []byte
+	
+	SignatureHeaderBytes []byte
+	
+	ChannelHeader *common.ChannelHeader
+	
 	SignatureHeader *common.SignatureHeader
 }
 

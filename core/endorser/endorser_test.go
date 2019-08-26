@@ -38,9 +38,15 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func pvtEmptyDistributor(_ string, _ string, _ *transientstore.TxPvtReadWriteSetWithConfigInfo, _ uint64) error {
-	return nil
+type PrivateDataDistributorAdapter func(channel string, txID string, privateData *transientstore.TxPvtReadWriteSetWithConfigInfo, blkHt uint64) error
+
+func (pda PrivateDataDistributorAdapter) DistributePrivateData(channel string, txID string, privateData *transientstore.TxPvtReadWriteSetWithConfigInfo, blkHt uint64) error {
+	return pda(channel, txID, privateData, blkHt)
 }
+
+var pvtEmptyDistributor = PrivateDataDistributorAdapter(func(_ string, _ string, _ *transientstore.TxPvtReadWriteSetWithConfigInfo, _ uint64) error {
+	return nil
+})
 
 func getSignedPropWithCHID(ccid, chid string, t *testing.T) *pb.SignedProposal {
 	ccargs := [][]byte{[]byte("args")}
@@ -89,7 +95,7 @@ type fakeEndorserMetrics struct {
 }
 
 
-func initFakeMetrics(es *endorser.Endorser) *fakeEndorserMetrics {
+func initFakeMetrics() (*endorser.Metrics, *fakeEndorserMetrics) {
 	fakeMetrics := &fakeEndorserMetrics{
 		proposalDuration:         &metricsfakes.Histogram{},
 		proposalsReceived:        &metricsfakes.Counter{},
@@ -107,16 +113,18 @@ func initFakeMetrics(es *endorser.Endorser) *fakeEndorserMetrics {
 	fakeMetrics.endorsementsFailed.WithReturns(fakeMetrics.endorsementsFailed)
 	fakeMetrics.duplicateTxsFailure.WithReturns(fakeMetrics.duplicateTxsFailure)
 
-	es.Metrics.ProposalDuration = fakeMetrics.proposalDuration
-	es.Metrics.ProposalsReceived = fakeMetrics.proposalsReceived
-	es.Metrics.SuccessfulProposals = fakeMetrics.successfulProposals
-	es.Metrics.ProposalValidationFailed = fakeMetrics.proposalValidationFailed
-	es.Metrics.ProposalACLCheckFailed = fakeMetrics.proposalACLCheckFailed
-	es.Metrics.InitFailed = fakeMetrics.initFailed
-	es.Metrics.EndorsementsFailed = fakeMetrics.endorsementsFailed
-	es.Metrics.DuplicateTxsFailure = fakeMetrics.duplicateTxsFailure
+	metrics := &endorser.Metrics{
+		ProposalDuration:         fakeMetrics.proposalDuration,
+		ProposalsReceived:        fakeMetrics.proposalsReceived,
+		SuccessfulProposals:      fakeMetrics.successfulProposals,
+		ProposalValidationFailed: fakeMetrics.proposalValidationFailed,
+		ProposalACLCheckFailed:   fakeMetrics.proposalACLCheckFailed,
+		InitFailed:               fakeMetrics.initFailed,
+		EndorsementsFailed:       fakeMetrics.endorsementsFailed,
+		DuplicateTxsFailure:      fakeMetrics.duplicateTxsFailure,
+	}
 
-	return fakeMetrics
+	return metrics, fakeMetrics
 }
 
 func testEndorsementCompletedMetric(t *testing.T, fakeMetrics *fakeEndorserMetrics, callCount int32, chainID, ccnamever, succ string) {
@@ -128,18 +136,22 @@ func testEndorsementCompletedMetric(t *testing.T, fakeMetrics *fakeEndorserMetri
 }
 
 func TestEndorserCCInvocationFailed(t *testing.T) {
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		GetTransactionByIDErr:      errors.New(""),
-		ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
-		ExecuteResp:                &pb.Response{Status: 1000, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}}), Message: "achoo"},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			GetTransactionByIDErr:      errors.New(""),
+			ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
+			ExecuteResp:                &pb.Response{Status: 1000, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}}), Message: "achoo"},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
 			},
 		},
-	}, &disabled.Provider{})
+		Metrics: endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	signedProp := getSignedProp("test-chaincode", t)
 
@@ -150,18 +162,22 @@ func TestEndorserCCInvocationFailed(t *testing.T) {
 }
 
 func TestEndorserNoCCDef(t *testing.T) {
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		GetTransactionByIDErr:      errors.New(""),
-		ChaincodeDefinitionError:   errors.New("gesundheit"),
-		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			GetTransactionByIDErr:      errors.New(""),
+			ChaincodeDefinitionError:   errors.New("gesundheit"),
+			ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
 			},
 		},
-	}, &disabled.Provider{})
+		Metrics: endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	signedProp := getSignedProp("test-chaincode", t)
 
@@ -186,7 +202,11 @@ func TestEndorserSysCC(t *testing.T) {
 		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
 	}
 	attachPluginEndorser(support, nil)
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, support, &disabled.Provider{})
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support:                support,
+		Metrics:                endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	signedProp := getSignedProp("test-chaincode", t)
 
@@ -196,18 +216,22 @@ func TestEndorserSysCC(t *testing.T) {
 }
 
 func TestEndorserCCInvocationError(t *testing.T) {
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		GetTransactionByIDErr:      errors.New(""),
-		ExecuteError:               errors.New(""),
-		ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			GetTransactionByIDErr:      errors.New(""),
+			ExecuteError:               errors.New(""),
+			ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
 			},
 		},
-	}, &disabled.Provider{})
+		Metrics: endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	signedProp := getSignedProp("test-chaincode", t)
 
@@ -217,19 +241,23 @@ func TestEndorserCCInvocationError(t *testing.T) {
 }
 
 func TestEndorserDupTXId(t *testing.T) {
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
-		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
+	metrics, fakeMetrics := initFakeMetrics()
+
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
+			ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
 			},
 		},
-	}, &disabled.Provider{})
-
-	fakeMetrics := initFakeMetrics(es)
+		Metrics: metrics,
+	}
 
 	signedProp := getSignedProp("test-chaincode", t)
 
@@ -247,21 +275,25 @@ func TestEndorserDupTXId(t *testing.T) {
 }
 
 func TestEndorserBadACL(t *testing.T) {
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		CheckACLErr:                errors.New(""),
-		GetTransactionByIDErr:      errors.New(""),
-		ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
-		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
+	metrics, fakeMetrics := initFakeMetrics()
+
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			CheckACLErr:                errors.New(""),
+			GetTransactionByIDErr:      errors.New(""),
+			ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
+			ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
 			},
 		},
-	}, &disabled.Provider{})
-
-	fakeMetrics := initFakeMetrics(es)
+		Metrics: metrics,
+	}
 
 	signedProp := getSignedProp("test-chaincode", t)
 
@@ -278,20 +310,24 @@ func TestEndorserBadACL(t *testing.T) {
 }
 
 func TestEndorserGoodPathEmptyChannel(t *testing.T) {
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		GetTransactionByIDErr:      errors.New(""),
-		ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
-		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
+	metrics, fakeMetrics := initFakeMetrics()
+
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			GetTransactionByIDErr:      errors.New(""),
+			ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
+			ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
 			},
 		},
-	}, &disabled.Provider{})
-
-	fakeMetrics := initFakeMetrics(es)
+		Metrics: metrics,
+	}
 
 	signedProp := getSignedPropWithCHIdAndArgs("", "test-chaincode", [][]byte{[]byte("test-args")}, t)
 
@@ -304,21 +340,25 @@ func TestEndorserGoodPathEmptyChannel(t *testing.T) {
 }
 
 func TestEndorserLSCCInitFails(t *testing.T) {
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		GetTransactionByIDErr:      errors.New(""),
-		ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
-		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
-			},
-		},
-		ExecuteCDSError: errors.New(""),
-	}, &disabled.Provider{})
+	metrics, fakeMetrics := initFakeMetrics()
 
-	fakeMetrics := initFakeMetrics(es)
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			GetTransactionByIDErr:      errors.New(""),
+			ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
+			ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
+			},
+			ExecuteCDSError: errors.New(""),
+		},
+		Metrics: metrics,
+	}
 
 	cds := protoutil.MarshalOrPanic(
 		&pb.ChaincodeDeploymentSpec{
@@ -349,19 +389,23 @@ func TestEndorserLSCCDeploySysCC(t *testing.T) {
 	SysCCMap := make(map[string]struct{})
 	deployedCCName := "barf"
 	SysCCMap[deployedCCName] = struct{}{}
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		GetTransactionByIDErr:      errors.New(""),
-		ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
-		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			GetTransactionByIDErr:      errors.New(""),
+			ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
+			ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
 			},
+			SysCCMap: SysCCMap,
 		},
-		SysCCMap: SysCCMap,
-	}, &disabled.Provider{})
+		Metrics: endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	cds := protoutil.MarshalOrPanic(
 		&pb.ChaincodeDeploymentSpec{
@@ -394,7 +438,11 @@ func TestEndorserGoodPathWEvents(t *testing.T) {
 		ExecuteEvent:               &pb.ChaincodeEvent{},
 	}
 	attachPluginEndorser(support, nil)
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, support, &disabled.Provider{})
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support:                support,
+		Metrics:                endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	signedProp := getSignedProp("ccid", t)
 
@@ -404,18 +452,22 @@ func TestEndorserGoodPathWEvents(t *testing.T) {
 }
 
 func TestEndorserBadChannel(t *testing.T) {
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, &mocks.MockSupport{
-		GetApplicationConfigBoolRv: true,
-		GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
-		GetTransactionByIDErr:      errors.New(""),
-		ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
-		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
-		GetTxSimulatorRv: &mocks.MockTxSim{
-			GetTxSimulationResultsRv: &ledger.TxSimulationResults{
-				PubSimulationResults: &rwset.TxReadWriteSet{},
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support: &mocks.MockSupport{
+			GetApplicationConfigBoolRv: true,
+			GetApplicationConfigRv:     &mc.MockApplication{CapabilitiesRv: &mc.MockApplicationCapabilities{}},
+			GetTransactionByIDErr:      errors.New(""),
+			ChaincodeDefinitionRv:      &ccprovider.ChaincodeData{Escc: "ESCC"},
+			ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
+			GetTxSimulatorRv: &mocks.MockTxSim{
+				GetTxSimulationResultsRv: &ledger.TxSimulationResults{
+					PubSimulationResults: &rwset.TxReadWriteSet{},
+				},
 			},
 		},
-	}, &disabled.Provider{})
+		Metrics: endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	signedProp := getSignedPropWithCHID("ccid", "barfchain", t)
 
@@ -439,9 +491,14 @@ func TestEndorserGoodPath(t *testing.T) {
 		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
 	}
 	attachPluginEndorser(support, nil)
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, support, &disabled.Provider{})
 
-	fakeMetrics := initFakeMetrics(es)
+	metrics, fakeMetrics := initFakeMetrics()
+
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support:                support,
+		Metrics:                metrics,
+	}
 
 	signedProp := getSignedProp("ccid", t)
 
@@ -472,7 +529,11 @@ func TestEndorserChaincodeCallLogging(t *testing.T) {
 		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
 	}
 	attachPluginEndorser(support, nil)
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, support, &disabled.Provider{})
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support:                support,
+		Metrics:                endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	buf := gbytes.NewBuffer()
 	old := flogging.SetWriter(buf)
@@ -499,7 +560,11 @@ func TestEndorserLSCC(t *testing.T) {
 		ExecuteResp:                &pb.Response{Status: 200, Payload: protoutil.MarshalOrPanic(&pb.ProposalResponse{Response: &pb.Response{}})},
 	}
 	attachPluginEndorser(support, nil)
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, support, &disabled.Provider{})
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support:                support,
+		Metrics:                endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	cds := protoutil.MarshalOrPanic(
 		&pb.ChaincodeDeploymentSpec{
@@ -547,7 +612,11 @@ func TestEndorseWithPlugin(t *testing.T) {
 	}
 	attachPluginEndorser(support, nil)
 
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, support, &disabled.Provider{})
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support:                support,
+		Metrics:                endorser.NewMetrics(&disabled.Provider{}),
+	}
 
 	signedProp := getSignedProp("ccid", t)
 
@@ -575,8 +644,13 @@ func TestEndorseEndorsementFailure(t *testing.T) {
 	
 	attachPluginEndorser(support, fmt.Errorf("sign err"))
 
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, support, &disabled.Provider{})
-	fakeMetrics := initFakeMetrics(es)
+	metrics, fakeMetrics := initFakeMetrics()
+
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support:                support,
+		Metrics:                metrics,
+	}
 
 	signedProp := getSignedProp("ccid", t)
 
@@ -611,8 +685,12 @@ func TestEndorseEndorsementFailureDueToCCError(t *testing.T) {
 
 	attachPluginEndorser(support, nil)
 
-	es := endorser.NewEndorserServer(pvtEmptyDistributor, support, &disabled.Provider{})
-	fakeMetrics := initFakeMetrics(es)
+	metrics, fakeMetrics := initFakeMetrics()
+	es := &endorser.Endorser{
+		PrivateDataDistributor: pvtEmptyDistributor,
+		Support:                support,
+		Metrics:                metrics,
+	}
 
 	signedProp := getSignedProp("ccid", t)
 
@@ -661,11 +739,11 @@ func TestEndorserAcquireTxSimulator(t *testing.T) {
 				ExecuteResp:                expectedResponse,
 			}
 			attachPluginEndorser(support, nil)
-			es := endorser.NewEndorserServer(
-				pvtEmptyDistributor,
-				support,
-				&disabled.Provider{},
-			)
+			es := &endorser.Endorser{
+				PrivateDataDistributor: pvtEmptyDistributor,
+				Support:                support,
+				Metrics:                endorser.NewMetrics(&disabled.Provider{}),
+			}
 
 			t.Parallel()
 			args := [][]byte{[]byte("args")}

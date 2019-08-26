@@ -88,7 +88,6 @@ import (
 	cb "github.com/mcc-github/blockchain/protos/common"
 	discprotos "github.com/mcc-github/blockchain/protos/discovery"
 	pb "github.com/mcc-github/blockchain/protos/peer"
-	pt "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -562,10 +561,6 @@ func serve(args []string) error {
 
 	logger.Debugf("Running peer")
 
-	privDataDist := func(channel string, txID string, privateData *pt.TxPvtReadWriteSetWithConfigInfo, blkHt uint64) error {
-		return gossipService.DistributePrivateData(channel, txID, privateData, blkHt)
-	}
-
 	libConf, err := library.LoadConfig()
 	if err != nil {
 		return errors.WithMessage(err, "could not decode peer handlers configuration")
@@ -593,7 +588,11 @@ func serve(args []string) error {
 		SigningIdentityFetcher:  signingIdentityFetcher,
 	})
 	endorserSupport.PluginEndorser = pluginEndorser
-	serverEndorser := endorser.NewEndorserServer(privDataDist, endorserSupport, metricsProvider)
+	serverEndorser := &endorser.Endorser{
+		PrivateDataDistributor: gossipService,
+		Support:                endorserSupport,
+		Metrics:                endorser.NewMetrics(metricsProvider),
+	}
 
 	
 	for _, cc := range []scc.SelfDescribingSysCC{lsccInst, csccInst, qsccInst, lifecycleSCC} {
