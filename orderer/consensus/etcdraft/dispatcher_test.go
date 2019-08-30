@@ -9,10 +9,10 @@ package etcdraft_test
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft/mocks"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )

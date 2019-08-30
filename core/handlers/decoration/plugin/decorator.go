@@ -7,8 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package main
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/handlers/decoration"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 

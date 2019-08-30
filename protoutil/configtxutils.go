@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 package protoutil
 
-import "github.com/mcc-github/blockchain/protos/common"
+import "github.com/mcc-github/blockchain-protos-go/common"
 
 func NewConfigGroup() *common.ConfigGroup {
 	return &common.ConfigGroup{

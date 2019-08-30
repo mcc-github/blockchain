@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"testing"
 
+	protopeer "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/ledger"
-	protopeer "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 )
 

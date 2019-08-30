@@ -15,11 +15,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/orderer/common/broadcast"
 	"github.com/mcc-github/blockchain/orderer/common/broadcast/mock"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 )
 
 var _ = Describe("Broadcast", func() {

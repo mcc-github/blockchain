@@ -10,11 +10,11 @@ import (
 	"os"
 	"sync"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"google.golang.org/grpc"
 	pb "gopkg.in/cheggaaa/pb.v1"

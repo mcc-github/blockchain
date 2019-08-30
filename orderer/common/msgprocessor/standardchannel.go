@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package msgprocessor
 
 import (
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"

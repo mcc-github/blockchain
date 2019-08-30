@@ -7,10 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package acl
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/policies"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

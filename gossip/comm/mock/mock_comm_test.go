@@ -9,10 +9,10 @@ package mock
 import (
 	"testing"
 
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/gossip/comm"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/protoext"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/assert"
 )
 

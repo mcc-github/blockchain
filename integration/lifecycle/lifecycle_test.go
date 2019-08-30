@@ -15,11 +15,12 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/gogo/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/tools/protolator"
 	"github.com/mcc-github/blockchain/common/tools/protolator/protoext/ordererext"
 	"github.com/mcc-github/blockchain/integration/nwo"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain/integration/runner"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -55,6 +56,25 @@ var _ = Describe("Lifecycle", func() {
 
 		
 		network.GenerateConfigTree()
+
+		
+		
+		
+		
+		
+		couchDB := &runner.CouchDB{}
+		couchProcess := ifrit.Invoke(couchDB)
+		Eventually(couchProcess.Ready(), runner.DefaultStartTimeout).Should(BeClosed())
+		Consistently(couchProcess.Wait()).ShouldNot(Receive())
+		couchAddr := couchDB.Address()
+		peer := network.Peer("org1", "peer1")
+		core := network.ReadPeerConfig(peer)
+		core.Ledger.State.StateDatabase = "CouchDB"
+		core.Ledger.State.CouchDBConfig.CouchDBAddress = couchAddr
+		processes[couchDB.Name] = couchProcess
+		network.WritePeerConfig(peer, core)
+
+		
 		network.Bootstrap()
 
 		for _, o := range network.Orderers {
@@ -89,8 +109,8 @@ var _ = Describe("Lifecycle", func() {
 		org1peer2 := network.Peer("org1", "peer2")
 
 		chaincode := nwo.Chaincode{
-			Name:                "mycc",
-			Version:             "0.0",
+			Name:                "My_1st-Chaincode",
+			Version:             "Version-0.0",
 			Path:                "github.com/mcc-github/blockchain/integration/chaincode/simple/cmd",
 			Lang:                "golang",
 			PackageFile:         filepath.Join(tempDir, "simplecc.tar.gz"),
@@ -135,7 +155,7 @@ var _ = Describe("Lifecycle", func() {
 		nwo.InitChaincode(network, "testchannel", orderer, chaincode, testPeers...)
 
 		By("ensuring the chaincode can be invoked and queried")
-		RunQueryInvokeQuery(network, orderer, org1peer2, 100)
+		RunQueryInvokeQuery(network, orderer, org1peer2, "My_1st-Chaincode", 100)
 
 		By("setting a bad package ID to temporarily disable endorsements on org1")
 		savedPackageID := chaincode.PackageID
@@ -148,14 +168,14 @@ var _ = Describe("Lifecycle", func() {
 		By("querying the chaincode and expecting the invocation to fail")
 		sess, err = network.PeerUserSession(org1peer2, "User1", commands.ChaincodeQuery{
 			ChannelID: "testchannel",
-			Name:      "mycc",
+			Name:      "My_1st-Chaincode",
 			Ctor:      `{"Args":["query","a"]}`,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit(1))
 		Expect(sess.Err).To(gbytes.Say("Error: endorsement failure during query. response: status:500 " +
-			"message:\"make sure the chaincode mycc has been successfully defined on channel testchannel and try " +
-			"again: chaincode definition for 'mycc' exists, but chaincode is not installed\""))
+			"message:\"make sure the chaincode My_1st-Chaincode has been successfully defined on channel testchannel and try " +
+			"again: chaincode definition for 'My_1st-Chaincode' exists, but chaincode is not installed\""))
 
 		By("setting the correct package ID to restore the chaincode")
 		chaincode.PackageID = savedPackageID
@@ -164,7 +184,7 @@ var _ = Describe("Lifecycle", func() {
 		By("querying the chaincode and expecting the invocation to succeed")
 		sess, err = network.PeerUserSession(org1peer2, "User1", commands.ChaincodeQuery{
 			ChannelID: "testchannel",
-			Name:      "mycc",
+			Name:      "My_1st-Chaincode",
 			Ctor:      `{"Args":["query","a"]}`,
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -180,12 +200,12 @@ var _ = Describe("Lifecycle", func() {
 		nwo.CommitChaincode(network, "testchannel", orderer, chaincode, testPeers[0], testPeers...)
 
 		By("ensuring the chaincode can still be invoked and queried")
-		RunQueryInvokeQuery(network, orderer, testPeers[0], 90)
+		RunQueryInvokeQuery(network, orderer, testPeers[0], "My_1st-Chaincode", 90)
 
 		By("deploying another chaincode using the same chaincode package")
 		nwo.DeployChaincode(network, "testchannel", orderer, nwo.Chaincode{
-			Name:                "yourcc",
-			Version:             "0.0",
+			Name:                "Your_Chaincode",
+			Version:             "Version+0_0",
 			Path:                "github.com/mcc-github/blockchain/integration/chaincode/simple/cmd",
 			Lang:                "golang",
 			PackageFile:         filepath.Join(tempDir, "simplecc.tar.gz"),
@@ -197,7 +217,8 @@ var _ = Describe("Lifecycle", func() {
 		})
 
 		By("listing the installed chaincodes and verifying the channel/chaincode definitions that are using the chaincode package")
-		nwo.QueryInstalledReferences(network, "testchannel", chaincode.Label, chaincode.PackageID, network.Peer("org2", "peer1"), []string{"mycc", "0.0"}, []string{"yourcc", "0.0"})
+		nwo.QueryInstalledReferences(network, "testchannel", chaincode.Label, chaincode.PackageID, network.Peer("org2", "peer1"), []string{"My_1st-Chaincode", "Version-0.0"}, []string{"Your_Chaincode", "Version+0_0"})
+
 		By("adding a new org")
 		org3 := &nwo.Organization{
 			MSPID:         "Org3ExampleCom",
@@ -283,21 +304,21 @@ var _ = Describe("Lifecycle", func() {
 		sess, err = network.PeerUserSession(org3peer1, "User1", commands.ChaincodeInvoke{
 			ChannelID:     "testchannel",
 			Orderer:       network.OrdererAddress(orderer, nwo.ListenPort),
-			Name:          "mycc",
+			Name:          "My_1st-Chaincode",
 			Ctor:          `{"Args":["invoke","a","b","10"]}`,
 			PeerAddresses: org3AndOrg1PeerAddresses,
 			WaitForEvent:  true,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit(1))
-		Expect(sess.Err).To(gbytes.Say("chaincode definition for 'mycc' at sequence 2 on channel 'testchannel' has not yet been approved by this org"))
+		Expect(sess.Err).To(gbytes.Say("chaincode definition for 'My_1st-Chaincode' at sequence 2 on channel 'testchannel' has not yet been approved by this org"))
 
 		By("org3 approving the chaincode definition")
 		nwo.ApproveChaincodeForMyOrg(network, "testchannel", orderer, chaincode, network.PeersInOrg("org3")...)
 		nwo.EnsureChaincodeCommitted(network, "testchannel", chaincode.Name, chaincode.Version, chaincode.Sequence, []*nwo.Organization{network.Organization("org1"), network.Organization("org2"), network.Organization("org3")}, org3peer1)
 
 		By("ensuring chaincode can be invoked and queried by org3")
-		RunQueryInvokeQueryWithAddresses(network, orderer, org3peer1, 80, org3AndOrg1PeerAddresses...)
+		RunQueryInvokeQueryWithAddresses(network, orderer, org3peer1, "My_1st-Chaincode", 80, org3AndOrg1PeerAddresses...)
 
 		By("deploying a chaincode without an endorsement policy specified")
 		chaincode = nwo.Chaincode{

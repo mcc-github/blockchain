@@ -9,10 +9,10 @@ package msgprocessor
 import (
 	"fmt"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/policies"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

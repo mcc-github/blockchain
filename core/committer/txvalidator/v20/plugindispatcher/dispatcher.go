@@ -10,14 +10,14 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	s "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

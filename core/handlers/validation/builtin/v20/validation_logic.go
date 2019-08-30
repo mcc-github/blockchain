@@ -10,6 +10,8 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/common/validation/statebased"
@@ -17,8 +19,6 @@ import (
 	vi "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
 	vp "github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
 	vs "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

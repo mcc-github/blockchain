@@ -21,9 +21,9 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 	bccspfactory "github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/stretchr/testify/assert"
 )
 

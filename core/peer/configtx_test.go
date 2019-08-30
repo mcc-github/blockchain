@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/capabilities"
 	"github.com/mcc-github/blockchain/common/channelconfig"
@@ -21,7 +22,6 @@ import (
 	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

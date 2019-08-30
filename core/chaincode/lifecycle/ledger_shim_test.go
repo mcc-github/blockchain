@@ -12,9 +12,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle/mock"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 )
 
 var _ = Describe("LedgerShims", func() {

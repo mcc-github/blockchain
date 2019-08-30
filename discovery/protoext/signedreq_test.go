@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/discovery"
 	"github.com/mcc-github/blockchain/discovery/protoext"
-	"github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/stretchr/testify/assert"
 )
 

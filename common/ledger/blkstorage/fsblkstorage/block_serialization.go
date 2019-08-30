@@ -7,8 +7,8 @@ package fsblkstorage
 
 import (
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
 	ledgerutil "github.com/mcc-github/blockchain/common/ledger/util"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

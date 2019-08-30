@@ -9,7 +9,7 @@ package configtx
 import (
 	"bytes"
 
-	cb "github.com/mcc-github/blockchain/protos/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 )
 
 type comparable struct {

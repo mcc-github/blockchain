@@ -8,6 +8,8 @@ package lockbasedtxmgr
 import (
 	"fmt"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	ledger "github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -16,8 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/pkg/errors"
 )
 

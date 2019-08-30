@@ -10,12 +10,12 @@ import (
 	"bytes"
 	"fmt"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 	"github.com/mcc-github/blockchain/protoutil"
 
 	"github.com/golang/protobuf/proto"
@@ -489,6 +489,8 @@ func (ef *ExternalFunctions) InstallChaincode(chaincodeInstallPackage []byte) (*
 	if ef.InstallListener != nil {
 		ef.InstallListener.HandleChaincodeInstalled(pkg.Metadata, packageID)
 	}
+
+	logger.Infof("successfully installed chaincode with package ID '%s'", packageID)
 
 	return &chaincode.InstalledChaincode{
 		PackageID: packageID,

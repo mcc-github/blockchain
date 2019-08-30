@@ -9,6 +9,8 @@ package endorsement
 import (
 	"fmt"
 
+	"github.com/mcc-github/blockchain-protos-go/discovery"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/graph"
@@ -17,8 +19,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/common"
 	. "github.com/mcc-github/blockchain/gossip/discovery"
-	"github.com/mcc-github/blockchain/protos/discovery"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )
 

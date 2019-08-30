@@ -22,12 +22,12 @@ import (
 	"time"
 
 	protoG "github.com/golang/protobuf/proto"
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/gossip/msgstore"
 	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"

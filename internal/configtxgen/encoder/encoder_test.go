@@ -13,14 +13,14 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
+	"github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder/fakes"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

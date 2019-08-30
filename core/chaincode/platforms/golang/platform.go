@@ -11,17 +11,19 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"net/url"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
-	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/util"
 	"github.com/mcc-github/blockchain/internal/ccmetadata"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -30,134 +32,43 @@ import (
 type Platform struct{}
 
 
-func pathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return true, err
-}
-
-func decodeUrl(path string) (string, error) {
-	var urlLocation string
-	if strings.HasPrefix(path, "http://") {
-		urlLocation = path[7:]
-	} else if strings.HasPrefix(path, "https://") {
-		urlLocation = path[8:]
-	} else {
-		urlLocation = path
-	}
-
-	if len(urlLocation) < 2 {
-		return "", errors.New("ChaincodeSpec's path/URL invalid")
-	}
-
-	if strings.LastIndex(urlLocation, "/") == len(urlLocation)-1 {
-		urlLocation = urlLocation[:len(urlLocation)-1]
-	}
-
-	return urlLocation, nil
-}
-
-func getGopath() (string, error) {
-	env, err := getGoEnv()
-	if err != nil {
-		return "", err
-	}
-	
-	splitGoPath := filepath.SplitList(env["GOPATH"])
-	if len(splitGoPath) == 0 {
-		return "", fmt.Errorf("invalid GOPATH environment variable value: %s", env["GOPATH"])
-	}
-	return splitGoPath[0], nil
-}
-
-func filter(vs []string, f func(string) bool) []string {
-	vsf := make([]string, 0)
-	for _, v := range vs {
-		if f(v) {
-			vsf = append(vsf, v)
-		}
-	}
-	return vsf
-}
-
-
 func (p *Platform) Name() string {
 	return pb.ChaincodeSpec_GOLANG.String()
 }
 
 
+
+
+
 func (p *Platform) ValidatePath(rawPath string) error {
-	path, err := url.Parse(rawPath)
-	if err != nil || path == nil {
-		return fmt.Errorf("invalid path: %s", err)
+	_, err := getCodeDescriptor(rawPath)
+	if err != nil {
+		return err
 	}
 
-	
-	
-	
-	if path.Scheme == "" {
-		gopath, err := getGopath()
-		if err != nil {
-			return err
-		}
-		pathToCheck := filepath.Join(gopath, "src", rawPath)
-		exists, err := pathExists(pathToCheck)
-		if err != nil {
-			return fmt.Errorf("error validating chaincode path: %s", err)
-		}
-		if !exists {
-			return fmt.Errorf("path to chaincode does not exist: %s", pathToCheck)
-		}
-	}
 	return nil
 }
 
+
+
+
 func (p *Platform) ValidateCodePackage(code []byte) error {
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	re := regexp.MustCompile(`^(/)?(src|META-INF)/.*`)
 	is := bytes.NewReader(code)
 	gr, err := gzip.NewReader(is)
 	if err != nil {
 		return fmt.Errorf("failure opening codepackage gzip stream: %s", err)
 	}
-	tr := tar.NewReader(gr)
 
+	tr := tar.NewReader(gr)
 	for {
 		header, err := tr.Next()
-		if err != nil {
-			
+		if err == io.EOF {
 			break
 		}
-
-		
-		
-		
-		if !re.MatchString(header.Name) {
-			return fmt.Errorf("illegal file detected in payload: \"%s\"", header.Name)
+		if err != nil {
+			return err
 		}
 
-		
-		
-		
-		
-		
-		
-		
-		
 		
 		if header.Mode&^0100666 != 0 {
 			return fmt.Errorf("illegal file mode detected for file %s: %o", header.Name, header.Mode)
@@ -167,256 +78,41 @@ func (p *Platform) ValidateCodePackage(code []byte) error {
 	return nil
 }
 
-type Sources []SourceDescriptor
-
-func (s Sources) Len() int {
-	return len(s)
-}
-
-func (s Sources) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s Sources) Less(i, j int) bool {
-	return strings.Compare(s[i].Name, s[j].Name) < 0
-}
 
 
 
 
-
-
-func vendorDependencies(pkg string, files Sources) {
-
-	exclusions := make([]string, 0)
-	elements := strings.Split(pkg, "/")
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	prev := filepath.Join("src")
-	for _, element := range elements {
-		curr := filepath.Join(prev, element)
-		vendor := filepath.Join(curr, "vendor")
-		exclusions = append(exclusions, vendor)
-		prev = curr
-	}
-
-	
-	
-	
-	exclusions = append(exclusions, filepath.Join("src", pkg))
-
-	count := len(files)
-	sem := make(chan bool, count)
-
-	
-	
-	
-	
-	
-	vendorPath := filepath.Join("src", pkg, "vendor")
-	for i, file := range files {
-		go func(i int, file SourceDescriptor) {
-			excluded := false
-
-			for _, exclusion := range exclusions {
-				if strings.HasPrefix(file.Name, exclusion) == true {
-					excluded = true
-					break
-				}
-			}
-
-			if excluded == false {
-				origName := file.Name
-				file.Name = strings.Replace(origName, "src", vendorPath, 1)
-				logger.Debugf("vendoring %s -> %s", origName, file.Name)
-			}
-
-			files[i] = file
-			sem <- true
-		}(i, file)
-	}
-
-	for i := 0; i < count; i++ {
-		<-sem
-	}
-}
-
-
-func (p *Platform) GetDeploymentPayload(path string) ([]byte, error) {
-
-	var err error
-
-	
-	
-	
-	code, err := getCode(path)
+func (p *Platform) GetDeploymentPayload(codepath string) ([]byte, error) {
+	codeDescriptor, err := getCodeDescriptor(codepath)
 	if err != nil {
 		return nil, err
 	}
-	if code.Cleanup != nil {
-		defer code.Cleanup()
-	}
 
-	
-	
-	
-	env, err := getGoEnv()
+	fileMap, err := findSource(codeDescriptor)
 	if err != nil {
 		return nil, err
 	}
-	gopaths := splitEnvPaths(env["GOPATH"])
-	goroots := splitEnvPaths(env["GOROOT"])
-	gopaths[code.Gopath] = true
-	env["GOPATH"] = flattenEnvPaths(gopaths)
 
-	
-	
-	
-	imports, err := listImports(env, code.Pkg)
-	if err != nil {
-		return nil, fmt.Errorf("Error obtaining imports: %s", err)
-	}
-
-	
-	
-	
-	var provided = map[string]bool{
-		"github.com/mcc-github/blockchain/core/chaincode/shim": true,
-		"github.com/mcc-github/blockchain/protos/peer":         true,
-	}
-
-	
-	var pseudo = map[string]bool{
-		"C": true,
-	}
-
-	imports = filter(imports, func(pkg string) bool {
-		
-		if _, ok := provided[pkg]; ok == true {
-			logger.Debugf("Discarding provided package %s", pkg)
-			return false
-		}
-
-		
-		if _, ok := pseudo[pkg]; ok == true {
-			logger.Debugf("Discarding pseudo-package %s", pkg)
-			return false
-		}
-
-		
-		for goroot := range goroots {
-			fqp := filepath.Join(goroot, "src", pkg)
-			exists, err := pathExists(fqp)
-			if err == nil && exists {
-				logger.Debugf("Discarding GOROOT package %s", pkg)
-				return false
-			}
-		}
-
-		
-		logger.Debugf("Accepting import: %s", pkg)
-		return true
-	})
-
-	
-	
-	
-	
-	deps := make(map[string]bool)
-
-	for _, pkg := range imports {
-		
-		
-		
-		transitives, err := listDeps(env, pkg)
+	var packageInfo []PackageInfo
+	for _, dist := range distributions() {
+		pi, err := dependencyPackageInfo(dist.goos, dist.goarch, codeDescriptor.Pkg)
 		if err != nil {
-			return nil, fmt.Errorf("Error obtaining dependencies for %s: %s", pkg, err)
+			return nil, err
 		}
-
-		
-		
-		
-
-		
-		deps[pkg] = true
-
-		
-		for _, dep := range transitives {
-			deps[dep] = true
-		}
+		packageInfo = append(packageInfo, pi...)
 	}
 
-	
-	delete(deps, "")
-
-	
-	
-	
-	fileMap, err := findSource(code.Gopath, code.Pkg)
-	if err != nil {
-		return nil, err
-	}
-
-	
-	
-	
-	
-	for dep := range deps {
-		logger.Debugf("processing dep: %s", dep)
-
-		
-		
-		
-		
-		for gopath := range gopaths {
-			fqp := filepath.Join(gopath, "src", dep)
-			exists, err := pathExists(fqp)
-
-			logger.Debugf("checking: %s exists: %v", fqp, exists)
-
-			if err == nil && exists {
-
-				
-				files, err := findSource(gopath, dep)
-				if err != nil {
-					return nil, err
-				}
-
-				
-				for _, file := range files {
-					fileMap[file.Name] = file
-				}
+	for _, pkg := range packageInfo {
+		for _, filename := range pkg.Files() {
+			filePath := filepath.Join(pkg.Dir, filename)
+			sd := SourceDescriptor{
+				Name:       path.Join("src", pkg.ImportPath, filename),
+				Path:       filePath,
+				IsMetadata: false,
 			}
+			fileMap[sd.Name] = sd
 		}
 	}
-
-	logger.Debugf("done")
-
-	
-	
-	
-	files := make(Sources, 0)
-	for _, file := range fileMap {
-		files = append(files, file)
-	}
-
-	
-	
-	
-	vendorDependencies(code.Pkg, files)
-
-	
-	
-	
-	sort.Sort(files)
 
 	
 	
@@ -425,14 +121,15 @@ func (p *Platform) GetDeploymentPayload(path string) ([]byte, error) {
 	gw := gzip.NewWriter(payload)
 	tw := tar.NewWriter(gw)
 
-	for _, file := range files {
+	for _, file := range fileMap.values() {
 		
 		
 		
 		if file.IsMetadata {
-			file.Name, err = filepath.Rel(filepath.Join("src", code.Pkg), file.Name)
+			
+			file.Name, err = filepath.Rel(filepath.Join("src", codeDescriptor.Pkg), file.Name)
 			if err != nil {
-				return nil, fmt.Errorf("This error was caused by bad packaging of the metadata.  The file [%s] is marked as MetaFile, however not located under META-INF   Error:[%s]", file.Name, err)
+				return nil, errors.Wrapf(err, "failed to calculate relative path for %s", file.Name)
 			}
 
 			
@@ -441,7 +138,6 @@ func (p *Platform) GetDeploymentPayload(path string) ([]byte, error) {
 			
 			
 			if strings.HasPrefix(filename, ".") {
-				logger.Warningf("Ignoring hidden file in metadata directory: %s", file.Name)
 				continue
 			}
 
@@ -477,7 +173,7 @@ func (p *Platform) GetDeploymentPayload(path string) ([]byte, error) {
 
 func (p *Platform) GenerateDockerfile() (string, error) {
 	var buf []string
-	buf = append(buf, "FROM "+util.GetDockerfileFromConfig("chaincode.golang.runtime"))
+	buf = append(buf, "FROM "+util.GetDockerImageFromConfig("chaincode.golang.runtime"))
 	buf = append(buf, "ADD binpackage.tar /usr/local/bin")
 
 	return strings.Join(buf, "\n"), nil
@@ -493,14 +189,143 @@ func getLDFlagsOpts() string {
 	return staticLDFlagsOpts
 }
 
-func (p *Platform) DockerBuildOptions(path string) (util.DockerBuildOptions, error) {
-	pkgname, err := decodeUrl(path)
+func (p *Platform) DockerBuildOptions(pkg string) (util.DockerBuildOptions, error) {
+	ldFlagOpts := getLDFlagsOpts()
+	return util.DockerBuildOptions{
+		Cmd: fmt.Sprintf("GOPATH=/chaincode/input:$GOPATH go build  %s -o /chaincode/output/chaincode %s", ldFlagOpts, pkg),
+	}, nil
+}
+
+type CodeDescriptor struct {
+	Gopath string
+	Pkg    string
+}
+
+func getGopath() (string, error) {
+	output, err := exec.Command("go", "env", "GOPATH").Output()
 	if err != nil {
-		return util.DockerBuildOptions{}, fmt.Errorf("could not decode url: %s", err)
+		return "", err
 	}
 
-	ldflagsOpt := getLDFlagsOpts()
-	return util.DockerBuildOptions{
-		Cmd: fmt.Sprintf("GOPATH=/chaincode/input:$GOPATH go build  %s -o /chaincode/output/chaincode %s", ldflagsOpt, pkgname),
-	}, nil
+	pathElements := filepath.SplitList(strings.TrimSpace(string(output)))
+	if len(pathElements) == 0 {
+		return "", fmt.Errorf("GOPATH is not set")
+	}
+
+	return pathElements[0], nil
+}
+
+
+func getCodeDescriptor(path string) (CodeDescriptor, error) {
+	if path == "" {
+		return CodeDescriptor{}, errors.New("cannot collect files from empty chaincode path")
+	}
+
+	gopath, err := getGopath()
+	if err != nil {
+		return CodeDescriptor{}, err
+	}
+	sourcePath := filepath.Join(gopath, "src", path)
+
+	fi, err := os.Stat(sourcePath)
+	if err != nil {
+		return CodeDescriptor{}, errors.Wrap(err, "failed to get code")
+	}
+	if !fi.IsDir() {
+		return CodeDescriptor{}, errors.Errorf("path is not a directory: %s", path)
+	}
+
+	return CodeDescriptor{Gopath: gopath, Pkg: path}, nil
+}
+
+type SourceDescriptor struct {
+	Name       string
+	Path       string
+	IsMetadata bool
+}
+
+type Sources []SourceDescriptor
+
+func (s Sources) Len() int           { return len(s) }
+func (s Sources) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s Sources) Less(i, j int) bool { return s[i].Name < s[j].Name }
+
+type SourceMap map[string]SourceDescriptor
+
+func (s SourceMap) values() Sources {
+	var sources Sources
+	for _, src := range s {
+		sources = append(sources, src)
+	}
+
+	sort.Sort(sources)
+	return sources
+}
+
+func findSource(cd CodeDescriptor) (SourceMap, error) {
+	sources := SourceMap{}
+
+	tld := filepath.Join(cd.Gopath, "src", cd.Pkg)
+	walkFn := func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			
+			if path == tld {
+				return nil
+			}
+
+			
+			
+			if isMetadataDir(path, tld) {
+				return nil
+			}
+
+			
+			return filepath.SkipDir
+		}
+
+		name, err := filepath.Rel(cd.Gopath, path)
+		if err != nil {
+			return errors.Wrapf(err, "failed to calculate relative path for %s", path)
+		}
+
+		sources[name] = SourceDescriptor{Name: name, Path: path, IsMetadata: isMetadataDir(path, tld)}
+		return nil
+	}
+
+	if err := filepath.Walk(tld, walkFn); err != nil {
+		return nil, errors.Wrap(err, "walk failed")
+	}
+
+	return sources, nil
+}
+
+
+func isMetadataDir(path, tld string) bool {
+	return strings.HasPrefix(path, filepath.Join(tld, "META-INF"))
+}
+
+
+type dist struct{ goos, goarch string }
+
+
+func distributions() []dist {
+	
+	dists := map[dist]bool{
+		{goos: "linux", goarch: "amd64"}: true,
+		{goos: "linux", goarch: "s390x"}: true,
+	}
+
+	
+	dists[dist{goos: runtime.GOOS, goarch: runtime.GOARCH}] = true
+
+	var list []dist
+	for d := range dists {
+		list = append(list, d)
+	}
+
+	return list
 }

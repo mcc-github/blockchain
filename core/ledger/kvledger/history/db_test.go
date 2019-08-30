@@ -12,15 +12,15 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	util2 "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 )
 

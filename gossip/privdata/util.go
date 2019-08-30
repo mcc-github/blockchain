@@ -10,14 +10,14 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
+	"github.com/mcc-github/blockchain-protos-go/msp"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
-	"github.com/mcc-github/blockchain/protos/msp"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 type txValidationFlags []uint8

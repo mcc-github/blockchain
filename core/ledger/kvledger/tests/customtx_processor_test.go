@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	protopeer "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/ledgermgmt"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
-	"github.com/mcc-github/blockchain/protos/common"
-	protopeer "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 )
 

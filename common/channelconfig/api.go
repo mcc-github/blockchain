@@ -9,12 +9,12 @@ package channelconfig
 import (
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/msp"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 

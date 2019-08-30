@@ -8,10 +8,10 @@ package pvtdatastorage
 
 import (
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 )
 
 func v11Format(datakeyBytes []byte) (bool, error) {

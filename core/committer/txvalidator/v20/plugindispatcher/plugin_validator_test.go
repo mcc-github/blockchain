@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/mocks/ledger"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
@@ -19,8 +21,6 @@ import (
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	"github.com/mcc-github/blockchain/msp"
 	. "github.com/mcc-github/blockchain/msp/mocks"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

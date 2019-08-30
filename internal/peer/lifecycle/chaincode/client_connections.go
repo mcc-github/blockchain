@@ -9,9 +9,9 @@ package chaincode
 import (
 	"crypto/tls"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/internal/peer/common"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )

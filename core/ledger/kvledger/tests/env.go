@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/util"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
@@ -22,7 +23,6 @@ import (
 	"github.com/mcc-github/blockchain/core/scc/lscc"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )

@@ -10,9 +10,9 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence/mock"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"

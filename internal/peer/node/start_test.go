@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/core/handlers/library"
 	"github.com/mcc-github/blockchain/core/testutil"
 	"github.com/mcc-github/blockchain/internal/peer/node/mock"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mitchellh/mapstructure"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"

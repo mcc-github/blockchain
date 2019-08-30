@@ -27,6 +27,9 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/channelconfig"
@@ -43,7 +46,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/config"
@@ -62,8 +64,6 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
-	"github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -156,7 +156,7 @@ func initPeer(chainIDs ...string) (*cm.Lifecycle, net.Listener, *ChaincodeSuppor
 			},
 			PackageProvider: &persistence.FallbackPackageLocator{
 				ChaincodePackageLocator: &persistence.ChaincodePackageLocator{},
-				LegacyCCPackageLocator:  &ccprovider.CCInfoFSImpl{},
+				LegacyCCPackageLocator:  &ccprovider.CCInfoFSImpl{GetHasher: cryptoProvider},
 			},
 		},
 		PeerAddress: peerAddress,

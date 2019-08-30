@@ -9,9 +9,9 @@ package pvtdatastorage
 import (
 	"math"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/willf/bitset"
 )
 

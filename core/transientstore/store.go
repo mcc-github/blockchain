@@ -10,12 +10,12 @@ import (
 	"errors"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
+	"github.com/mcc-github/blockchain-protos-go/transientstore"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	"github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 

@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger/ramledger"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
@@ -23,8 +25,6 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/multichannel/mocks"
 	"github.com/mcc-github/blockchain/orderer/consensus"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

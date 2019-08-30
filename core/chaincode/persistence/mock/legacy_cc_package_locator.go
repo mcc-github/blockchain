@@ -4,8 +4,8 @@ package mock
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 type LegacyCCPackageLocator struct {

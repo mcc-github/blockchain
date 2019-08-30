@@ -12,10 +12,10 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/crypto"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil/fakes"
 	"github.com/stretchr/testify/assert"
 )

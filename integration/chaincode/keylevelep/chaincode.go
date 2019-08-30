@@ -10,9 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
-	"github.com/mcc-github/blockchain/core/chaincode/shim/ext/statebased"
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-chaincode-go/pkg/statebased"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 )
 
 

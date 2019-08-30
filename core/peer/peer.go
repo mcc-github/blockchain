@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	cc "github.com/mcc-github/blockchain/common/config"
@@ -37,8 +39,6 @@ import (
 	gossipservice "github.com/mcc-github/blockchain/gossip/service"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

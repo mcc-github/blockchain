@@ -9,7 +9,7 @@ package msp
 import (
 	"time"
 
-	"github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 )
 
 

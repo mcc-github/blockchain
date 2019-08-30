@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	lc "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/core/dispatcher"
-	lc "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 
 	"github.com/golang/protobuf/proto"
 )

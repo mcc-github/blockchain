@@ -9,10 +9,10 @@ package policies_test
 import (
 	"testing"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	mb "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/policies"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	mb "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

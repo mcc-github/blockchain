@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/internal/peer/common"
 	"github.com/mcc-github/blockchain/msp"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 )
 

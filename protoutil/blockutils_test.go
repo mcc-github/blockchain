@@ -13,9 +13,9 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
-	"github.com/mcc-github/blockchain/protos/common"
-	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

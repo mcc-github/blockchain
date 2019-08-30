@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
 	configtxtest "github.com/mcc-github/blockchain/common/configtx/test"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
@@ -22,8 +24,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	lgr "github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )

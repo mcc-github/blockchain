@@ -9,8 +9,8 @@ package common
 import (
 	"context"
 
-	cb "github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	grpc "google.golang.org/grpc"
 )
 

@@ -9,7 +9,7 @@ package policies
 import (
 	"testing"
 
-	cb "github.com/mcc-github/blockchain/protos/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/stretchr/testify/assert"
 )
 

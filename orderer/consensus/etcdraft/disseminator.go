@@ -5,7 +5,7 @@ package etcdraft
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 )
 
 

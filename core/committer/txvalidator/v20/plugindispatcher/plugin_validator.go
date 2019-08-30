@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	ledger2 "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/policies"
 	txvalidatorplugin "github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
@@ -21,7 +22,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/policy"
 	"github.com/mcc-github/blockchain/msp"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

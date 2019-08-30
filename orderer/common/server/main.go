@@ -26,6 +26,8 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/mcc-github/blockchain-lib-go/healthz"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -51,8 +53,6 @@ import (
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
 	"github.com/mcc-github/blockchain/orderer/consensus/kafka"
 	"github.com/mcc-github/blockchain/orderer/consensus/solo"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

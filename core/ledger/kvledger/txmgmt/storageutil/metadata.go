@@ -8,8 +8,8 @@ package storageutil
 
 import (
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 )
 
 

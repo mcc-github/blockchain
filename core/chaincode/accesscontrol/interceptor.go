@@ -9,7 +9,7 @@ package accesscontrol
 import (
 	"fmt"
 
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"google.golang.org/grpc"
 )
 

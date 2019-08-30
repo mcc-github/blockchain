@@ -9,11 +9,11 @@ package lifecycle_test
 import (
 	"fmt"
 
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle/mock"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/scc"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

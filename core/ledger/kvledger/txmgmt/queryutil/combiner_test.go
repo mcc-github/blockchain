@@ -14,13 +14,13 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/util"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
 	"github.com/mcc-github/blockchain/common/flogging"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/queryutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/queryutil/mock"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	statedbmock "github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb/mock"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -4,7 +4,7 @@ package mock
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 )
 
 type ChaincodeStream struct {

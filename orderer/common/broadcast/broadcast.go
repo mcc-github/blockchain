@@ -10,11 +10,11 @@ import (
 	"io"
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/pkg/errors"
 )
 

@@ -4,7 +4,7 @@
 package bootstrap
 
 import (
-	ab "github.com/mcc-github/blockchain/protos/common"
+	ab "github.com/mcc-github/blockchain-protos-go/common"
 )
 
 

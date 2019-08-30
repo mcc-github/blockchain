@@ -14,11 +14,11 @@ import (
 	"encoding/pem"
 
 	"github.com/golang/protobuf/proto"
+	m "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/bccsp/signer"
 	"github.com/mcc-github/blockchain/bccsp/sw"
-	m "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )
 

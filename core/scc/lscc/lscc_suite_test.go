@@ -9,7 +9,7 @@ package lscc_test
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"

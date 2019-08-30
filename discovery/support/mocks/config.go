@@ -4,8 +4,8 @@ package mocks
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/discovery/support/config"
-	"github.com/mcc-github/blockchain/protos/common"
 )
 
 type ConfigBlockGetter struct {

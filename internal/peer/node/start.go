@@ -21,6 +21,10 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	discprotos "github.com/mcc-github/blockchain-protos-go/discovery"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	ccdef "github.com/mcc-github/blockchain/common/chaincode"
@@ -84,10 +88,6 @@ import (
 	"github.com/mcc-github/blockchain/internal/peer/version"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/protos/common"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	discprotos "github.com/mcc-github/blockchain/protos/discovery"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -136,6 +136,20 @@ func (e externalVMAdapter) Build(
 	codePackage io.Reader,
 ) (container.Instance, error) {
 	return e.detector.Build(ccid, metadata, codePackage)
+}
+
+type endorserChannelAdapter struct {
+	peer *peer.Peer
+}
+
+func (e endorserChannelAdapter) Channel(channelID string) *endorser.Channel {
+	if peerChannel := e.peer.Channel(channelID); peerChannel != nil {
+		return &endorser.Channel{
+			IdentityDeserializer: peerChannel.MSPManager(),
+		}
+	}
+
+	return nil
 }
 
 func serve(args []string) error {
@@ -242,7 +256,11 @@ func serve(args []string) error {
 		CryptoProvider: factory.GetDefault(),
 	}
 
-	signingIdentity := mgmt.GetLocalSigningIdentityOrPanic()
+	localMSP := mgmt.GetLocalMSP()
+	signingIdentity, err := localMSP.GetDefaultSigningIdentity()
+	if err != nil {
+		logger.Panicf("Could not get the default signing identity from the local MSP: [%+v]", err)
+	}
 	policyMgr := policies.PolicyManagerGetterFunc(peerInstance.GetPolicyManager)
 
 	
@@ -301,7 +319,7 @@ func serve(args []string) error {
 	}
 
 	packageProvider := &persistence.PackageProvider{
-		LegacyPP: &ccprovider.CCInfoFSImpl{},
+		LegacyPP: &ccprovider.CCInfoFSImpl{GetHasher: factory.GetDefault()},
 	}
 
 	
@@ -502,7 +520,7 @@ func serve(args []string) error {
 				ChaincodePackageLocator: &persistence.ChaincodePackageLocator{
 					ChaincodeDir: chaincodeInstallPath,
 				},
-				LegacyCCPackageLocator: &ccprovider.CCInfoFSImpl{},
+				LegacyCCPackageLocator: &ccprovider.CCInfoFSImpl{GetHasher: factory.GetDefault()},
 			},
 		},
 	}
@@ -588,8 +606,13 @@ func serve(args []string) error {
 		SigningIdentityFetcher:  signingIdentityFetcher,
 	})
 	endorserSupport.PluginEndorser = pluginEndorser
+	channelFetcher := endorserChannelAdapter{
+		peer: peerInstance,
+	}
 	serverEndorser := &endorser.Endorser{
 		PrivateDataDistributor: gossipService,
+		ChannelFetcher:         channelFetcher,
+		LocalMSP:               localMSP,
 		Support:                endorserSupport,
 		Metrics:                endorser.NewMetrics(metricsProvider),
 	}

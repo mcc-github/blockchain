@@ -2,7 +2,7 @@
 
 package mocks
 
-import common "github.com/mcc-github/blockchain/protos/common"
+import common "github.com/mcc-github/blockchain-protos-go/common"
 import etcdraft "github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
 import mock "github.com/stretchr/testify/mock"
 

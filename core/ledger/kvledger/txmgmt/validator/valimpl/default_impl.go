@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package valimpl
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
@@ -15,7 +16,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/internal"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/statebasedval"
 	"github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/protos/common"
 )
 
 var logger = flogging.MustGetLogger("valimpl")

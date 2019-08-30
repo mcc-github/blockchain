@@ -5,9 +5,9 @@ package etcdraft
 import (
 	"sync/atomic"
 
+	"github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/protoutil"
 	"go.etcd.io/etcd/raft"
 )

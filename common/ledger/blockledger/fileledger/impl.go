@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package fileledger
 
 import (
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 )
 
 var logger = flogging.MustGetLogger("common.ledger.blockledger.file")

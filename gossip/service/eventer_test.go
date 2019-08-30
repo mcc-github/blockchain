@@ -10,9 +10,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/gossip/util"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 const testChannelID = "foo"

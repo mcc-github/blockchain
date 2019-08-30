@@ -9,6 +9,8 @@ package service
 import (
 	"sync"
 
+	gproto "github.com/mcc-github/blockchain-protos-go/gossip"
+	"github.com/mcc-github/blockchain-protos-go/transientstore"
 	corecomm "github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/committer"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
@@ -29,8 +31,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/state"
 	"github.com/mcc-github/blockchain/gossip/util"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	gproto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"

@@ -23,10 +23,10 @@ import (
 	"time"
 
 	pb "github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
-	"github.com/mcc-github/blockchain/protos/common"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -9,7 +9,7 @@ package deliver
 import (
 	"time"
 
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 package validation
 
-import "github.com/mcc-github/blockchain/protos/common"
+import "github.com/mcc-github/blockchain-protos-go/common"
 
 
 type Argument interface {

@@ -14,9 +14,9 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"

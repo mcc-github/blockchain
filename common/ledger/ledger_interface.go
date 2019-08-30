@@ -17,7 +17,7 @@ limitations under the License.
 package ledger
 
 import (
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain-protos-go/common"
 )
 
 

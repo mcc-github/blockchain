@@ -8,8 +8,8 @@ package blockledger
 
 import (
 	"github.com/golang/protobuf/proto"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

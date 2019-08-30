@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"reflect"
 
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/common/util"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"

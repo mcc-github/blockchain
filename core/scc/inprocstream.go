@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 )
 
 

@@ -9,8 +9,8 @@ package etcdraft
 import (
 	"testing"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
-	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"

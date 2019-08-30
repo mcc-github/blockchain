@@ -9,8 +9,8 @@ package etcdraft_test
 import (
 	"testing"
 
+	etcdraftproto "github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
-	etcdraftproto "github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
 )

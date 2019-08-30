@@ -4,7 +4,7 @@ package mocks
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

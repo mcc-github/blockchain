@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package testutil
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/mock"
-	"github.com/mcc-github/blockchain/protos/common"
 )
 
 

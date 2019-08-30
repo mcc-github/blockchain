@@ -14,10 +14,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"google.golang.org/grpc"
 )
 

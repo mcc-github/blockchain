@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
+	"github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"

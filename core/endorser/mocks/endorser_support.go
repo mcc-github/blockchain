@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package mocks
 
 import (
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/endorser"
 	"github.com/mcc-github/blockchain/core/ledger"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/mock"
 )
 

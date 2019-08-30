@@ -10,9 +10,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/gossip/util"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
 
 

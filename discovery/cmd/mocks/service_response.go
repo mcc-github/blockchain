@@ -4,7 +4,7 @@ package mocks
 
 import discovery "github.com/mcc-github/blockchain/discovery/client"
 import mock "github.com/stretchr/testify/mock"
-import protosdiscovery "github.com/mcc-github/blockchain/protos/discovery"
+import protosdiscovery "github.com/mcc-github/blockchain-protos-go/discovery"
 
 
 type ServiceResponse struct {

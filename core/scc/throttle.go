@@ -9,9 +9,9 @@ package scc
 import (
 	"context"
 
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/semaphore"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 func Throttle(limit int, systemCC SelfDescribingSysCC) *ThrottledSysCC {

@@ -8,11 +8,11 @@ package chaincode
 
 import (
 	"github.com/golang/protobuf/proto"
+	common2 "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/policies/inquire"
-	common2 "github.com/mcc-github/blockchain/protos/common"
 )
 
 var logger = flogging.MustGetLogger("discovery.DiscoverySupport")

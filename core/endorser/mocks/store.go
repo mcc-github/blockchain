@@ -3,8 +3,8 @@ package mocks
 
 import ledger "github.com/mcc-github/blockchain/core/ledger"
 import mock "github.com/stretchr/testify/mock"
-import protostransientstore "github.com/mcc-github/blockchain/protos/transientstore"
-import rwset "github.com/mcc-github/blockchain/protos/ledger/rwset"
+import protostransientstore "github.com/mcc-github/blockchain-protos-go/transientstore"
+import rwset "github.com/mcc-github/blockchain-protos-go/ledger/rwset"
 import transientstore "github.com/mcc-github/blockchain/core/transientstore"
 
 

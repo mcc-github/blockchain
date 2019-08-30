@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/core/deliverservice/mocks"
 	"github.com/mcc-github/blockchain/gossip/api"
 	common2 "github.com/mcc-github/blockchain/gossip/common"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

@@ -11,9 +11,9 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain-amcl/amcl/FP256BN"
+	m "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/idemix"
 	"github.com/mcc-github/blockchain/msp"
-	m "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )
 

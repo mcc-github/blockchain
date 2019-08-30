@@ -8,7 +8,7 @@ package main
 
 import (
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain-protos-go/common"
 )
 
 

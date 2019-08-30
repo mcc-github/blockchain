@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	mspprotos "github.com/mcc-github/blockchain-protos-go/msp"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
@@ -24,9 +27,6 @@ import (
 	ledgerUtil "github.com/mcc-github/blockchain/core/ledger/util"
 	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/mcc-github/blockchain/msp"
-	"github.com/mcc-github/blockchain/protos/common"
-	mspprotos "github.com/mcc-github/blockchain/protos/msp"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

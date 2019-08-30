@@ -9,10 +9,10 @@ package statebasedval
 import (
 	"bytes"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 )
 
 type rangeQueryValidator interface {

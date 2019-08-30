@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package v20
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 

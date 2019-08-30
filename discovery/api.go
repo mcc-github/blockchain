@@ -7,10 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package discovery
 
 import (
+	discprotos "github.com/mcc-github/blockchain-protos-go/discovery"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
-	discprotos "github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

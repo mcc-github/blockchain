@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	pcommon "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/internal/peer/common"
-	pcommon "github.com/mcc-github/blockchain/protos/common"
 )
 
 

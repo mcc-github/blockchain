@@ -9,8 +9,8 @@ package valinforetriever_test
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/v20/valinforetriever"

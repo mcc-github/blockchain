@@ -9,8 +9,8 @@ package cceventmgmt
 import (
 	"fmt"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/protos/common"
 )
 
 

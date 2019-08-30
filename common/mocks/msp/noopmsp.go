@@ -19,8 +19,8 @@ package msp
 import (
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	m "github.com/mcc-github/blockchain/msp"
-	"github.com/mcc-github/blockchain/protos/msp"
 )
 
 type noopmsp struct {

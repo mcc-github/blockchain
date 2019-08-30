@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	fcommon "github.com/mcc-github/blockchain-protos-go/common"
+	protosgossip "github.com/mcc-github/blockchain-protos-go/gossip"
 	commonutil "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/gossip/api"
@@ -26,8 +28,6 @@ import (
 	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
 	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
-	fcommon "github.com/mcc-github/blockchain/protos/common"
-	protosgossip "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"

@@ -13,6 +13,9 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
@@ -23,9 +26,6 @@ import (
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
 	lutil "github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 )
 

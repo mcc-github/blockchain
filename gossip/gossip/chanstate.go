@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/comm"
 	"github.com/mcc-github/blockchain/gossip/common"
@@ -18,7 +19,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/gossip/channel"
 	"github.com/mcc-github/blockchain/gossip/metrics"
 	"github.com/mcc-github/blockchain/gossip/protoext"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
 
 type channelState struct {

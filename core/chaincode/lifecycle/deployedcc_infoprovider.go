@@ -11,14 +11,14 @@ import (
 	"regexp"
 	"strings"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
+	"github.com/mcc-github/blockchain-protos-go/msp"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/util"
 	validationState "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
-	"github.com/mcc-github/blockchain/protos/msp"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 
 	"github.com/pkg/errors"

@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package lifecycle
 
 import (
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	validatorstate "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 
 	"github.com/pkg/errors"
 )

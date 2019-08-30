@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"

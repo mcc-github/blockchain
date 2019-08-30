@@ -22,7 +22,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
 	"github.com/stretchr/testify/assert"
 )
 

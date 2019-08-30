@@ -14,6 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
+	"github.com/mcc-github/blockchain-protos-go/peer"
+	transientstore2 "github.com/mcc-github/blockchain-protos-go/transientstore"
 	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
@@ -38,10 +42,6 @@ import (
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
 	"github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	"github.com/mcc-github/blockchain/protos/peer"
-	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )

@@ -10,10 +10,10 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	m "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/msp"
-	"github.com/mcc-github/blockchain/protos/common"
-	m "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

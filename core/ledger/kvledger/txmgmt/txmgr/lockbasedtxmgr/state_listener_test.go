@@ -8,14 +8,14 @@ package lockbasedtxmgr
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )

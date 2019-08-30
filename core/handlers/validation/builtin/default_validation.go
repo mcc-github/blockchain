@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/v20/plugindispatcher"
@@ -21,7 +22,6 @@ import (
 	v12 "github.com/mcc-github/blockchain/core/handlers/validation/builtin/v12"
 	v13 "github.com/mcc-github/blockchain/core/handlers/validation/builtin/v13"
 	v20 "github.com/mcc-github/blockchain/core/handlers/validation/builtin/v20"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
 

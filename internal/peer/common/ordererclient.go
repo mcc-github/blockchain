@@ -9,8 +9,8 @@ import (
 	"context"
 	"crypto/tls"
 
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/core/comm"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/pkg/errors"
 )
 

@@ -15,13 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/gossip"
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/gossip/comm"
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/gossip/gossip/algo"
 	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
-	"github.com/mcc-github/blockchain/protos/gossip"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/assert"
 )
 

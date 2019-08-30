@@ -9,7 +9,7 @@ package scc
 import (
 	"testing"
 
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -185,3 +185,11 @@ noverify = [
   [[prune.project]]
       name = "go.etcd.io/etcd"
       non-go = false
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/mcc-github/blockchain-protos-go"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/mcc-github/blockchain-chaincode-go"

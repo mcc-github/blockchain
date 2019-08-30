@@ -12,13 +12,13 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/mcc-github/blockchain-protos-go/discovery"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/discovery/protoext"
 	common2 "github.com/mcc-github/blockchain/gossip/common"
 	discovery2 "github.com/mcc-github/blockchain/gossip/discovery"
-	"github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

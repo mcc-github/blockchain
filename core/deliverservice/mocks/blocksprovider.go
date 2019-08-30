@@ -11,11 +11,11 @@ import (
 	"sync/atomic"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	gossip_proto "github.com/mcc-github/blockchain-protos-go/gossip"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	gossip_common "github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
-	"github.com/mcc-github/blockchain/protos/common"
-	gossip_proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"google.golang.org/grpc"
 )

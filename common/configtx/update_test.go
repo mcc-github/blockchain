@@ -11,9 +11,9 @@ import (
 	"reflect"
 	"testing"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	mockpolicies "github.com/mcc-github/blockchain/common/configtx/mock"
 	"github.com/mcc-github/blockchain/common/policies"
-	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/stretchr/testify/assert"
 )
 

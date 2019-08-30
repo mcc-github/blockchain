@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
-	"github.com/mcc-github/blockchain/core/chaincode/shim/shimtest"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	"github.com/mcc-github/blockchain-chaincode-go/shimtest"
 )
 
 func checkInit(t *testing.T, stub *shimtest.MockStub, args [][]byte) {

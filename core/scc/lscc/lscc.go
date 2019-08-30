@@ -12,13 +12,17 @@ import (
 	"regexp"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	mb "github.com/mcc-github/blockchain-protos-go/msp"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
@@ -30,9 +34,6 @@ import (
 	"github.com/mcc-github/blockchain/internal/ccmetadata"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mgmt"
-	"github.com/mcc-github/blockchain/protos/common"
-	mb "github.com/mcc-github/blockchain/protos/msp"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
@@ -648,7 +649,7 @@ func isValidStatedbArtifactsTar(statedbArtifactsTar []byte) error {
 
 
 func (lscc *LifeCycleSysCC) executeInstall(stub shim.ChaincodeStubInterface, ccbytes []byte) error {
-	ccpack, err := ccprovider.GetCCPackage(ccbytes)
+	ccpack, err := ccprovider.GetCCPackage(ccbytes, factory.GetDefault())
 	if err != nil {
 		return err
 	}

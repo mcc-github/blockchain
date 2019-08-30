@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	mb "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
 	"github.com/mcc-github/blockchain/msp"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	mb "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )

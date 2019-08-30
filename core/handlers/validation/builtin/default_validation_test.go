@@ -9,13 +9,13 @@ package builtin
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	vmocks "github.com/mcc-github/blockchain/core/handlers/validation/builtin/mocks"
 	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/v12/mocks"
 	v20mocks "github.com/mcc-github/blockchain/core/handlers/validation/builtin/v20/mocks"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

@@ -9,7 +9,7 @@ package protoext
 import (
 	"fmt"
 
-	"github.com/mcc-github/blockchain/protos/gossip"
+	"github.com/mcc-github/blockchain-protos-go/gossip"
 )
 
 

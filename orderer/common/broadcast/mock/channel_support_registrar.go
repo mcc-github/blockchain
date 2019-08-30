@@ -4,8 +4,8 @@ package mock
 import (
 	sync "sync"
 
+	common "github.com/mcc-github/blockchain-protos-go/common"
 	broadcast "github.com/mcc-github/blockchain/orderer/common/broadcast"
-	common "github.com/mcc-github/blockchain/protos/common"
 )
 
 type ChannelSupportRegistrar struct {

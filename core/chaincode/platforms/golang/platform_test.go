@@ -13,37 +13,19 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/util"
 	"github.com/mcc-github/blockchain/core/config/configtest"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func testerr(err error, succ bool) error {
-	if succ && err != nil {
-		return fmt.Errorf("Expected success but got error %s", err)
-	} else if !succ && err == nil {
-		return fmt.Errorf("Expected failure but succeeded")
-	}
-	return nil
-}
-
-func writeBytesToPackage(name string, payload []byte, mode int64, tw *tar.Writer) error {
-	
-	var zeroTime time.Time
-	tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(payload)), ModTime: zeroTime, AccessTime: zeroTime, ChangeTime: zeroTime, Mode: mode})
-	tw.Write(payload)
-
-	return nil
-}
 
 func generateFakeCDS(ccname, path, file string, mode int64) (*pb.ChaincodeDeploymentSpec, error) {
 	codePackage := bytes.NewBuffer(nil)
@@ -51,7 +33,11 @@ func generateFakeCDS(ccname, path, file string, mode int64) (*pb.ChaincodeDeploy
 	tw := tar.NewWriter(gw)
 
 	payload := make([]byte, 25, 25)
-	err := writeBytesToPackage(file, payload, mode, tw)
+	err := tw.WriteHeader(&tar.Header{Name: file, Mode: mode, Size: int64(len(payload))})
+	if err != nil {
+		return nil, err
+	}
+	_, err = tw.Write(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -72,36 +58,58 @@ func generateFakeCDS(ccname, path, file string, mode int64) (*pb.ChaincodeDeploy
 	return cds, nil
 }
 
-type spec struct {
-	CCName          string
-	Path, File      string
-	Mode            int64
-	SuccessExpected bool
-	RealGen         bool
+func TestName(t *testing.T) {
+	platform := &Platform{}
+	assert.Equal(t, "GOLANG", platform.Name())
 }
 
-func TestValidateCDS(t *testing.T) {
-	platform := &Platform{}
+func TestValidatePath(t *testing.T) {
+	var tests = []struct {
+		path string
+		succ bool
+	}{
+		{path: "http://github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: false},
+		{path: "https://github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: false},
+		{path: "github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: true},
+		{path: "github.com/mcc-github/blockchain/bad/chaincode/golang/testdata/src/chaincodes/noop", succ: false},
+		{path: ":github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: false},
+	}
 
-	specs := make([]spec, 0)
-	specs = append(specs, spec{CCName: "NoCode", Path: "path/to/nowhere", File: "/bin/warez", Mode: 0100400, SuccessExpected: false})
-	specs = append(specs, spec{CCName: "NoCode", Path: "path/to/somewhere", File: "/src/path/to/somewhere/main.go", Mode: 0100400, SuccessExpected: true})
-	specs = append(specs, spec{CCName: "NoCode", Path: "path/to/somewhere", File: "/bad-src/path/to/somewhere/main.go", Mode: 0100400, SuccessExpected: false})
-	specs = append(specs, spec{CCName: "NoCode", Path: "path/to/somewhere", File: "/src/path/to/somewhere/warez", Mode: 0100555, SuccessExpected: false})
-	specs = append(specs, spec{CCName: "NoCode", Path: "path/to/somewhere", File: "/META-INF/path/to/a/meta1", Mode: 0100555, SuccessExpected: false})
-	specs = append(specs, spec{CCName: "NoCode", Path: "path/to/somewhere", File: "/META-Inf/path/to/a/meta2", Mode: 0100400, SuccessExpected: false})
-	specs = append(specs, spec{CCName: "NoCode", Path: "path/to/somewhere", File: "META-INF/path/to/a/meta3", Mode: 0100400, SuccessExpected: true})
-
-	for _, s := range specs {
-		cds, err := generateFakeCDS(s.CCName, s.Path, s.File, s.Mode)
-
-		err = platform.ValidateCodePackage(cds.CodePackage)
-		if s.SuccessExpected == true && err != nil {
-			t.Errorf("Unexpected failure: %s", err)
+	for _, tt := range tests {
+		platform := &Platform{}
+		err := platform.ValidatePath(tt.path)
+		if tt.succ {
+			assert.NoError(t, err, "expected %s to be a valid path", tt.path)
+		} else {
+			assert.Errorf(t, err, "expected %s to be an invalid path", tt.path)
 		}
-		if s.SuccessExpected == false && err == nil {
-			t.Log("Expected validation failure")
-			t.Fail()
+	}
+}
+
+func TestValidateCodePackage(t *testing.T) {
+	tests := []struct {
+		name            string
+		path            string
+		file            string
+		mode            int64
+		successExpected bool
+	}{
+		{name: "NoCode", path: "path/to/somewhere", file: "/src/path/to/somewhere/main.go", mode: 0100400, successExpected: true},
+		{name: "NoCode", path: "path/to/somewhere", file: "/src/path/to/somewhere/warez", mode: 0100555, successExpected: false},
+		{name: "NoCode", path: "path/to/somewhere", file: "/META-INF/path/to/a/meta1", mode: 0100555, successExpected: false},
+		{name: "NoCode", path: "path/to/somewhere", file: "META-INF/path/to/a/meta3", mode: 0100400, successExpected: true},
+	}
+
+	for _, tt := range tests {
+		cds, err := generateFakeCDS(tt.name, tt.path, tt.file, tt.mode)
+		assert.NoError(t, err, "failed to generate fake cds")
+
+		platform := &Platform{}
+		err = platform.ValidateCodePackage(cds.CodePackage)
+		if tt.successExpected {
+			assert.NoError(t, err, "expected success for path: %s, file: %s", tt.path, tt.file)
+		} else {
+			assert.Errorf(t, err, "expected error for path: %s, file: %s", tt.path, tt.file)
 		}
 	}
 }
@@ -126,7 +134,7 @@ func Test_findSource(t *testing.T) {
 
 	var source SourceMap
 
-	source, err = findSource(gopath, "github.com/mcc-github/blockchain/cmd/peer")
+	source, err = findSource(CodeDescriptor{Gopath: gopath, Pkg: "github.com/mcc-github/blockchain/cmd/peer"})
 	if err != nil {
 		t.Errorf("failed to find source: %s", err)
 	}
@@ -135,111 +143,37 @@ func Test_findSource(t *testing.T) {
 		t.Errorf("Failed to find expected source file: %v", source)
 	}
 
-	source, err = findSource(gopath, "acme.com/this/should/not/exist")
+	source, err = findSource(CodeDescriptor{Gopath: gopath, Pkg: "acme.com/this/should/not/exist"})
 	if err == nil {
 		t.Errorf("Success when failure was expected")
 	}
 }
 
-func Test_DeploymentPayload(t *testing.T) {
+func TestDeploymentPayload(t *testing.T) {
 	platform := &Platform{}
 
 	payload, err := platform.GetDeploymentPayload("github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop")
 	assert.NoError(t, err)
 
-	t.Logf("payload size: %d", len(payload))
-
 	is := bytes.NewReader(payload)
 	gr, err := gzip.NewReader(is)
-	if err == nil {
-		tr := tar.NewReader(gr)
+	assert.NoError(t, err, "failed to create new gzip reader")
+	tr := tar.NewReader(gr)
 
-		for {
-			header, err := tr.Next()
-			if err != nil {
-				
-				break
-			}
+	var foundIndexArtifact bool
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		assert.NoError(t, err, "unexpected error while processing package")
 
-			t.Logf("%s (%d)", header.Name, header.Size)
+		if header.Name == "META-INF/statedb/couchdb/indexes/indexOwner.json" {
+			foundIndexArtifact = true
+			break
 		}
 	}
-}
-
-func Test_DeploymentPayloadWithStateDBArtifacts(t *testing.T) {
-	platform := &Platform{}
-
-	payload, err := platform.GetDeploymentPayload("github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noopWithMETA")
-	assert.NoError(t, err)
-
-	t.Logf("payload size: %d", len(payload))
-
-	is := bytes.NewReader(payload)
-	gr, err := gzip.NewReader(is)
-	if err == nil {
-		tr := tar.NewReader(gr)
-
-		var foundIndexArtifact bool
-		for {
-			header, err := tr.Next()
-			if err != nil {
-				
-				break
-			}
-
-			t.Logf("%s (%d)", header.Name, header.Size)
-			if header.Name == "META-INF/statedb/couchdb/indexes/indexOwner.json" {
-				foundIndexArtifact = true
-			}
-		}
-		assert.Equal(t, true, foundIndexArtifact, "should have found statedb index artifact in noopWithMETA META-INF directory")
-	}
-}
-
-func Test_decodeUrl(t *testing.T) {
-	path := "http://example.com/foo/bar"
-	if _, err := decodeUrl(path); err != nil {
-		t.Fail()
-		t.Logf("Error to decodeUrl unsuccessfully with valid path: %s, %s", path, err)
-	}
-
-	path = ""
-	if _, err := decodeUrl(path); err == nil {
-		t.Fail()
-		t.Logf("Error to decodeUrl successfully with invalid path: %s", path)
-	}
-
-	path = "/"
-	if _, err := decodeUrl(path); err == nil {
-		t.Fatalf("Error to decodeUrl successfully with invalid path: %s", path)
-	}
-
-	path = "http:/
-	if _, err := decodeUrl(path); err == nil {
-		t.Fatalf("Error to decodeUrl successfully with invalid path: %s", path)
-	}
-}
-
-func TestValidatePath(t *testing.T) {
-	platform := &Platform{}
-
-	var tests = []struct {
-		path string
-		succ bool
-	}{
-		{path: "http://github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: true},
-		{path: "https://github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: true},
-		{path: "github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: true},
-		{path: "github.com/mcc-github/blockchain/bad/chaincode/golang/testdata/src/chaincodes/noop", succ: false},
-		{path: ":github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/chaincodes/noop", succ: false},
-	}
-
-	for _, tst := range tests {
-		err := platform.ValidatePath(tst.path)
-		if err = testerr(err, tst.succ); err != nil {
-			t.Errorf("Error validating chaincode spec: %s, %s", tst.path, err)
-		}
-	}
+	assert.Equal(t, true, foundIndexArtifact, "should have found statedb index artifact in noop META-INF directory")
 }
 
 func updateGopath(t *testing.T, path string) func() {
@@ -260,7 +194,9 @@ func updateGopath(t *testing.T, path string) func() {
 }
 
 func TestGetDeploymentPayload(t *testing.T) {
-	testdataPath, err := filepath.Abs("testdata")
+	const testdata = "github.com/mcc-github/blockchain/core/chaincode/platforms/golang/testdata/src/"
+
+	gopath, err := getGopath()
 	require.NoError(t, err)
 
 	platform := &Platform{}
@@ -270,21 +206,22 @@ func TestGetDeploymentPayload(t *testing.T) {
 		path   string
 		succ   bool
 	}{
-		{gopath: testdataPath, path: "chaincodes/noop", succ: true},
-		{gopath: testdataPath, path: "bad/chaincodes/noop", succ: false},
-		{gopath: testdataPath, path: "chaincodes/BadImport", succ: false},
-		{gopath: testdataPath, path: "chaincodes/BadMetadataInvalidIndex", succ: false},
-		{gopath: testdataPath, path: "chaincodes/BadMetadataUnexpectedFolderContent", succ: false},
-		{gopath: testdataPath, path: "chaincodes/BadMetadataIgnoreHiddenFile", succ: true},
-		{gopath: testdataPath, path: "chaincodes/empty/", succ: false},
+		{gopath: gopath, path: testdata + "chaincodes/noop", succ: true},
+		{gopath: gopath, path: testdata + "bad/chaincodes/noop", succ: false},
+		{gopath: gopath, path: testdata + "chaincodes/BadImport", succ: false},
+		{gopath: gopath, path: testdata + "chaincodes/BadMetadataInvalidIndex", succ: false},
+		{gopath: gopath, path: testdata + "chaincodes/BadMetadataUnexpectedFolderContent", succ: false},
+		{gopath: gopath, path: testdata + "chaincodes/BadMetadataIgnoreHiddenFile", succ: true},
+		{gopath: gopath, path: testdata + "chaincodes/empty/", succ: false},
 	}
 
 	for _, tst := range tests {
 		reset := updateGopath(t, tst.gopath)
 		_, err := platform.GetDeploymentPayload(tst.path)
-		t.Log(err)
-		if err = testerr(err, tst.succ); err != nil {
-			t.Errorf("Error validating chaincode spec: %s, %s", tst.path, err)
+		if tst.succ {
+			assert.NoError(t, err, "expected success for path: %s", tst.path)
+		} else {
+			assert.Errorf(t, err, "expected error for path: %s", tst.path)
 		}
 		reset()
 	}

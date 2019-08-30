@@ -22,9 +22,9 @@ import (
 	"fmt"
 	"time"
 
+	mspproto "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/msp"
-	mspproto "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

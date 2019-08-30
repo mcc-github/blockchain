@@ -24,9 +24,8 @@ import (
 	"os"
 
 	"github.com/golang/protobuf/proto"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/bccsp"
-	"github.com/mcc-github/blockchain/bccsp/factory"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 
@@ -73,11 +72,6 @@ type CDSPackage struct {
 	datab     []byte
 	id        []byte
 	GetHasher GetHasher
-}
-
-
-func (ccpack *CDSPackage) reset() {
-	*ccpack = CDSPackage{GetHasher: factory.GetDefault()}
 }
 
 
@@ -136,10 +130,6 @@ func (ccpack *CDSPackage) getCDSData(cds *pb.ChaincodeDeploymentSpec) ([]byte, [
 	b, err := proto.Marshal(cds)
 	if err != nil {
 		return nil, nil, nil, err
-	}
-
-	if err = factory.InitFactories(nil); err != nil {
-		return nil, nil, nil, fmt.Errorf("Internal error, BCCSP could not be initialized : %s", err)
 	}
 
 	
@@ -219,8 +209,6 @@ func (ccpack *CDSPackage) ValidateCC(ccdata *ChaincodeData) error {
 
 
 func (ccpack *CDSPackage) InitFromBuffer(buf []byte) (*ChaincodeData, error) {
-	
-	ccpack.reset()
 
 	depSpec := &pb.ChaincodeDeploymentSpec{}
 	err := proto.Unmarshal(buf, depSpec)
@@ -244,8 +232,6 @@ func (ccpack *CDSPackage) InitFromBuffer(buf []byte) (*ChaincodeData, error) {
 
 
 func (ccpack *CDSPackage) InitFromPath(ccNameVersion string, path string) ([]byte, *pb.ChaincodeDeploymentSpec, error) {
-	
-	ccpack.reset()
 
 	buf, err := GetChaincodePackageFromPath(ccNameVersion, path)
 	if err != nil {

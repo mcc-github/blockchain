@@ -9,7 +9,7 @@ package protoutil_test
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )

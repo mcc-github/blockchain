@@ -7,10 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package endorsement
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/common"
+	. "github.com/mcc-github/blockchain-protos-go/discovery"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/gossip/api"
-	"github.com/mcc-github/blockchain/protos/common"
-	. "github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/pkg/errors"
 )
 

@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 )
 
 type MSPConfig struct{ *msp.MSPConfig }

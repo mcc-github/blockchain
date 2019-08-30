@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain-protos-go/common"
 )
 
 

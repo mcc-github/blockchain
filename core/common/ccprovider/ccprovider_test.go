@@ -15,18 +15,23 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/peer"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestInstalledCCs(t *testing.T) {
 	tmpDir, hashes := setupDirectoryStructure(t)
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
+
 	defer func() {
 		os.RemoveAll(tmpDir)
 	}()
+
 	testCases := []struct {
 		name              string
 		directory         string
@@ -80,7 +85,7 @@ func TestInstalledCCs(t *testing.T) {
 		{
 			name: "No permission on chaincode files",
 			ls:   ioutil.ReadDir,
-			extractCCFromPath: func(_ string, _ string) (ccprovider.CCPackage, error) {
+			extractCCFromPath: func(_ string, _ string, _ ccprovider.GetHasher) (ccprovider.CCPackage, error) {
 				return nil, errors.New("banana")
 			},
 			expected:      nil,
@@ -93,7 +98,7 @@ func TestInstalledCCs(t *testing.T) {
 	for _, test := range testCases {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			c := &ccprovider.CCInfoFSImpl{}
+			c := &ccprovider.CCInfoFSImpl{GetHasher: cryptoProvider}
 			res, err := c.ListInstalledChaincodes(path.Join(tmpDir, test.directory), test.ls, test.extractCCFromPath)
 			assert.Equal(t, test.expected, res)
 			if test.errorContains == "" {
@@ -124,7 +129,9 @@ func TestChaincodeData(t *testing.T) {
 }
 
 func TestGetChaincodeInstallPath(t *testing.T) {
-	c := &ccprovider.CCInfoFSImpl{}
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	assert.NoError(t, err)
+	c := &ccprovider.CCInfoFSImpl{GetHasher: cryptoProvider}
 	installPath := c.GetChaincodeInstallPath()
 	defer ccprovider.SetChaincodesPath(installPath)
 

@@ -12,12 +12,12 @@ import (
 	"math"
 
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	mspprotos "github.com/mcc-github/blockchain-protos-go/msp"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
+	"github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/bccsp"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	mspprotos "github.com/mcc-github/blockchain/protos/msp"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

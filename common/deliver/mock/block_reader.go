@@ -4,8 +4,8 @@ package mock
 import (
 	sync "sync"
 
+	orderer "github.com/mcc-github/blockchain-protos-go/orderer"
 	blockledger "github.com/mcc-github/blockchain/common/ledger/blockledger"
-	orderer "github.com/mcc-github/blockchain/protos/orderer"
 )
 
 type BlockReader struct {

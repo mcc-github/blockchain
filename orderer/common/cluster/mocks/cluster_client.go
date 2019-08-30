@@ -5,7 +5,7 @@ package mocks
 import context "context"
 import grpc "google.golang.org/grpc"
 import mock "github.com/stretchr/testify/mock"
-import orderer "github.com/mcc-github/blockchain/protos/orderer"
+import orderer "github.com/mcc-github/blockchain-protos-go/orderer"
 
 
 type ClusterClient struct {

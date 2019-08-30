@@ -13,6 +13,10 @@ import (
 	"time"
 
 	pb "github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
+	"github.com/mcc-github/blockchain-protos-go/transientstore"
 	vsccErrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/comm"
@@ -21,10 +25,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/metrics"
 	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
-	"github.com/mcc-github/blockchain/protos/common"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	"github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

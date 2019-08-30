@@ -22,8 +22,8 @@ import (
 	"time"
 
 	pb "github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )

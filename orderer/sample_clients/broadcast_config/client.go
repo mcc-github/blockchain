@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"os"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 	"google.golang.org/grpc"
 )
 

@@ -13,10 +13,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/golang/protobuf/proto"
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle/mock"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

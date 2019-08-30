@@ -12,11 +12,11 @@ import (
 	"path"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/cmd/common/signer"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/integration/nwo"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"

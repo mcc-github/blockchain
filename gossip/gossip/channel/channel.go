@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	common_utils "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/comm"
@@ -28,7 +29,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/metrics"
 	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 )
 
 const DefMsgExpirationTimeout = election.DefLeaderAliveThreshold * 10

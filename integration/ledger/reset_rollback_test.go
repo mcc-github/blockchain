@@ -19,9 +19,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	docker "github.com/fsouza/go-dockerclient"
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/integration/nwo"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/tedsuo/ifrit"

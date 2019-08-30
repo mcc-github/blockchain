@@ -12,9 +12,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 	"github.com/stretchr/testify/assert"
 )
 

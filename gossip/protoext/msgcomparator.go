@@ -9,8 +9,8 @@ package protoext
 import (
 	"bytes"
 
+	"github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/gossip/common"
-	"github.com/mcc-github/blockchain/protos/gossip"
 )
 
 

@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package channelconfig
 
 import (
-	cb "github.com/mcc-github/blockchain/protos/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/pkg/errors"
 )
 

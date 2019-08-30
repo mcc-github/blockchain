@@ -9,6 +9,9 @@ package msgprocessor
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
+	"github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/common/capabilities"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
@@ -16,9 +19,6 @@ import (
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	"github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	"github.com/mcc-github/blockchain/internal/configtxlator/update"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

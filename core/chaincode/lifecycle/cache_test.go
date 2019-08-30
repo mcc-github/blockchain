@@ -9,6 +9,10 @@ package lifecycle_test
 import (
 	"fmt"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/util"
@@ -17,10 +21,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/ledger"
 	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 	"github.com/mcc-github/blockchain/protoutil"
 
 	. "github.com/onsi/ginkgo"

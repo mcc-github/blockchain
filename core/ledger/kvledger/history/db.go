@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package history
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/util/leveldbhelper"
@@ -13,7 +14,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
 	"github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/protos/common"
 	protoutil "github.com/mcc-github/blockchain/protoutil"
 )
 

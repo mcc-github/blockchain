@@ -8,10 +8,11 @@ package protoutil
 
 import (
 	"github.com/golang/protobuf/proto"
-	"github.com/mcc-github/blockchain/protos/common"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/msp"
+	"github.com/mcc-github/blockchain-protos-go/peer"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/pkg/errors"
 )
 
@@ -30,6 +31,13 @@ func UnmarshalChaincodeDeploymentSpec(code []byte) (*peer.ChaincodeDeploymentSpe
 	cds := &peer.ChaincodeDeploymentSpec{}
 	err := proto.Unmarshal(code, cds)
 	return cds, errors.Wrap(err, "error unmarshaling ChaincodeDeploymentSpec")
+}
+
+
+func UnmarshalChaincodeInvocationSpec(encoded []byte) (*peer.ChaincodeInvocationSpec, error) {
+	cis := &peer.ChaincodeInvocationSpec{}
+	err := proto.Unmarshal(encoded, cis)
+	return cis, errors.Wrap(err, "error unmarshaling ChaincodeInvocationSpec")
 }
 
 
@@ -65,6 +73,12 @@ func UnmarshalSignatureHeader(bytes []byte) (*cb.SignatureHeader, error) {
 	sh := &common.SignatureHeader{}
 	err := proto.Unmarshal(bytes, sh)
 	return sh, errors.Wrap(err, "error unmarshaling SignatureHeader")
+}
+
+func UnmarshalSerializedIdentity(bytes []byte) (*msp.SerializedIdentity, error) {
+	sid := &msp.SerializedIdentity{}
+	err := proto.Unmarshal(bytes, sid)
+	return sid, errors.Wrap(err, "error unmarshaling SerializedIdentity")
 }
 
 

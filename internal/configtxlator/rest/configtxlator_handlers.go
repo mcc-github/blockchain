@@ -12,8 +12,8 @@ import (
 	"net/http"
 
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/internal/configtxlator/update"
-	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 func fieldBytes(fieldName string, r *http.Request) ([]byte, error) {

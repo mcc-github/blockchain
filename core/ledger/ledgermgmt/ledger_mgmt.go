@@ -10,13 +10,13 @@ import (
 	"bytes"
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/cceventmgmt"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
 

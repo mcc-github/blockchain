@@ -10,8 +10,8 @@ import (
 	"math"
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/core/common/privdata"
-	"github.com/mcc-github/blockchain/protos/common"
 )
 
 var defaultBTL uint64 = math.MaxUint64

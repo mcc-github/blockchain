@@ -7,6 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package test
 
 import (
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	mspproto "github.com/mcc-github/blockchain-protos-go/msp"
+	"github.com/mcc-github/blockchain-protos-go/peer"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/genesis"
@@ -14,10 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	mspproto "github.com/mcc-github/blockchain/protos/msp"
-	"github.com/mcc-github/blockchain/protos/peer"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

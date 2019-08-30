@@ -15,10 +15,10 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/integration/nwo/commands"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer/lifecycle"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"

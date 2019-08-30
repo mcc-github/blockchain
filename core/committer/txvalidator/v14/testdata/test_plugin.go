@@ -10,12 +10,12 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/policies"
 	. "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

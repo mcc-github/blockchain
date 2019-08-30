@@ -11,9 +11,9 @@ import (
 	"crypto/tls"
 	"time"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/internal/peer/lifecycle/chaincode"
 	"github.com/mcc-github/blockchain/internal/peer/lifecycle/chaincode/mock"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"

@@ -11,6 +11,9 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -22,9 +25,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	btltestutil "github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy/testutil"
 	"github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
 	"github.com/stretchr/testify/assert"
 )
 

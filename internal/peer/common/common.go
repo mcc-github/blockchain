@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	pcommon "github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -24,8 +26,6 @@ import (
 	"github.com/mcc-github/blockchain/core/scc/cscc"
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
-	pcommon "github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"

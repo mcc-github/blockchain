@@ -4,8 +4,8 @@ package mocks
 import (
 	"sync"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/configtx"
-	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 type ConfigtxValidator struct {

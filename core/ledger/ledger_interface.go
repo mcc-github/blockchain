@@ -11,13 +11,13 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mcc-github/blockchain-lib-go/healthz"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/core/ledger/util/couchdb"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 

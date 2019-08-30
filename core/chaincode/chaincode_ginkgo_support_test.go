@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/chaincode"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/mock"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

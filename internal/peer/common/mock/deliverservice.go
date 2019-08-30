@@ -5,8 +5,8 @@ import (
 	"context"
 	"sync"
 
-	commona "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
+	commona "github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"google.golang.org/grpc/metadata"
 )
 

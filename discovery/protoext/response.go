@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 package protoext
 
-import "github.com/mcc-github/blockchain/protos/discovery"
+import "github.com/mcc-github/blockchain-protos-go/discovery"
 
 
 

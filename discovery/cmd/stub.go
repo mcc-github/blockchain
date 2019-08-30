@@ -9,11 +9,11 @@ package discovery
 import (
 	"context"
 
+	"github.com/mcc-github/blockchain-protos-go/discovery"
 	"github.com/mcc-github/blockchain/cmd/common"
 	"github.com/mcc-github/blockchain/cmd/common/comm"
 	"github.com/mcc-github/blockchain/cmd/common/signer"
 	discoveryclient "github.com/mcc-github/blockchain/discovery/client"
-	"github.com/mcc-github/blockchain/protos/discovery"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

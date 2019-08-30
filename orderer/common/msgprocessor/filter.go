@@ -9,7 +9,7 @@ package msgprocessor
 import (
 	"errors"
 
-	ab "github.com/mcc-github/blockchain/protos/common"
+	ab "github.com/mcc-github/blockchain-protos-go/common"
 )
 
 

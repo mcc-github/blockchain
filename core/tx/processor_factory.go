@@ -6,9 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 package tx
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/pkg/tx"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 

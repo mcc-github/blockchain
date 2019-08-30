@@ -11,8 +11,8 @@ import (
 	"errors"
 	"fmt"
 
-	protcommon "github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	protcommon "github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/spf13/cobra"
 )

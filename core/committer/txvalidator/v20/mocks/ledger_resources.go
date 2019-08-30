@@ -4,7 +4,7 @@ package mocks
 
 import ledger "github.com/mcc-github/blockchain/core/ledger"
 import mock "github.com/stretchr/testify/mock"
-import peer "github.com/mcc-github/blockchain/protos/peer"
+import peer "github.com/mcc-github/blockchain-protos-go/peer"
 
 
 type LedgerResources struct {

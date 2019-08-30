@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/ledger"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

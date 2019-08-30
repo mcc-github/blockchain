@@ -4,7 +4,7 @@ package mock
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
 )
 
 type StateIterator struct {

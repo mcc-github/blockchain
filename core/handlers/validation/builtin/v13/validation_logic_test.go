@@ -15,6 +15,12 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	"github.com/mcc-github/blockchain-chaincode-go/shimtest"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
+	"github.com/mcc-github/blockchain-protos-go/peer"
+	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/capabilities"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/common/channelconfig"
@@ -24,8 +30,6 @@ import (
 	"github.com/mcc-github/blockchain/common/mocks/scc"
 	"github.com/mcc-github/blockchain/common/util"
 	aclmocks "github.com/mcc-github/blockchain/core/aclmgmt/mocks"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
-	"github.com/mcc-github/blockchain/core/chaincode/shim/shimtest"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/v14"
 	mocks2 "github.com/mcc-github/blockchain/core/committer/txvalidator/v14/mocks"
 	"github.com/mcc-github/blockchain/core/common/ccpackage"
@@ -38,9 +42,6 @@ import (
 	"github.com/mcc-github/blockchain/msp"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -81,7 +82,11 @@ func processSignedCDS(cds *peer.ChaincodeDeploymentSpec, policy *common.Signatur
 
 	b := protoutil.MarshalOrPanic(env)
 
-	ccpack := &ccprovider.SignedCDSPackage{}
+	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
+	if err != nil {
+		return nil, fmt.Errorf("could not create bootBCCSP %s", err)
+	}
+	ccpack := &ccprovider.SignedCDSPackage{GetHasher: cryptoProvider}
 	cd, err := ccpack.InitFromBuffer(b)
 	if err != nil {
 		return nil, fmt.Errorf("error owner creating package %s", err)

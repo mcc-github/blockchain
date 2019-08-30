@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	gossip2 "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	util2 "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -19,8 +21,6 @@ import (
 	gmetricsmocks "github.com/mcc-github/blockchain/gossip/metrics/mocks"
 	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
 	"github.com/mcc-github/blockchain/gossip/privdata/mocks"
-	"github.com/mcc-github/blockchain/protos/common"
-	gossip2 "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

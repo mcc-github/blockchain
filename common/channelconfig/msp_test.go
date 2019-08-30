@@ -9,11 +9,11 @@ package channelconfig
 import (
 	"testing"
 
+	mspprotos "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/core/config/configtest"
 	"github.com/mcc-github/blockchain/msp"
-	mspprotos "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/stretchr/testify/assert"
 )
 

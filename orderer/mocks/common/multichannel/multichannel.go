@@ -7,12 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package multichannel
 
 import (
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	mockblockcutter "github.com/mcc-github/blockchain/orderer/mocks/common/blockcutter"
-	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/mcc-github/blockchain/protoutil"
 )
 

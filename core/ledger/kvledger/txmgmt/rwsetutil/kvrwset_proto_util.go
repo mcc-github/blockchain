@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 package rwsetutil
 
-import "github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
+import "github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 
 
 func SetRawReads(rqi *kvrwset.RangeQueryInfo, kvReads []*kvrwset.KVRead) {

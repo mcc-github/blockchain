@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package inactive
 
 import (
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain-protos-go/common"
 )
 
 

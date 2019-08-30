@@ -9,10 +9,10 @@ package chaincode
 import (
 	"sync"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 type TransactionContext struct {

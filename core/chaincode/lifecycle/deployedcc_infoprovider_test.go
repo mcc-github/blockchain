@@ -9,15 +9,15 @@ package lifecycle_test
 import (
 	"fmt"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle/mock"
 	"github.com/mcc-github/blockchain/core/ledger"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
-	pb "github.com/mcc-github/blockchain/protos/peer"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 
 	"github.com/golang/protobuf/proto"
 

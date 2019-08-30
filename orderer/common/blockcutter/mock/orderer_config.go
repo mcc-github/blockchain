@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/protos/orderer"
 )
 
 type OrdererConfig struct {

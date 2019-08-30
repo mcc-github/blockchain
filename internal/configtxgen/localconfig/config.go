@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/common/viperutil"
 	cf "github.com/mcc-github/blockchain/core/config"
 	"github.com/mcc-github/blockchain/msp"
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/spf13/viper"
 )
 

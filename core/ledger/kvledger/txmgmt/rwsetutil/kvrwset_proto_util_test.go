@@ -9,7 +9,7 @@ package rwsetutil
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 	"github.com/stretchr/testify/assert"
 )
 

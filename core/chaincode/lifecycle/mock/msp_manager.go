@@ -4,8 +4,8 @@ package mock
 import (
 	"sync"
 
+	mspa "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/msp"
-	mspa "github.com/mcc-github/blockchain/protos/msp"
 )
 
 type MSPManager struct {

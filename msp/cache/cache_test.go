@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
+	msp2 "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/msp/mocks"
-	msp2 "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

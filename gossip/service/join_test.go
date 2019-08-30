@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/comm"
@@ -20,8 +22,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/gossip"
 	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

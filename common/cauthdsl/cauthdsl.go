@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	mb "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/msp"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	mb "github.com/mcc-github/blockchain/protos/msp"
 	"go.uber.org/zap/zapcore"
 )
 

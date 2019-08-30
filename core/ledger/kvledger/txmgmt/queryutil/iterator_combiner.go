@@ -9,9 +9,9 @@ package queryutil
 import (
 	"fmt"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
-	"github.com/mcc-github/blockchain/protos/ledger/queryresult"
 )
 
 type itrCombiner struct {

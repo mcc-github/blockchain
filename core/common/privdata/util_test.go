@@ -9,7 +9,7 @@ package privdata
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/stretchr/testify/assert"
 )
 

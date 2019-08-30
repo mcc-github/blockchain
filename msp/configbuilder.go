@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 )

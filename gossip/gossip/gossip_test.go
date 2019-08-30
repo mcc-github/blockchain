@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	corecomm "github.com/mcc-github/blockchain/core/comm"
@@ -31,7 +32,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/metrics/mocks"
 	"github.com/mcc-github/blockchain/gossip/protoext"
 	"github.com/mcc-github/blockchain/gossip/util"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/assert"
 )
 

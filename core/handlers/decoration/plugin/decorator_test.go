@@ -9,7 +9,7 @@ package main
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -7,10 +7,10 @@ package main
 
 
 import (
-	_ "github.com/mcc-github/blockchain/core/chaincode/shim"
-	_ "github.com/mcc-github/blockchain/core/chaincode/shim/ext/attrmgr"
-	_ "github.com/mcc-github/blockchain/core/chaincode/shim/ext/cid"
-	_ "github.com/mcc-github/blockchain/core/chaincode/shim/ext/statebased"
+	_ "github.com/mcc-github/blockchain-chaincode-go/pkg/attrmgr"
+	_ "github.com/mcc-github/blockchain-chaincode-go/pkg/cid"
+	_ "github.com/mcc-github/blockchain-chaincode-go/pkg/statebased"
+	_ "github.com/mcc-github/blockchain-chaincode-go/shim"
 )
 
 func main() {

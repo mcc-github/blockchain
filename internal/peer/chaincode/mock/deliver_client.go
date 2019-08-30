@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"google.golang.org/grpc"
 )
 

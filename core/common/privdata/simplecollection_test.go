@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
+	pb "github.com/mcc-github/blockchain-protos-go/common"
+	mb "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	"github.com/mcc-github/blockchain/msp"
-	pb "github.com/mcc-github/blockchain/protos/common"
-	mb "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )

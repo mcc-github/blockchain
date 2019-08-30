@@ -11,9 +11,9 @@ import (
 	"crypto/sha256"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 )
 
@@ -340,7 +340,7 @@ func GetSignedProposal(prop *peer.Proposal, signer identity.SignerSerializer) (*
 		return nil, errors.New("nil arguments")
 	}
 
-	propBytes, err := GetBytesProposal(prop)
+	propBytes, err := proto.Marshal(prop)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,7 @@ func MockSignedEndorserProposalOrPanic(
 		panic(err)
 	}
 
-	propBytes, err := GetBytesProposal(prop)
+	propBytes, err := proto.Marshal(prop)
 	if err != nil {
 		panic(err)
 	}

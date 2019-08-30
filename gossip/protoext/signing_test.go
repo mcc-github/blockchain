@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/gossip/protoext"
-	"github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )

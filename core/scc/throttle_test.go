@@ -9,10 +9,10 @@ package scc_test
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/core/scc/mock"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	. "github.com/onsi/gomega"
 )
 

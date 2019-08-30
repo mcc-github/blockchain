@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/orderer/consensus"
-	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 var logger = flogging.MustGetLogger("orderer.consensus.solo")

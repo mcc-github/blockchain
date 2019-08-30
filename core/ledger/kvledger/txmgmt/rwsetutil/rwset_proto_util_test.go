@@ -21,8 +21,8 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 )

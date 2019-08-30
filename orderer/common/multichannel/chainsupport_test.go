@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/deliver/mock"
@@ -22,8 +24,6 @@ import (
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	"github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
 	msgprocessormocks "github.com/mcc-github/blockchain/orderer/common/msgprocessor/mocks"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

@@ -9,8 +9,8 @@ package config
 import (
 	"time"
 
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 )
 
 

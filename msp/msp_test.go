@@ -21,12 +21,12 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/bccsp/utils"
 	"github.com/mcc-github/blockchain/core/config/configtest"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/stretchr/testify/assert"
 )
 

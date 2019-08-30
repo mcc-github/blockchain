@@ -4,21 +4,17 @@ package mocks
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
-	"github.com/mcc-github/blockchain/core/endorser"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 type Support struct {
-	CheckACLStub        func(*peer.SignedProposal, *common.ChannelHeader, *common.SignatureHeader, *peer.ChaincodeHeaderExtension) error
+	CheckACLStub        func(string, *peer.SignedProposal) error
 	checkACLMutex       sync.RWMutex
 	checkACLArgsForCall []struct {
-		arg1 *peer.SignedProposal
-		arg2 *common.ChannelHeader
-		arg3 *common.SignatureHeader
-		arg4 *peer.ChaincodeHeaderExtension
+		arg1 string
+		arg2 *peer.SignedProposal
 	}
 	checkACLReturns struct {
 		result1 error
@@ -26,26 +22,30 @@ type Support struct {
 	checkACLReturnsOnCall map[int]struct {
 		result1 error
 	}
-	EndorseWithPluginStub        func(endorser.Context) (*peer.ProposalResponse, error)
+	EndorseWithPluginStub        func(string, string, []byte, *peer.SignedProposal) (*peer.Endorsement, []byte, error)
 	endorseWithPluginMutex       sync.RWMutex
 	endorseWithPluginArgsForCall []struct {
-		arg1 endorser.Context
+		arg1 string
+		arg2 string
+		arg3 []byte
+		arg4 *peer.SignedProposal
 	}
 	endorseWithPluginReturns struct {
-		result1 *peer.ProposalResponse
-		result2 error
+		result1 *peer.Endorsement
+		result2 []byte
+		result3 error
 	}
 	endorseWithPluginReturnsOnCall map[int]struct {
-		result1 *peer.ProposalResponse
-		result2 error
+		result1 *peer.Endorsement
+		result2 []byte
+		result3 error
 	}
-	ExecuteStub        func(*ccprovider.TransactionParams, string, *peer.Proposal, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)
+	ExecuteStub        func(*ccprovider.TransactionParams, string, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)
 	executeMutex       sync.RWMutex
 	executeArgsForCall []struct {
 		arg1 *ccprovider.TransactionParams
 		arg2 string
-		arg3 *peer.Proposal
-		arg4 *peer.ChaincodeInput
+		arg3 *peer.ChaincodeInput
 	}
 	executeReturns struct {
 		result1 *peer.Response
@@ -194,19 +194,17 @@ type Support struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *Support) CheckACL(arg1 *peer.SignedProposal, arg2 *common.ChannelHeader, arg3 *common.SignatureHeader, arg4 *peer.ChaincodeHeaderExtension) error {
+func (fake *Support) CheckACL(arg1 string, arg2 *peer.SignedProposal) error {
 	fake.checkACLMutex.Lock()
 	ret, specificReturn := fake.checkACLReturnsOnCall[len(fake.checkACLArgsForCall)]
 	fake.checkACLArgsForCall = append(fake.checkACLArgsForCall, struct {
-		arg1 *peer.SignedProposal
-		arg2 *common.ChannelHeader
-		arg3 *common.SignatureHeader
-		arg4 *peer.ChaincodeHeaderExtension
-	}{arg1, arg2, arg3, arg4})
-	fake.recordInvocation("CheckACL", []interface{}{arg1, arg2, arg3, arg4})
+		arg1 string
+		arg2 *peer.SignedProposal
+	}{arg1, arg2})
+	fake.recordInvocation("CheckACL", []interface{}{arg1, arg2})
 	fake.checkACLMutex.Unlock()
 	if fake.CheckACLStub != nil {
-		return fake.CheckACLStub(arg1, arg2, arg3, arg4)
+		return fake.CheckACLStub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1
@@ -221,17 +219,17 @@ func (fake *Support) CheckACLCallCount() int {
 	return len(fake.checkACLArgsForCall)
 }
 
-func (fake *Support) CheckACLCalls(stub func(*peer.SignedProposal, *common.ChannelHeader, *common.SignatureHeader, *peer.ChaincodeHeaderExtension) error) {
+func (fake *Support) CheckACLCalls(stub func(string, *peer.SignedProposal) error) {
 	fake.checkACLMutex.Lock()
 	defer fake.checkACLMutex.Unlock()
 	fake.CheckACLStub = stub
 }
 
-func (fake *Support) CheckACLArgsForCall(i int) (*peer.SignedProposal, *common.ChannelHeader, *common.SignatureHeader, *peer.ChaincodeHeaderExtension) {
+func (fake *Support) CheckACLArgsForCall(i int) (string, *peer.SignedProposal) {
 	fake.checkACLMutex.RLock()
 	defer fake.checkACLMutex.RUnlock()
 	argsForCall := fake.checkACLArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+	return argsForCall.arg1, argsForCall.arg2
 }
 
 func (fake *Support) CheckACLReturns(result1 error) {
@@ -257,22 +255,30 @@ func (fake *Support) CheckACLReturnsOnCall(i int, result1 error) {
 	}{result1}
 }
 
-func (fake *Support) EndorseWithPlugin(arg1 endorser.Context) (*peer.ProposalResponse, error) {
+func (fake *Support) EndorseWithPlugin(arg1 string, arg2 string, arg3 []byte, arg4 *peer.SignedProposal) (*peer.Endorsement, []byte, error) {
+	var arg3Copy []byte
+	if arg3 != nil {
+		arg3Copy = make([]byte, len(arg3))
+		copy(arg3Copy, arg3)
+	}
 	fake.endorseWithPluginMutex.Lock()
 	ret, specificReturn := fake.endorseWithPluginReturnsOnCall[len(fake.endorseWithPluginArgsForCall)]
 	fake.endorseWithPluginArgsForCall = append(fake.endorseWithPluginArgsForCall, struct {
-		arg1 endorser.Context
-	}{arg1})
-	fake.recordInvocation("EndorseWithPlugin", []interface{}{arg1})
+		arg1 string
+		arg2 string
+		arg3 []byte
+		arg4 *peer.SignedProposal
+	}{arg1, arg2, arg3Copy, arg4})
+	fake.recordInvocation("EndorseWithPlugin", []interface{}{arg1, arg2, arg3Copy, arg4})
 	fake.endorseWithPluginMutex.Unlock()
 	if fake.EndorseWithPluginStub != nil {
-		return fake.EndorseWithPluginStub(arg1)
+		return fake.EndorseWithPluginStub(arg1, arg2, arg3, arg4)
 	}
 	if specificReturn {
-		return ret.result1, ret.result2
+		return ret.result1, ret.result2, ret.result3
 	}
 	fakeReturns := fake.endorseWithPluginReturns
-	return fakeReturns.result1, fakeReturns.result2
+	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
 }
 
 func (fake *Support) EndorseWithPluginCallCount() int {
@@ -281,58 +287,60 @@ func (fake *Support) EndorseWithPluginCallCount() int {
 	return len(fake.endorseWithPluginArgsForCall)
 }
 
-func (fake *Support) EndorseWithPluginCalls(stub func(endorser.Context) (*peer.ProposalResponse, error)) {
+func (fake *Support) EndorseWithPluginCalls(stub func(string, string, []byte, *peer.SignedProposal) (*peer.Endorsement, []byte, error)) {
 	fake.endorseWithPluginMutex.Lock()
 	defer fake.endorseWithPluginMutex.Unlock()
 	fake.EndorseWithPluginStub = stub
 }
 
-func (fake *Support) EndorseWithPluginArgsForCall(i int) endorser.Context {
+func (fake *Support) EndorseWithPluginArgsForCall(i int) (string, string, []byte, *peer.SignedProposal) {
 	fake.endorseWithPluginMutex.RLock()
 	defer fake.endorseWithPluginMutex.RUnlock()
 	argsForCall := fake.endorseWithPluginArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
 }
 
-func (fake *Support) EndorseWithPluginReturns(result1 *peer.ProposalResponse, result2 error) {
+func (fake *Support) EndorseWithPluginReturns(result1 *peer.Endorsement, result2 []byte, result3 error) {
 	fake.endorseWithPluginMutex.Lock()
 	defer fake.endorseWithPluginMutex.Unlock()
 	fake.EndorseWithPluginStub = nil
 	fake.endorseWithPluginReturns = struct {
-		result1 *peer.ProposalResponse
-		result2 error
-	}{result1, result2}
+		result1 *peer.Endorsement
+		result2 []byte
+		result3 error
+	}{result1, result2, result3}
 }
 
-func (fake *Support) EndorseWithPluginReturnsOnCall(i int, result1 *peer.ProposalResponse, result2 error) {
+func (fake *Support) EndorseWithPluginReturnsOnCall(i int, result1 *peer.Endorsement, result2 []byte, result3 error) {
 	fake.endorseWithPluginMutex.Lock()
 	defer fake.endorseWithPluginMutex.Unlock()
 	fake.EndorseWithPluginStub = nil
 	if fake.endorseWithPluginReturnsOnCall == nil {
 		fake.endorseWithPluginReturnsOnCall = make(map[int]struct {
-			result1 *peer.ProposalResponse
-			result2 error
+			result1 *peer.Endorsement
+			result2 []byte
+			result3 error
 		})
 	}
 	fake.endorseWithPluginReturnsOnCall[i] = struct {
-		result1 *peer.ProposalResponse
-		result2 error
-	}{result1, result2}
+		result1 *peer.Endorsement
+		result2 []byte
+		result3 error
+	}{result1, result2, result3}
 }
 
-func (fake *Support) Execute(arg1 *ccprovider.TransactionParams, arg2 string, arg3 *peer.Proposal, arg4 *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error) {
+func (fake *Support) Execute(arg1 *ccprovider.TransactionParams, arg2 string, arg3 *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error) {
 	fake.executeMutex.Lock()
 	ret, specificReturn := fake.executeReturnsOnCall[len(fake.executeArgsForCall)]
 	fake.executeArgsForCall = append(fake.executeArgsForCall, struct {
 		arg1 *ccprovider.TransactionParams
 		arg2 string
-		arg3 *peer.Proposal
-		arg4 *peer.ChaincodeInput
-	}{arg1, arg2, arg3, arg4})
-	fake.recordInvocation("Execute", []interface{}{arg1, arg2, arg3, arg4})
+		arg3 *peer.ChaincodeInput
+	}{arg1, arg2, arg3})
+	fake.recordInvocation("Execute", []interface{}{arg1, arg2, arg3})
 	fake.executeMutex.Unlock()
 	if fake.ExecuteStub != nil {
-		return fake.ExecuteStub(arg1, arg2, arg3, arg4)
+		return fake.ExecuteStub(arg1, arg2, arg3)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2, ret.result3
@@ -347,17 +355,17 @@ func (fake *Support) ExecuteCallCount() int {
 	return len(fake.executeArgsForCall)
 }
 
-func (fake *Support) ExecuteCalls(stub func(*ccprovider.TransactionParams, string, *peer.Proposal, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)) {
+func (fake *Support) ExecuteCalls(stub func(*ccprovider.TransactionParams, string, *peer.ChaincodeInput) (*peer.Response, *peer.ChaincodeEvent, error)) {
 	fake.executeMutex.Lock()
 	defer fake.executeMutex.Unlock()
 	fake.ExecuteStub = stub
 }
 
-func (fake *Support) ExecuteArgsForCall(i int) (*ccprovider.TransactionParams, string, *peer.Proposal, *peer.ChaincodeInput) {
+func (fake *Support) ExecuteArgsForCall(i int) (*ccprovider.TransactionParams, string, *peer.ChaincodeInput) {
 	fake.executeMutex.RLock()
 	defer fake.executeMutex.RUnlock()
 	argsForCall := fake.executeArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
 func (fake *Support) ExecuteReturns(result1 *peer.Response, result2 *peer.ChaincodeEvent, result3 error) {

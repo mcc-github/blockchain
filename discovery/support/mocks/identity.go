@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	mspprotos "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/msp"
-	mspprotos "github.com/mcc-github/blockchain/protos/msp"
 )
 
 type Identity struct {

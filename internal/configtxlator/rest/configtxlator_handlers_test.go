@@ -13,7 +13,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	cb "github.com/mcc-github/blockchain/protos/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )

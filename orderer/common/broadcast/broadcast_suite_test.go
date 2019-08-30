@@ -9,8 +9,8 @@ package broadcast_test
 import (
 	"testing"
 
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/metrics"
-	ab "github.com/mcc-github/blockchain/protos/orderer"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

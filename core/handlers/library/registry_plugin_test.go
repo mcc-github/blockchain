@@ -18,9 +18,9 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
 	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
-	"github.com/mcc-github/blockchain/protos/peer"
 	"github.com/stretchr/testify/assert"
 )
 

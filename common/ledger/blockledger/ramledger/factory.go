@@ -19,8 +19,8 @@ package ramledger
 import (
 	"sync"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 type ramLedgerFactory struct {

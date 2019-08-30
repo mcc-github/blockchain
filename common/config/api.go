@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package config
 
 import (
-	cb "github.com/mcc-github/blockchain/protos/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 )
 
 

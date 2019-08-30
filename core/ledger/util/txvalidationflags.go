@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package util
 
 import (
-	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 )
 
 

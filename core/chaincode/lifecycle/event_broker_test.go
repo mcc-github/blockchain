@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package lifecycle_test
 
 import (
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/chaincode/lifecycle/mock"
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	ledgermock "github.com/mcc-github/blockchain/core/ledger/mock"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"

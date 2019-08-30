@@ -14,12 +14,12 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	. "github.com/mcc-github/blockchain-protos-go/discovery"
+	"github.com/mcc-github/blockchain-protos-go/gossip"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/cmd/common"
 	discovery "github.com/mcc-github/blockchain/discovery/client"
 	"github.com/mcc-github/blockchain/gossip/protoext"
-	. "github.com/mcc-github/blockchain/protos/discovery"
-	"github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )
 

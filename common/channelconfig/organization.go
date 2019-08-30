@@ -9,9 +9,9 @@ package channelconfig
 import (
 	"fmt"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	mspprotos "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/msp"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	mspprotos "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )
 

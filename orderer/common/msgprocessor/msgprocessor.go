@@ -11,8 +11,8 @@ package msgprocessor
 import (
 	"errors"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
-	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 const (

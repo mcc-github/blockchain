@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package cache
 
 import (
+	pmsp "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/msp"
-	pmsp "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )
 

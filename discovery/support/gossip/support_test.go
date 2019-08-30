@@ -9,12 +9,12 @@ package gossip_test
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/gossip"
 	gossipSupport "github.com/mcc-github/blockchain/discovery/support/gossip"
 	"github.com/mcc-github/blockchain/discovery/support/gossip/mocks"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/discovery"
 	"github.com/mcc-github/blockchain/gossip/protoext"
-	"github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/assert"
 )
 

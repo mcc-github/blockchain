@@ -49,16 +49,17 @@ func TestSpawnEtcdRaft(t *testing.T) {
 	defer gexec.CleanupBuildArtifacts()
 
 	t.Run("Bad", func(t *testing.T) {
+		gt = NewGomegaWithT(t)
 		tempDir, err := ioutil.TempDir("", "etcdraft-orderer-launch")
 		gt.Expect(err).NotTo(HaveOccurred())
 		defer os.RemoveAll(tempDir)
 
 		t.Run("Invalid bootstrap block", func(t *testing.T) {
-			testEtcdRaftOSNFailureInvalidBootstrapBlock(gt, tempDir, orderer, blockchainRootDir)
+			testEtcdRaftOSNFailureInvalidBootstrapBlock(NewGomegaWithT(t), tempDir, orderer, blockchainRootDir)
 		})
 
 		t.Run("TLS disabled single listener", func(t *testing.T) {
-			testEtcdRaftOSNNoTLSSingleListener(gt, tempDir, orderer, blockchainRootDir, configtxgen)
+			testEtcdRaftOSNNoTLSSingleListener(NewGomegaWithT(t), tempDir, orderer, blockchainRootDir, configtxgen)
 		})
 	})
 
@@ -66,6 +67,7 @@ func TestSpawnEtcdRaft(t *testing.T) {
 		
 		
 		t.Run("TLS disabled dual listener", func(t *testing.T) {
+			gt = NewGomegaWithT(t)
 			tempDir, err := ioutil.TempDir("", "etcdraft-orderer-launch")
 			gt.Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(tempDir)
@@ -74,6 +76,7 @@ func TestSpawnEtcdRaft(t *testing.T) {
 		})
 
 		t.Run("TLS enabled single listener", func(t *testing.T) {
+			gt = NewGomegaWithT(t)
 			tempDir, err := ioutil.TempDir("", "etcdraft-orderer-launch")
 			gt.Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(tempDir)

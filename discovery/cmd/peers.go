@@ -12,9 +12,9 @@ import (
 	"io"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/cmd/common"
 	discovery "github.com/mcc-github/blockchain/discovery/client"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )
 

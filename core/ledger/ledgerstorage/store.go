@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage"
 	"github.com/mcc-github/blockchain/common/ledger/blkstorage/fsblkstorage"
@@ -17,7 +18,6 @@ import (
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatapolicy"
 	"github.com/mcc-github/blockchain/core/ledger/pvtdatastorage"
-	"github.com/mcc-github/blockchain/protos/common"
 )
 
 const maxBlockFileSize = 64 * 1024 * 1024

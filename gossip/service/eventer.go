@@ -9,8 +9,8 @@ package service
 import (
 	"reflect"
 
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 

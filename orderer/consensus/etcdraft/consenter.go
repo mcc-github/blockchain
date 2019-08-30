@@ -14,6 +14,9 @@ import (
 
 	"code.cloudfoundry.org/clock"
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
+	"github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
@@ -23,9 +26,6 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/multichannel"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	"github.com/mcc-github/blockchain/orderer/consensus/inactive"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/orderer"
-	"github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
@@ -220,7 +220,7 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		c.Communication,
 		rpc,
 		func() (BlockPuller, error) {
-			return newBlockPuller(support, c.Dialer, c.OrdererConfig.General.Cluster, factory.GetDefault())
+			return NewBlockPuller(support, c.Dialer, c.OrdererConfig.General.Cluster, factory.GetDefault())
 		},
 		nil,
 	)

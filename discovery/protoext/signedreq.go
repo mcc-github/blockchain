@@ -8,7 +8,7 @@ package protoext
 
 import (
 	"github.com/gogo/protobuf/proto"
-	"github.com/mcc-github/blockchain/protos/discovery"
+	"github.com/mcc-github/blockchain-protos-go/discovery"
 )
 
 

@@ -9,8 +9,8 @@ package blockcutter
 import (
 	"sync"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
-	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 var logger = flogging.MustGetLogger("orderer.mocks.common.blockcutter")

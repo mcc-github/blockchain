@@ -4,7 +4,7 @@ package mock
 import (
 	sync "sync"
 
-	common "github.com/mcc-github/blockchain/protos/common"
+	common "github.com/mcc-github/blockchain-protos-go/common"
 )
 
 type BlockIterator struct {

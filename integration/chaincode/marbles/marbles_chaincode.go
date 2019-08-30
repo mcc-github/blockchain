@@ -85,8 +85,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 )
 
 

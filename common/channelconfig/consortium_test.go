@@ -8,9 +8,9 @@ package channelconfig
 import (
 	"testing"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/bccsp/sw"
 	"github.com/mcc-github/blockchain/msp"
-	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -9,7 +9,7 @@ package channelconfig
 import (
 	"testing"
 
-	ab "github.com/mcc-github/blockchain/protos/orderer"
+	ab "github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/stretchr/testify/assert"
 )
 

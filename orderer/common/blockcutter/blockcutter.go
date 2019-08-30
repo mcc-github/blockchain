@@ -9,9 +9,9 @@ package blockcutter
 import (
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
-	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 var logger = flogging.MustGetLogger("orderer.common.blockcutter")

@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package ccintf
 
 import (
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 )
 
 

@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package msp
 
 import (
-	m "github.com/mcc-github/blockchain/protos/msp"
+	m "github.com/mcc-github/blockchain-protos-go/msp"
 )
 
 

@@ -4,9 +4,9 @@ package etcdraft_test
 
 import (
 	"github.com/golang/protobuf/proto"
+	etcdraftproto "github.com/mcc-github/blockchain-protos-go/orderer/etcdraft"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
-	etcdraftproto "github.com/mcc-github/blockchain/protos/orderer/etcdraft"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

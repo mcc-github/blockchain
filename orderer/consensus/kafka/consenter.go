@@ -9,11 +9,11 @@ package kafka
 import (
 	"github.com/Shopify/sarama"
 	"github.com/mcc-github/blockchain-lib-go/healthz"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/consensus"
-	cb "github.com/mcc-github/blockchain/protos/common"
 )
 
 

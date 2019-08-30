@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	m "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/bccsp"
-	m "github.com/mcc-github/blockchain/protos/msp"
 	errors "github.com/pkg/errors"
 )
 

@@ -11,11 +11,11 @@ import (
 	"fmt"
 	"testing"
 
+	. "github.com/mcc-github/blockchain-protos-go/discovery"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/cmd/common"
 	discovery "github.com/mcc-github/blockchain/discovery/cmd"
 	"github.com/mcc-github/blockchain/discovery/cmd/mocks"
-	. "github.com/mcc-github/blockchain/protos/discovery"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

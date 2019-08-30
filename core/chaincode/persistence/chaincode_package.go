@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	pb "github.com/mcc-github/blockchain/protos/peer"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 
 	"github.com/pkg/errors"
 )

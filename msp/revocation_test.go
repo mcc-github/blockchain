@@ -20,8 +20,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/bccsp/sw"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/stretchr/testify/assert"
 )
 

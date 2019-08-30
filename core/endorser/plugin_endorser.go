@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"sync"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
 	endorsement3 "github.com/mcc-github/blockchain/core/handlers/endorsement/api/identities"
 	"github.com/mcc-github/blockchain/core/transientstore"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 )
 

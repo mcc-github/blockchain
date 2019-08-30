@@ -23,11 +23,11 @@ import (
 	"os"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/core/common/ccpackage"
-	"github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 
@@ -64,18 +64,14 @@ func (data *SignedCDSData) Equals(other *SignedCDSData) bool {
 
 
 type SignedCDSPackage struct {
-	buf      []byte
-	depSpec  *pb.ChaincodeDeploymentSpec
-	sDepSpec *pb.SignedChaincodeDeploymentSpec
-	env      *common.Envelope
-	data     *SignedCDSData
-	datab    []byte
-	id       []byte
-}
-
-
-func (ccpack *SignedCDSPackage) reset() {
-	*ccpack = SignedCDSPackage{}
+	buf       []byte
+	depSpec   *pb.ChaincodeDeploymentSpec
+	sDepSpec  *pb.SignedChaincodeDeploymentSpec
+	env       *common.Envelope
+	data      *SignedCDSData
+	datab     []byte
+	id        []byte
+	GetHasher GetHasher
 }
 
 
@@ -162,7 +158,7 @@ func (ccpack *SignedCDSPackage) getCDSData(scds *pb.SignedChaincodeDeploymentSpe
 	}
 
 	
-	hash, err := factory.GetDefault().GetHash(&bccsp.SHAOpts{})
+	hash, err := ccpack.GetHasher.GetHash(&bccsp.SHAOpts{})
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -256,8 +252,6 @@ func (ccpack *SignedCDSPackage) ValidateCC(ccdata *ChaincodeData) error {
 
 
 func (ccpack *SignedCDSPackage) InitFromBuffer(buf []byte) (*ChaincodeData, error) {
-	
-	ccpack.reset()
 
 	env := &common.Envelope{}
 	err := proto.Unmarshal(buf, env)
@@ -302,8 +296,6 @@ func (ccpack *SignedCDSPackage) InitFromFS(ccNameVersion string) ([]byte, *pb.Ch
 
 
 func (ccpack *SignedCDSPackage) InitFromPath(ccNameVersion string, path string) ([]byte, *pb.ChaincodeDeploymentSpec, error) {
-	
-	ccpack.reset()
 
 	buf, err := GetChaincodePackageFromPath(ccNameVersion, path)
 	if err != nil {

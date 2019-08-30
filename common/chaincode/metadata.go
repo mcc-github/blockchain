@@ -9,8 +9,8 @@ package chaincode
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/gossip"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/gossip"
 )
 
 

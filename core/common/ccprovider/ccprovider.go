@@ -15,12 +15,13 @@ import (
 	"unicode"
 
 	"github.com/golang/protobuf/proto"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
+	"github.com/mcc-github/blockchain/bccsp"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/chaincode"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/ledger"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/pkg/errors"
 )
 
@@ -117,7 +118,9 @@ type CCCacheSupport interface {
 
 
 
-type CCInfoFSImpl struct{}
+type CCInfoFSImpl struct {
+	GetHasher GetHasher
+}
 
 
 
@@ -142,13 +145,13 @@ func (cifs *CCInfoFSImpl) GetChaincodeDepSpec(ccNameVersion string) (*pb.Chainco
 }
 
 
-func (*CCInfoFSImpl) GetChaincodeFromPath(ccNameVersion string, path string) (CCPackage, error) {
+func (cifs *CCInfoFSImpl) GetChaincodeFromPath(ccNameVersion string, path string) (CCPackage, error) {
 	
-	cccdspack := &CDSPackage{GetHasher: factory.GetDefault()}
+	cccdspack := &CDSPackage{GetHasher: cifs.GetHasher}
 	_, _, err := cccdspack.InitFromPath(ccNameVersion, path)
 	if err != nil {
 		
-		ccscdspack := &SignedCDSPackage{}
+		ccscdspack := &SignedCDSPackage{GetHasher: cifs.GetHasher}
 		_, _, err = ccscdspack.InitFromPath(ccNameVersion, path)
 		if err != nil {
 			return nil, err
@@ -165,12 +168,12 @@ func (*CCInfoFSImpl) GetChaincodeInstallPath() string {
 
 
 
-func (*CCInfoFSImpl) PutChaincode(depSpec *pb.ChaincodeDeploymentSpec) (CCPackage, error) {
+func (cifs *CCInfoFSImpl) PutChaincode(depSpec *pb.ChaincodeDeploymentSpec) (CCPackage, error) {
 	buf, err := proto.Marshal(depSpec)
 	if err != nil {
 		return nil, err
 	}
-	cccdspack := &CDSPackage{GetHasher: factory.GetDefault()}
+	cccdspack := &CDSPackage{GetHasher: cifs.GetHasher}
 	if _, err := cccdspack.InitFromBuffer(buf); err != nil {
 		return nil, err
 	}
@@ -186,7 +189,7 @@ func (*CCInfoFSImpl) PutChaincode(depSpec *pb.ChaincodeDeploymentSpec) (CCPackag
 type DirEnumerator func(string) ([]os.FileInfo, error)
 
 
-type ChaincodeExtractor func(ccNameVersion string, path string) (CCPackage, error)
+type ChaincodeExtractor func(ccNameVersion string, path string, getHasher GetHasher) (CCPackage, error)
 
 
 func (cifs *CCInfoFSImpl) ListInstalledChaincodes(dir string, ls DirEnumerator, ccFromPath ChaincodeExtractor) ([]chaincode.InstalledChaincode, error) {
@@ -215,7 +218,7 @@ func (cifs *CCInfoFSImpl) ListInstalledChaincodes(dir string, ls DirEnumerator, 
 		ccName := f.Name()[:i]      
 		ccVersion := f.Name()[i+1:] 
 
-		ccPackage, err := ccFromPath(ccName+":"+ccVersion, dir)
+		ccPackage, err := ccFromPath(ccName+":"+ccVersion, dir, cifs.GetHasher)
 		if err != nil {
 			ccproviderLogger.Warning("Failed obtaining chaincode information about", ccName, ccVersion, ":", err)
 			return nil, errors.Wrapf(err, "failed obtaining information about %s, version %s", ccName, ccVersion)
@@ -233,7 +236,7 @@ func (cifs *CCInfoFSImpl) ListInstalledChaincodes(dir string, ls DirEnumerator, 
 
 
 
-var ccInfoFSProvider = &CCInfoFSImpl{}
+var ccInfoFSProvider = &CCInfoFSImpl{GetHasher: factory.GetDefault()}
 
 
 var ccInfoCache = NewCCInfoCache(ccInfoFSProvider)
@@ -259,9 +262,9 @@ func GetChaincodeData(ccNameVersion string) (*ChaincodeData, error) {
 
 
 
-func GetCCPackage(buf []byte) (CCPackage, error) {
+func GetCCPackage(buf []byte, bccsp bccsp.BCCSP) (CCPackage, error) {
 	
-	cds := &CDSPackage{GetHasher: factory.GetDefault()}
+	cds := &CDSPackage{GetHasher: bccsp}
 	if ccdata, err := cds.InitFromBuffer(buf); err != nil {
 		cds = nil
 	} else {
@@ -272,7 +275,7 @@ func GetCCPackage(buf []byte) (CCPackage, error) {
 	}
 
 	
-	scds := &SignedCDSPackage{}
+	scds := &SignedCDSPackage{GetHasher: bccsp}
 	if ccdata, err := scds.InitFromBuffer(buf); err != nil {
 		scds = nil
 	} else {

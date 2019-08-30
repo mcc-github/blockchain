@@ -1,5 +1,5 @@
 /*
-Copyright 2017 - Greg Haskins <gregory.haskins@gmail.com>
+Copyright IBM Corp. All Rights Reserved.
 
 SPDX-License-Identifier: Apache-2.0
 */
@@ -7,34 +7,35 @@ SPDX-License-Identifier: Apache-2.0
 package golang
 
 import (
+	"runtime"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_listDeps(t *testing.T) {
-	_, err := listDeps(nil, "github.com/mcc-github/blockchain/cmd/peer")
-	if err != nil {
-		t.Errorf("list failed: %s", err)
-	}
-}
+func Test_dependencyPackageInfo(t *testing.T) {
+	t.Run("TestPeer", func(t *testing.T) {
+		deps, err := dependencyPackageInfo(runtime.GOOS, runtime.GOARCH, "github.com/mcc-github/blockchain/cmd/peer")
+		assert.NoError(t, err, "failed to get dependencyPackageInfo")
 
-func Test_runProgram(t *testing.T) {
-	_, err := runProgram(
-		getEnv(),
-		10*time.Millisecond,
-		"go",
-		"build",
-		"github.com/mcc-github/blockchain/cmd/peer",
-	)
-	assert.Contains(t, err.Error(), "timed out")
+		var found bool
+		for _, pi := range deps {
+			if pi.ImportPath == "github.com/mcc-github/blockchain/cmd/peer" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "expected to find the peer package")
+	})
 
-	_, err = runProgram(
-		getEnv(),
-		1*time.Second,
-		"go",
-		"cmddoesnotexist",
-	)
-	assert.Contains(t, err.Error(), "unknown command")
+	t.Run("TestFromGoroot", func(t *testing.T) {
+		deps, err := dependencyPackageInfo(runtime.GOOS, runtime.GOARCH, "os")
+		assert.NoError(t, err)
+		assert.Empty(t, deps)
+	})
+
+	t.Run("TestFailure", func(t *testing.T) {
+		_, err := dependencyPackageInfo(runtime.GOOS, runtime.GOARCH, "./doesnotexist")
+		assert.EqualError(t, err, "listing deps for pacakge ./doesnotexist failed: exit status 1")
+	})
 }

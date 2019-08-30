@@ -19,6 +19,7 @@ import (
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
@@ -40,7 +41,6 @@ import (
 	"github.com/mcc-github/blockchain/orderer/common/multichannel"
 	server_mocks "github.com/mcc-github/blockchain/orderer/common/server/mocks"
 	"github.com/mcc-github/blockchain/orderer/consensus"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

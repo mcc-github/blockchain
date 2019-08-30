@@ -7,8 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package comm
 
 import (
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/gossip/protoext"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/pkg/errors"
 )
 

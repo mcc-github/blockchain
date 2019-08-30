@@ -10,7 +10,7 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/msp"
+	"github.com/mcc-github/blockchain-protos-go/msp"
 
 	"github.com/onsi/gomega"
 )

@@ -9,7 +9,7 @@ package policies
 import (
 	"fmt"
 
-	cb "github.com/mcc-github/blockchain/protos/common"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/pkg/errors"
 )
 

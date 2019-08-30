@@ -11,12 +11,13 @@ import (
 	"io/ioutil"
 
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
+	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/core/common/ccpackage"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/internal/peer/common"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	cb "github.com/mcc-github/blockchain/protos/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -236,7 +237,7 @@ func getPackageFromFile(ccPkgFile string) (proto.Message, *pb.ChaincodeDeploymen
 	}
 
 	
-	ccpack, err := ccprovider.GetCCPackage(ccPkgBytes)
+	ccpack, err := ccprovider.GetCCPackage(ccPkgBytes, factory.GetDefault())
 	if err != nil {
 		return nil, nil, err
 	}

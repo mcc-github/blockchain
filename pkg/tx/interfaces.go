@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/pkg/statedata"
-	"github.com/mcc-github/blockchain/protos/common"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 
@@ -227,8 +227,6 @@ type Envelope struct {
 	Signature []byte
 	
 	Data []byte
-	
-	HeaderBytes []byte
 	
 	ChannelHeaderBytes []byte
 	

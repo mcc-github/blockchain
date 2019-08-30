@@ -3,7 +3,7 @@
 package mocks
 
 import cluster "github.com/mcc-github/blockchain/orderer/common/cluster"
-import common "github.com/mcc-github/blockchain/protos/common"
+import common "github.com/mcc-github/blockchain-protos-go/common"
 import mock "github.com/stretchr/testify/mock"
 
 

@@ -9,7 +9,7 @@ package chaincode
 import (
 	"testing"
 
-	"github.com/mcc-github/blockchain/protos/gossip"
+	"github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/stretchr/testify/assert"
 )
 

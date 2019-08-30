@@ -4,7 +4,7 @@ package mock
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/protos/common"
+	"github.com/mcc-github/blockchain-protos-go/common"
 )
 
 type CollectionInfoProvider struct {

@@ -13,20 +13,23 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
+	"github.com/mcc-github/blockchain-protos-go/transientstore"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
-	pb "github.com/mcc-github/blockchain/protos/peer"
-	"github.com/mcc-github/blockchain/protos/transientstore"
+	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 var endorserLogger = flogging.MustGetLogger("endorser")
+
+
 
 
 
@@ -78,7 +81,20 @@ type Support interface {
 }
 
 
+
+
+type ChannelFetcher interface {
+	Channel(channelID string) *Channel
+}
+
+type Channel struct {
+	IdentityDeserializer msp.IdentityDeserializer
+}
+
+
 type Endorser struct {
+	ChannelFetcher         ChannelFetcher
+	LocalMSP               msp.IdentityDeserializer
 	PrivateDataDistributor PrivateDataDistributor
 	Support                Support
 	PvtRWSetAssembler      PvtRWSetAssembler
@@ -185,7 +201,7 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, chai
 		}
 		endorsedAt, err := e.Support.GetLedgerHeight(txParams.ChannelID)
 		if err != nil {
-			return nil, nil, nil, errors.WithMessage(err, fmt.Sprint("failed to obtain ledger height for channel", txParams.ChannelID))
+			return nil, nil, nil, errors.WithMessage(err, fmt.Sprintf("failed to obtain ledger height for channel '%s'", txParams.ChannelID))
 		}
 		
 		
@@ -207,18 +223,13 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, chai
 }
 
 
-func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*UnpackedProposal, error) {
+func (e *Endorser) preProcess(up *UnpackedProposal, channel *Channel) error {
 	
-	up, err := UnpackProposal(signedProp)
-	if err != nil {
-		e.Metrics.ProposalValidationFailed.Add(1)
-		return nil, err
-	}
 
-	err = ValidateUnpackedProposal(up)
+	err := up.Validate(channel.IdentityDeserializer)
 	if err != nil {
 		e.Metrics.ProposalValidationFailed.Add(1)
-		return nil, err
+		return errors.WithMessage(err, "error validating proposal")
 	}
 
 	endorserLogger.Debugf("[%s][%s] processing txid: %s", up.ChannelHeader.ChannelId, shorttxid(up.ChannelHeader.TxId), up.ChannelHeader.TxId)
@@ -228,7 +239,7 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*UnpackedProposal,
 		
 		
 		
-		return up, nil
+		return nil
 	}
 
 	
@@ -243,7 +254,7 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*UnpackedProposal,
 		
 		
 		e.Metrics.DuplicateTxsFailure.With(meterLabels...).Add(1)
-		return nil, errors.Errorf("duplicate transaction found [%s]. Creator [%x]", up.ChannelHeader.TxId, up.SignatureHeader.Creator)
+		return errors.Errorf("duplicate transaction found [%s]. Creator [%x]", up.ChannelHeader.TxId, up.SignatureHeader.Creator)
 	}
 
 	
@@ -252,11 +263,11 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*UnpackedProposal,
 		
 		if err = e.Support.CheckACL(up.ChannelHeader.ChannelId, up.SignedProposal); err != nil {
 			e.Metrics.ProposalACLCheckFailed.With(meterLabels...).Add(1)
-			return nil, err
+			return err
 		}
 	}
 
-	return up, nil
+	return nil
 }
 
 
@@ -272,8 +283,26 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 	
 	success := false
 
+	up, err := UnpackProposal(signedProp)
+	if err != nil {
+		e.Metrics.ProposalValidationFailed.Add(1)
+		return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, err
+	}
+
+	var channel *Channel
+	if up.ChannelID() != "" {
+		channel = e.ChannelFetcher.Channel(up.ChannelID())
+		if channel == nil {
+			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: fmt.Sprintf("channel '%s' not found", up.ChannelHeader.ChannelId)}}, nil
+		}
+	} else {
+		channel = &Channel{
+			IdentityDeserializer: e.LocalMSP,
+		}
+	}
+
 	
-	up, err := e.preProcess(signedProp)
+	err = e.preProcess(up, channel)
 	if err != nil {
 		return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, err
 	}
@@ -344,7 +373,7 @@ func (e *Endorser) ProcessProposalSuccessfullyOrError(up *UnpackedProposal) (*pb
 	
 	res, simulationResult, ccevent, err := e.SimulateProposal(txParams, up.ChaincodeName, up.Input)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, "error in simulation")
 	}
 
 	cceventBytes, err := CreateCCEventBytes(ccevent)

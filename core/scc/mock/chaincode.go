@@ -4,8 +4,8 @@ package mock
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
-	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 )
 
 type Chaincode struct {

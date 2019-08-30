@@ -9,8 +9,8 @@ import (
 	"os"
 
 	"github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/orderer/common/bootstrap"
-	cb "github.com/mcc-github/blockchain/protos/common"
 	"github.com/pkg/errors"
 )
 

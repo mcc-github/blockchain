@@ -8,7 +8,7 @@ package main
 
 import (
 	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
-	"github.com/mcc-github/blockchain/protos/peer"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 )
 
 type NoOpEndorser struct {

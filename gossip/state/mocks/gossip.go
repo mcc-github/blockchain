@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package mocks
 
 import (
+	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/comm"
 	"github.com/mcc-github/blockchain/gossip/common"
@@ -14,7 +15,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/filter"
 	"github.com/mcc-github/blockchain/gossip/gossip"
 	"github.com/mcc-github/blockchain/gossip/protoext"
-	proto "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/stretchr/testify/mock"
 )
 

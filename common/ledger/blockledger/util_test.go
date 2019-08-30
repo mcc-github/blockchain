@@ -9,9 +9,9 @@ package blockledger_test
 import (
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/deliver/mock"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
-	"github.com/mcc-github/blockchain/protos/common"
 	"github.com/stretchr/testify/assert"
 )
 

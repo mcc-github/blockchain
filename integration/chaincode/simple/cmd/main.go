@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
 	"github.com/mcc-github/blockchain/integration/chaincode/simple"
 )
 

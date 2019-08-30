@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	m "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/bccsp"
 	idemixbccsp "github.com/mcc-github/blockchain/bccsp/idemix"
 	"github.com/mcc-github/blockchain/bccsp/sw"
-	m "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
 )

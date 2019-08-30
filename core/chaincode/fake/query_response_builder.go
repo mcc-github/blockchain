@@ -4,9 +4,9 @@ package fake
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/core/chaincode"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 type QueryResponseBuilder struct {

@@ -6,14 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 package statebasedval
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/validator/internal"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/version"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset/kvrwset"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 var logger = flogging.MustGetLogger("statebasedval")

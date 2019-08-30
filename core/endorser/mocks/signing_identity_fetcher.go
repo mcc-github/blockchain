@@ -9,7 +9,7 @@ package mocks
 
 import endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api/identities"
 import mock "github.com/stretchr/testify/mock"
-import peer "github.com/mcc-github/blockchain/protos/peer"
+import peer "github.com/mcc-github/blockchain-protos-go/peer"
 
 
 type SigningIdentityFetcher struct {

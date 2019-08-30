@@ -20,6 +20,7 @@ import (
 	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/flogging/floggingtest"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
 	"github.com/mcc-github/blockchain/common/metrics/metricsfakes"
@@ -27,7 +28,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/container/dockercontroller/mock"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/stretchr/testify/assert"

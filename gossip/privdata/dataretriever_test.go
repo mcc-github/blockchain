@@ -10,14 +10,14 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	gossip2 "github.com/mcc-github/blockchain-protos-go/gossip"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
+	transientstore2 "github.com/mcc-github/blockchain-protos-go/transientstore"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/transientstore"
 	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
 	"github.com/mcc-github/blockchain/gossip/privdata/mocks"
-	"github.com/mcc-github/blockchain/protos/common"
-	gossip2 "github.com/mcc-github/blockchain/protos/gossip"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

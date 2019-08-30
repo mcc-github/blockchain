@@ -7,8 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package endorsement
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/peer"
 	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
-	"github.com/mcc-github/blockchain/protos/peer"
 )
 
 

@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
+	transientstore2 "github.com/mcc-github/blockchain-protos-go/transientstore"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/deliverservice"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
@@ -20,8 +22,6 @@ import (
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/election"
 	"github.com/mcc-github/blockchain/gossip/util"
-	"github.com/mcc-github/blockchain/protos/ledger/rwset"
-	transientstore2 "github.com/mcc-github/blockchain/protos/transientstore"
 	"github.com/stretchr/testify/assert"
 )
 

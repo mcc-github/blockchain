@@ -15,9 +15,9 @@ import (
 	"io/ioutil"
 	"math/big"
 
+	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/bccsp/utils"
 	"github.com/mcc-github/blockchain/common/util"
-	"github.com/mcc-github/blockchain/protos/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )

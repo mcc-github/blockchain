@@ -11,10 +11,10 @@ import (
 	"io"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/comm"
-	"github.com/mcc-github/blockchain/protos/orderer"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )

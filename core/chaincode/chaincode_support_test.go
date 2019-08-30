@@ -24,6 +24,9 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	plgr "github.com/mcc-github/blockchain-protos-go/ledger/queryresult"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	commonledger "github.com/mcc-github/blockchain/common/ledger"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
@@ -36,7 +39,6 @@ import (
 	"github.com/mcc-github/blockchain/core/chaincode/persistence"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms"
 	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/config"
 	"github.com/mcc-github/blockchain/core/container"
@@ -47,8 +49,6 @@ import (
 	"github.com/mcc-github/blockchain/core/scc"
 	"github.com/mcc-github/blockchain/core/scc/lscc"
 	mspmgmt "github.com/mcc-github/blockchain/msp/mgmt"
-	plgr "github.com/mcc-github/blockchain/protos/ledger/queryresult"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -215,7 +215,7 @@ func initMockPeer(chainIDs ...string) (*peer.Peer, *ChaincodeSupport, func(), er
 			},
 			PackageProvider: &persistence.FallbackPackageLocator{
 				ChaincodePackageLocator: &persistence.ChaincodePackageLocator{},
-				LegacyCCPackageLocator:  &ccprovider.CCInfoFSImpl{},
+				LegacyCCPackageLocator:  &ccprovider.CCInfoFSImpl{GetHasher: cryptoProvider},
 			},
 		},
 	}

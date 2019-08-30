@@ -18,8 +18,8 @@ package mgmt
 
 import (
 	"github.com/golang/protobuf/proto"
+	mspproto "github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/msp"
-	mspproto "github.com/mcc-github/blockchain/protos/msp"
 	"github.com/pkg/errors"
 )
 

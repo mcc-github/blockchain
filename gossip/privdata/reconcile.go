@@ -13,13 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
+	protosgossip "github.com/mcc-github/blockchain-protos-go/gossip"
 	commonutil "github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/committer"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/gossip/metrics"
 	privdatacommon "github.com/mcc-github/blockchain/gossip/privdata/common"
-	"github.com/mcc-github/blockchain/protos/common"
-	protosgossip "github.com/mcc-github/blockchain/protos/gossip"
 	"github.com/pkg/errors"
 )
 

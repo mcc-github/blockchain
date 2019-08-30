@@ -12,8 +12,8 @@ import (
 	"os"
 	"testing"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/internal/peer/common"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"

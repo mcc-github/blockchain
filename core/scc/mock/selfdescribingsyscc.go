@@ -4,7 +4,7 @@ package mock
 import (
 	"sync"
 
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
 )
 
 type SelfDescribingSysCC struct {

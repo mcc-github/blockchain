@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package committer
 
 import (
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/ledger"
-	"github.com/mcc-github/blockchain/protos/common"
 )
 
 var logger = flogging.MustGetLogger("committer")

@@ -19,12 +19,12 @@ package support
 import (
 	"sync"
 
+	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/msp"
-	"github.com/mcc-github/blockchain/protos/common"
 )
 
 type Support struct {

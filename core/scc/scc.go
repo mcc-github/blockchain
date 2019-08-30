@@ -7,10 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package scc
 
 import (
+	"github.com/mcc-github/blockchain-chaincode-go/shim"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/shim"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 )
 
 

@@ -11,10 +11,10 @@ import (
 	"os"
 	"testing"
 
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/internal/peer/common"
 	"github.com/mcc-github/blockchain/internal/peer/lifecycle/chaincode"
 	msptesttools "github.com/mcc-github/blockchain/msp/mgmt/testtools"
-	pb "github.com/mcc-github/blockchain/protos/peer"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

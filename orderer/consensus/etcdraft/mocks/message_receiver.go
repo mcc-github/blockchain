@@ -3,7 +3,7 @@
 package mocks
 
 import mock "github.com/stretchr/testify/mock"
-import orderer "github.com/mcc-github/blockchain/protos/orderer"
+import orderer "github.com/mcc-github/blockchain-protos-go/orderer"
 
 
 type MessageReceiver struct {

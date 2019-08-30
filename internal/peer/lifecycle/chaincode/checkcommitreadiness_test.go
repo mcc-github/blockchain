@@ -11,10 +11,10 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	pb "github.com/mcc-github/blockchain-protos-go/peer"
+	lb "github.com/mcc-github/blockchain-protos-go/peer/lifecycle"
 	"github.com/mcc-github/blockchain/internal/peer/lifecycle/chaincode"
 	"github.com/mcc-github/blockchain/internal/peer/lifecycle/chaincode/mock"
-	pb "github.com/mcc-github/blockchain/protos/peer"
-	lb "github.com/mcc-github/blockchain/protos/peer/lifecycle"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
