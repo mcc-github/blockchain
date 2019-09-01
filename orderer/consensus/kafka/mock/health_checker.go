@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	healthz "github.com/mcc-github/blockchain-lib-go/healthz"
+	"github.com/mcc-github/blockchain-lib-go/healthz"
 )
 
 type HealthChecker struct {

@@ -12,11 +12,11 @@ import (
 	"github.com/golang/protobuf/proto"
 	cb "github.com/mcc-github/blockchain-protos-go/common"
 	ab "github.com/mcc-github/blockchain-protos-go/orderer"
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger"
 	"github.com/mcc-github/blockchain/common/ledger/blockledger/ramledger"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
-	mockchannelconfig "github.com/mcc-github/blockchain/common/mocks/config"
-	mockpolicies "github.com/mcc-github/blockchain/common/mocks/policies"
+	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/internal/configtxgen/configtxgentest"
 	"github.com/mcc-github/blockchain/internal/configtxgen/encoder"
 	genesisconfig "github.com/mcc-github/blockchain/internal/configtxgen/localconfig"
@@ -29,6 +29,36 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
+
+
+
+type resources interface {
+	channelconfig.Resources
+}
+
+
+
+type ordererConfig interface {
+	channelconfig.Orderer
+}
+
+
+
+type ordererCapabilities interface {
+	channelconfig.OrdererCapabilities
+}
+
+
+
+type channelConfig interface {
+	channelconfig.Channel
+}
+
+
+
+type channelCapabilities interface {
+	channelconfig.ChannelCapabilities
+}
 
 
 
@@ -312,65 +342,57 @@ func testLastConfigBlockNumber(t *testing.T, block *cb.Block, expectedBlockNumbe
 }
 
 func TestResourcesCheck(t *testing.T) {
-	t.Run("GoodResources", func(t *testing.T) {
-		err := checkResources(&mockchannelconfig.Resources{
-			PolicyManagerVal: &mockpolicies.Manager{},
-			OrdererConfigVal: &mockchannelconfig.Orderer{
-				CapabilitiesVal: &mockchannelconfig.OrdererCapabilities{},
-			},
-			ChannelConfigVal: &mockchannelconfig.Channel{
-				CapabilitiesVal: &mockchannelconfig.ChannelCapabilities{},
-			},
-		})
+	mockOrderer := &mocks.OrdererConfig{}
+	mockOrdererCaps := &mocks.OrdererCapabilities{}
+	mockOrderer.CapabilitiesReturns(mockOrdererCaps)
+	mockChannel := &mocks.ChannelConfig{}
+	mockChannelCaps := &mocks.ChannelCapabilities{}
+	mockChannel.CapabilitiesReturns(mockChannelCaps)
 
+	mockResources := &mocks.Resources{}
+	mockResources.PolicyManagerReturns(&policies.ManagerImpl{})
+
+	t.Run("GoodResources", func(t *testing.T) {
+		mockResources.OrdererConfigReturns(mockOrderer, true)
+		mockResources.ChannelConfigReturns(mockChannel)
+
+		err := checkResources(mockResources)
 		assert.NoError(t, err)
 	})
 
 	t.Run("MissingOrdererConfigPanic", func(t *testing.T) {
-		err := checkResources(&mockchannelconfig.Resources{
-			PolicyManagerVal: &mockpolicies.Manager{},
-		})
+		mockResources.OrdererConfigReturns(nil, false)
 
+		err := checkResources(mockResources)
 		assert.Error(t, err)
 		assert.Regexp(t, "config does not contain orderer config", err.Error())
 	})
 
 	t.Run("MissingOrdererCapability", func(t *testing.T) {
-		err := checkResources(&mockchannelconfig.Resources{
-			PolicyManagerVal: &mockpolicies.Manager{},
-			OrdererConfigVal: &mockchannelconfig.Orderer{
-				CapabilitiesVal: &mockchannelconfig.OrdererCapabilities{
-					SupportedErr: errors.New("An error"),
-				},
-			},
-		})
+		mockResources.OrdererConfigReturns(mockOrderer, true)
+		mockOrdererCaps.SupportedReturns(errors.New("An error"))
 
+		err := checkResources(mockResources)
 		assert.Error(t, err)
 		assert.Regexp(t, "config requires unsupported orderer capabilities:", err.Error())
+
+		
+		mockOrdererCaps.SupportedReturns(nil)
 	})
 
 	t.Run("MissingChannelCapability", func(t *testing.T) {
-		err := checkResources(&mockchannelconfig.Resources{
-			PolicyManagerVal: &mockpolicies.Manager{},
-			OrdererConfigVal: &mockchannelconfig.Orderer{
-				CapabilitiesVal: &mockchannelconfig.OrdererCapabilities{},
-			},
-			ChannelConfigVal: &mockchannelconfig.Channel{
-				CapabilitiesVal: &mockchannelconfig.ChannelCapabilities{
-					SupportedErr: errors.New("An error"),
-				},
-			},
-		})
+		mockChannelCaps.SupportedReturns(errors.New("An error"))
 
+		err := checkResources(mockResources)
 		assert.Error(t, err)
 		assert.Regexp(t, "config requires unsupported channel capabilities:", err.Error())
 	})
 
 	t.Run("MissingOrdererConfigPanic", func(t *testing.T) {
+		mockResources.OrdererConfigReturns(nil, false)
+
 		assert.Panics(t, func() {
-			checkResourcesOrPanic(&mockchannelconfig.Resources{
-				PolicyManagerVal: &mockpolicies.Manager{},
-			})
+			checkResourcesOrPanic(mockResources)
 		})
 	})
 }

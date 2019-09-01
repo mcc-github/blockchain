@@ -9,7 +9,6 @@ package multichannel
 import (
 	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/orderer/common/blockcutter"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	mockblockcutter "github.com/mcc-github/blockchain/orderer/mocks/common/blockcutter"
@@ -20,10 +19,10 @@ import (
 
 type ConsenterSupport struct {
 	
-	SharedConfigVal *mockconfig.Orderer
+	SharedConfigVal channelconfig.Orderer
 
 	
-	ChannelConfigVal *mockconfig.Channel
+	ChannelConfigVal channelconfig.Channel
 
 	
 	BlockCutterVal *mockblockcutter.Receiver

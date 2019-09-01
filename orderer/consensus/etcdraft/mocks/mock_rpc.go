@@ -2,10 +2,10 @@
 package mocks
 
 import (
-	sync "sync"
+	"sync"
 
-	orderer "github.com/mcc-github/blockchain-protos-go/orderer"
-	etcdraft "github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
+	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
 )
 
 type FakeRPC struct {

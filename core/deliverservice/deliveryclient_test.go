@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain-protos-go/orderer"
 	"github.com/mcc-github/blockchain/core/comm"
 	"github.com/mcc-github/blockchain/core/deliverservice/blocksprovider"
@@ -53,7 +54,7 @@ func (*mockMCS) GetPKIidOfCert(peerIdentity api.PeerIdentityType) common.PKIidTy
 	return common.PKIidType("pkiID")
 }
 
-func (*mockMCS) VerifyBlock(chainID common.ChannelID, seqNum uint64, signedBlock []byte) error {
+func (*mockMCS) VerifyBlock(chainID common.ChannelID, seqNum uint64, signedBlock *cb.Block) error {
 	return nil
 }
 

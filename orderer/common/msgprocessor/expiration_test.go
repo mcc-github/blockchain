@@ -15,11 +15,28 @@ import (
 	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain-protos-go/msp"
 	"github.com/mcc-github/blockchain/common/channelconfig"
-	"github.com/mcc-github/blockchain/common/mocks/config"
+	"github.com/mcc-github/blockchain/orderer/common/msgprocessor/mocks"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
+
+
+
+type configResources interface {
+	channelconfig.Resources
+}
+
+
+
+type ordererConfig interface {
+	channelconfig.Orderer
+}
+
+
+
+type ordererCapabilities interface {
+	channelconfig.OrdererCapabilities
+}
 
 func createEnvelope(t *testing.T, serializedIdentity []byte) *common.Envelope {
 	sHdr := protoutil.MakeSignatureHeader(serializedIdentity, nil)
@@ -62,67 +79,54 @@ func createIdemixIdentity(t *testing.T) []byte {
 	return idBytes
 }
 
-type resourcesMock struct {
-	mock.Mock
-}
-
-func (r *resourcesMock) OrdererConfig() (channelconfig.Orderer, bool) {
-	args := r.Called()
-	if args.Get(1).(bool) {
-		return args.Get(0).(channelconfig.Orderer), true
-	}
-	return nil, false
-}
-
 func TestExpirationRejectRule(t *testing.T) {
-	activeCapability := &config.Orderer{CapabilitiesVal: &config.OrdererCapabilities{
-		ExpirationVal: true,
-	}}
-	inActiveCapability := &config.Orderer{CapabilitiesVal: &config.OrdererCapabilities{
-		ExpirationVal: false,
-	}}
-	resources := &resourcesMock{}
-	setupMock := func() {
-		
-		resources.On("OrdererConfig").Return(activeCapability, true).Once()
-		
-		resources.On("OrdererConfig").Return(inActiveCapability, true).Once()
-	}
+	mockResources := &mocks.Resources{}
+
 	t.Run("NoOrdererConfig", func(t *testing.T) {
-		resources.On("OrdererConfig").Return(nil, false).Once()
 		assert.Panics(t, func() {
-			NewExpirationRejectRule(resources).Apply(&common.Envelope{})
+			NewExpirationRejectRule(mockResources).Apply(&common.Envelope{})
 		})
 	})
+
+	mockOrderer := &mocks.OrdererConfig{}
+	mockResources.OrdererConfigReturns(mockOrderer, true)
+	mockCapabilities := &mocks.OrdererCapabilities{}
+	mockOrderer.CapabilitiesReturns(mockCapabilities)
+
 	t.Run("BadEnvelope", func(t *testing.T) {
-		setupMock()
-		err := NewExpirationRejectRule(resources).Apply(&common.Envelope{})
+		mockCapabilities.ExpirationCheckReturns(true)
+		err := NewExpirationRejectRule(mockResources).Apply(&common.Envelope{})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "could not convert message to signedData")
 
-		err = NewExpirationRejectRule(resources).Apply(&common.Envelope{})
+		mockCapabilities.ExpirationCheckReturns(false)
+		err = NewExpirationRejectRule(mockResources).Apply(&common.Envelope{})
 		assert.NoError(t, err)
 	})
+
 	t.Run("ExpiredX509Identity", func(t *testing.T) {
-		setupMock()
 		env := createEnvelope(t, createX509Identity(t, "expiredCert.pem"))
-		err := NewExpirationRejectRule(resources).Apply(env)
+		mockCapabilities.ExpirationCheckReturns(true)
+		err := NewExpirationRejectRule(mockResources).Apply(env)
 		assert.Error(t, err)
 		assert.Equal(t, err.Error(), "identity expired")
 
-		err = NewExpirationRejectRule(resources).Apply(env)
+		mockCapabilities.ExpirationCheckReturns(false)
+		err = NewExpirationRejectRule(mockResources).Apply(env)
 		assert.NoError(t, err)
 	})
 	t.Run("IdemixIdentity", func(t *testing.T) {
-		setupMock()
 		env := createEnvelope(t, createIdemixIdentity(t))
-		assert.Nil(t, NewExpirationRejectRule(resources).Apply(env))
-		assert.Nil(t, NewExpirationRejectRule(resources).Apply(env))
+		mockCapabilities.ExpirationCheckReturns(true)
+		assert.Nil(t, NewExpirationRejectRule(mockResources).Apply(env))
+		mockCapabilities.ExpirationCheckReturns(false)
+		assert.Nil(t, NewExpirationRejectRule(mockResources).Apply(env))
 	})
 	t.Run("NoneExpiredX509Identity", func(t *testing.T) {
-		setupMock()
 		env := createEnvelope(t, createX509Identity(t, "cert.pem"))
-		assert.Nil(t, NewExpirationRejectRule(resources).Apply(env))
-		assert.Nil(t, NewExpirationRejectRule(resources).Apply(env))
+		mockCapabilities.ExpirationCheckReturns(true)
+		assert.Nil(t, NewExpirationRejectRule(mockResources).Apply(env))
+		mockCapabilities.ExpirationCheckReturns(false)
+		assert.Nil(t, NewExpirationRejectRule(mockResources).Apply(env))
 	})
 }

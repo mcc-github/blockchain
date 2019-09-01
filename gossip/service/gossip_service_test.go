@@ -851,7 +851,7 @@ func (*naiveCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityType) gos
 
 
 
-func (*naiveCryptoService) VerifyBlock(chainID gossipcommon.ChannelID, seqNum uint64, signedBlock []byte) error {
+func (*naiveCryptoService) VerifyBlock(chainID gossipcommon.ChannelID, seqNum uint64, signedBlock *common.Block) error {
 	return nil
 }
 

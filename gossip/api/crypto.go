@@ -9,6 +9,7 @@ package api
 import (
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"google.golang.org/grpc"
 )
@@ -27,7 +28,7 @@ type MessageCryptoService interface {
 	
 	
 	
-	VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock []byte) error
+	VerifyBlock(channelID common.ChannelID, seqNum uint64, block *cb.Block) error
 
 	
 	

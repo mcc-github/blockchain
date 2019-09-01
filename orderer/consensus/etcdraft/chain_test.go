@@ -24,7 +24,6 @@ import (
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/crypto/tlsgen"
 	"github.com/mcc-github/blockchain/common/flogging"
-	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/orderer/common/cluster"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
 	"github.com/mcc-github/blockchain/orderer/consensus/etcdraft/mocks"
@@ -55,6 +54,13 @@ const (
 
 func init() {
 	factory.InitFactories(nil)
+}
+
+func mockOrderer(batchTimeout time.Duration, metadata []byte) *mocks.OrdererConfig {
+	orderer := &mocks.OrdererConfig{}
+	orderer.BatchTimeoutReturns(batchTimeout)
+	orderer.ConsensusMetadataReturns(metadata)
+	return orderer
 }
 
 
@@ -121,10 +127,8 @@ var _ = Describe("Chain", func() {
 			support = &consensusmocks.FakeConsenterSupport{}
 			support.ChainIDReturns(channelID)
 			consenterMetadata = createMetadata(1, tlsCA)
-			support.SharedConfigReturns(&mockconfig.Orderer{
-				BatchTimeoutVal:      time.Hour,
-				ConsensusMetadataVal: marshalOrPanic(consenterMetadata),
-			})
+			support.SharedConfigReturns(mockOrderer(time.Hour, marshalOrPanic(consenterMetadata)))
+
 			cutter = mockblockcutter.NewReceiver()
 			support.BlockCutterReturns(cutter)
 
@@ -318,7 +322,7 @@ var _ = Describe("Chain", func() {
 				By("respecting batch timeout")
 				cutter.CutNext = false
 				timeout := time.Second
-				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 				err = chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(fakeFields.fakeNormalProposalsReceived.AddCallCount()).To(Equal(2))
@@ -336,7 +340,7 @@ var _ = Describe("Chain", func() {
 				close(cutter.Block)
 
 				timeout := time.Second
-				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 				err := chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
@@ -357,7 +361,7 @@ var _ = Describe("Chain", func() {
 			It("does not write a block if halted before timeout", func() {
 				close(cutter.Block)
 				timeout := time.Second
-				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 				err := chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
@@ -374,7 +378,7 @@ var _ = Describe("Chain", func() {
 				close(cutter.Block)
 
 				timeout := time.Second
-				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 				err := chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
@@ -412,7 +416,7 @@ var _ = Describe("Chain", func() {
 				close(cutter.Block)
 
 				timeout := time.Second
-				support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 				err := chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
@@ -430,7 +434,7 @@ var _ = Describe("Chain", func() {
 					close(cutter.Block)
 
 					timeout := time.Hour
-					support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
+					support.SharedConfigReturns(mockOrderer(timeout, nil))
 					support.SequenceReturns(1)
 				})
 
@@ -3244,7 +3248,7 @@ func newChain(timeout time.Duration, channel string, dataDir string, id uint64, 
 
 	support := &consensusmocks.FakeConsenterSupport{}
 	support.ChainIDReturns(channel)
-	support.SharedConfigReturns(&mockconfig.Orderer{BatchTimeoutVal: timeout})
+	support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 	cutter := mockblockcutter.NewReceiver()
 	close(cutter.Block)

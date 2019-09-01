@@ -17,6 +17,7 @@ import (
 	"time"
 
 	gproto "github.com/golang/protobuf/proto"
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -134,7 +135,7 @@ func (cs *cryptoService) VerifyByChannel(channel common.ChannelID, identity api.
 	return args.Get(0).(error)
 }
 
-func (cs *cryptoService) VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock []byte) error {
+func (cs *cryptoService) VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock *cb.Block) error {
 	args := cs.Called(signedBlock)
 	if args.Get(0) == nil {
 		return nil

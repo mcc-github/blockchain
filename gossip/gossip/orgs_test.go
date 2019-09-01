@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	proto "github.com/mcc-github/blockchain-protos-go/gossip"
 	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
@@ -76,7 +77,7 @@ func (*configurableCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityTy
 
 
 
-func (*configurableCryptoService) VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock []byte) error {
+func (*configurableCryptoService) VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock *cb.Block) error {
 	return nil
 }
 

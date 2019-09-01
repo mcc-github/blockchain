@@ -16,9 +16,9 @@ import (
 	"github.com/golang/protobuf/proto"
 	cb "github.com/mcc-github/blockchain-protos-go/common"
 	ab "github.com/mcc-github/blockchain-protos-go/orderer"
+	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/metrics/disabled"
-	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/consensus"
 	"github.com/mcc-github/blockchain/orderer/consensus/kafka/mock"
@@ -26,6 +26,12 @@ import (
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
 )
+
+
+
+type ordererConfig interface {
+	channelconfig.Orderer
+}
 
 var mockRetryOptions = localconfig.Retry{
 	ShortInterval: 50 * time.Millisecond,
@@ -98,11 +104,11 @@ func TestHandleChain(t *testing.T) {
 			SetMessage(mockChannel.topic(), mockChannel.partition(), newestOffset, message),
 	})
 
+	mockOrderer := &mock.OrdererConfig{}
+	mockOrderer.KafkaBrokersReturns([]string{mockBroker.Addr()})
 	mockSupport := &mockmultichannel.ConsenterSupport{
-		ChannelIDVal: mockChannel.topic(),
-		SharedConfigVal: &mockconfig.Orderer{
-			KafkaBrokersVal: []string{mockBroker.Addr()},
-		},
+		ChannelIDVal:    mockChannel.topic(),
+		SharedConfigVal: mockOrderer,
 	}
 
 	mockMetadata := &cb.Metadata{Value: protoutil.MarshalOrPanic(&ab.KafkaMetadata{LastOffsetPersisted: newestOffset - 1})}

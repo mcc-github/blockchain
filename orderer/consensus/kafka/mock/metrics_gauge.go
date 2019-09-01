@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	metrics "github.com/mcc-github/blockchain/common/metrics"
+	"github.com/mcc-github/blockchain/common/metrics"
 )
 
 type MetricsGauge struct {

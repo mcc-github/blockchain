@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	cb "github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/gossip/api"
 	"github.com/mcc-github/blockchain/gossip/common"
 	"github.com/mcc-github/blockchain/gossip/util"
@@ -77,7 +78,7 @@ func (*naiveCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityType) com
 
 
 
-func (*naiveCryptoService) VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock []byte) error {
+func (*naiveCryptoService) VerifyBlock(channelID common.ChannelID, seqNum uint64, signedBlock *cb.Block) error {
 	return nil
 }
 
