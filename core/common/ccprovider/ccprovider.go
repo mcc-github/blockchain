@@ -247,14 +247,6 @@ func GetChaincodeFromFS(ccNameVersion string) (CCPackage, error) {
 }
 
 
-
-
-func PutChaincodeIntoFS(depSpec *pb.ChaincodeDeploymentSpec) error {
-	_, err := ccInfoFSProvider.PutChaincode(depSpec)
-	return err
-}
-
-
 func GetChaincodeData(ccNameVersion string) (*ChaincodeData, error) {
 	ccproviderLogger.Debugf("Getting chaincode data for <%s> from cache", ccNameVersion)
 	return ccInfoCache.GetChaincodeData(ccNameVersion)

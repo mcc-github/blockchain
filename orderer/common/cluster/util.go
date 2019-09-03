@@ -16,7 +16,6 @@ import (
 
 	"github.com/mcc-github/blockchain-protos-go/common"
 	"github.com/mcc-github/blockchain/bccsp"
-	"github.com/mcc-github/blockchain/bccsp/factory"
 	"github.com/mcc-github/blockchain/common/channelconfig"
 	"github.com/mcc-github/blockchain/common/configtx"
 	"github.com/mcc-github/blockchain/common/flogging"
@@ -537,6 +536,7 @@ func (bva *BlockVerifierAssembler) VerifierFromConfig(configuration *common.Conf
 		Logger:    bva.Logger,
 		PolicyMgr: policyMgr,
 		Channel:   channel,
+		BCCSP:     bva.BCCSP,
 	}, nil
 }
 
@@ -545,6 +545,7 @@ type BlockValidationPolicyVerifier struct {
 	Logger    *flogging.FabricLogger
 	Channel   string
 	PolicyMgr policies.Manager
+	BCCSP     bccsp.BCCSP
 }
 
 
@@ -552,7 +553,7 @@ func (bv *BlockValidationPolicyVerifier) VerifyBlockSignature(sd []*protoutil.Si
 	policyMgr := bv.PolicyMgr
 	
 	if envelope != nil {
-		bundle, err := channelconfig.NewBundle(bv.Channel, envelope.Config, factory.GetDefault())
+		bundle, err := channelconfig.NewBundle(bv.Channel, envelope.Config, bv.BCCSP)
 		if err != nil {
 			buff := &bytes.Buffer{}
 			protolator.DeepMarshalJSON(buff, envelope.Config)

@@ -208,7 +208,7 @@ func TestInitializeBootstrapChannel(t *testing.T) {
 		t.Run(tc.genesisMethod+"/"+tc.ledgerType, func(t *testing.T) {
 
 			fileLedgerLocation, _ := ioutil.TempDir("", "test-ledger")
-			ledgerFactory, _ := createLedgerFactory(
+			ledgerFactory, _, err := createLedgerFactory(
 				&localconfig.TopLevel{
 					General: localconfig.General{LedgerType: tc.ledgerType},
 					FileLedger: localconfig.FileLedger{
@@ -217,13 +217,13 @@ func TestInitializeBootstrapChannel(t *testing.T) {
 				},
 				&disabled.Provider{},
 			)
-
+			assert.NoError(t, err)
 			bootstrapConfig := &localconfig.TopLevel{
 				General: localconfig.General{
 					GenesisMethod:  tc.genesisMethod,
 					GenesisProfile: "SampleSingleMSPSolo",
 					GenesisFile:    "genesisblock",
-					SystemChannel:  genesisconfig.TestChainID,
+					SystemChannel:  genesisconfig.TestChannelID,
 				},
 			}
 
@@ -250,7 +250,7 @@ func TestExtractSysChanLastConfig(t *testing.T) {
 	lastConf := extractSysChanLastConfig(rlf, genesisBlock)
 	assert.Nil(t, lastConf)
 
-	rl, err := rlf.GetOrCreate(genesisconfig.TestChainID)
+	rl, err := rlf.GetOrCreate(genesisconfig.TestChannelID)
 	require.NoError(t, err)
 
 	err = rl.Append(genesisBlock)
@@ -264,7 +264,7 @@ func TestExtractSysChanLastConfig(t *testing.T) {
 		_ = extractSysChanLastConfig(rlf, nil)
 	})
 
-	configTx, err := protoutil.CreateSignedEnvelope(common.HeaderType_CONFIG, genesisconfig.TestChainID, nil, &common.ConfigEnvelope{}, 0, 0)
+	configTx, err := protoutil.CreateSignedEnvelope(common.HeaderType_CONFIG, genesisconfig.TestChannelID, nil, &common.ConfigEnvelope{}, 0, 0)
 	require.NoError(t, err)
 
 	nextBlock := blockledger.CreateNextBlock(rl, []*common.Envelope{configTx})
@@ -355,7 +355,8 @@ func TestInitializeMultiChainManager(t *testing.T) {
 	conf := genesisConfig(t)
 	assert.NotPanics(t, func() {
 		signer := &server_mocks.SignerSerializer{}
-		lf, _ := createLedgerFactory(conf, &disabled.Provider{})
+		lf, _, err := createLedgerFactory(conf, &disabled.Provider{})
+		assert.NoError(t, err)
 		bootBlock := encoder.New(genesisconfig.Load(genesisconfig.SampleDevModeSoloProfile)).GenesisBlockForChannel("system")
 		initializeMultichannelRegistrar(
 			bootBlock,
@@ -428,7 +429,8 @@ func TestUpdateTrustedRoots(t *testing.T) {
 			caMgr.updateTrustedRoots(bundle, grpcServer)
 		}
 	}
-	lf, _ := createLedgerFactory(conf, &disabled.Provider{})
+	lf, _, err := createLedgerFactory(conf, &disabled.Provider{})
+	assert.NoError(t, err)
 	bootBlock := encoder.New(genesisconfig.Load(genesisconfig.SampleDevModeSoloProfile)).GenesisBlockForChannel("system")
 	signer := &server_mocks.SignerSerializer{}
 	initializeMultichannelRegistrar(
@@ -444,11 +446,11 @@ func TestUpdateTrustedRoots(t *testing.T) {
 		lf,
 		callback,
 	)
-	t.Logf("# app CAs: %d", len(caMgr.appRootCAsByChain[genesisconfig.TestChainID]))
-	t.Logf("# orderer CAs: %d", len(caMgr.ordererRootCAsByChain[genesisconfig.TestChainID]))
+	t.Logf("# app CAs: %d", len(caMgr.appRootCAsByChain[genesisconfig.TestChannelID]))
+	t.Logf("# orderer CAs: %d", len(caMgr.ordererRootCAsByChain[genesisconfig.TestChannelID]))
 	
-	assert.Equal(t, 0, len(caMgr.appRootCAsByChain[genesisconfig.TestChainID]))
-	assert.Equal(t, 0, len(caMgr.ordererRootCAsByChain[genesisconfig.TestChainID]))
+	assert.Equal(t, 0, len(caMgr.appRootCAsByChain[genesisconfig.TestChannelID]))
+	assert.Equal(t, 0, len(caMgr.ordererRootCAsByChain[genesisconfig.TestChannelID]))
 	grpcServer.Listener().Close()
 
 	conf = &localconfig.TopLevel{
@@ -494,12 +496,12 @@ func TestUpdateTrustedRoots(t *testing.T) {
 		lf,
 		callback,
 	)
-	t.Logf("# app CAs: %d", len(caMgr.appRootCAsByChain[genesisconfig.TestChainID]))
-	t.Logf("# orderer CAs: %d", len(caMgr.ordererRootCAsByChain[genesisconfig.TestChainID]))
+	t.Logf("# app CAs: %d", len(caMgr.appRootCAsByChain[genesisconfig.TestChannelID]))
+	t.Logf("# orderer CAs: %d", len(caMgr.ordererRootCAsByChain[genesisconfig.TestChannelID]))
 	
 	
-	assert.Equal(t, 2, len(caMgr.appRootCAsByChain[genesisconfig.TestChainID]))
-	assert.Equal(t, 2, len(caMgr.ordererRootCAsByChain[genesisconfig.TestChainID]))
+	assert.Equal(t, 2, len(caMgr.appRootCAsByChain[genesisconfig.TestChannelID]))
+	assert.Equal(t, 2, len(caMgr.ordererRootCAsByChain[genesisconfig.TestChannelID]))
 	assert.Len(t, predDialer.Config.SecOpts.ServerRootCAs, 2)
 	grpcServer.Listener().Close()
 }
@@ -757,7 +759,7 @@ func genesisConfig(t *testing.T) *localconfig.TopLevel {
 			LedgerType:     "ram",
 			GenesisMethod:  "provisional",
 			GenesisProfile: "SampleDevModeSolo",
-			SystemChannel:  genesisconfig.TestChainID,
+			SystemChannel:  genesisconfig.TestChannelID,
 			LocalMSPDir:    localMSPDir,
 			LocalMSPID:     "SampleOrg",
 			BCCSP: &factory.FactoryOpts{
@@ -803,7 +805,7 @@ func TestCreateReplicator(t *testing.T) {
 
 	ledgerFactory := &server_mocks.Factory{}
 	ledgerFactory.On("GetOrCreate", "mychannel").Return(ledger, nil)
-	ledgerFactory.On("ChainIDs").Return([]string{"mychannel"})
+	ledgerFactory.On("ChannelIDs").Return([]string{"mychannel"})
 
 	signer := &server_mocks.SignerSerializer{}
 	r := createReplicator(ledgerFactory, bootBlock, &localconfig.TopLevel{}, comm.SecureOptions{}, signer)

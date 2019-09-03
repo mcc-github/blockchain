@@ -20,6 +20,8 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 
@@ -32,10 +34,9 @@ type TestEnv struct {
 
 func NewTestEnv(t testing.TB) *TestEnv {
 	dbPath, err := ioutil.TempDir("", "bookkeep")
-	if err != nil {
-		t.Fatalf("Failed to create bookkeeping directory: %s", err)
-	}
-	provider := NewProvider(dbPath)
+	require.NoError(t, err)
+	provider, err := NewProvider(dbPath)
+	require.NoError(t, err)
 	return &TestEnv{t, provider, dbPath}
 }
 

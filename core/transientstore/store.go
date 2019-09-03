@@ -120,9 +120,12 @@ type RwsetScanner struct {
 }
 
 
-func NewStoreProvider(path string) StoreProvider {
-	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: path})
-	return &storeProvider{dbProvider: dbProvider}
+func NewStoreProvider(path string) (StoreProvider, error) {
+	dbProvider, err := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: path})
+	if err != nil {
+		return nil, err
+	}
+	return &storeProvider{dbProvider: dbProvider}, nil
 }
 
 

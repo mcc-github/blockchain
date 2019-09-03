@@ -257,7 +257,7 @@ type Factory interface {
 	GetOrCreate(chainID string) (blockledger.ReadWriter, error)
 
 	
-	ChainIDs() []string
+	ChannelIDs() []string
 
 	
 	Close()
@@ -283,12 +283,12 @@ type verifiersByChannel map[string]cluster.BlockVerifier
 func (vl *verifierLoader) loadVerifiers() verifiersByChannel {
 	res := make(verifiersByChannel)
 
-	for _, chain := range vl.ledgerFactory.ChainIDs() {
-		v := vl.loadVerifier(chain)
+	for _, channel := range vl.ledgerFactory.ChannelIDs() {
+		v := vl.loadVerifier(channel)
 		if v == nil {
 			continue
 		}
-		res[chain] = v
+		res[channel] = v
 	}
 
 	return res

@@ -1,44 +1,130 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package leveldbhelper
 
 import (
 	"bytes"
+	"fmt"
 	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
-var dbNameKeySep = []byte{0x00}
-var lastKeyIndicator = byte(0x01)
 
 
-type Provider struct {
-	db        *DB
-	dbHandles map[string]*DBHandle
-	mux       sync.Mutex
+const internalDBName = "_"
+
+var (
+	dbNameKeySep     = []byte{0x00}
+	lastKeyIndicator = byte(0x01)
+	formatVersionKey = []byte{'f'} 
+)
+
+
+
+
+
+
+
+
+type Conf struct {
+	DBPath                string
+	ExpectedFormatVersion string
 }
 
 
-func NewProvider(conf *Conf) *Provider {
+
+type ErrFormatVersionMismatch struct {
+	DBPath                string
+	ExpectedFormatVersion string
+	DataFormatVersion     string
+}
+
+func (e *ErrFormatVersionMismatch) Error() string {
+	return fmt.Sprintf("unexpected format. db path = [%s], data format = [%s], expected format = [%s]",
+		e.DBPath, e.DataFormatVersion, e.ExpectedFormatVersion,
+	)
+}
+
+
+func IsFormatVersionMismatch(err error) bool {
+	_, ok := err.(*ErrFormatVersionMismatch)
+	return ok
+}
+
+
+type Provider struct {
+	db *DB
+
+	mux       sync.Mutex
+	dbHandles map[string]*DBHandle
+}
+
+
+func NewProvider(conf *Conf) (*Provider, error) {
+	db, err := openDBAndCheckFormat(conf)
+	if err != nil {
+		return nil, err
+	}
+	return &Provider{
+		db:        db,
+		dbHandles: make(map[string]*DBHandle),
+	}, nil
+}
+
+func openDBAndCheckFormat(conf *Conf) (d *DB, e error) {
 	db := CreateDB(conf)
 	db.Open()
-	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}}
+
+	defer func() {
+		if e != nil {
+			db.Close()
+		}
+	}()
+
+	internalDB := &DBHandle{
+		db:     db,
+		dbName: internalDBName,
+	}
+
+	dbEmpty, err := db.isEmpty()
+	if err != nil {
+		return nil, err
+	}
+
+	if dbEmpty && conf.ExpectedFormatVersion != "" {
+		logger.Infof("DB is empty Setting db format as %s", conf.ExpectedFormatVersion)
+		if err := internalDB.Put(formatVersionKey, []byte(conf.ExpectedFormatVersion), true); err != nil {
+			return nil, err
+		}
+		return db, nil
+	}
+
+	formatVersion, err := internalDB.Get(formatVersionKey)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debugf("Checking for db format at path [%s]", conf.DBPath)
+
+	if !bytes.Equal(formatVersion, []byte(conf.ExpectedFormatVersion)) {
+		logger.Errorf("the db at path [%s] contains data in unexpected format. expected data format = [%s], data format = [%s]",
+			conf.DBPath, conf.ExpectedFormatVersion, formatVersion)
+		return nil, &ErrFormatVersionMismatch{ExpectedFormatVersion: conf.ExpectedFormatVersion, DataFormatVersion: string(formatVersion), DBPath: conf.DBPath}
+	}
+
+	logger.Debug("format is latest, nothing to do")
+	return db, nil
+}
+
+
+func (p *Provider) GetDataFormat() (string, error) {
+	f, err := p.GetDBHandle(internalDBName).Get(formatVersionKey)
+	return string(f), err
 }
 
 

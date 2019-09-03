@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -41,13 +42,32 @@ func (p *Platform) Name() string {
 
 
 func (p *Platform) ValidatePath(rawPath string) error {
-	_, err := getCodeDescriptor(rawPath)
+	_, err := describeCode(rawPath)
 	if err != nil {
 		return err
 	}
 
 	return nil
 }
+
+
+
+
+
+func (p *Platform) NormalizePath(rawPath string) (string, error) {
+	modInfo, err := moduleInfo(rawPath)
+	if err != nil {
+		return "", err
+	}
+
+	
+	if modInfo == nil {
+		return rawPath, nil
+	}
+
+	return modInfo.ImportPath, nil
+}
+
 
 
 
@@ -59,6 +79,7 @@ func (p *Platform) ValidateCodePackage(code []byte) error {
 		return fmt.Errorf("failure opening codepackage gzip stream: %s", err)
 	}
 
+	re := regexp.MustCompile(`^(src|META-INF)/`)
 	tr := tar.NewReader(gr)
 	for {
 		header, err := tr.Next()
@@ -70,8 +91,14 @@ func (p *Platform) ValidateCodePackage(code []byte) error {
 		}
 
 		
-		if header.Mode&^0100666 != 0 {
-			return fmt.Errorf("illegal file mode detected for file %s: %o", header.Name, header.Mode)
+		if !re.MatchString(header.Name) {
+			return fmt.Errorf("illegal file name in payload: %s", header.Name)
+		}
+
+		
+		mode := header.FileInfo().Mode()
+		if mode&^(os.ModeDir|0777) != 0 {
+			return fmt.Errorf("illegal file mode in payload: %s", header.Name)
 		}
 	}
 
@@ -79,11 +106,14 @@ func (p *Platform) ValidateCodePackage(code []byte) error {
 }
 
 
+const c_ISDIR = 040000
+
+
 
 
 
 func (p *Platform) GetDeploymentPayload(codepath string) ([]byte, error) {
-	codeDescriptor, err := getCodeDescriptor(codepath)
+	codeDescriptor, err := describeCode(codepath)
 	if err != nil {
 		return nil, err
 	}
@@ -93,67 +123,46 @@ func (p *Platform) GetDeploymentPayload(codepath string) ([]byte, error) {
 		return nil, err
 	}
 
-	var packageInfo []PackageInfo
-	for _, dist := range distributions() {
-		pi, err := dependencyPackageInfo(dist.goos, dist.goarch, codeDescriptor.Pkg)
-		if err != nil {
-			return nil, err
+	var dependencyPackageInfo []PackageInfo
+	if !codeDescriptor.Module {
+		for _, dist := range distributions() {
+			pi, err := gopathDependencyPackageInfo(dist.goos, dist.goarch, codeDescriptor.Path)
+			if err != nil {
+				return nil, err
+			}
+			dependencyPackageInfo = append(dependencyPackageInfo, pi...)
 		}
-		packageInfo = append(packageInfo, pi...)
 	}
 
-	for _, pkg := range packageInfo {
+	for _, pkg := range dependencyPackageInfo {
 		for _, filename := range pkg.Files() {
-			filePath := filepath.Join(pkg.Dir, filename)
 			sd := SourceDescriptor{
-				Name:       path.Join("src", pkg.ImportPath, filename),
-				Path:       filePath,
-				IsMetadata: false,
+				Name: path.Join("src", pkg.ImportPath, filename),
+				Path: filepath.Join(pkg.Dir, filename),
 			}
 			fileMap[sd.Name] = sd
 		}
 	}
 
-	
-	
-	
 	payload := bytes.NewBuffer(nil)
 	gw := gzip.NewWriter(payload)
 	tw := tar.NewWriter(gw)
 
-	for _, file := range fileMap.values() {
-		
-		
-		
-		if file.IsMetadata {
-			
-			file.Name, err = filepath.Rel(filepath.Join("src", codeDescriptor.Pkg), file.Name)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to calculate relative path for %s", file.Name)
-			}
-
-			
-			_, filename := filepath.Split(file.Name)
-
-			
-			
-			if strings.HasPrefix(filename, ".") {
-				continue
-			}
-
-			fileBytes, err := ioutil.ReadFile(file.Path)
-			if err != nil {
-				return nil, err
-			}
-
-			
-			
-			err = ccmetadata.ValidateMetadataFile(file.Name, fileBytes)
-			if err != nil {
-				return nil, err
-			}
+	
+	for _, dirname := range fileMap.Directories() {
+		err := tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeDir,
+			Name:     dirname + "/",
+			Mode:     c_ISDIR | 0755,
+			Uid:      500,
+			Gid:      500,
+		})
+		if err != nil {
+			return nil, err
 		}
+	}
 
+	for _, file := range fileMap.Sources() {
 		err = util.WriteFileToPackage(file.Path, file.Name, tw)
 		if err != nil {
 			return nil, fmt.Errorf("Error writing %s to tar: %s", file.Name, err)
@@ -189,59 +198,132 @@ func getLDFlagsOpts() string {
 	return staticLDFlagsOpts
 }
 
-func (p *Platform) DockerBuildOptions(pkg string) (util.DockerBuildOptions, error) {
+var buildScript = `
+set -e
+if [ -f "/chaincode/input/src/go.mod" ] && [ -d "/chaincode/input/src/vendor" ]; then
+    cd /chaincode/input/src
+    GO111MODULE=on go build -v -mod=vendor %[1]s -o /chaincode/output/chaincode %[2]s
+elif [ -f "/chaincode/input/src/go.mod" ]; then
+    cd /chaincode/input/src
+    GO111MODULE=on GOPROXY=https://proxy.golang.org go build -v -mod=readonly %[1]s -o /chaincode/output/chaincode %[2]s
+else
+    GOPATH=/chaincode/input:$GOPATH go build -v %[1]s -o /chaincode/output/chaincode %[2]s
+fi
+echo Done!
+`
+
+func (p *Platform) DockerBuildOptions(path string) (util.DockerBuildOptions, error) {
 	ldFlagOpts := getLDFlagsOpts()
 	return util.DockerBuildOptions{
-		Cmd: fmt.Sprintf("GOPATH=/chaincode/input:$GOPATH go build  %s -o /chaincode/output/chaincode %s", ldFlagOpts, pkg),
+		Cmd: fmt.Sprintf(buildScript, ldFlagOpts, path),
 	}, nil
 }
 
+
 type CodeDescriptor struct {
-	Gopath string
-	Pkg    string
+	Source       string 
+	MetadataRoot string 
+	Path         string 
+	Module       bool   
 }
 
-func getGopath() (string, error) {
-	output, err := exec.Command("go", "env", "GOPATH").Output()
-	if err != nil {
-		return "", err
-	}
-
-	pathElements := filepath.SplitList(strings.TrimSpace(string(output)))
-	if len(pathElements) == 0 {
-		return "", fmt.Errorf("GOPATH is not set")
-	}
-
-	return pathElements[0], nil
+func (cd CodeDescriptor) isMetadata(path string) bool {
+	return strings.HasPrefix(
+		filepath.Clean(path),
+		filepath.Clean(cd.MetadataRoot),
+	)
 }
 
 
-func getCodeDescriptor(path string) (CodeDescriptor, error) {
+func describeCode(path string) (*CodeDescriptor, error) {
 	if path == "" {
-		return CodeDescriptor{}, errors.New("cannot collect files from empty chaincode path")
+		return nil, errors.New("cannot collect files from empty chaincode path")
 	}
 
-	gopath, err := getGopath()
+	
+	modInfo, err := moduleInfo(path)
 	if err != nil {
-		return CodeDescriptor{}, err
+		return nil, err
 	}
-	sourcePath := filepath.Join(gopath, "src", path)
 
-	fi, err := os.Stat(sourcePath)
+	if modInfo != nil {
+		return &CodeDescriptor{
+			Module:       true,
+			MetadataRoot: filepath.Join(modInfo.Dir, modInfo.ImportPath, "META-INF"),
+			Path:         modInfo.ImportPath,
+			Source:       modInfo.Dir,
+		}, nil
+	}
+
+	return describeGopath(path)
+}
+
+func describeGopath(importPath string) (*CodeDescriptor, error) {
+	output, err := exec.Command("go", "list", "-f", "{{.Dir}}", importPath).Output()
 	if err != nil {
-		return CodeDescriptor{}, errors.Wrap(err, "failed to get code")
+		return nil, err
 	}
-	if !fi.IsDir() {
-		return CodeDescriptor{}, errors.Errorf("path is not a directory: %s", path)
+	sourcePath := filepath.Clean(strings.TrimSpace(string(output)))
+
+	return &CodeDescriptor{
+		Path:         importPath,
+		MetadataRoot: filepath.Join(sourcePath, "META-INF"),
+		Source:       sourcePath,
+	}, nil
+}
+
+func regularFileExists(path string) (bool, error) {
+	fi, err := os.Stat(path)
+	switch {
+	case os.IsNotExist(err):
+		return false, nil
+	case err != nil:
+		return false, err
+	default:
+		return fi.Mode().IsRegular(), nil
+	}
+}
+
+func moduleInfo(path string) (*ModuleInfo, error) {
+	entryWD, err := os.Getwd()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get working directory")
 	}
 
-	return CodeDescriptor{Gopath: gopath, Pkg: path}, nil
+	
+	if err := os.Chdir(path); err != nil {
+		return nil, nil
+	}
+	defer func() {
+		if err := os.Chdir(entryWD); err != nil {
+			panic(fmt.Sprintf("failed to restore working directory: %s", err))
+		}
+	}()
+
+	
+	
+	
+	cmd := exec.Command("go", "env", "GOMOD")
+	cmd.Env = append(os.Environ(), "GO111MODULE=on")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to determine module root")
+	}
+
+	modExists, err := regularFileExists(strings.TrimSpace(string(output)))
+	if err != nil {
+		return nil, err
+	}
+	if !modExists {
+		return nil, nil
+	}
+
+	return listModuleInfo()
 }
 
 type SourceDescriptor struct {
-	Name       string
-	Path       string
-	IsMetadata bool
+	Name string
+	Path string
 }
 
 type Sources []SourceDescriptor
@@ -252,7 +334,7 @@ func (s Sources) Less(i, j int) bool { return s[i].Name < s[j].Name }
 
 type SourceMap map[string]SourceDescriptor
 
-func (s SourceMap) values() Sources {
+func (s SourceMap) Sources() Sources {
 	var sources Sources
 	for _, src := range s {
 		sources = append(sources, src)
@@ -262,10 +344,28 @@ func (s SourceMap) values() Sources {
 	return sources
 }
 
-func findSource(cd CodeDescriptor) (SourceMap, error) {
+func (s SourceMap) Directories() []string {
+	dirMap := map[string]bool{}
+	for filename := range s {
+		dir := filepath.Dir(filename)
+		for dir != "." && !dirMap[dir] {
+			dirMap[dir] = true
+			dir = filepath.Dir(dir)
+		}
+	}
+
+	var dirs []string
+	for dir := range dirMap {
+		dirs = append(dirs, dir)
+	}
+	sort.Strings(dirs)
+
+	return dirs
+}
+
+func findSource(cd *CodeDescriptor) (SourceMap, error) {
 	sources := SourceMap{}
 
-	tld := filepath.Join(cd.Gopath, "src", cd.Pkg)
 	walkFn := func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -273,13 +373,18 @@ func findSource(cd CodeDescriptor) (SourceMap, error) {
 
 		if info.IsDir() {
 			
-			if path == tld {
+			if path == cd.Source {
 				return nil
 			}
 
 			
 			
-			if isMetadataDir(path, tld) {
+			if cd.isMetadata(path) {
+				return nil
+			}
+
+			
+			if cd.Module && !strings.HasPrefix(info.Name(), ".") {
 				return nil
 			}
 
@@ -287,29 +392,64 @@ func findSource(cd CodeDescriptor) (SourceMap, error) {
 			return filepath.SkipDir
 		}
 
-		name, err := filepath.Rel(cd.Gopath, path)
+		relativeRoot := cd.Source
+		if cd.isMetadata(path) {
+			relativeRoot = cd.MetadataRoot
+		}
+
+		name, err := filepath.Rel(relativeRoot, path)
 		if err != nil {
 			return errors.Wrapf(err, "failed to calculate relative path for %s", path)
 		}
 
-		sources[name] = SourceDescriptor{Name: name, Path: path, IsMetadata: isMetadataDir(path, tld)}
+		switch {
+		case cd.isMetadata(path):
+			
+			if strings.HasPrefix(info.Name(), ".") {
+				return nil
+			}
+			name = filepath.Join("META-INF", name)
+			err := validateMetadata(name, path)
+			if err != nil {
+				return err
+			}
+		case cd.Module:
+			name = filepath.Join("src", name)
+		default:
+			name = filepath.Join("src", cd.Path, name)
+		}
+
+		sources[name] = SourceDescriptor{Name: name, Path: path}
 		return nil
 	}
 
-	if err := filepath.Walk(tld, walkFn); err != nil {
+	if err := filepath.Walk(cd.Source, walkFn); err != nil {
 		return nil, errors.Wrap(err, "walk failed")
 	}
 
 	return sources, nil
 }
 
+func validateMetadata(name, path string) error {
+	contents, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
 
-func isMetadataDir(path, tld string) bool {
-	return strings.HasPrefix(path, filepath.Join(tld, "META-INF"))
+	
+	
+	err = ccmetadata.ValidateMetadataFile(name, contents)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 
+
 type dist struct{ goos, goarch string }
+
 
 
 func distributions() []dist {

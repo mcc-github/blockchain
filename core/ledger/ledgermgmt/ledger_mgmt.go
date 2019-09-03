@@ -8,6 +8,7 @@ package ledgermgmt
 
 import (
 	"bytes"
+	"fmt"
 	"sync"
 
 	"github.com/mcc-github/blockchain-protos-go/common"
@@ -27,6 +28,7 @@ var ErrLedgerAlreadyOpened = errors.New("ledger already opened")
 
 
 var ErrLedgerMgmtNotInitialized = errors.New("ledger mgmt should be initialized before using")
+
 
 type LedgerMgr struct {
 	lock           sync.Mutex
@@ -66,7 +68,7 @@ func NewLedgerMgr(initializer *Initializer) *LedgerMgr {
 		},
 	)
 	if err != nil {
-		panic(errors.WithMessage(err, "Error in instantiating ledger provider"))
+		panic(fmt.Sprintf("Error in instantiating ledger provider: %s", err))
 	}
 	ledgerMgr := &LedgerMgr{
 		openedLedgers:  make(map[string]ledger.PeerLedger),

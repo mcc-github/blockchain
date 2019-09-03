@@ -18,10 +18,10 @@ type rangeScan struct {
 }
 
 var (
-	
-	compositeKeySep = []byte{0x00}
-	savePointKey    = []byte{0x00}
-	emptyValue      = []byte{}
+	compositeKeySep = []byte{0x00} 
+	dataKeyPrefix   = []byte{'d'}  
+	savePointKey    = []byte{'s'}  
+	emptyValue      = []byte{}     
 )
 
 

@@ -17,7 +17,11 @@ import (
 	protoutil "github.com/mcc-github/blockchain/protoutil"
 )
 
-var logger = flogging.MustGetLogger("historyleveldb")
+var logger = flogging.MustGetLogger("history")
+
+const (
+	dataFormatVersion = "2.0"
+)
 
 
 type DBProvider struct {
@@ -25,12 +29,20 @@ type DBProvider struct {
 }
 
 
-func NewDBProvider(path string) *DBProvider {
+func NewDBProvider(path string) (*DBProvider, error) {
 	logger.Debugf("constructing HistoryDBProvider dbPath=%s", path)
-	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: path})
-	return &DBProvider{
-		leveldbProvider: dbProvider,
+	levelDBProvider, err := leveldbhelper.NewProvider(
+		&leveldbhelper.Conf{
+			DBPath:                path,
+			ExpectedFormatVersion: dataFormatVersion,
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
+	return &DBProvider{
+		leveldbProvider: levelDBProvider,
+	}, nil
 }
 
 

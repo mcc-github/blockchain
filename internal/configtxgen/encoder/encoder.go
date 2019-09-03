@@ -606,7 +606,7 @@ func New(config *genesisconfig.Profile) *Bootstrapper {
 
 
 func (bs *Bootstrapper) GenesisBlock() *cb.Block {
-	return genesis.NewFactoryImpl(bs.channelGroup).Block(genesisconfig.TestChainID)
+	return genesis.NewFactoryImpl(bs.channelGroup).Block(genesisconfig.TestChannelID)
 }
 
 

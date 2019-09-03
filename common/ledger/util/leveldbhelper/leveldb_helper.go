@@ -30,11 +30,6 @@ const (
 )
 
 
-type Conf struct {
-	DBPath string
-}
-
-
 type DB struct {
 	conf    *Conf
 	db      *leveldb.DB
@@ -80,6 +75,14 @@ func (dbInst *DB) Open() {
 		panic(fmt.Sprintf("Error opening leveldb: %s", err))
 	}
 	dbInst.dbState = opened
+}
+
+func (dbInst *DB) isEmpty() (bool, error) {
+	itr := dbInst.db.NewIterator(&goleveldbutil.Range{}, dbInst.readOpts)
+	defer itr.Release()
+	hasItems := itr.Next()
+	return !hasItems,
+		errors.Wrapf(itr.Error(), "error while trying to see if the leveldb at path [%s] is empty", dbInst.conf.DBPath)
 }
 
 

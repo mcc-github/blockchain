@@ -11,7 +11,7 @@ type Factory struct {
 }
 
 
-func (_m *Factory) ChainIDs() []string {
+func (_m *Factory) ChannelIDs() []string {
 	ret := _m.Called()
 
 	var r0 []string

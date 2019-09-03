@@ -15,10 +15,10 @@ import (
 type Factory interface {
 	
 	
-	GetOrCreate(chainID string) (ReadWriter, error)
+	GetOrCreate(channelID string) (ReadWriter, error)
 
 	
-	ChainIDs() []string
+	ChannelIDs() []string
 
 	
 	Close()

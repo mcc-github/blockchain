@@ -53,12 +53,12 @@ func (flf *fileLedgerFactory) GetOrCreate(chainID string) (blockledger.ReadWrite
 }
 
 
-func (flf *fileLedgerFactory) ChainIDs() []string {
-	chainIDs, err := flf.blkstorageProvider.List()
+func (flf *fileLedgerFactory) ChannelIDs() []string {
+	channelIDs, err := flf.blkstorageProvider.List()
 	if err != nil {
 		logger.Panic(err)
 	}
-	return chainIDs
+	return channelIDs
 }
 
 
@@ -67,14 +67,18 @@ func (flf *fileLedgerFactory) Close() {
 }
 
 
-func New(directory string, metricsProvider metrics.Provider) blockledger.Factory {
-	return &fileLedgerFactory{
-		blkstorageProvider: fsblkstorage.NewProvider(
-			fsblkstorage.NewConf(directory, -1),
-			&blkstorage.IndexConfig{
-				AttrsToIndex: []blkstorage.IndexableAttr{blkstorage.IndexableAttrBlockNum}},
-			metricsProvider,
-		),
-		ledgers: make(map[string]blockledger.ReadWriter),
+func New(directory string, metricsProvider metrics.Provider) (blockledger.Factory, error) {
+	p, err := fsblkstorage.NewProvider(
+		fsblkstorage.NewConf(directory, -1),
+		&blkstorage.IndexConfig{
+			AttrsToIndex: []blkstorage.IndexableAttr{blkstorage.IndexableAttrBlockNum}},
+		metricsProvider,
+	)
+	if err != nil {
+		return nil, err
 	}
+	return &fileLedgerFactory{
+		blkstorageProvider: p,
+		ledgers:            make(map[string]blockledger.ReadWriter),
+	}, nil
 }

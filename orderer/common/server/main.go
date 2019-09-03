@@ -100,7 +100,10 @@ func Main() {
 	defer opsSystem.Stop()
 	metricsProvider := opsSystem.Provider
 
-	lf, _ := createLedgerFactory(conf, metricsProvider)
+	lf, _, err := createLedgerFactory(conf, metricsProvider)
+	if err != nil {
+		logger.Panicf("Failed in creating ledger factory: %v", err)
+	}
 	sysChanLastConfigBlock := extractSysChanLastConfig(lf, bootstrapBlock)
 	clusterBootBlock := selectClusterBootBlock(bootstrapBlock, sysChanLastConfigBlock)
 
@@ -242,12 +245,12 @@ func reuseListener(conf *localconfig.TopLevel, typ string) bool {
 
 func extractSysChanLastConfig(lf blockledger.Factory, bootstrapBlock *cb.Block) *cb.Block {
 	
-	chainCount := len(lf.ChainIDs())
-	if chainCount == 0 {
+	channelCount := len(lf.ChannelIDs())
+	if channelCount == 0 {
 		logger.Info("Bootstrapping because no existing channels")
 		return nil
 	}
-	logger.Infof("Not bootstrapping because of %d existing channels", chainCount)
+	logger.Infof("Not bootstrapping because of %d existing channels", channelCount)
 
 	systemChannelName, err := protoutil.GetChainIDFromBlock(bootstrapBlock)
 	if err != nil {
@@ -675,7 +678,7 @@ func initializeMultichannelRegistrar(
 ) *multichannel.Registrar {
 	genesisBlock := extractBootstrapBlock(conf)
 	
-	if len(lf.ChainIDs()) == 0 {
+	if len(lf.ChannelIDs()) == 0 {
 		initializeBootstrapChannel(genesisBlock, lf)
 	} else {
 		logger.Info("Not bootstrapping because of existing channels")

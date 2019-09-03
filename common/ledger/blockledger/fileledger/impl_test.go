@@ -42,10 +42,11 @@ func initialize(t *testing.T) (*testEnv, *FileLedger) {
 	name, err := ioutil.TempDir("", "mcc-github_blockchain")
 	assert.NoError(t, err, "Error creating temp dir: %s", err)
 
-	flf := New(name, &disabled.Provider{}).(*fileLedgerFactory)
-	fl, err := flf.GetOrCreate(genesisconfig.TestChainID)
-	assert.NoError(t, err, "Error GetOrCreate chain")
-
+	p, err := New(name, &disabled.Provider{})
+	assert.NoError(t, err)
+	flf := p.(*fileLedgerFactory)
+	fl, err := flf.GetOrCreate(genesisconfig.TestChannelID)
+	assert.NoError(t, err, "Error GetOrCreate channel")
 	fl.Append(genesisBlock)
 	return &testEnv{location: name, t: t, flf: flf}, fl.(*FileLedger)
 }
@@ -147,24 +148,25 @@ func TestReinitialization(t *testing.T) {
 	
 	ledger1.Append(b1)
 
-	fl, err := tev.flf.GetOrCreate(genesisconfig.TestChainID)
+	fl, err := tev.flf.GetOrCreate(genesisconfig.TestChannelID)
 	ledger1, ok := fl.(*FileLedger)
-	assert.NoError(t, err, "Expected to successfully get test chain")
-	assert.Equal(t, 1, len(tev.flf.ChainIDs()), "Exptected not new chain to be created")
+	assert.NoError(t, err, "Expected to successfully get test channel")
+	assert.Equal(t, 1, len(tev.flf.ChannelIDs()), "Exptected not new channel to be created")
 	assert.True(t, ok, "Exptected type assertion to succeed")
 
 	
 	tev.shutDown()
 
 	
-	provider2 := New(tev.location, &disabled.Provider{})
+	provider2, err := New(tev.location, &disabled.Provider{})
+	assert.NoError(t, err)
 
 	
-	chains := provider2.ChainIDs()
-	assert.Equal(t, 1, len(chains), "Should have recovered the chain")
+	channels := provider2.ChannelIDs()
+	assert.Equal(t, 1, len(channels), "Should have recovered the channel")
 
 	
-	ledger2, err := provider2.GetOrCreate(chains[0])
+	ledger2, err := provider2.GetOrCreate(channels[0])
 	assert.NoError(t, err, "Unexpected error: %s", err)
 
 	fl = ledger2.(*FileLedger)

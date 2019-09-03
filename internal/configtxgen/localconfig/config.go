@@ -35,7 +35,7 @@ var configName = strings.ToLower(Prefix)
 const (
 	
 	
-	TestChainID = "testchainid"
+	TestChannelID = "testchainid"
 
 	
 	

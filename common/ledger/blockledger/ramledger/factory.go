@@ -67,7 +67,7 @@ func newChain(maxSize int) blockledger.ReadWriter {
 }
 
 
-func (rlf *ramLedgerFactory) ChainIDs() []string {
+func (rlf *ramLedgerFactory) ChannelIDs() []string {
 	rlf.mutex.Lock()
 	defer rlf.mutex.Unlock()
 	ids := make([]string, len(rlf.ledgers))

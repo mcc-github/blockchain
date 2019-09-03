@@ -35,9 +35,12 @@ type provider struct {
 }
 
 
-func NewProvider(dbPath string) Provider {
-	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
-	return &provider{dbProvider: dbProvider}
+func NewProvider(dbPath string) (Provider, error) {
+	dbProvider, err := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
+	if err != nil {
+		return nil, err
+	}
+	return &provider{dbProvider: dbProvider}, nil
 }
 
 
