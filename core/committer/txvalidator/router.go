@@ -12,12 +12,16 @@ import (
 )
 
 
+
+
 type Validator interface {
 	
 	
 	
 	Validate(block *common.Block) error
 }
+
+
 
 
 type CapabilityProvider interface {

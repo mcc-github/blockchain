@@ -22,10 +22,10 @@ import (
 	protospeer "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/cauthdsl"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
-	mockconfig "github.com/mcc-github/blockchain/common/mocks/config"
 	"github.com/mcc-github/blockchain/common/semaphore"
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator"
+	tmocks "github.com/mcc-github/blockchain/core/committer/txvalidator/mocks"
 	txvalidatorplugin "github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	txvalidatorv20 "github.com/mcc-github/blockchain/core/committer/txvalidator/v20"
 	txvalidatormocks "github.com/mcc-github/blockchain/core/committer/txvalidator/v20/mocks"
@@ -52,14 +52,14 @@ func signedByAnyMember(ids []string) []byte {
 	return protoutil.MarshalOrPanic(&protospeer.ApplicationPolicy{Type: &protospeer.ApplicationPolicy_SignaturePolicy{SignaturePolicy: p}})
 }
 
-func v20Capabilities() *mockconfig.MockApplicationCapabilities {
-	return &mockconfig.MockApplicationCapabilities{
-		V1_2ValidationRv:      true,
-		V1_3ValidationRv:      true,
-		PrivateChannelDataRv:  true,
-		KeyLevelEndorsementRv: true,
-		V2_0ValidationRv:      true,
-	}
+func v20Capabilities() *tmocks.ApplicationCapabilities {
+	ac := &tmocks.ApplicationCapabilities{}
+	ac.On("V1_2Validation").Return(true)
+	ac.On("V1_3Validation").Return(true)
+	ac.On("V2_0Validation").Return(true)
+	ac.On("PrivateChannelData").Return(true)
+	ac.On("KeyLevelEndorsement").Return(true)
+	return ac
 }
 
 func createRWset(t *testing.T, ccnames ...string) []byte {
