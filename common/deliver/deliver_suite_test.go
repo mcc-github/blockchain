@@ -15,9 +15,16 @@ import (
 )
 
 
+
 type filteredResponseSender interface {
 	deliver.ResponseSender
 	deliver.Filtered
+}
+
+
+
+type privateDataResponseSender interface {
+	deliver.ResponseSender
 }
 
 func TestDeliver(t *testing.T) {

@@ -15,17 +15,12 @@ import (
 	"github.com/mcc-github/blockchain-protos-go/ledger/rwset/kvrwset"
 	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/java"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/node"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	vc "github.com/mcc-github/blockchain/core/handlers/validation/api/capabilities"
 	vs "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
-	"github.com/mcc-github/blockchain/core/handlers/validation/builtin/internal/car"
 	"github.com/mcc-github/blockchain/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/mcc-github/blockchain/core/scc/lscc"
-	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
@@ -398,18 +393,10 @@ func (vscc *Validator) ValidateLSCCInvocation(
 			return policyErr(fmt.Errorf("VSCC error: invocation of lscc(%s) does not have appropriate arguments", lsccFunc))
 		}
 
-		err = packaging.NewRegistry(
-			
-			
-			
-			
-			&golang.Platform{},
-			&node.Platform{},
-			&java.Platform{},
-			&car.Platform{},
-		).ValidateDeploymentSpec(cdsArgs.ChaincodeSpec.Type.String(), cdsArgs.CodePackage)
-		if err != nil {
-			return policyErr(fmt.Errorf("failed to validate deployment spec: %s", err))
+		switch cdsArgs.ChaincodeSpec.Type.String() {
+		case "GOLANG", "NODE", "JAVA", "CAR":
+		default:
+			return policyErr(fmt.Errorf("unexpected chaincode spec type: %s", cdsArgs.ChaincodeSpec.Type.String()))
 		}
 
 		

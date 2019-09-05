@@ -23,6 +23,7 @@ import (
 	localconfig "github.com/mcc-github/blockchain/orderer/common/localconfig"
 	"github.com/mcc-github/blockchain/orderer/common/msgprocessor"
 	"github.com/mcc-github/blockchain/orderer/common/multichannel"
+	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -64,11 +65,21 @@ func (rs *responseSender) SendStatusResponse(status cb.Status) error {
 	return rs.Send(reply)
 }
 
-func (rs *responseSender) SendBlockResponse(block *cb.Block) error {
+
+func (rs *responseSender) SendBlockResponse(
+	block *cb.Block,
+	channelID string,
+	chain deliver.Chain,
+	signedData *protoutil.SignedData,
+) error {
 	response := &ab.DeliverResponse{
 		Type: &ab.DeliverResponse_Block{Block: block},
 	}
 	return rs.Send(response)
+}
+
+func (rs *responseSender) DataType() string {
+	return "block"
 }
 
 

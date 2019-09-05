@@ -2,11 +2,11 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	deliver "github.com/mcc-github/blockchain/common/deliver"
-	blockledger "github.com/mcc-github/blockchain/common/ledger/blockledger"
-	policies "github.com/mcc-github/blockchain/common/policies"
+	"github.com/mcc-github/blockchain/common/deliver"
+	"github.com/mcc-github/blockchain/common/ledger/blockledger"
+	"github.com/mcc-github/blockchain/common/policies"
 )
 
 type Chain struct {

@@ -19,13 +19,11 @@ import (
 	"github.com/mcc-github/blockchain/common/configtx"
 	commonerrors "github.com/mcc-github/blockchain/common/errors"
 	"github.com/mcc-github/blockchain/common/flogging"
-	"github.com/mcc-github/blockchain/core/chaincode/platforms/golang"
 	"github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
 	"github.com/mcc-github/blockchain/core/common/validation"
 	"github.com/mcc-github/blockchain/core/ledger"
 	ledgerUtil "github.com/mcc-github/blockchain/core/ledger/util"
-	"github.com/mcc-github/blockchain/internal/peer/packaging"
 	"github.com/mcc-github/blockchain/msp"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
@@ -593,10 +591,8 @@ func (v *TxValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sy
 		return nil, err
 	}
 
-	
-	err = packaging.NewRegistry(&golang.Platform{}).ValidateDeploymentSpec(cds.ChaincodeSpec.Type.String(), cds.CodePackage)
-	if err != nil {
-		return nil, err
+	if cds.ChaincodeSpec.Type.String() != "GOLANG" {
+		return nil, errors.Errorf("unexpected chaincode type: %s", cds.ChaincodeSpec.Type.String())
 	}
 
 	return &sysccprovider.ChaincodeInstance{

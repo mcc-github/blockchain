@@ -10,11 +10,16 @@ import (
 	"runtime/debug"
 
 	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
 	"github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/deliver"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
+	"github.com/mcc-github/blockchain/core/common/privdata"
+	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/ledger/util"
+	"github.com/mcc-github/blockchain/msp"
+	"github.com/mcc-github/blockchain/msp/mgmt"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/pkg/errors"
 )
@@ -27,8 +32,28 @@ type PolicyCheckerProvider func(resourceName string) deliver.PolicyCheckerFunc
 
 
 type DeliverServer struct {
-	DeliverHandler        *deliver.Handler
-	PolicyCheckerProvider PolicyCheckerProvider
+	DeliverHandler          *deliver.Handler
+	PolicyCheckerProvider   PolicyCheckerProvider
+	CollectionPolicyChecker CollectionPolicyChecker
+	IdentityDeserializerMgr IdentityDeserializerManager
+}
+
+
+type Chain interface {
+	deliver.Chain
+	Ledger() ledger.PeerLedger
+}
+
+
+type CollectionPolicyChecker interface {
+	CheckCollectionPolicy(blockNum uint64, ccName string, collName string, cfgHistoryRetriever ledger.ConfigHistoryRetriever, deserializer msp.IdentityDeserializer, signedData *protoutil.SignedData) (bool, error)
+}
+
+
+type IdentityDeserializerManager interface {
+	
+	
+	Deserializer(channel string) (msp.IdentityDeserializer, error)
 }
 
 
@@ -45,11 +70,21 @@ func (brs *blockResponseSender) SendStatusResponse(status common.Status) error {
 }
 
 
-func (brs *blockResponseSender) SendBlockResponse(block *common.Block) error {
+func (brs *blockResponseSender) SendBlockResponse(
+	block *common.Block,
+	channelID string,
+	chain deliver.Chain,
+	signedData *protoutil.SignedData,
+) error {
+	
 	response := &peer.DeliverResponse{
 		Type: &peer.DeliverResponse_Block{Block: block},
 	}
 	return brs.Send(response)
+}
+
+func (brs *blockResponseSender) DataType() string {
+	return "block"
 }
 
 
@@ -72,7 +107,12 @@ func (fbrs *filteredBlockResponseSender) IsFiltered() bool {
 }
 
 
-func (fbrs *filteredBlockResponseSender) SendBlockResponse(block *common.Block) error {
+func (fbrs *filteredBlockResponseSender) SendBlockResponse(
+	block *common.Block,
+	channelID string,
+	chain deliver.Chain,
+	signedData *protoutil.SignedData,
+) error {
 	
 	b := blockEvent(*block)
 	filteredBlock, err := b.toFilteredBlock()
@@ -84,6 +124,109 @@ func (fbrs *filteredBlockResponseSender) SendBlockResponse(block *common.Block) 
 		Type: &peer.DeliverResponse_FilteredBlock{FilteredBlock: filteredBlock},
 	}
 	return fbrs.Send(response)
+}
+
+func (fbrs *filteredBlockResponseSender) DataType() string {
+	return "filtered_block"
+}
+
+
+type blockAndPrivateDataResponseSender struct {
+	peer.Deliver_DeliverWithPrivateDataServer
+	CollectionPolicyChecker
+	IdentityDeserializerManager
+}
+
+
+func (bprs *blockAndPrivateDataResponseSender) SendStatusResponse(status common.Status) error {
+	reply := &peer.DeliverResponse{
+		Type: &peer.DeliverResponse_Status{Status: status},
+	}
+	return bprs.Send(reply)
+}
+
+
+func (bprs *blockAndPrivateDataResponseSender) SendBlockResponse(
+	block *common.Block,
+	channelID string,
+	chain deliver.Chain,
+	signedData *protoutil.SignedData,
+) error {
+	pvtData, err := bprs.getPrivateData(block, chain, channelID, signedData)
+	if err != nil {
+		return err
+	}
+
+	blockAndPvtData := &peer.BlockAndPrivateData{
+		Block:          block,
+		PrivateDataMap: pvtData,
+	}
+	response := &peer.DeliverResponse{
+		Type: &peer.DeliverResponse_BlockAndPrivateData{BlockAndPrivateData: blockAndPvtData},
+	}
+	return bprs.Send(response)
+}
+
+func (bprs *blockAndPrivateDataResponseSender) DataType() string {
+	return "block_and_pvtdata"
+}
+
+
+func (bprs *blockAndPrivateDataResponseSender) getPrivateData(
+	block *common.Block,
+	chain deliver.Chain,
+	channelID string,
+	signedData *protoutil.SignedData,
+) (map[uint64]*rwset.TxPvtReadWriteSet, error) {
+
+	channel, ok := chain.(Chain)
+	if !ok {
+		return nil, errors.New("wrong chain type")
+	}
+
+	pvtData, err := channel.Ledger().GetPvtDataByNum(block.Header.Number, nil)
+	if err != nil {
+		logger.Errorf("Error getting private data by block number %d on channel %s", block.Header.Number, channelID)
+		return nil, errors.Wrapf(err, "error getting private data by block number %d", block.Header.Number)
+	}
+
+	seqs2Namespaces := aggregatedCollections(make(map[seqAndDataModel]map[string][]*rwset.CollectionPvtReadWriteSet))
+
+	configHistoryRetriever, err := channel.Ledger().GetConfigHistoryRetriever()
+	if err != nil {
+		return nil, err
+	}
+
+	identityDeserializer, err := bprs.IdentityDeserializerManager.Deserializer(channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	
+	for _, item := range pvtData {
+		logger.Debugf("Got private data for block number %d, tx sequence %d", block.Header.Number, item.SeqInBlock)
+		if item.WriteSet == nil {
+			continue
+		}
+		for _, ns := range item.WriteSet.NsPvtRwset {
+			for _, col := range ns.CollectionPvtRwset {
+				logger.Debugf("Checking policy for namespace %s, collection %s", ns.Namespace, col.CollectionName)
+
+				eligible, err := bprs.CollectionPolicyChecker.CheckCollectionPolicy(block.Header.Number,
+					ns.Namespace, col.CollectionName, configHistoryRetriever, identityDeserializer, signedData)
+				if err != nil {
+					return nil, err
+				}
+
+				if eligible {
+					logger.Debugf("Adding private data for namespace %s, collection %s", ns.Namespace, col.CollectionName)
+					seqs2Namespaces.addCollection(item.SeqInBlock, item.WriteSet.DataModel, ns.Namespace, col)
+				}
+			}
+		}
+	}
+
+	return seqs2Namespaces.asPrivateDataMap(), nil
 }
 
 
@@ -109,11 +252,6 @@ func (s *DeliverServer) DeliverFiltered(srv peer.Deliver_DeliverFilteredServer) 
 }
 
 
-func (s *DeliverServer) DeliverWithPrivateData(srv peer.Deliver_DeliverWithPrivateDataServer) (err error) {
-	panic("not implemented yet")
-}
-
-
 func (s *DeliverServer) Deliver(srv peer.Deliver_DeliverServer) (err error) {
 	logger.Debugf("Starting new Deliver handler")
 	defer dumpStacktraceOnPanic()
@@ -126,6 +264,30 @@ func (s *DeliverServer) Deliver(srv peer.Deliver_DeliverServer) (err error) {
 		},
 	}
 	return s.DeliverHandler.Handle(srv.Context(), deliverServer)
+}
+
+
+func (s *DeliverServer) DeliverWithPrivateData(srv peer.Deliver_DeliverWithPrivateDataServer) (err error) {
+	logger.Debug("Starting new DeliverWithPrivateData handler")
+	defer dumpStacktraceOnPanic()
+	if s.CollectionPolicyChecker == nil {
+		s.CollectionPolicyChecker = &collPolicyChecker{}
+	}
+	if s.IdentityDeserializerMgr == nil {
+		s.IdentityDeserializerMgr = &identityDeserializerMgr{}
+	}
+	
+	deliverServer := &deliver.Server{
+		PolicyChecker: s.PolicyCheckerProvider(resources.Event_Block),
+		Receiver:      srv,
+		ResponseSender: &blockAndPrivateDataResponseSender{
+			Deliver_DeliverWithPrivateDataServer: srv,
+			CollectionPolicyChecker:              s.CollectionPolicyChecker,
+			IdentityDeserializerManager:          s.IdentityDeserializerMgr,
+		},
+	}
+	err = s.DeliverHandler.Handle(srv.Context(), deliverServer)
+	return err
 }
 
 func (block *blockEvent) toFilteredBlock() (*peer.FilteredBlock, error) {
@@ -241,4 +403,120 @@ func dumpStacktraceOnPanic() {
 		}
 		logger.Debugf("Closing Deliver stream")
 	}()
+}
+
+type seqAndDataModel struct {
+	seq       uint64
+	dataModel rwset.TxReadWriteSet_DataModel
+}
+
+
+
+
+type aggregatedCollections map[seqAndDataModel]map[string][]*rwset.CollectionPvtReadWriteSet
+
+
+func (ac aggregatedCollections) addCollection(seqInBlock uint64, dm rwset.TxReadWriteSet_DataModel, namespace string, col *rwset.CollectionPvtReadWriteSet) {
+	seq := seqAndDataModel{
+		dataModel: dm,
+		seq:       seqInBlock,
+	}
+	if _, exists := ac[seq]; !exists {
+		ac[seq] = make(map[string][]*rwset.CollectionPvtReadWriteSet)
+	}
+	ac[seq][namespace] = append(ac[seq][namespace], col)
+}
+
+
+
+func (ac aggregatedCollections) asPrivateDataMap() map[uint64]*rwset.TxPvtReadWriteSet {
+	var pvtDataMap = make(map[uint64]*rwset.TxPvtReadWriteSet)
+	for seq, ns := range ac {
+		
+		txPvtRWSet := &rwset.TxPvtReadWriteSet{
+			DataModel: seq.dataModel,
+		}
+
+		for namespaceName, cols := range ns {
+			txPvtRWSet.NsPvtRwset = append(txPvtRWSet.NsPvtRwset, &rwset.NsPvtReadWriteSet{
+				Namespace:          namespaceName,
+				CollectionPvtRwset: cols,
+			})
+		}
+
+		pvtDataMap[seq.seq] = txPvtRWSet
+	}
+	return pvtDataMap
+}
+
+
+
+type identityDeserializerMgr struct {
+}
+
+func (*identityDeserializerMgr) Deserializer(channelID string) (msp.IdentityDeserializer, error) {
+	id, ok := mgmt.GetDeserializers()[channelID]
+	if !ok {
+		return nil, errors.Errorf("channel %s not found", channelID)
+	}
+	return id, nil
+}
+
+
+type collPolicyChecker struct {
+}
+
+
+func (cs *collPolicyChecker) CheckCollectionPolicy(
+	blockNum uint64,
+	ccName string,
+	collName string,
+	cfgHistoryRetriever ledger.ConfigHistoryRetriever,
+	deserializer msp.IdentityDeserializer,
+	signedData *protoutil.SignedData,
+) (bool, error) {
+	configInfo, err := cfgHistoryRetriever.MostRecentCollectionConfigBelow(blockNum, ccName)
+	if err != nil {
+		return false, errors.WithMessagef(err, "error getting most recent collection config below block sequence = %d for chaincode %s", blockNum, ccName)
+	}
+
+	staticCollConfig := extractStaticCollectionConfig(configInfo.CollectionConfig, collName)
+	if staticCollConfig == nil {
+		return false, errors.Errorf("no collection config was found for collection %s for chaincode %s", collName, ccName)
+	}
+
+	if !staticCollConfig.MemberOnlyRead {
+		return true, nil
+	}
+
+	
+	collAP := &privdata.SimpleCollection{}
+	err = collAP.Setup(staticCollConfig, deserializer)
+	if err != nil {
+		return false, errors.WithMessagef(err, "error setting up collection  %s", staticCollConfig.Name)
+	}
+	logger.Debugf("got collection access policy")
+
+	collFilter := collAP.AccessFilter()
+	if collFilter == nil {
+		logger.Debugf("collection %s has no access filter, skipping...", collName)
+		return false, nil
+	}
+
+	eligible := collFilter(*signedData)
+	return eligible, nil
+}
+
+func extractStaticCollectionConfig(configPackage *common.CollectionConfigPackage, collectionName string) *common.StaticCollectionConfig {
+	for _, config := range configPackage.Config {
+		switch cconf := config.Payload.(type) {
+		case *common.CollectionConfig_StaticCollectionConfig:
+			if cconf.StaticCollectionConfig.Name == collectionName {
+				return cconf.StaticCollectionConfig
+			}
+		default:
+			return nil
+		}
+	}
+	return nil
 }

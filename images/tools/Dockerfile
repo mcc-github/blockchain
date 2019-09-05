@@ -7,11 +7,11 @@ ARG ALPINE_VER
 FROM golang:${GO_VER}-alpine as golang
 
 RUN apk add --no-cache \
-	gcc \
-	musl-dev \
-	git \
 	bash \
-	make;
+	gcc \
+	git \
+	make \
+	musl-dev;
 
 ADD . $GOPATH/src/github.com/mcc-github/blockchain
 WORKDIR $GOPATH/src/github.com/mcc-github/blockchain
@@ -21,10 +21,12 @@ FROM golang as tools
 RUN make configtxgen configtxlator cryptogen peer discover idemixgen
 
 FROM golang:${GO_VER}-alpine
+# git is required to support `go list -m`
 RUN apk add --no-cache \
-	tzdata \
+	bash \
+	git \
 	jq \
-	bash;
+	tzdata;
 ENV FABRIC_CFG_PATH /etc/mcc-github/blockchain
 VOLUME /etc/mcc-github/blockchain
 COPY --from=tools /go/src/github.com/mcc-github/blockchain/.build/bin /usr/local/bin
