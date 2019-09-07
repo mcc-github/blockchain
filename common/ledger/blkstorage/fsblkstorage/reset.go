@@ -15,6 +15,7 @@ import (
 	"github.com/mcc-github/blockchain/common/ledger/util"
 )
 
+
 func ResetBlockStore(blockStorageDir string) error {
 	conf := &Conf{blockStorageDir: blockStorageDir}
 	indexDir := conf.getIndexDir()
@@ -170,6 +171,7 @@ func recordHeightIfGreaterThanPreviousRecording(ledgerDir string) error {
 	return nil
 }
 
+
 func LoadPreResetHeight(blockStorageDir string) (map[string]uint64, error) {
 	logger.Info("Loading Pre-reset heights")
 	preResetFilesMap, err := preRestHtFiles(blockStorageDir)
@@ -191,6 +193,7 @@ func LoadPreResetHeight(blockStorageDir string) (map[string]uint64, error) {
 	logger.Info("Pre-reset heights loaded")
 	return m, nil
 }
+
 
 func ClearPreResetHeight(blockStorageDir string) error {
 	logger.Info("Clearing Pre-reset heights")

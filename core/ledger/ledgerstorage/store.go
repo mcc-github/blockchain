@@ -43,9 +43,6 @@ var attrsToIndex = []blkstorage.IndexableAttr{
 	blkstorage.IndexableAttrBlockNum,
 	blkstorage.IndexableAttrTxID,
 	blkstorage.IndexableAttrBlockNumTranNum,
-	
-	blkstorage.IndexableAttrBlockTxID,
-	blkstorage.IndexableAttrTxValidationCode,
 }
 
 

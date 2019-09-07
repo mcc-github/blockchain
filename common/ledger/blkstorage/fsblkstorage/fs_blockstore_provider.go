@@ -23,6 +23,18 @@ import (
 	"github.com/mcc-github/blockchain/common/metrics"
 )
 
+const (
+	dataFormatVersion20 = "2.0"
+)
+
+func dataFormatVersion(indexConfig *blkstorage.IndexConfig) string {
+	
+	if indexConfig.Contains(blkstorage.IndexableAttrTxID) {
+		return dataFormatVersion20
+	}
+	return ""
+}
+
 
 type FsBlockstoreProvider struct {
 	conf            *Conf
@@ -33,7 +45,12 @@ type FsBlockstoreProvider struct {
 
 
 func NewProvider(conf *Conf, indexConfig *blkstorage.IndexConfig, metricsProvider metrics.Provider) (blkstorage.BlockStoreProvider, error) {
-	p, err := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: conf.getIndexDir()})
+	dbConf := &leveldbhelper.Conf{
+		DBPath:                conf.getIndexDir(),
+		ExpectedFormatVersion: dataFormatVersion(indexConfig),
+	}
+
+	p, err := leveldbhelper.NewProvider(dbConf)
 	if err != nil {
 		return nil, err
 	}

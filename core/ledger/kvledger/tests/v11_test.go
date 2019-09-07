@@ -13,7 +13,7 @@ import (
 
 	protopeer "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 
@@ -22,14 +22,29 @@ func TestV11(t *testing.T) {
 	defer env.cleanup()
 	
 	testutil.CopyDir("testdata/v11/sample_ledgers/ledgersData", env.initializer.Config.RootFSPath, true)
+
+	blkIndexPath := fmt.Sprintf("%s/chains/index", env.initializer.Config.RootFSPath)
 	historyDBPath := fmt.Sprintf("%s/historyLeveldb", env.initializer.Config.RootFSPath)
-	assert.PanicsWithValue(
+
+	
+	require.PanicsWithValue(
+		t,
+		fmt.Sprintf("Error in instantiating ledger provider: unexpected format. db path = [%s], data format = [], expected format = [2.0]",
+			blkIndexPath),
+		func() { env.initLedgerMgmt() },
+	)
+
+	
+	require.NoError(t, os.RemoveAll(blkIndexPath))
+	require.PanicsWithValue(
 		t,
 		fmt.Sprintf("Error in instantiating ledger provider: unexpected format. db path = [%s], data format = [], expected format = [2.0]",
 			historyDBPath),
 		func() { env.initLedgerMgmt() },
 	)
-	assert.NoError(t, os.RemoveAll(historyDBPath))
+
+	
+	require.NoError(t, os.RemoveAll(historyDBPath))
 	env.initLedgerMgmt()
 
 	h1, h2 := env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)

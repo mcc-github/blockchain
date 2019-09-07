@@ -19,17 +19,25 @@ type IndexableAttr string
 
 
 const (
-	IndexableAttrBlockNum         = IndexableAttr("BlockNum")
-	IndexableAttrBlockHash        = IndexableAttr("BlockHash")
-	IndexableAttrTxID             = IndexableAttr("TxID")
-	IndexableAttrBlockNumTranNum  = IndexableAttr("BlockNumTranNum")
-	IndexableAttrBlockTxID        = IndexableAttr("BlockTxID")
-	IndexableAttrTxValidationCode = IndexableAttr("TxValidationCode")
+	IndexableAttrBlockNum        = IndexableAttr("BlockNum")
+	IndexableAttrBlockHash       = IndexableAttr("BlockHash")
+	IndexableAttrTxID            = IndexableAttr("TxID")
+	IndexableAttrBlockNumTranNum = IndexableAttr("BlockNumTranNum")
 )
 
 
 type IndexConfig struct {
 	AttrsToIndex []IndexableAttr
+}
+
+
+func (c *IndexConfig) Contains(indexableAttr IndexableAttr) bool {
+	for _, a := range c.AttrsToIndex {
+		if a == indexableAttr {
+			return true
+		}
+	}
+	return false
 }
 
 var (
