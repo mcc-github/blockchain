@@ -42,7 +42,7 @@ func (p *Platform) Name() string {
 
 
 func (p *Platform) ValidatePath(rawPath string) error {
-	_, err := describeCode(rawPath)
+	_, err := DescribeCode(rawPath)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ const c_ISDIR = 040000
 
 
 func (p *Platform) GetDeploymentPayload(codepath string) ([]byte, error) {
-	codeDescriptor, err := describeCode(codepath)
+	codeDescriptor, err := DescribeCode(codepath)
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +206,12 @@ if [ -f "/chaincode/input/src/go.mod" ] && [ -d "/chaincode/input/src/vendor" ];
 elif [ -f "/chaincode/input/src/go.mod" ]; then
     cd /chaincode/input/src
     GO111MODULE=on GOPROXY=https://proxy.golang.org go build -v -mod=readonly %[1]s -o /chaincode/output/chaincode %[2]s
+elif [ -f "/chaincode/input/src/%[2]s/go.mod" ] && [ -d "/chaincode/input/src/%[2]s/vendor" ]; then
+    cd /chaincode/input/src/%[2]s
+    GO111MODULE=on GOPROXY=https://proxy.golang.org go build -v -mod=vendor %[1]s -o /chaincode/output/chaincode .
+elif [ -f "/chaincode/input/src/%[2]s/go.mod" ]; then
+    cd /chaincode/input/src/%[2]s
+    GO111MODULE=on GOPROXY=https://proxy.golang.org go build -v -mod=readonly %[1]s -o /chaincode/output/chaincode .
 else
     GOPATH=/chaincode/input:$GOPATH go build -v %[1]s -o /chaincode/output/chaincode %[2]s
 fi
@@ -235,7 +241,7 @@ func (cd CodeDescriptor) isMetadata(path string) bool {
 }
 
 
-func describeCode(path string) (*CodeDescriptor, error) {
+func DescribeCode(path string) (*CodeDescriptor, error) {
 	if path == "" {
 		return nil, errors.New("cannot collect files from empty chaincode path")
 	}
@@ -247,9 +253,15 @@ func describeCode(path string) (*CodeDescriptor, error) {
 	}
 
 	if modInfo != nil {
+		
+		relImport, err := filepath.Rel(modInfo.ModulePath, modInfo.ImportPath)
+		if err != nil {
+			return nil, err
+		}
+
 		return &CodeDescriptor{
 			Module:       true,
-			MetadataRoot: filepath.Join(modInfo.Dir, modInfo.ImportPath, "META-INF"),
+			MetadataRoot: filepath.Join(modInfo.Dir, relImport, "META-INF"),
 			Path:         modInfo.ImportPath,
 			Source:       modInfo.Dir,
 		}, nil
