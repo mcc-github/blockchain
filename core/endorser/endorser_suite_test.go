@@ -37,6 +37,11 @@ type txSimulator interface {
 	ledger.TxSimulator
 }
 
+
+type historyQueryExecutor interface {
+	ledger.HistoryQueryExecutor
+}
+
 func TestEndorser(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Endorser Suite")

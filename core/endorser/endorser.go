@@ -18,6 +18,7 @@ import (
 	"github.com/mcc-github/blockchain-protos-go/transientstore"
 	"github.com/mcc-github/blockchain/common/flogging"
 	"github.com/mcc-github/blockchain/common/util"
+	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/internal/pkg/identity"
@@ -64,7 +65,7 @@ type Support interface {
 	ExecuteLegacyInit(txParams *ccprovider.TransactionParams, name, version string, spec *pb.ChaincodeInput) (*pb.Response, *pb.ChaincodeEvent, error)
 
 	
-	GetChaincodeDefinition(channelID, chaincodeID string, txsim ledger.QueryExecutor) (ccprovider.ChaincodeDefinition, error)
+	ChaincodeEndorsementInfo(channelID, chaincodeID string, txsim ledger.QueryExecutor) (*lifecycle.ChaincodeEndorsementInfo, error)
 
 	
 	
@@ -106,8 +107,8 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, input *
 	endorserLogger.Infof("[%s][%s] Entry chaincode: %s", txParams.ChannelID, shorttxid(txParams.TxID), chaincodeName)
 	defer func(start time.Time) {
 		logger := endorserLogger.WithOptions(zap.AddCallerSkip(1))
-		elapsedMilliseconds := time.Since(start).Round(time.Millisecond) / time.Millisecond
-		logger.Infof("[%s][%s] Exit chaincode: %s (%dms)", txParams.ChannelID, shorttxid(txParams.TxID), chaincodeName, elapsedMilliseconds)
+		elapsedMillisec := time.Since(start).Round(time.Millisecond) / time.Millisecond
+		logger.Infof("[%s][%s] Exit chaincode: %s (%dms)", txParams.ChannelID, shorttxid(txParams.TxID), chaincodeName, elapsedMillisec)
 	}(time.Now())
 
 	res, ccevent, err := e.Support.Execute(txParams, chaincodeName, input)
@@ -124,7 +125,7 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, input *
 
 	
 	if chaincodeName != "lscc" || len(input.Args) < 3 || (string(input.Args[0]) != "deploy" && string(input.Args[0]) != "upgrade") {
-		return res, ccevent, err
+		return res, ccevent, nil
 	}
 
 	
@@ -369,7 +370,7 @@ func (e *Endorser) ProcessProposalSuccessfullyOrError(up *UnpackedProposal) (*pb
 		txParams.HistoryQueryExecutor = hqe
 	}
 
-	cdLedger, err := e.Support.GetChaincodeDefinition(up.ChannelHeader.ChannelId, up.ChaincodeName, txParams.TXSimulator)
+	cdLedger, err := e.Support.ChaincodeEndorsementInfo(up.ChannelID(), up.ChaincodeName, txParams.TXSimulator)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "make sure the chaincode %s has been successfully defined on channel %s and try again", up.ChaincodeName, up.ChannelID())
 	}
@@ -387,7 +388,7 @@ func (e *Endorser) ProcessProposalSuccessfullyOrError(up *UnpackedProposal) (*pb
 
 	prpBytes, err := protoutil.GetBytesProposalResponsePayload(up.ProposalHash, res, simulationResult, cceventBytes, &pb.ChaincodeID{
 		Name:    up.ChaincodeName,
-		Version: cdLedger.CCVersion(),
+		Version: cdLedger.Version,
 	})
 	if err != nil {
 		endorserLogger.Warning("Failed marshaling the proposal response payload to bytes", err)
@@ -422,7 +423,7 @@ func (e *Endorser) ProcessProposalSuccessfullyOrError(up *UnpackedProposal) (*pb
 		}, nil
 	}
 
-	escc := cdLedger.Endorsement()
+	escc := cdLedger.EndorsementPlugin
 
 	endorserLogger.Debugf("[%s][%s] escc for chaincode %s is %s", up.ChannelID(), shorttxid(up.TxID()), up.ChaincodeName, escc)
 

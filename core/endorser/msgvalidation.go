@@ -134,6 +134,11 @@ func (up *UnpackedProposal) Validate(idDeserializer msp.IdentityDeserializer) er
 	}
 
 	
+	if up.ChannelHeader.Epoch != 0 {
+		return errors.Errorf("epoch is non-zero")
+	}
+
+	
 	if len(up.SignatureHeader.Nonce) == 0 {
 		return errors.Errorf("nonce is empty")
 	}

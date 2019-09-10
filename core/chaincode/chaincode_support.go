@@ -14,6 +14,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	pb "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/util"
+	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/container/ccintf"
 	"github.com/mcc-github/blockchain/core/ledger"
@@ -46,15 +47,8 @@ type Launcher interface {
 
 type Lifecycle interface {
 	
-	ChaincodeDefinition(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error)
-}
-
-
-
-
-
-type LegacyChaincodeDefinition interface {
-	ExecuteLegacySecurityChecks() error
+	
+	ChaincodeEndorsementInfo(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (*lifecycle.ChaincodeEndorsementInfo, error)
 }
 
 
@@ -210,21 +204,14 @@ func (cs *ChaincodeSupport) Invoke(txParams *ccprovider.TransactionParams, chain
 
 func (cs *ChaincodeSupport) CheckInvocation(txParams *ccprovider.TransactionParams, chaincodeName string, input *pb.ChaincodeInput) (ccid string, cctype pb.ChaincodeMessage_Type, err error) {
 	chaincodeLogger.Debugf("[%s] getting chaincode data for %s on channel %s", shorttxid(txParams.TxID), chaincodeName, txParams.ChannelID)
-	cd, err := cs.Lifecycle.ChaincodeDefinition(txParams.ChannelID, chaincodeName, txParams.TXSimulator)
+	cii, err := cs.Lifecycle.ChaincodeEndorsementInfo(txParams.ChannelID, chaincodeName, txParams.TXSimulator)
 	if err != nil {
 		logDevModeError(cs.UserRunsCC)
 		return "", 0, errors.Wrapf(err, "[channel %s] failed to get chaincode container info for %s", txParams.ChannelID, chaincodeName)
 	}
 
-	if legacyDefinition, ok := cd.(LegacyChaincodeDefinition); ok {
-		err = legacyDefinition.ExecuteLegacySecurityChecks()
-		if err != nil {
-			return "", 0, errors.WithMessagef(err, "[channel %s] failed the chaincode security checks for %s", txParams.ChannelID, chaincodeName)
-		}
-	}
-
 	needsInitialization := false
-	if cd.RequiresInit() {
+	if cii.EnforceInit {
 		
 		
 
@@ -233,14 +220,14 @@ func (cs *ChaincodeSupport) CheckInvocation(txParams *ccprovider.TransactionPara
 			return "", 0, errors.WithMessage(err, "could not get 'initialized' key")
 		}
 
-		needsInitialization = !bytes.Equal(value, []byte(cd.CCVersion()))
+		needsInitialization = !bytes.Equal(value, []byte(cii.Version))
 	}
 
 	
 	
 	
 	if input.IsInit {
-		if !cd.RequiresInit() {
+		if !cii.EnforceInit {
 			return "", 0, errors.Errorf("chaincode '%s' does not require initialization but called as init", chaincodeName)
 		}
 
@@ -248,19 +235,19 @@ func (cs *ChaincodeSupport) CheckInvocation(txParams *ccprovider.TransactionPara
 			return "", 0, errors.Errorf("chaincode '%s' is already initialized but called as init", chaincodeName)
 		}
 
-		err = txParams.TXSimulator.SetState(chaincodeName, InitializedKeyName, []byte(cd.CCVersion()))
+		err = txParams.TXSimulator.SetState(chaincodeName, InitializedKeyName, []byte(cii.Version))
 		if err != nil {
 			return "", 0, errors.WithMessage(err, "could not set 'initialized' key")
 		}
 
-		return cd.ChaincodeID(), pb.ChaincodeMessage_INIT, nil
+		return cii.ChaincodeID, pb.ChaincodeMessage_INIT, nil
 	}
 
 	if needsInitialization {
 		return "", 0, errors.Errorf("chaincode '%s' has not been initialized for this version, must call as init first", chaincodeName)
 	}
 
-	return cd.ChaincodeID(), pb.ChaincodeMessage_TRANSACTION, nil
+	return cii.ChaincodeID, pb.ChaincodeMessage_TRANSACTION, nil
 }
 
 

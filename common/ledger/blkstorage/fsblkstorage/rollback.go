@@ -1,5 +1,6 @@
 /*
 Copyright IBM Corp. All Rights Reserved.
+
 SPDX-License-Identifier: Apache-2.0
 */
 
@@ -123,17 +124,11 @@ func (r *rollbackMgr) deleteIndexEntriesRange(startBlkNum, endBlkNum uint64) err
 
 	numberOfBlocksToRetrieve := endBlkNum - startBlkNum + 1
 	for numberOfBlocksToRetrieve > 0 {
-		blockBytes, placementInfo, err := stream.nextBlockBytesAndPlacementInfo()
+		blockBytes, _, err := stream.nextBlockBytesAndPlacementInfo()
 		if err != nil {
 			return err
 		}
-
 		blockInfo, err := extractSerializedBlockInfo(blockBytes)
-		if err != nil {
-			return err
-		}
-
-		err = populateBlockInfoWithDuplicateTxids(blockInfo, placementInfo, r.indexStore)
 		if err != nil {
 			return err
 		}
@@ -143,33 +138,6 @@ func (r *rollbackMgr) deleteIndexEntriesRange(startBlkNum, endBlkNum uint64) err
 
 	batch.Put(indexCheckpointKey, encodeBlockNum(startBlkNum-1))
 	return r.indexStore.db.WriteBatch(batch, true)
-}
-
-func populateBlockInfoWithDuplicateTxids(blockInfo *serializedBlockInfo, placementInfo *blockPlacementInfo, indexStore *blockIndex) error {
-	
-	if !indexStore.isAttributeIndexed(blkstorage.IndexableAttrTxID) {
-		return nil
-	}
-
-	for _, txOffset := range blockInfo.txOffsets {
-		blockLoc, err := indexStore.getBlockLocByTxID(txOffset.txID)
-		
-		
-		
-		
-		if err == blkstorage.ErrNotFoundInIndex {
-			logger.Warnf("TxID [%s] not found in index... skipping this TxID", txOffset.txID)
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		
-		if blockLoc.fileSuffixNum != placementInfo.fileNum || blockLoc.offset != int(placementInfo.blockStartOffset) {
-			txOffset.isDuplicate = true
-		}
-	}
-	return nil
 }
 
 func addIndexEntriesToBeDeleted(batch *leveldbhelper.UpdateBatch, blockInfo *serializedBlockInfo, indexStore *blockIndex) error {
@@ -187,16 +155,11 @@ func addIndexEntriesToBeDeleted(batch *leveldbhelper.UpdateBatch, blockInfo *ser
 		}
 	}
 
-	for _, txOffset := range blockInfo.txOffsets {
-		if txOffset.isDuplicate {
-			continue
-		}
-
-		if indexStore.isAttributeIndexed(blkstorage.IndexableAttrTxID) {
-			batch.Delete(constructTxIDKey(txOffset.txID))
+	if indexStore.isAttributeIndexed(blkstorage.IndexableAttrTxID) {
+		for i, txOffset := range blockInfo.txOffsets {
+			batch.Delete(constructTxIDKey(txOffset.txID, blockInfo.blockHeader.Number, uint64(i)))
 		}
 	}
-
 	return nil
 }
 

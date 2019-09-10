@@ -23,6 +23,7 @@ import (
 	"github.com/mcc-github/blockchain/common/policies"
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
+	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/common/privdata"
 	"github.com/mcc-github/blockchain/core/common/sysccprovider"
@@ -206,12 +207,11 @@ func (lscc *LifeCycleSysCC) Name() string              { return "lscc" }
 func (lscc *LifeCycleSysCC) Chaincode() shim.Chaincode { return lscc }
 
 type LegacySecurity struct {
-	*ccprovider.ChaincodeData
 	Support FilesystemSupport
 }
 
-func (ls *LegacySecurity) SecurityCheckLegacyChaincode() error {
-	ccpack, err := ls.Support.GetChaincodeFromLocalStorage(ls.ChaincodeData.ChaincodeID())
+func (ls *LegacySecurity) SecurityCheckLegacyChaincode(cd *ccprovider.ChaincodeData) error {
+	ccpack, err := ls.Support.GetChaincodeFromLocalStorage(cd.ChaincodeID())
 	if err != nil {
 		return InvalidDeploymentSpecErr(err.Error())
 	}
@@ -221,7 +221,7 @@ func (ls *LegacySecurity) SecurityCheckLegacyChaincode() error {
 	
 	
 	
-	if err = ccpack.ValidateCC(ls.ChaincodeData); err != nil {
+	if err = ccpack.ValidateCC(cd); err != nil {
 		return InvalidCCOnFSError(err.Error())
 	}
 
@@ -240,15 +240,15 @@ func (ls *LegacySecurity) SecurityCheckLegacyChaincode() error {
 	
 	
 	if fsData.InstantiationPolicy != nil {
-		if !bytes.Equal(fsData.InstantiationPolicy, ls.ChaincodeData.InstantiationPolicy) {
-			return fmt.Errorf("Instantiation policy mismatch for cc %s", ls.ChaincodeID())
+		if !bytes.Equal(fsData.InstantiationPolicy, cd.InstantiationPolicy) {
+			return fmt.Errorf("Instantiation policy mismatch for cc %s", cd.ChaincodeID())
 		}
 	}
 
 	return nil
 }
 
-func (lscc *LifeCycleSysCC) ChaincodeDefinition(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (ccprovider.ChaincodeDefinition, error) {
+func (lscc *LifeCycleSysCC) ChaincodeEndorsementInfo(channelID, chaincodeName string, qe ledger.SimpleQueryExecutor) (*lifecycle.ChaincodeEndorsementInfo, error) {
 	chaincodeDataBytes, err := qe.GetState("lscc", chaincodeName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not retrieve state for chaincode %s", chaincodeName)
@@ -264,9 +264,19 @@ func (lscc *LifeCycleSysCC) ChaincodeDefinition(channelID, chaincodeName string,
 		return nil, errors.Wrapf(err, "chaincode %s has bad definition", chaincodeName)
 	}
 
-	return &LegacySecurity{
-		ChaincodeData: chaincodeData,
-		Support:       lscc.Support,
+	ls := &LegacySecurity{
+		Support: lscc.Support,
+	}
+
+	err = ls.SecurityCheckLegacyChaincode(chaincodeData)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed security checks")
+	}
+
+	return &lifecycle.ChaincodeEndorsementInfo{
+		Version:           chaincodeData.Version,
+		EndorsementPlugin: chaincodeData.Escc,
+		ChaincodeID:       chaincodeData.Name + ":" + chaincodeData.Version,
 	}, nil
 }
 

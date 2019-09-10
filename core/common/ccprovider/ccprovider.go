@@ -355,24 +355,6 @@ func GetInstalledChaincodes() (*pb.ChaincodeQueryResponse, error) {
 
 
 
-type ChaincodeDefinition interface {
-	
-	CCVersion() string
-
-	
-	
-	Endorsement() string
-
-	
-	RequiresInit() bool
-
-	
-	ChaincodeID() string
-}
-
-
-
-
 
 
 type ChaincodeData struct {
@@ -400,43 +382,6 @@ type ChaincodeData struct {
 
 	
 	InstantiationPolicy []byte `protobuf:"bytes,8,opt,name=instantiation_policy,proto3"`
-}
-
-
-func (cd *ChaincodeData) CCName() string {
-	return cd.Name
-}
-
-
-func (cd *ChaincodeData) Hash() []byte {
-	return cd.Id
-}
-
-
-func (cd *ChaincodeData) CCVersion() string {
-	return cd.Version
-}
-
-
-
-
-
-func (cd *ChaincodeData) Validation() (string, []byte) {
-	return cd.Vscc, cd.Policy
-}
-
-
-
-func (cd *ChaincodeData) Endorsement() string {
-	return cd.Escc
-}
-
-
-
-
-
-func (cd *ChaincodeData) RequiresInit() bool {
-	return false
 }
 
 

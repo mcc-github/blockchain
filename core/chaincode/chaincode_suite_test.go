@@ -65,11 +65,6 @@ type lifecycle_ interface {
 }
 
 
-type legacyChaincodeDefinition interface {
-	chaincode.LegacyChaincodeDefinition
-}
-
-
 type chaincodeStream interface {
 	ccintf.ChaincodeStream
 }

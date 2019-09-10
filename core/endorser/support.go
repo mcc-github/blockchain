@@ -14,9 +14,10 @@ import (
 	"github.com/mcc-github/blockchain/core/aclmgmt"
 	"github.com/mcc-github/blockchain/core/aclmgmt/resources"
 	"github.com/mcc-github/blockchain/core/chaincode"
+	"github.com/mcc-github/blockchain/core/chaincode/lifecycle"
 	"github.com/mcc-github/blockchain/core/common/ccprovider"
 	"github.com/mcc-github/blockchain/core/handlers/decoration"
-	. "github.com/mcc-github/blockchain/core/handlers/endorsement/api/identities"
+	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api/identities"
 	"github.com/mcc-github/blockchain/core/handlers/library"
 	"github.com/mcc-github/blockchain/core/ledger"
 	"github.com/mcc-github/blockchain/core/scc"
@@ -50,7 +51,7 @@ func (s *SupportImpl) NewQueryCreator(channel string) (QueryCreator, error) {
 	return lgr, nil
 }
 
-func (s *SupportImpl) SigningIdentityForRequest(*pb.SignedProposal) (SigningIdentity, error) {
+func (s *SupportImpl) SigningIdentityForRequest(*pb.SignedProposal) (endorsement.SigningIdentity, error) {
 	return s.SignerSerializer, nil
 }
 
@@ -126,8 +127,8 @@ func (s *SupportImpl) Execute(txParams *ccprovider.TransactionParams, name strin
 }
 
 
-func (s *SupportImpl) GetChaincodeDefinition(channelID, chaincodeName string, txsim ledger.QueryExecutor) (ccprovider.ChaincodeDefinition, error) {
-	return s.ChaincodeSupport.Lifecycle.ChaincodeDefinition(channelID, chaincodeName, txsim)
+func (s *SupportImpl) ChaincodeEndorsementInfo(channelID, chaincodeName string, txsim ledger.QueryExecutor) (*lifecycle.ChaincodeEndorsementInfo, error) {
+	return s.ChaincodeSupport.Lifecycle.ChaincodeEndorsementInfo(channelID, chaincodeName, txsim)
 }
 
 
