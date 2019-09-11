@@ -32,10 +32,10 @@ func TestNewDataRetriever_GetDataFromTransientStore(t *testing.T) {
 	collectionName := "testCollectionName"
 
 	rwSetScanner.On("Close")
-	rwSetScanner.On("NextWithConfig").Return(&transientstore.EndorserPvtSimulationResultsWithConfig{
+	rwSetScanner.On("Next").Return(&transientstore.EndorserPvtSimulationResults{
 		ReceivedAtBlockHeight:          2,
 		PvtSimulationResultsWithConfig: nil,
-	}, nil).Once().On("NextWithConfig").Return(&transientstore.EndorserPvtSimulationResultsWithConfig{
+	}, nil).Once().On("Next").Return(&transientstore.EndorserPvtSimulationResults{
 		ReceivedAtBlockHeight: 2,
 		PvtSimulationResultsWithConfig: &transientstore2.TxPvtReadWriteSetWithConfigInfo{
 			PvtRwset: &rwset.TxPvtReadWriteSet{
@@ -61,7 +61,7 @@ func TestNewDataRetriever_GetDataFromTransientStore(t *testing.T) {
 		},
 	}, nil).
 		Once(). 
-		On("NextWithConfig").Return(nil, nil)
+		On("Next").Return(nil, nil)
 
 	dataStore.On("LedgerHeight").Return(uint64(1), nil)
 	dataStore.On("GetTxPvtRWSetByTxid", "testTxID", mock.Anything).Return(rwSetScanner, nil)
@@ -557,7 +557,7 @@ func TestNewDataRetriever_FailedToReadNext(t *testing.T) {
 	collectionName := "testCollectionName"
 
 	rwSetScanner.On("Close")
-	rwSetScanner.On("NextWithConfig").Return(nil, errors.New("failed to read next"))
+	rwSetScanner.On("Next").Return(nil, errors.New("failed to read next"))
 
 	dataStore.On("LedgerHeight").Return(uint64(1), nil)
 	dataStore.On("GetTxPvtRWSetByTxid", "testTxID", mock.Anything).Return(rwSetScanner, nil)
@@ -588,7 +588,7 @@ func TestNewDataRetriever_EmptyPvtRWSetInTransientStore(t *testing.T) {
 	collectionName := "testCollectionName"
 
 	rwSetScanner.On("Close")
-	rwSetScanner.On("NextWithConfig").Return(&transientstore.EndorserPvtSimulationResultsWithConfig{
+	rwSetScanner.On("Next").Return(&transientstore.EndorserPvtSimulationResults{
 		ReceivedAtBlockHeight: 2,
 		PvtSimulationResultsWithConfig: &transientstore2.TxPvtReadWriteSetWithConfigInfo{
 			CollectionConfigs: map[string]*common.CollectionConfigPackage{
@@ -607,7 +607,7 @@ func TestNewDataRetriever_EmptyPvtRWSetInTransientStore(t *testing.T) {
 		},
 	}, nil).
 		Once(). 
-		On("NextWithConfig").Return(nil, nil)
+		On("Next").Return(nil, nil)
 
 	dataStore.On("LedgerHeight").Return(uint64(1), nil)
 	dataStore.On("GetTxPvtRWSetByTxid", "testTxID", mock.Anything).Return(rwSetScanner, nil)

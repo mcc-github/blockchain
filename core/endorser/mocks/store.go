@@ -1,10 +1,10 @@
 
+
 package mocks
 
 import blockchain_protos_gotransientstore "github.com/mcc-github/blockchain-protos-go/transientstore"
 import ledger "github.com/mcc-github/blockchain/core/ledger"
 import mock "github.com/stretchr/testify/mock"
-import rwset "github.com/mcc-github/blockchain-protos-go/ledger/rwset"
 import transientstore "github.com/mcc-github/blockchain/core/transientstore"
 
 
@@ -57,21 +57,7 @@ func (_m *Store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter)
 }
 
 
-func (_m *Store) Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error {
-	ret := _m.Called(txid, blockHeight, privateSimulationResults)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(string, uint64, *rwset.TxPvtReadWriteSet) error); ok {
-		r0 = rf(txid, blockHeight, privateSimulationResults)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-
-func (_m *Store) PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *blockchain_protos_gotransientstore.TxPvtReadWriteSetWithConfigInfo) error {
+func (_m *Store) Persist(txid string, blockHeight uint64, privateSimulationResultsWithConfig *blockchain_protos_gotransientstore.TxPvtReadWriteSetWithConfigInfo) error {
 	ret := _m.Called(txid, blockHeight, privateSimulationResultsWithConfig)
 
 	var r0 error

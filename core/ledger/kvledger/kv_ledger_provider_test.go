@@ -23,9 +23,11 @@ import (
 	"github.com/mcc-github/blockchain/common/util"
 	"github.com/mcc-github/blockchain/core/ledger"
 	lgr "github.com/mcc-github/blockchain/core/ledger"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger/msgs"
 	"github.com/mcc-github/blockchain/core/ledger/mock"
 	"github.com/mcc-github/blockchain/protoutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLedgerProvider(t *testing.T) {
@@ -46,13 +48,18 @@ func TestLedgerProvider(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, existingLedgerIDs, numLedgers)
 
+	
+	s := provider.idStore
+	val, err := s.db.Get(formatKey)
+	require.NoError(t, err)
+	require.Equal(t, []byte(idStoreFormatVersion), val)
+
 	provider.Close()
 
 	provider = testutilNewProvider(conf, t)
 	defer provider.Close()
 	ledgerIds, _ := provider.List()
 	assert.Len(t, ledgerIds, numLedgers)
-	t.Logf("ledgerIDs=%#v", ledgerIds)
 	for i := 0; i < numLedgers; i++ {
 		assert.Equal(t, constructTestLedgerID(i), ledgerIds[i])
 	}
@@ -69,11 +76,18 @@ func TestLedgerProvider(t *testing.T) {
 
 		
 		s := provider.idStore
-		gbBytesInProviderStore, err := s.db.Get(s.encodeLedgerKey(ledgerid))
+		gbBytesInProviderStore, err := s.db.Get(s.encodeLedgerKey(ledgerid, ledgerKeyPrefix))
 		assert.NoError(t, err)
 		gb := &common.Block{}
 		assert.NoError(t, proto.Unmarshal(gbBytesInProviderStore, gb))
 		assert.True(t, proto.Equal(gb, genesisBlocks[i]), "proto messages are not equal")
+
+		
+		val, err := s.db.Get(s.encodeLedgerKey(ledgerid, metadataKeyPrefix))
+		require.NoError(t, err)
+		metadata := &msgs.LedgerMetadata{}
+		require.NoError(t, proto.Unmarshal(val, metadata))
+		require.Equal(t, msgs.Status_ACTIVE, metadata.Status)
 	}
 	gb, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(2))
 	_, err = provider.Create(gb)
@@ -85,7 +99,68 @@ func TestLedgerProvider(t *testing.T) {
 
 	_, err = provider.Open(constructTestLedgerID(numLedgers))
 	assert.Equal(t, ErrNonExistingLedgerID, err)
+}
 
+func TestGetActiveLedgerIDsIteratorError(t *testing.T) {
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+	provider := testutilNewProvider(conf, t)
+
+	for i := 0; i < 2; i++ {
+		genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(i))
+		provider.Create(genesisBlock)
+	}
+
+	
+	provider.Close()
+	_, err := provider.idStore.getActiveLedgerIDs()
+	require.EqualError(t, err, "error getting ledger ids from idStore: leveldb: closed")
+}
+
+func TestLedgerMetataDataUnmarshalError(t *testing.T) {
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+	provider := testutilNewProvider(conf, t)
+
+	ledgerID := constructTestLedgerID(0)
+	genesisBlock, _ := configtxtest.MakeGenesisBlock(ledgerID)
+	provider.Create(genesisBlock)
+
+	
+	provider.idStore.db.Put(provider.idStore.encodeLedgerKey(ledgerID, metadataKeyPrefix), []byte("invalid"), true)
+
+	_, err := provider.List()
+	require.EqualError(t, err, "error unmarshing ledger metadata: unexpected EOF")
+
+	_, err = provider.Open(ledgerID)
+	require.EqualError(t, err, "error unmarshing ledger metadata: unexpected EOF")
+}
+
+func TestNewProviderIdStoreFormatError(t *testing.T) {
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+
+	testutil.CopyDir("tests/testdata/v11/sample_ledgers/ledgersData", conf.RootFSPath, true)
+
+	
+	_, err := NewProvider(
+		&lgr.Initializer{
+			DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+			MetricsProvider:               &disabled.Provider{},
+			Config:                        conf,
+		},
+	)
+	require.EqualError(t, err, fmt.Sprintf("unexpected format. db path = [%s], data format = [], expected format = [2.0]", LedgerProviderPath(conf.RootFSPath)))
+}
+
+func TestUpgradeIDStoreFormatDBError(t *testing.T) {
+	conf, cleanup := testConfig(t)
+	defer cleanup()
+	provider := testutilNewProvider(conf, t)
+	provider.Close()
+
+	err := provider.idStore.upgradeFormat()
+	require.EqualError(t, err, "error retrieving leveldb key [[]byte{0x66}]: leveldb: closed")
 }
 
 func TestLedgerProviderHistoryDBDisabled(t *testing.T) {
@@ -130,7 +205,7 @@ func TestLedgerProviderHistoryDBDisabled(t *testing.T) {
 
 		
 		s := provider.idStore
-		gbBytesInProviderStore, err := s.db.Get(s.encodeLedgerKey(ledgerid))
+		gbBytesInProviderStore, err := s.db.Get(s.encodeLedgerKey(ledgerid, ledgerKeyPrefix))
 		assert.NoError(t, err)
 		gb := &common.Block{}
 		assert.NoError(t, proto.Unmarshal(gbBytesInProviderStore, gb))

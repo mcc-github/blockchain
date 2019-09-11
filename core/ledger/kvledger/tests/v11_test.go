@@ -13,6 +13,8 @@ import (
 
 	protopeer "github.com/mcc-github/blockchain-protos-go/peer"
 	"github.com/mcc-github/blockchain/common/ledger/testutil"
+	"github.com/mcc-github/blockchain/core/ledger/kvledger"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +27,18 @@ func TestV11(t *testing.T) {
 
 	blkIndexPath := fmt.Sprintf("%s/chains/index", env.initializer.Config.RootFSPath)
 	historyDBPath := fmt.Sprintf("%s/historyLeveldb", env.initializer.Config.RootFSPath)
+	idStorePath := kvledger.LedgerProviderPath(env.initializer.Config.RootFSPath)
 
+	
+	assert.PanicsWithValue(
+		t,
+		fmt.Sprintf("Error in instantiating ledger provider: unexpected format. db path = [%s], data format = [], expected format = [2.0]",
+			idStorePath),
+		func() { env.initLedgerMgmt() },
+	)
+
+	
+	require.NoError(t, kvledger.UpgradeIDStoreFormat(env.initializer.Config.RootFSPath))
 	
 	require.PanicsWithValue(
 		t,

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/mcc-github/blockchain-protos-go/common"
-	"github.com/mcc-github/blockchain-protos-go/ledger/rwset"
 	"github.com/mcc-github/blockchain-protos-go/peer"
 	transientstore2 "github.com/mcc-github/blockchain-protos-go/transientstore"
 	"github.com/mcc-github/blockchain/bccsp/sw"
@@ -63,11 +62,7 @@ func (*mockTransientStore) PurgeByHeight(maxBlockNumToRetain uint64) error {
 	return nil
 }
 
-func (*mockTransientStore) Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error {
-	panic("implement me")
-}
-
-func (*mockTransientStore) PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *transientstore2.TxPvtReadWriteSetWithConfigInfo) error {
+func (*mockTransientStore) Persist(txid string, blockHeight uint64, privateSimulationResultsWithConfig *transientstore2.TxPvtReadWriteSetWithConfigInfo) error {
 	panic("implement me")
 }
 

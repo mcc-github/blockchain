@@ -56,10 +56,8 @@ type Committer interface {
 type TransientStore interface {
 	
 	
-	PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *protostransientstore.TxPvtReadWriteSetWithConfigInfo) error
+	Persist(txid string, blockHeight uint64, privateSimulationResultsWithConfig *protostransientstore.TxPvtReadWriteSetWithConfigInfo) error
 
-	
-	Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error
 	
 	
 	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error)
@@ -165,7 +163,7 @@ func NewCoordinator(support Support, selfSignedData protoutil.SignedData, metric
 
 
 func (c *coordinator) StorePvtData(txID string, privData *protostransientstore.TxPvtReadWriteSetWithConfigInfo, blkHeight uint64) error {
-	return c.TransientStore.PersistWithConfig(txID, blkHeight, privData)
+	return c.TransientStore.Persist(txID, blkHeight, privData)
 }
 
 
@@ -355,9 +353,6 @@ func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][
 			}
 			ownedRWsets[key] = rws
 			delete(privateInfo.missingKeys, key)
-			
-			
-			c.TransientStore.Persist(dig.TxId, blockSeq, key.toTxPvtReadWriteSet(rws))
 			logger.Debug("Fetched", key)
 		}
 	}
@@ -391,7 +386,7 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 	}
 	defer iterator.Close()
 	for {
-		res, err := iterator.NextWithConfig()
+		res, err := iterator.Next()
 		if err != nil {
 			logger.Error("Failed iterating:", err)
 			break

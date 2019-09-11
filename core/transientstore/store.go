@@ -21,11 +21,12 @@ import (
 
 var logger = flogging.MustGetLogger("transientstore")
 
-var emptyValue = []byte{}
-var nilByte = byte('\x00')
-
-
-var ErrStoreEmpty = errors.New("Transient store is empty")
+var (
+	emptyValue = []byte{}
+	nilByte    = byte('\x00')
+	
+	ErrStoreEmpty = errors.New("Transient store is empty")
+)
 
 
 
@@ -44,12 +45,6 @@ type RWSetScanner interface {
 	
 	Next() (*EndorserPvtSimulationResults, error)
 	
-	
-	
-	
-	
-	NextWithConfig() (*EndorserPvtSimulationResultsWithConfig, error)
-	
 	Close()
 }
 
@@ -59,12 +54,7 @@ type RWSetScanner interface {
 type Store interface {
 	
 	
-	Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error
-	
-	
-	
-	
-	PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error
+	Persist(txid string, blockHeight uint64, privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error
 	
 	
 	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (RWSetScanner, error)
@@ -84,14 +74,7 @@ type Store interface {
 }
 
 
-
 type EndorserPvtSimulationResults struct {
-	ReceivedAtBlockHeight uint64
-	PvtSimulationResults  *rwset.TxPvtReadWriteSet
-}
-
-
-type EndorserPvtSimulationResultsWithConfig struct {
 	ReceivedAtBlockHeight          uint64
 	PvtSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo
 }
@@ -112,6 +95,7 @@ type store struct {
 	db       *leveldbhelper.DBHandle
 	ledgerID string
 }
+
 
 type RwsetScanner struct {
 	txid   string
@@ -141,56 +125,7 @@ func (provider *storeProvider) Close() {
 
 
 
-
 func (s *store) Persist(txid string, blockHeight uint64,
-	privateSimulationResults *rwset.TxPvtReadWriteSet) error {
-
-	logger.Debugf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
-
-	dbBatch := leveldbhelper.NewUpdateBatch()
-
-	
-	
-	
-	uuid := util.GenerateUUID()
-	compositeKeyPvtRWSet := createCompositeKeyForPvtRWSet(txid, uuid, blockHeight)
-	privateSimulationResultsBytes, err := proto.Marshal(privateSimulationResults)
-	if err != nil {
-		return err
-	}
-	dbBatch.Put(compositeKeyPvtRWSet, privateSimulationResultsBytes)
-
-	
-
-	
-	
-	
-	
-	
-	compositeKeyPurgeIndexByHeight := createCompositeKeyForPurgeIndexByHeight(blockHeight, txid, uuid)
-	dbBatch.Put(compositeKeyPurgeIndexByHeight, emptyValue)
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	compositeKeyPurgeIndexByTxid := createCompositeKeyForPurgeIndexByTxid(txid, uuid, blockHeight)
-	dbBatch.Put(compositeKeyPurgeIndexByTxid, emptyValue)
-
-	return s.db.WriteBatch(dbBatch, true)
-}
-
-
-
-
-
-func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 	privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error {
 
 	logger.Debugf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
@@ -373,34 +308,7 @@ func (s *store) Shutdown() {
 
 
 
-
 func (scanner *RwsetScanner) Next() (*EndorserPvtSimulationResults, error) {
-	if !scanner.dbItr.Next() {
-		return nil, nil
-	}
-	dbKey := scanner.dbItr.Key()
-	dbVal := scanner.dbItr.Value()
-	_, blockHeight, err := splitCompositeKeyOfPvtRWSet(dbKey)
-	if err != nil {
-		return nil, err
-	}
-
-	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
-	if err := proto.Unmarshal(dbVal, txPvtRWSet); err != nil {
-		return nil, err
-	}
-	filteredTxPvtRWSet := trimPvtWSet(txPvtRWSet, scanner.filter)
-
-	return &EndorserPvtSimulationResults{
-		ReceivedAtBlockHeight: blockHeight,
-		PvtSimulationResults:  filteredTxPvtRWSet,
-	}, nil
-}
-
-
-
-
-func (scanner *RwsetScanner) NextWithConfig() (*EndorserPvtSimulationResultsWithConfig, error) {
 	if !scanner.dbItr.Next() {
 		return nil, nil
 	}
@@ -437,7 +345,7 @@ func (scanner *RwsetScanner) NextWithConfig() (*EndorserPvtSimulationResultsWith
 
 	txPvtRWSetWithConfig.PvtRwset = filteredTxPvtRWSet
 
-	return &EndorserPvtSimulationResultsWithConfig{
+	return &EndorserPvtSimulationResults{
 		ReceivedAtBlockHeight:          blockHeight,
 		PvtSimulationResultsWithConfig: txPvtRWSetWithConfig,
 	}, nil
