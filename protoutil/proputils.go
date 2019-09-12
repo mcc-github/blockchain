@@ -29,13 +29,13 @@ func validateChannelHeaderType(chdr *common.ChannelHeader, expectedTypes []commo
 
 
 
-func CreateChaincodeProposal(typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, creator []byte) (*peer.Proposal, string, error) {
-	return CreateChaincodeProposalWithTransient(typ, chainID, cis, creator, nil)
+func CreateChaincodeProposal(typ common.HeaderType, channelID string, cis *peer.ChaincodeInvocationSpec, creator []byte) (*peer.Proposal, string, error) {
+	return CreateChaincodeProposalWithTransient(typ, channelID, cis, creator, nil)
 }
 
 
 
-func CreateChaincodeProposalWithTransient(typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, creator []byte, transientMap map[string][]byte) (*peer.Proposal, string, error) {
+func CreateChaincodeProposalWithTransient(typ common.HeaderType, channelID string, cis *peer.ChaincodeInvocationSpec, creator []byte, transientMap map[string][]byte) (*peer.Proposal, string, error) {
 	
 	nonce, err := getRandomNonce()
 	if err != nil {
@@ -45,13 +45,13 @@ func CreateChaincodeProposalWithTransient(typ common.HeaderType, chainID string,
 	
 	txid := ComputeTxID(nonce, creator)
 
-	return CreateChaincodeProposalWithTxIDNonceAndTransient(txid, typ, chainID, cis, nonce, creator, transientMap)
+	return CreateChaincodeProposalWithTxIDNonceAndTransient(txid, typ, channelID, cis, nonce, creator, transientMap)
 }
 
 
 
 
-func CreateChaincodeProposalWithTxIDAndTransient(typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, creator []byte, txid string, transientMap map[string][]byte) (*peer.Proposal, string, error) {
+func CreateChaincodeProposalWithTxIDAndTransient(typ common.HeaderType, channelID string, cis *peer.ChaincodeInvocationSpec, creator []byte, txid string, transientMap map[string][]byte) (*peer.Proposal, string, error) {
 	
 	nonce, err := getRandomNonce()
 	if err != nil {
@@ -63,12 +63,12 @@ func CreateChaincodeProposalWithTxIDAndTransient(typ common.HeaderType, chainID 
 		txid = ComputeTxID(nonce, creator)
 	}
 
-	return CreateChaincodeProposalWithTxIDNonceAndTransient(txid, typ, chainID, cis, nonce, creator, transientMap)
+	return CreateChaincodeProposalWithTxIDNonceAndTransient(txid, typ, channelID, cis, nonce, creator, transientMap)
 }
 
 
 
-func CreateChaincodeProposalWithTxIDNonceAndTransient(txid string, typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, nonce, creator []byte, transientMap map[string][]byte) (*peer.Proposal, string, error) {
+func CreateChaincodeProposalWithTxIDNonceAndTransient(txid string, typ common.HeaderType, channelID string, cis *peer.ChaincodeInvocationSpec, nonce, creator []byte, transientMap map[string][]byte) (*peer.Proposal, string, error) {
 	ccHdrExt := &peer.ChaincodeHeaderExtension{ChaincodeId: cis.ChaincodeSpec.ChaincodeId}
 	ccHdrExtBytes, err := proto.Marshal(ccHdrExt)
 	if err != nil {
@@ -101,7 +101,7 @@ func CreateChaincodeProposalWithTxIDNonceAndTransient(txid string, typ common.He
 				Type:      int32(typ),
 				TxId:      txid,
 				Timestamp: timestamp,
-				ChannelId: chainID,
+				ChannelId: channelID,
 				Extension: ccHdrExtBytes,
 				Epoch:     epoch,
 			},
@@ -239,23 +239,23 @@ func GetActionFromEnvelopeMsg(env *common.Envelope) (*peer.ChaincodeAction, erro
 
 
 
-func CreateProposalFromCISAndTxid(txid string, typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, creator []byte) (*peer.Proposal, string, error) {
+func CreateProposalFromCISAndTxid(txid string, typ common.HeaderType, channelID string, cis *peer.ChaincodeInvocationSpec, creator []byte) (*peer.Proposal, string, error) {
 	nonce, err := getRandomNonce()
 	if err != nil {
 		return nil, "", err
 	}
-	return CreateChaincodeProposalWithTxIDNonceAndTransient(txid, typ, chainID, cis, nonce, creator, nil)
+	return CreateChaincodeProposalWithTxIDNonceAndTransient(txid, typ, channelID, cis, nonce, creator, nil)
 }
 
 
 
-func CreateProposalFromCIS(typ common.HeaderType, chainID string, cis *peer.ChaincodeInvocationSpec, creator []byte) (*peer.Proposal, string, error) {
-	return CreateChaincodeProposal(typ, chainID, cis, creator)
+func CreateProposalFromCIS(typ common.HeaderType, channelID string, cis *peer.ChaincodeInvocationSpec, creator []byte) (*peer.Proposal, string, error) {
+	return CreateChaincodeProposal(typ, channelID, cis, creator)
 }
 
 
 
-func CreateGetChaincodesProposal(chainID string, creator []byte) (*peer.Proposal, string, error) {
+func CreateGetChaincodesProposal(channelID string, creator []byte) (*peer.Proposal, string, error) {
 	ccinp := &peer.ChaincodeInput{Args: [][]byte{[]byte("getchaincodes")}}
 	lsccSpec := &peer.ChaincodeInvocationSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
@@ -264,7 +264,7 @@ func CreateGetChaincodesProposal(chainID string, creator []byte) (*peer.Proposal
 			Input:       ccinp,
 		},
 	}
-	return CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, chainID, lsccSpec, creator)
+	return CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, channelID, lsccSpec, creator)
 }
 
 
@@ -290,7 +290,7 @@ func CreateInstallProposalFromCDS(ccpack proto.Message, creator []byte) (*peer.P
 
 
 func CreateDeployProposalFromCDS(
-	chainID string,
+	channelID string,
 	cds *peer.ChaincodeDeploymentSpec,
 	creator []byte,
 	policy []byte,
@@ -298,15 +298,15 @@ func CreateDeployProposalFromCDS(
 	vscc []byte,
 	collectionConfig []byte) (*peer.Proposal, string, error) {
 	if collectionConfig == nil {
-		return createProposalFromCDS(chainID, cds, creator, "deploy", policy, escc, vscc)
+		return createProposalFromCDS(channelID, cds, creator, "deploy", policy, escc, vscc)
 	}
-	return createProposalFromCDS(chainID, cds, creator, "deploy", policy, escc, vscc, collectionConfig)
+	return createProposalFromCDS(channelID, cds, creator, "deploy", policy, escc, vscc, collectionConfig)
 }
 
 
 
 func CreateUpgradeProposalFromCDS(
-	chainID string,
+	channelID string,
 	cds *peer.ChaincodeDeploymentSpec,
 	creator []byte,
 	policy []byte,
@@ -314,14 +314,14 @@ func CreateUpgradeProposalFromCDS(
 	vscc []byte,
 	collectionConfig []byte) (*peer.Proposal, string, error) {
 	if collectionConfig == nil {
-		return createProposalFromCDS(chainID, cds, creator, "upgrade", policy, escc, vscc)
+		return createProposalFromCDS(channelID, cds, creator, "upgrade", policy, escc, vscc)
 	}
-	return createProposalFromCDS(chainID, cds, creator, "upgrade", policy, escc, vscc, collectionConfig)
+	return createProposalFromCDS(channelID, cds, creator, "upgrade", policy, escc, vscc, collectionConfig)
 }
 
 
 
-func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, propType string, args ...[]byte) (*peer.Proposal, string, error) {
+func createProposalFromCDS(channelID string, msg proto.Message, creator []byte, propType string, args ...[]byte) (*peer.Proposal, string, error) {
 	
 	var ccinp *peer.ChaincodeInput
 	var b []byte
@@ -340,7 +340,7 @@ func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, pr
 		if !ok || cds == nil {
 			return nil, "", errors.New("invalid message for creating lifecycle chaincode proposal")
 		}
-		Args := [][]byte{[]byte(propType), []byte(chainID), b}
+		Args := [][]byte{[]byte(propType), []byte(channelID), b}
 		Args = append(Args, args...)
 
 		ccinp = &peer.ChaincodeInput{Args: Args}
@@ -358,7 +358,7 @@ func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, pr
 	}
 
 	
-	return CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, chainID, lsccSpec, creator)
+	return CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, channelID, lsccSpec, creator)
 }
 
 

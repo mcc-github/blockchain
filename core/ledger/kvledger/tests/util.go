@@ -113,7 +113,7 @@ func constructTransaction(txid string, simulationResults []byte) (*common.Envelo
 
 
 func constructUnsignedTxEnv(
-	chainID string,
+	channelID string,
 	ccid *protopeer.ChaincodeID,
 	response *protopeer.Response,
 	simulationResults []byte,
@@ -135,7 +135,7 @@ func constructUnsignedTxEnv(
 		
 		prop, txid, err = protoutil.CreateChaincodeProposal(
 			headerType,
-			chainID,
+			channelID,
 			&protopeer.ChaincodeInvocationSpec{
 				ChaincodeSpec: &protopeer.ChaincodeSpec{
 					ChaincodeId: ccid,
@@ -153,7 +153,7 @@ func constructUnsignedTxEnv(
 		prop, txid, err = protoutil.CreateChaincodeProposalWithTxIDNonceAndTransient(
 			txid,
 			headerType,
-			chainID,
+			channelID,
 			&protopeer.ChaincodeInvocationSpec{
 				ChaincodeSpec: &protopeer.ChaincodeSpec{
 					ChaincodeId: ccid,

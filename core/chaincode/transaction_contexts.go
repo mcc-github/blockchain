@@ -29,8 +29,8 @@ func NewTransactionContexts() *TransactionContexts {
 }
 
 
-func contextID(chainID, txID string) string {
-	return chainID + txID
+func contextID(channelID, txID string) string {
+	return channelID + txID
 }
 
 
@@ -47,7 +47,7 @@ func (c *TransactionContexts) Create(txParams *ccprovider.TransactionParams) (*T
 
 	txctx := &TransactionContext{
 		NamespaceID:          txParams.NamespaceID,
-		ChainID:              txParams.ChannelID,
+		ChannelID:            txParams.ChannelID,
 		SignedProp:           txParams.SignedProp,
 		Proposal:             txParams.Proposal,
 		ResponseNotifier:     make(chan *pb.ChaincodeMessage, 1),
@@ -68,8 +68,8 @@ func (c *TransactionContexts) Create(txParams *ccprovider.TransactionParams) (*T
 
 
 
-func (c *TransactionContexts) Get(chainID, txID string) *TransactionContext {
-	ctxID := contextID(chainID, txID)
+func (c *TransactionContexts) Get(channelID, txID string) *TransactionContext {
+	ctxID := contextID(channelID, txID)
 	c.mutex.Lock()
 	tc := c.contexts[ctxID]
 	c.mutex.Unlock()
@@ -78,8 +78,8 @@ func (c *TransactionContexts) Get(chainID, txID string) *TransactionContext {
 
 
 
-func (c *TransactionContexts) Delete(chainID, txID string) {
-	ctxID := contextID(chainID, txID)
+func (c *TransactionContexts) Delete(channelID, txID string) {
+	ctxID := contextID(channelID, txID)
 	c.mutex.Lock()
 	delete(c.contexts, ctxID)
 	c.mutex.Unlock()

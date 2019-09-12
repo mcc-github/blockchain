@@ -82,7 +82,7 @@ func ToChaincodeArgs(args ...string) [][]byte {
 const testchainid = "testchainid"
 
 
-func GetTestChainID() string {
+func GetTestChannelID() string {
 	return testchainid
 }
 
