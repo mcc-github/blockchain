@@ -27,6 +27,8 @@ import (
 
 var logger = flogging.MustGetLogger("chaincode.externalbuilders")
 
+const MetadataFile = "metadata.json"
+
 type Instance struct {
 	BuildContext *BuildContext
 	Builder      *Builder
@@ -94,12 +96,13 @@ func (d *Detector) Build(ccid string, md *persistence.ChaincodePackageMetadata, 
 }
 
 type BuildContext struct {
-	CCID       string
-	Metadata   *persistence.ChaincodePackageMetadata
-	ScratchDir string
-	SourceDir  string
-	OutputDir  string
-	LaunchDir  string
+	CCID        string
+	Metadata    *persistence.ChaincodePackageMetadata
+	ScratchDir  string
+	SourceDir   string
+	MetadataDir string
+	OutputDir   string
+	LaunchDir   string
 }
 
 var pkgIDreg = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -117,18 +120,25 @@ func NewBuildContext(ccid string, md *persistence.ChaincodePackageMetadata, code
 		return nil, errors.WithMessage(err, "could not create source dir")
 	}
 
+	metadataDir := filepath.Join(scratchDir, "metadata")
+	err = os.Mkdir(metadataDir, 0700)
+	if err != nil {
+		os.RemoveAll(scratchDir)
+		return nil, errors.WithMessage(err, "could not create metadata dir")
+	}
+
 	outputDir := filepath.Join(scratchDir, "bld")
 	err = os.Mkdir(outputDir, 0700)
 	if err != nil {
 		os.RemoveAll(scratchDir)
-		return nil, errors.WithMessage(err, "could not create source dir")
+		return nil, errors.WithMessage(err, "could not create build dir")
 	}
 
 	launchDir := filepath.Join(scratchDir, "run")
 	err = os.MkdirAll(launchDir, 0700)
 	if err != nil {
 		os.RemoveAll(scratchDir)
-		return nil, errors.WithMessage(err, "could not create source dir")
+		return nil, errors.WithMessage(err, "could not create launch dir")
 	}
 
 	err = Untar(codePackage, sourceDir)
@@ -137,14 +147,41 @@ func NewBuildContext(ccid string, md *persistence.ChaincodePackageMetadata, code
 		return nil, errors.WithMessage(err, "could not untar source package")
 	}
 
+	err = writeMetadataFile(ccid, md, metadataDir)
+	if err != nil {
+		os.RemoveAll(scratchDir)
+		return nil, errors.WithMessage(err, "could not write metadata file")
+	}
+
 	return &BuildContext{
-		ScratchDir: scratchDir,
-		SourceDir:  sourceDir,
-		OutputDir:  outputDir,
-		LaunchDir:  launchDir,
-		Metadata:   md,
-		CCID:       ccid,
+		ScratchDir:  scratchDir,
+		SourceDir:   sourceDir,
+		MetadataDir: metadataDir,
+		OutputDir:   outputDir,
+		LaunchDir:   launchDir,
+		Metadata:    md,
+		CCID:        ccid,
 	}, nil
+}
+
+type buildMetadata struct {
+	Path      string `json:"path"`
+	Type      string `json:"type"`
+	PackageID string `json:"package_id"`
+}
+
+func writeMetadataFile(ccid string, md *persistence.ChaincodePackageMetadata, dst string) error {
+	buildMetadata := &buildMetadata{
+		Path:      md.Path,
+		Type:      md.Type,
+		PackageID: ccid,
+	}
+	mdBytes, err := json.Marshal(buildMetadata)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal build metadata into JSON")
+	}
+
+	return ioutil.WriteFile(filepath.Join(dst, MetadataFile), mdBytes, 0700)
 }
 
 func (bc *BuildContext) Cleanup() {
@@ -160,10 +197,8 @@ func (b *Builder) Detect(buildContext *BuildContext) bool {
 	detect := filepath.Join(b.Location, "bin", "detect")
 	cmd := NewCommand(
 		detect,
-		"--package-id", buildContext.CCID,
-		"--path", buildContext.Metadata.Path,
-		"--type", buildContext.Metadata.Type,
-		"--source", buildContext.SourceDir,
+		buildContext.SourceDir,
+		buildContext.MetadataDir,
 	)
 
 	err := RunCommand(b.Logger, cmd)
@@ -181,11 +216,9 @@ func (b *Builder) Build(buildContext *BuildContext) error {
 	build := filepath.Join(b.Location, "bin", "build")
 	cmd := NewCommand(
 		build,
-		"--package-id", buildContext.CCID,
-		"--path", buildContext.Metadata.Path,
-		"--type", buildContext.Metadata.Type,
-		"--source", buildContext.SourceDir,
-		"--output", buildContext.OutputDir,
+		buildContext.SourceDir,
+		buildContext.MetadataDir,
+		buildContext.OutputDir,
 	)
 
 	err := RunCommand(b.Logger, cmd)
@@ -198,10 +231,10 @@ func (b *Builder) Build(buildContext *BuildContext) error {
 
 
 type LaunchConfig struct {
-	PeerAddress string `json:"PeerAddress"`
-	ClientCert  []byte `json:"ClientCert"`
-	ClientKey   []byte `json:"ClientKey"`
-	RootCert    []byte `json:"RootCert"`
+	PeerAddress string `json:"peer_address"`
+	ClientCert  []byte `json:"client_cert"`
+	ClientKey   []byte `json:"client_key"`
+	RootCert    []byte `json:"root_cert"`
 }
 
 func (b *Builder) Launch(buildContext *BuildContext, peerConnection *ccintf.PeerConnection) error {
@@ -227,12 +260,10 @@ func (b *Builder) Launch(buildContext *BuildContext, peerConnection *ccintf.Peer
 	launch := filepath.Join(b.Location, "bin", "launch")
 	cmd := NewCommand(
 		launch,
-		"--package-id", buildContext.CCID,
-		"--path", buildContext.Metadata.Path,
-		"--type", buildContext.Metadata.Type,
-		"--source", buildContext.SourceDir,
-		"--output", buildContext.OutputDir,
-		"--artifacts", buildContext.LaunchDir,
+		buildContext.SourceDir,
+		buildContext.MetadataDir,
+		buildContext.OutputDir,
+		buildContext.LaunchDir,
 	)
 
 	err = RunCommand(b.Logger, cmd)
@@ -254,7 +285,7 @@ func (b *Builder) Name() string {
 
 func NewCommand(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
-	for _, key := range []string{"LD_LIBRARY_PATH", "LIBPATH", "PATH", "TMPDIR"} {
+	for _, key := range []string{"GOCACHE", "HOME", "LD_LIBRARY_PATH", "LIBPATH", "PATH", "TMPDIR"} {
 		if val, ok := os.LookupEnv(key); ok {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
 		}

@@ -10,8 +10,9 @@ set -e
 source "$(cd "$(dirname "$0")" && pwd)/functions.sh"
 
 # place the Go build cache directory into the default build tree if it exists
-if [ -d "${GOPATH}/src/github.com/mcc-github/blockchain/.build" ]; then
-    export GOCACHE="${GOPATH}/src/github.com/mcc-github/blockchain/.build/go-cache"
+base_dir="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -d "${base_dir}/.build" ]; then
+    export GOCACHE="${base_dir}/.build/go-cache"
 fi
 
 blockchain_dir="$(cd "$(dirname "$0")/.." && pwd)"
