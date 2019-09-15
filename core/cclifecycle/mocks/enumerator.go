@@ -2,8 +2,10 @@
 
 package mocks
 
-import chaincode "github.com/mcc-github/blockchain/common/chaincode"
-import mock "github.com/stretchr/testify/mock"
+import (
+	chaincode "github.com/mcc-github/blockchain/common/chaincode"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type Enumerator struct {

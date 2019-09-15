@@ -2,9 +2,9 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	deliver "github.com/mcc-github/blockchain/common/deliver"
+	"github.com/mcc-github/blockchain/common/deliver"
 )
 
 type ChainManager struct {

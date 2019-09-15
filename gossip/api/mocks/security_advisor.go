@@ -2,8 +2,10 @@
 
 package mocks
 
-import api "github.com/mcc-github/blockchain/gossip/api"
-import mock "github.com/stretchr/testify/mock"
+import (
+	api "github.com/mcc-github/blockchain/gossip/api"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type SecurityAdvisor struct {

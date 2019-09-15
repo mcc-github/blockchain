@@ -2,8 +2,10 @@
 
 package mocks
 
-import etcdraft "github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
-import mock "github.com/stretchr/testify/mock"
+import (
+	etcdraft "github.com/mcc-github/blockchain/orderer/consensus/etcdraft"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type ReceiverGetter struct {

@@ -2,10 +2,13 @@
 
 package mocks
 
-import client "github.com/mcc-github/blockchain/discovery/client"
+import (
+	client "github.com/mcc-github/blockchain/discovery/client"
 
-import discovery "github.com/mcc-github/blockchain-protos-go/discovery"
-import mock "github.com/stretchr/testify/mock"
+	discovery "github.com/mcc-github/blockchain-protos-go/discovery"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type ChannelResponse struct {

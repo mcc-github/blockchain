@@ -2,10 +2,10 @@
 package mock
 
 import (
-	sync "sync"
+	"sync"
 
-	common "github.com/mcc-github/blockchain-protos-go/common"
-	deliver "github.com/mcc-github/blockchain/common/deliver"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain/common/deliver"
 )
 
 type PolicyChecker struct {

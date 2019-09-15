@@ -2,9 +2,12 @@
 
 package mocks
 
-import discovery "github.com/mcc-github/blockchain/discovery/client"
-import mock "github.com/stretchr/testify/mock"
-import protosdiscovery "github.com/mcc-github/blockchain-protos-go/discovery"
+import (
+	blockchain_protos_godiscovery "github.com/mcc-github/blockchain-protos-go/discovery"
+	discovery "github.com/mcc-github/blockchain/discovery/client"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type ServiceResponse struct {
@@ -44,15 +47,15 @@ func (_m *ServiceResponse) ForLocal() discovery.LocalResponse {
 }
 
 
-func (_m *ServiceResponse) Raw() *protosdiscovery.Response {
+func (_m *ServiceResponse) Raw() *blockchain_protos_godiscovery.Response {
 	ret := _m.Called()
 
-	var r0 *protosdiscovery.Response
-	if rf, ok := ret.Get(0).(func() *protosdiscovery.Response); ok {
+	var r0 *blockchain_protos_godiscovery.Response
+	if rf, ok := ret.Get(0).(func() *blockchain_protos_godiscovery.Response); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*protosdiscovery.Response)
+			r0 = ret.Get(0).(*blockchain_protos_godiscovery.Response)
 		}
 	}
 

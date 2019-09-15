@@ -2,11 +2,11 @@
 package fakes
 
 import (
-	context "context"
-	sync "sync"
+	"context"
+	"sync"
 
-	grpclogging "github.com/mcc-github/blockchain/common/grpclogging"
-	zapcore "go.uber.org/zap/zapcore"
+	"github.com/mcc-github/blockchain/common/grpclogging"
+	"go.uber.org/zap/zapcore"
 )
 
 type Leveler struct {

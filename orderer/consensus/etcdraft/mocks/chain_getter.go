@@ -2,8 +2,10 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
-import multichannel "github.com/mcc-github/blockchain/orderer/common/multichannel"
+import (
+	multichannel "github.com/mcc-github/blockchain/orderer/common/multichannel"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type ChainGetter struct {

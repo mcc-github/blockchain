@@ -1,9 +1,13 @@
 
+
 package mocks
 
-import endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
-import endorser "github.com/mcc-github/blockchain/core/endorser"
-import mock "github.com/stretchr/testify/mock"
+import (
+	endorser "github.com/mcc-github/blockchain/core/endorser"
+	endorsement "github.com/mcc-github/blockchain/core/handlers/endorsement/api"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type PluginMapper struct {

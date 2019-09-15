@@ -2,11 +2,11 @@
 package mock
 
 import (
-	context "context"
-	sync "sync"
+	"context"
+	"sync"
 
-	proto "github.com/golang/protobuf/proto"
-	deliver "github.com/mcc-github/blockchain/common/deliver"
+	"github.com/golang/protobuf/proto"
+	"github.com/mcc-github/blockchain/common/deliver"
 )
 
 type Inspector struct {

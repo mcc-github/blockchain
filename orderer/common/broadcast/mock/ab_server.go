@@ -2,12 +2,12 @@
 package mock
 
 import (
-	context "context"
-	sync "sync"
+	"context"
+	"sync"
 
-	common "github.com/mcc-github/blockchain-protos-go/common"
-	orderer "github.com/mcc-github/blockchain-protos-go/orderer"
-	metadata "google.golang.org/grpc/metadata"
+	"github.com/mcc-github/blockchain-protos-go/common"
+	"github.com/mcc-github/blockchain-protos-go/orderer"
+	"google.golang.org/grpc/metadata"
 )
 
 type ABServer struct {

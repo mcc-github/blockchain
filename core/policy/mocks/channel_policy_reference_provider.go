@@ -2,8 +2,10 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
-import policies "github.com/mcc-github/blockchain/common/policies"
+import (
+	policies "github.com/mcc-github/blockchain/common/policies"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type ChannelPolicyReferenceProvider struct {

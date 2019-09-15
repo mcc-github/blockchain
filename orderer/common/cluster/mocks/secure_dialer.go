@@ -2,9 +2,12 @@
 
 package mocks
 
-import cluster "github.com/mcc-github/blockchain/orderer/common/cluster"
-import grpc "google.golang.org/grpc"
-import mock "github.com/stretchr/testify/mock"
+import (
+	cluster "github.com/mcc-github/blockchain/orderer/common/cluster"
+	grpc "google.golang.org/grpc"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type SecureDialer struct {

@@ -2,8 +2,10 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
-import protoutil "github.com/mcc-github/blockchain/protoutil"
+import (
+	protoutil "github.com/mcc-github/blockchain/protoutil"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type PolicyEvaluator struct {

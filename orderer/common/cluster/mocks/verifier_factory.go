@@ -2,9 +2,12 @@
 
 package mocks
 
-import cluster "github.com/mcc-github/blockchain/orderer/common/cluster"
-import common "github.com/mcc-github/blockchain-protos-go/common"
-import mock "github.com/stretchr/testify/mock"
+import (
+	common "github.com/mcc-github/blockchain-protos-go/common"
+	cluster "github.com/mcc-github/blockchain/orderer/common/cluster"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type VerifierFactory struct {

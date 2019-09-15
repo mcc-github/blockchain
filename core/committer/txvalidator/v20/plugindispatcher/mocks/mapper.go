@@ -2,10 +2,12 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
-import plugin "github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
+import (
+	plugin "github.com/mcc-github/blockchain/core/committer/txvalidator/plugin"
+	mock "github.com/stretchr/testify/mock"
 
-import validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
+)
 
 
 type Mapper struct {

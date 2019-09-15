@@ -2,8 +2,10 @@
 
 package mocks
 
-import metrics "github.com/mcc-github/blockchain/common/metrics"
-import mock "github.com/stretchr/testify/mock"
+import (
+	metrics "github.com/mcc-github/blockchain/common/metrics"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type MetricsProvider struct {

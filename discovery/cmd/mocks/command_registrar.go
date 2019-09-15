@@ -2,10 +2,13 @@
 
 package mocks
 
-import common "github.com/mcc-github/blockchain/cmd/common"
+import (
+	common "github.com/mcc-github/blockchain/cmd/common"
 
-import kingpin "gopkg.in/alecthomas/kingpin.v2"
-import mock "github.com/stretchr/testify/mock"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type CommandRegistrar struct {

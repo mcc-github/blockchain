@@ -2,8 +2,10 @@
 
 package mocks
 
-import common "github.com/mcc-github/blockchain/gossip/privdata/common"
-import mock "github.com/stretchr/testify/mock"
+import (
+	common "github.com/mcc-github/blockchain/gossip/privdata/common"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type ReconciliationFetcher struct {

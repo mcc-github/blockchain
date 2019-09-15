@@ -2,10 +2,12 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
-import msp "github.com/mcc-github/blockchain/msp"
+import (
+	blockchain_protos_gomsp "github.com/mcc-github/blockchain-protos-go/msp"
+	mock "github.com/stretchr/testify/mock"
 
-import protosmsp "github.com/mcc-github/blockchain-protos-go/msp"
+	msp "github.com/mcc-github/blockchain/msp"
+)
 
 
 type IdentityDeserializer struct {
@@ -36,11 +38,11 @@ func (_m *IdentityDeserializer) DeserializeIdentity(serializedIdentity []byte) (
 }
 
 
-func (_m *IdentityDeserializer) IsWellFormed(identity *protosmsp.SerializedIdentity) error {
+func (_m *IdentityDeserializer) IsWellFormed(identity *blockchain_protos_gomsp.SerializedIdentity) error {
 	ret := _m.Called(identity)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*protosmsp.SerializedIdentity) error); ok {
+	if rf, ok := ret.Get(0).(func(*blockchain_protos_gomsp.SerializedIdentity) error); ok {
 		r0 = rf(identity)
 	} else {
 		r0 = ret.Error(0)

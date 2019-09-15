@@ -1,8 +1,11 @@
 
+
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
-import transientstore "github.com/mcc-github/blockchain/core/transientstore"
+import (
+	transientstore "github.com/mcc-github/blockchain/core/transientstore"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type TransientStoreRetriever struct {

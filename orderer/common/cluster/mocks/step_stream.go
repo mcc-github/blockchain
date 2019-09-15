@@ -2,10 +2,14 @@
 
 package mocks
 
-import context "context"
-import metadata "google.golang.org/grpc/metadata"
-import mock "github.com/stretchr/testify/mock"
-import orderer "github.com/mcc-github/blockchain-protos-go/orderer"
+import (
+	context "context"
+
+	mock "github.com/stretchr/testify/mock"
+	metadata "google.golang.org/grpc/metadata"
+
+	orderer "github.com/mcc-github/blockchain-protos-go/orderer"
+)
 
 
 type StepStream struct {

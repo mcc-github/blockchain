@@ -2,10 +2,14 @@
 
 package mocks
 
-import api "github.com/mcc-github/blockchain/gossip/api"
-import common "github.com/mcc-github/blockchain/gossip/common"
-import discovery "github.com/mcc-github/blockchain/gossip/discovery"
-import mock "github.com/stretchr/testify/mock"
+import (
+	api "github.com/mcc-github/blockchain/gossip/api"
+	common "github.com/mcc-github/blockchain/gossip/common"
+
+	discovery "github.com/mcc-github/blockchain/gossip/discovery"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type GossipSupport struct {

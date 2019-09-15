@@ -2,10 +2,14 @@
 
 package mocks
 
-import channelconfig "github.com/mcc-github/blockchain/common/channelconfig"
-import common "github.com/mcc-github/blockchain-protos-go/common"
-import mock "github.com/stretchr/testify/mock"
-import msp "github.com/mcc-github/blockchain/msp"
+import (
+	common "github.com/mcc-github/blockchain-protos-go/common"
+	channelconfig "github.com/mcc-github/blockchain/common/channelconfig"
+
+	mock "github.com/stretchr/testify/mock"
+
+	msp "github.com/mcc-github/blockchain/msp"
+)
 
 
 type ChannelResources struct {

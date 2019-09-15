@@ -2,11 +2,14 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
-import msp "github.com/mcc-github/blockchain/msp"
+import (
+	blockchain_protos_gomsp "github.com/mcc-github/blockchain-protos-go/msp"
+	mock "github.com/stretchr/testify/mock"
 
-import protosmsp "github.com/mcc-github/blockchain-protos-go/msp"
-import time "time"
+	msp "github.com/mcc-github/blockchain/msp"
+
+	time "time"
+)
 
 
 type Identity struct {
@@ -88,11 +91,11 @@ func (_m *Identity) GetOrganizationalUnits() []*msp.OUIdentifier {
 }
 
 
-func (_m *Identity) SatisfiesPrincipal(principal *protosmsp.MSPPrincipal) error {
+func (_m *Identity) SatisfiesPrincipal(principal *blockchain_protos_gomsp.MSPPrincipal) error {
 	ret := _m.Called(principal)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*protosmsp.MSPPrincipal) error); ok {
+	if rf, ok := ret.Get(0).(func(*blockchain_protos_gomsp.MSPPrincipal) error); ok {
 		r0 = rf(principal)
 	} else {
 		r0 = ret.Error(0)

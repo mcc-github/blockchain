@@ -2,10 +2,14 @@
 
 package mocks
 
-import cmd "github.com/mcc-github/blockchain/discovery/cmd"
-import common "github.com/mcc-github/blockchain/cmd/common"
-import discovery "github.com/mcc-github/blockchain/discovery/client"
-import mock "github.com/stretchr/testify/mock"
+import (
+	common "github.com/mcc-github/blockchain/cmd/common"
+	cmd "github.com/mcc-github/blockchain/discovery/cmd"
+
+	discovery "github.com/mcc-github/blockchain/discovery/client"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type Stub struct {

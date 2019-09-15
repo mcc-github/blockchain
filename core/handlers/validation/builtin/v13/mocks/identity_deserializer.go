@@ -2,9 +2,11 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
+import (
+	mock "github.com/stretchr/testify/mock"
 
-import validation "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/identities"
+)
 
 
 type IdentityDeserializer struct {

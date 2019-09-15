@@ -2,8 +2,10 @@
 
 package mocks
 
-import cluster "github.com/mcc-github/blockchain/orderer/common/cluster"
-import mock "github.com/stretchr/testify/mock"
+import (
+	cluster "github.com/mcc-github/blockchain/orderer/common/cluster"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type Communicator struct {

@@ -2,8 +2,10 @@
 
 package mocks
 
-import discovery "github.com/mcc-github/blockchain/discovery/client"
-import mock "github.com/stretchr/testify/mock"
+import (
+	discovery "github.com/mcc-github/blockchain/discovery/client"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type LocalResponse struct {

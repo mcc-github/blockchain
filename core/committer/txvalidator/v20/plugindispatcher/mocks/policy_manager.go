@@ -2,9 +2,11 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
+import (
+	mock "github.com/stretchr/testify/mock"
 
-import policies "github.com/mcc-github/blockchain/common/policies"
+	policies "github.com/mcc-github/blockchain/common/policies"
+)
 
 
 type PolicyManager struct {

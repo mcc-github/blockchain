@@ -2,10 +2,12 @@
 
 package mocks
 
-import ledger "github.com/mcc-github/blockchain/core/ledger"
-import mock "github.com/stretchr/testify/mock"
+import (
+	ledger "github.com/mcc-github/blockchain/core/ledger"
+	mock "github.com/stretchr/testify/mock"
 
-import transientstore "github.com/mcc-github/blockchain/core/transientstore"
+	transientstore "github.com/mcc-github/blockchain/core/transientstore"
+)
 
 
 type DataStore struct {

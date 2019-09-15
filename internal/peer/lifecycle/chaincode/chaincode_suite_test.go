@@ -25,7 +25,7 @@ type writer interface {
 }
 
 
-type platformRegistryIntf interface {
+type platformRegistry interface {
 	chaincode.PlatformRegistry
 }
 

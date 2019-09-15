@@ -1,10 +1,15 @@
 
+
 package mocks
 
-import blockledger "github.com/mcc-github/blockchain/common/ledger/blockledger"
-import common "github.com/mcc-github/blockchain-protos-go/common"
-import mock "github.com/stretchr/testify/mock"
-import orderer "github.com/mcc-github/blockchain-protos-go/orderer"
+import (
+	common "github.com/mcc-github/blockchain-protos-go/common"
+	blockledger "github.com/mcc-github/blockchain/common/ledger/blockledger"
+
+	mock "github.com/stretchr/testify/mock"
+
+	orderer "github.com/mcc-github/blockchain-protos-go/orderer"
+)
 
 
 type ReadWriter struct {

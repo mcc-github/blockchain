@@ -2,8 +2,10 @@
 
 package mocks
 
-import channelconfig "github.com/mcc-github/blockchain/common/channelconfig"
-import mock "github.com/stretchr/testify/mock"
+import (
+	channelconfig "github.com/mcc-github/blockchain/common/channelconfig"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type CapabilityProvider struct {

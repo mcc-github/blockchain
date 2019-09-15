@@ -2,9 +2,12 @@
 
 package mocks
 
-import common "github.com/mcc-github/blockchain-protos-go/common"
-import mock "github.com/stretchr/testify/mock"
-import peer "github.com/mcc-github/blockchain-protos-go/peer"
+import (
+	common "github.com/mcc-github/blockchain-protos-go/common"
+	mock "github.com/stretchr/testify/mock"
+
+	peer "github.com/mcc-github/blockchain-protos-go/peer"
+)
 
 
 type Dispatcher struct {

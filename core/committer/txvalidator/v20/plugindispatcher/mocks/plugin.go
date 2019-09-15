@@ -2,10 +2,12 @@
 
 package mocks
 
-import common "github.com/mcc-github/blockchain-protos-go/common"
-import mock "github.com/stretchr/testify/mock"
+import (
+	common "github.com/mcc-github/blockchain-protos-go/common"
+	mock "github.com/stretchr/testify/mock"
 
-import validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api"
+)
 
 
 type Plugin struct {

@@ -2,9 +2,9 @@
 package fakes
 
 import (
-	sync "sync"
+	"sync"
 
-	httpadmin "github.com/mcc-github/blockchain/common/flogging/httpadmin"
+	"github.com/mcc-github/blockchain/common/flogging/httpadmin"
 )
 
 type Logging struct {

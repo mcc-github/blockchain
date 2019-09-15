@@ -2,9 +2,12 @@
 
 package mocks
 
-import context "context"
-import mock "github.com/stretchr/testify/mock"
-import orderer "github.com/mcc-github/blockchain-protos-go/orderer"
+import (
+	context "context"
+
+	orderer "github.com/mcc-github/blockchain-protos-go/orderer"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type Dispatcher struct {

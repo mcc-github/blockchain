@@ -1,8 +1,11 @@
 
+
 package mocks
 
-import endorser "github.com/mcc-github/blockchain/core/endorser"
-import mock "github.com/stretchr/testify/mock"
+import (
+	endorser "github.com/mcc-github/blockchain/core/endorser"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type ChannelStateRetriever struct {

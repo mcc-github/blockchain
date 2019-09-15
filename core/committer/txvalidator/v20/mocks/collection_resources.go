@@ -2,9 +2,11 @@
 
 package mocks
 
-import mock "github.com/stretchr/testify/mock"
+import (
+	mock "github.com/stretchr/testify/mock"
 
-import validation "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
+	validation "github.com/mcc-github/blockchain/core/handlers/validation/api/state"
+)
 
 
 type CollectionResources struct {

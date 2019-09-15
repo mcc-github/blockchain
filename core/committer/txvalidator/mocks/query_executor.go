@@ -2,9 +2,12 @@
 
 package mocks
 
-import coreledger "github.com/mcc-github/blockchain/core/ledger"
-import ledger "github.com/mcc-github/blockchain/common/ledger"
-import mock "github.com/stretchr/testify/mock"
+import (
+	ledger "github.com/mcc-github/blockchain/common/ledger"
+	coreledger "github.com/mcc-github/blockchain/core/ledger"
+
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type QueryExecutor struct {

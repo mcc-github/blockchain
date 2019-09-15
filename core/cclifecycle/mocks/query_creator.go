@@ -2,8 +2,10 @@
 
 package mocks
 
-import cclifecycle "github.com/mcc-github/blockchain/core/cclifecycle"
-import mock "github.com/stretchr/testify/mock"
+import (
+	cclifecycle "github.com/mcc-github/blockchain/core/cclifecycle"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type QueryCreator struct {

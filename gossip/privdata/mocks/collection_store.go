@@ -2,12 +2,17 @@
 
 package mocks
 
-import common "github.com/mcc-github/blockchain-protos-go/common"
+import (
+	common "github.com/mcc-github/blockchain-protos-go/common"
 
-import ledger "github.com/mcc-github/blockchain/core/ledger"
-import mock "github.com/stretchr/testify/mock"
-import peer "github.com/mcc-github/blockchain-protos-go/peer"
-import privdata "github.com/mcc-github/blockchain/core/common/privdata"
+	ledger "github.com/mcc-github/blockchain/core/ledger"
+
+	mock "github.com/stretchr/testify/mock"
+
+	peer "github.com/mcc-github/blockchain-protos-go/peer"
+
+	privdata "github.com/mcc-github/blockchain/core/common/privdata"
+)
 
 
 type CollectionStore struct {

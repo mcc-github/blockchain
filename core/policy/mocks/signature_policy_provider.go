@@ -2,9 +2,12 @@
 
 package mocks
 
-import common "github.com/mcc-github/blockchain-protos-go/common"
-import mock "github.com/stretchr/testify/mock"
-import policies "github.com/mcc-github/blockchain/common/policies"
+import (
+	common "github.com/mcc-github/blockchain-protos-go/common"
+	mock "github.com/stretchr/testify/mock"
+
+	policies "github.com/mcc-github/blockchain/common/policies"
+)
 
 
 type SignaturePolicyProvider struct {

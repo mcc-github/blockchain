@@ -2,9 +2,12 @@
 
 package mocks
 
-import common "github.com/mcc-github/blockchain-protos-go/common"
-import mock "github.com/stretchr/testify/mock"
-import protoutil "github.com/mcc-github/blockchain/protoutil"
+import (
+	common "github.com/mcc-github/blockchain-protos-go/common"
+	mock "github.com/stretchr/testify/mock"
+
+	protoutil "github.com/mcc-github/blockchain/protoutil"
+)
 
 
 type BlockVerifier struct {

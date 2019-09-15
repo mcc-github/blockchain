@@ -2,9 +2,9 @@
 package fakes
 
 import (
-	sync "sync"
+	"sync"
 
-	operations "github.com/mcc-github/blockchain/core/operations"
+	"github.com/mcc-github/blockchain/core/operations"
 )
 
 type Logger struct {

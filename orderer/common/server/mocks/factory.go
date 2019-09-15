@@ -2,8 +2,10 @@
 
 package mocks
 
-import blockledger "github.com/mcc-github/blockchain/common/ledger/blockledger"
-import mock "github.com/stretchr/testify/mock"
+import (
+	blockledger "github.com/mcc-github/blockchain/common/ledger/blockledger"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type Factory struct {

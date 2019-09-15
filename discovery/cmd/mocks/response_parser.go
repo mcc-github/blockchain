@@ -2,8 +2,10 @@
 
 package mocks
 
-import discovery "github.com/mcc-github/blockchain/discovery/cmd"
-import mock "github.com/stretchr/testify/mock"
+import (
+	discovery "github.com/mcc-github/blockchain/discovery/cmd"
+	mock "github.com/stretchr/testify/mock"
+)
 
 
 type ResponseParser struct {

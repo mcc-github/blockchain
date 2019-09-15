@@ -2,10 +2,14 @@
 
 package mocks
 
-import blockchain_protos_gotransientstore "github.com/mcc-github/blockchain-protos-go/transientstore"
-import ledger "github.com/mcc-github/blockchain/core/ledger"
-import mock "github.com/stretchr/testify/mock"
-import transientstore "github.com/mcc-github/blockchain/core/transientstore"
+import (
+	blockchain_protos_gotransientstore "github.com/mcc-github/blockchain-protos-go/transientstore"
+	ledger "github.com/mcc-github/blockchain/core/ledger"
+
+	mock "github.com/stretchr/testify/mock"
+
+	transientstore "github.com/mcc-github/blockchain/core/transientstore"
+)
 
 
 type Store struct {
