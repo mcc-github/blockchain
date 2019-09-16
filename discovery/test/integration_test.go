@@ -494,7 +494,7 @@ func createClientAndService(t *testing.T, testdir string) (*client, *service) {
 	})
 	assert.NoError(t, err)
 
-	conn, err := dialer.NewConnection(gRPCServer.Address(), "")
+	conn, err := dialer.NewConnection(gRPCServer.Address())
 	assert.NoError(t, err)
 
 	wrapperClient := &client{AuthInfo: authInfo, conn: conn}
@@ -595,7 +595,7 @@ func buildBinaries() error {
 		return errors.WithStack(err)
 	}
 
-	idemixgen, err = gexec.Build("github.com/mcc-github/blockchain/common/tools/idemixgen")
+	idemixgen, err = gexec.Build("github.com/mcc-github/blockchain/cmd/idemixgen")
 	if err != nil {
 		return errors.WithStack(err)
 	}

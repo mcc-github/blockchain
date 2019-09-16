@@ -345,7 +345,7 @@ func TestNewConnection(t *testing.T) {
 			if test.clientAddress != "" {
 				address = test.clientAddress
 			}
-			conn, err := client.NewConnection(address, "")
+			conn, err := client.NewConnection(address)
 			if test.success {
 				assert.NoError(t, err)
 				assert.NotNil(t, conn)
@@ -390,7 +390,7 @@ func TestSetServerRootCAs(t *testing.T) {
 
 	
 	t.Log("running initial good config")
-	conn, err := client.NewConnection(address, "")
+	conn, err := client.NewConnection(address)
 	assert.NoError(t, err)
 	assert.NotNil(t, conn)
 	if conn != nil {
@@ -402,7 +402,7 @@ func TestSetServerRootCAs(t *testing.T) {
 	err = client.SetServerRootCAs([][]byte{})
 	assert.NoError(t, err)
 	
-	_, err = client.NewConnection(address, "")
+	_, err = client.NewConnection(address)
 	assert.Error(t, err)
 
 	
@@ -410,7 +410,7 @@ func TestSetServerRootCAs(t *testing.T) {
 	err = client.SetServerRootCAs([][]byte{[]byte(testCerts.caPEM)})
 	assert.NoError(t, err)
 	
-	conn, err = client.NewConnection(address, "")
+	conn, err = client.NewConnection(address)
 	assert.NoError(t, err)
 	assert.NotNil(t, conn)
 	if conn != nil {
@@ -491,7 +491,7 @@ func TestSetMessageSize(t *testing.T) {
 			if test.maxSendSize > 0 {
 				client.SetMaxSendMsgSize(test.maxSendSize)
 			}
-			conn, err := client.NewConnection(address, "")
+			conn, err := client.NewConnection(address)
 			assert.NoError(t, err)
 			defer conn.Close()
 			
@@ -556,4 +556,13 @@ func loadCerts(t *testing.T) testCerts {
 	assert.NoError(t, err)
 
 	return certs
+}
+
+func TestServerNameOverride(t *testing.T) {
+	tlsOption := comm.ServerNameOverride("override-name")
+	testConfig := &tls.Config{}
+	tlsOption(testConfig)
+	assert.Equal(t, &tls.Config{
+		ServerName: "override-name",
+	}, testConfig)
 }

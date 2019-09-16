@@ -38,8 +38,6 @@
 #   - dist-clean - clean release packages for all target platforms
 #   - unit-test-clean - cleans unit test state (particularly from docker)
 #   - basic-checks - performs basic checks like license, spelling, trailing spaces and linter
-#   - enable_ci_only_tests - triggers unit-tests in downstream jobs. Applicable only for CI not to
-#     use in the local machine.
 #   - docker-thirdparty - pulls thirdparty images (kafka,zookeeper,couchdb)
 #   - docker-tag-latest - re-tags the images made by 'make docker' with the :latest tag
 #   - docker-tag-stable - re-tags the images made by 'make docker' with the :stable tag
@@ -53,14 +51,9 @@ BASEIMAGE_RELEASE = 0.4.15
 # 3rd party image version
 COUCHDB_VER ?= 2.3
 
-# Allow to build as a submodule setting the main project to
-# the PROJECT_NAME env variable, for example,
-# export PROJECT_NAME=mcc-github/blockchain-test
-ifeq ($(PROJECT_NAME),true)
-PROJECT_NAME = $(PROJECT_NAME)/blockchain
-else
-PROJECT_NAME = mcc-github/blockchain
-endif
+# Disable impliicit rules
+.SUFFIXES:
+MAKEFLAGS += --no-builtin-rules
 
 BUILD_DIR ?= .build
 NEXUS_REPO = nexus3.mcc-github.org:10001/mcc-github
@@ -68,7 +61,7 @@ NEXUS_REPO = nexus3.mcc-github.org:10001/mcc-github
 EXTRA_VERSION ?= $(shell git rev-parse --short HEAD)
 PROJECT_VERSION=$(BASE_VERSION)-snapshot-$(EXTRA_VERSION)
 
-PKGNAME = github.com/$(PROJECT_NAME)
+PKGNAME = github.com/mcc-github/blockchain
 CGO_FLAGS = CGO_CFLAGS=" "
 ARCH=$(shell go env GOARCH)
 MARCH=$(shell go env GOOS)-$(shell go env GOARCH)
@@ -88,11 +81,6 @@ GO_LDFLAGS = $(patsubst %,-X $(PKGNAME)/common/metadata.%,$(METADATA_VAR))
 
 GO_TAGS ?=
 
-EXECUTABLES ?= go docker git curl
-K := $(foreach exec,$(EXECUTABLES),\
-	$(if $(shell which $(exec)),some string,$(error "No $(exec) in PATH: Check dependencies")))
-
-PROTOS = $(shell git ls-files *.proto | grep -Ev 'vendor/|testdata/')
 # No sense rebuilding when non production code is changed
 PROJECT_FILES = $(shell git ls-files  | grep -Ev '^integration/|^vagrant/|.png$|^LICENSE|^vendor/')
 IMAGES = peer orderer baseos ccenv buildenv tools
@@ -101,20 +89,20 @@ RELEASE_PKGS = configtxgen cryptogen idemixgen discover configtxlator peer order
 RELEASE_IMAGES = peer orderer tools ccenv baseos
 
 pkgmap.cryptogen      := $(PKGNAME)/cmd/cryptogen
-pkgmap.idemixgen      := $(PKGNAME)/common/tools/idemixgen
+pkgmap.idemixgen      := $(PKGNAME)/cmd/idemixgen
 pkgmap.configtxgen    := $(PKGNAME)/cmd/configtxgen
 pkgmap.configtxlator  := $(PKGNAME)/cmd/configtxlator
 pkgmap.peer           := $(PKGNAME)/cmd/peer
-pkgmap.orderer        := $(PKGNAME)/orderer
+pkgmap.orderer        := $(PKGNAME)/cmd/orderer
 pkgmap.discover       := $(PKGNAME)/cmd/discover
 
 include docker-env.mk
 
-all: native docker checks
+all: check-go-version native docker checks
 
 checks: basic-checks unit-test integration-test
 
-basic-checks: license spelling references trailing-spaces linter check-metrics-doc
+basic-checks: check-go-version license spelling references trailing-spaces linter check-metrics-doc
 
 desk-check: checks verify
 
@@ -159,17 +147,11 @@ baseos: $(BUILD_DIR)/images/baseos/$(DUMMY)
 
 ccenv: $(BUILD_DIR)/images/ccenv/$(DUMMY)
 
-.PHONY: check-go-version
-check-go-version:
-	@scripts/check_go_version.sh
-
 .PHONY: peer
-peer: check-go-version
 peer: $(BUILD_DIR)/bin/peer
 peer-docker: $(BUILD_DIR)/images/peer/$(DUMMY)
 
 .PHONY: orderer
-orderer: check-go-version
 orderer: $(BUILD_DIR)/bin/orderer
 orderer-docker: $(BUILD_DIR)/images/orderer/$(DUMMY)
 
@@ -189,6 +171,10 @@ idemixgen: $(BUILD_DIR)/bin/idemixgen
 discover: GO_LDFLAGS=-X $(pkgmap.$(@F))/metadata.Version=$(PROJECT_VERSION)
 discover: $(BUILD_DIR)/bin/discover
 
+.PHONY: check-go-version
+check-go-version:
+	@scripts/check_go_version.sh
+
 .PHONY: integration-test
 integration-test: gotool.ginkgo ccenv baseos docker-thirdparty
 	./scripts/run-integration-tests.sh
@@ -197,8 +183,6 @@ unit-test: unit-test-clean docker-thirdparty ccenv baseos
 	./scripts/run-unit-tests.sh
 
 unit-tests: unit-test
-
-enable_ci_only_tests: unit-test
 
 verify: export JOB_TYPE=VERIFY
 verify: unit-test
@@ -236,24 +220,11 @@ changelog:
 $(BUILD_DIR)/bin:
 	@mkdir -p $@
 
-$(BUILD_DIR)/bin/%: check-go-version $(PROJECT_FILES)
+$(BUILD_DIR)/bin/%: $(PROJECT_FILES)
 	@mkdir -p $(@D)
 	@echo "$@"
 	$(CGO_FLAGS) GOBIN=$(abspath $(@D)) go install -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
 	@echo "Binary available as $@"
-	@touch $@
-
-$(BUILD_DIR)/images/baseos/$(DUMMY):
-	@mkdir -p $(@D)
-	$(eval TARGET = ${patsubst $(BUILD_DIR)/images/%/$(DUMMY),%,${@}})
-	@echo "Docker:  building $(TARGET) image"
-	$(DBUILD) -f images/peer/Dockerfile \
-		--target base \
-		--build-arg GO_VER=${GO_VER} \
-		--build-arg ALPINE_VER=${ALPINE_VER} \
-		-t $(DOCKER_NS)/blockchain-$(TARGET) images/peer
-	docker tag $(DOCKER_NS)/blockchain-$(TARGET) $(DOCKER_NS)/blockchain-$(TARGET):$(BASE_VERSION)
-	docker tag $(DOCKER_NS)/blockchain-$(TARGET) $(DOCKER_NS)/blockchain-$(TARGET):$(DOCKER_TAG)
 	@touch $@
 
 $(BUILD_DIR)/images/peer/$(DUMMY): BUILD_ARGS=--build-arg GO_TAGS=${GO_TAGS}
@@ -282,22 +253,22 @@ release-all: check-go-version $(patsubst %,release/%, $(RELEASE_PLATFORMS))
 release/%: GO_LDFLAGS=-X $(pkgmap.$(@F))/metadata.CommitSHA=$(EXTRA_VERSION)
 
 release/windows-amd64: GOOS=windows
-release/windows-amd64: check-go-version $(patsubst %,release/windows-amd64/bin/%, $(RELEASE_PKGS))
+release/windows-amd64: $(patsubst %,release/windows-amd64/bin/%, $(RELEASE_PKGS))
 
 release/darwin-amd64: GOOS=darwin
-release/darwin-amd64: check-go-version $(patsubst %,release/darwin-amd64/bin/%, $(RELEASE_PKGS))
+release/darwin-amd64: $(patsubst %,release/darwin-amd64/bin/%, $(RELEASE_PKGS))
 
 release/linux-amd64: GOOS=linux
-release/linux-amd64: check-go-version $(patsubst %,release/linux-amd64/bin/%, $(RELEASE_PKGS))
+release/linux-amd64: $(patsubst %,release/linux-amd64/bin/%, $(RELEASE_PKGS))
 
 release/%-amd64: GOARCH=amd64
 release/linux-%: GOOS=linux
 
 release/linux-s390x: GOARCH=s390x
-release/linux-s390x: check-go-version $(patsubst %,release/linux-s390x/bin/%, $(RELEASE_PKGS))
+release/linux-s390x: $(patsubst %,release/linux-s390x/bin/%, $(RELEASE_PKGS))
 
 release/linux-ppc64le: GOARCH=ppc64le
-release/linux-ppc64le: check-go-version $(patsubst %,release/linux-ppc64le/bin/%, $(RELEASE_PKGS))
+release/linux-ppc64le: $(patsubst %,release/linux-ppc64le/bin/%, $(RELEASE_PKGS))
 
 release/%/bin/configtxlator: $(PROJECT_FILES)
 	@echo "Building $@ for $(GOOS)-$(GOARCH)"
@@ -325,14 +296,12 @@ release/%/bin/discover: $(PROJECT_FILES)
 	$(CGO_FLAGS) GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(abspath $@) -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
 
 release/%/bin/orderer: GO_LDFLAGS = $(patsubst %,-X $(PKGNAME)/common/metadata.%,$(METADATA_VAR))
-
 release/%/bin/orderer: $(PROJECT_FILES)
 	@echo "Building $@ for $(GOOS)-$(GOARCH)"
 	mkdir -p $(@D)
 	$(CGO_FLAGS) GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(abspath $@) -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
 
 release/%/bin/peer: GO_LDFLAGS = $(patsubst %,-X $(PKGNAME)/common/metadata.%,$(METADATA_VAR))
-
 release/%/bin/peer: $(PROJECT_FILES)
 	@echo "Building $@ for $(GOOS)-$(GOARCH)"
 	mkdir -p $(@D)

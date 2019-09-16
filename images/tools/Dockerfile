@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
-#
+
 ARG GO_VER
 ARG ALPINE_VER
 FROM golang:${GO_VER}-alpine as golang
@@ -15,7 +15,6 @@ RUN apk add --no-cache \
 
 ADD . $GOPATH/src/github.com/mcc-github/blockchain
 WORKDIR $GOPATH/src/github.com/mcc-github/blockchain
-ENV EXECUTABLES go git
 
 FROM golang as tools
 RUN make configtxgen configtxlator cryptogen peer discover idemixgen

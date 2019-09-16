@@ -43,7 +43,7 @@ func TestSpawnEtcdRaft(t *testing.T) {
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	
-	orderer, err := gexec.Build("github.com/mcc-github/blockchain/orderer")
+	orderer, err := gexec.Build("github.com/mcc-github/blockchain/cmd/orderer")
 	gt.Expect(err).NotTo(HaveOccurred())
 
 	defer gexec.CleanupBuildArtifacts()

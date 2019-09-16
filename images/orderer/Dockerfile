@@ -1,7 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
-#
+
 ARG GO_VER
 ARG ALPINE_VER
 FROM alpine:${ALPINE_VER} as base
@@ -16,7 +16,6 @@ RUN apk add --no-cache \
 	make;
 ADD . $GOPATH/src/github.com/mcc-github/blockchain
 WORKDIR $GOPATH/src/github.com/mcc-github/blockchain
-ENV EXECUTABLES go git
 
 FROM golang as orderer
 ARG GO_TAGS
